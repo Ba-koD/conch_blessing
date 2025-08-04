@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata>
+    <name>Conch's Blessing</name>
+    <directory>conch_blessing</directory>
+    <dependencies>
+        <dependency id="3540206030" />
+    </dependencies>
+    <id>0</id>
+    <description>🐚 Conch's Blessing - Items and Upgrades</description>
+    <version>1.0.0</version>
+    <visibility>Public</visibility>
+    <tag id="Lua"/>
+    <tag id="Items"/>
+    <tag id="Quality of Life"/>
+</metadata>
