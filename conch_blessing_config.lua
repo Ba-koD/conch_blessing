@@ -62,5 +62,4 @@ function ConchBlessing_Config.Reset(mod)
     ConchBlessing_Config.Save(mod)
 end
 
----@type MagicConchConfig
 return ConchBlessing_Config

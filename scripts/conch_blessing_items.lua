@@ -5,7 +5,10 @@
 --   name: "item name" - item display name
 --   description: "description" - item description
 --   pool: { RoomType.ROOM_XXX, ... } - item pools it appears in (can specify multiple pools as an array)
---     possible pools: TREASURE, SHOP, SECRET, SUPERSECRET, DEVIL, ANGEL, BOSS, MINIBOSS
+--     possible pools: ROOM_DEFAULT, ROOM_SHOP, ROOM_TREASURE, ROOM_BOSS, ROOM_MINIBOSS, ROOM_SECRET, ROOM_SUPERSECRET, ROOM_ARCADE, ROOM_CURSE, ROOM_CHALLENGE, ROOM_LIBRARY, ROOM_SACRIFICE, ROOM_DEVIL, ROOM_ANGEL, ROOM_DUNGEON, ROOM_BOSSRUSH, ROOM_ISAACS, ROOM_BARREN, ROOM_CHEST, ROOM_DICE, ROOM_BLACK_MARKET, ROOM_GREED_EXIT, ROOM_PLANETARIUM, ROOM_TELEPORTER, ROOM_TELEPORTER_EXIT, ROOM_SECRET_EXIT, ROOM_BLUE, ROOM_ULTRASECRET
+--     pool can be specified as:
+--       - RoomType.ROOM_XXX (uses default values: weight=1.0, decrease_by=1, remove_on=0.1)
+--       - {RoomType.ROOM_XXX, weight=1.0, decrease_by=1, remove_on=0.1} (custom values)
 --   weight: number - item weight in pool (higher number means more frequent appearance)
 --   DecreaseBy: number - weight decrease when item is selected from pool
 --   RemoveOn: number - probability of item being removed from pool (0.0-1.0)
@@ -50,21 +53,16 @@ ConchBlessing.ItemData = {
         name = "Live Eye",
         description = "The eye moves!",
         pool = {
+            -- Use default values (weight=1.0, decrease_by=1, remove_on=0.1)
             RoomType.ROOM_TREASURE,
-            RoomType.ROOM_SHOP,
-            RoomType.ROOM_SECRET,
-            RoomType.ROOM_SUPERSECRET,
-            RoomType.ROOM_DEVIL,
-            RoomType.ROOM_ANGEL,
-            RoomType.ROOM_BOSS,
+            RoomType.ROOM_BOSSRUSH,
+            -- Use custom values
+            { RoomType.ROOM_ARCADE, weight=1, decrease_by=1, remove_on=0.1 },
         },
         quality = 3,
         tags = "offensive",
         cache = "all",
         hidden = false,
-        weight = 1.0,
-        DecreaseBy = 1,
-        RemoveOn = 0.1,
         shopprice = 20, -- 상점에서의 가격 (코인)
         devilprice = 2, -- 악마방에서의 가격 (하트)
         maxcharges = 0,
@@ -73,7 +71,6 @@ ConchBlessing.ItemData = {
         maxhearts = 0,
         blackhearts = 0,
         soulhearts = 0,
-        -- origin = CollectibleType.COLLECTIBLE_BRIMSTONE, -- original item information
         origin = CollectibleType.COLLECTIBLE_DEAD_EYE, -- original item information
         flag = "positive", -- match Magic Conch result type
         script = "scripts/items/live_eye",
@@ -97,7 +94,10 @@ local function loadAllItems()
         ConchBlessing.printDebug("Processing: " .. itemKey)
         
         -- 1. load script
-        local scriptPath = itemData.script or "scripts/items/" .. string.lower(itemKey) .. ".lua"
+        local scriptPath = itemData.script
+        if not scriptPath then
+            ConchBlessing.printError("  Warning: " .. itemKey .. " has no script path!")
+        end
         ConchBlessing.printDebug("  Loading script: " .. scriptPath)
         
         local scriptSuccess, scriptErr = pcall(function()

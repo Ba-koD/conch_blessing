@@ -3,22 +3,10 @@
     <Pool Name="treasure">
         <Item Name="Live Eye" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
-    <Pool Name="shop">
+    <Pool Name="bossrush">
         <Item Name="Live Eye" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
-    <Pool Name="secret">
-        <Item Name="Live Eye" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
-    </Pool>
-    <Pool Name="ultraSecret">
-        <Item Name="Live Eye" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
-    </Pool>
-    <Pool Name="devil">
-        <Item Name="Live Eye" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
-    </Pool>
-    <Pool Name="angel">
-        <Item Name="Live Eye" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
-    </Pool>
-    <Pool Name="boss">
+    <Pool Name="arcade">
         <Item Name="Live Eye" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
 </ItemPools>

@@ -27,14 +27,41 @@ def find_matching_brace(content, start_pos):
     return -1
 
 def parse_pool_array(pool_data):
-    """parse the pool array"""
+    """parse the pool array with support for both simple and complex pool entries"""
     pools = []
     
-    # RoomType.ROOM_XXX 패턴 찾기
-    pool_matches = re.findall(r'RoomType\.ROOM_(\w+)', pool_data)
-    for pool in pool_matches:
-        pools.append(pool)
+    print(f"  Parsing pool data (full):")
+    print(f"  '{pool_data}'")
     
+    # 복잡한 풀 엔트리들을 먼저 찾아서 처리
+    # {RoomType.ROOM_XXX, weight=1.0, decrease_by=1, remove_on=0.1} 형태
+    # 여러 줄에 걸쳐 있을 수 있으므로 전체 텍스트에서 찾기
+    complex_pattern = r'\{RoomType\.ROOM_(\w+),\s*weight=([\d.]+),\s*decrease_by=(\d+),\s*remove_on=([\d.]+)\}'
+    complex_matches = re.findall(complex_pattern, pool_data, re.DOTALL)
+    
+    print(f"  Found {len(complex_matches)} complex matches: {complex_matches}")
+    
+    for match in complex_matches:
+        room_type = match[0]
+        weight = float(match[1])
+        decrease_by = int(match[2])
+        remove_on = float(match[3])
+        
+        pool_entry = f"ROOM_{room_type}"
+        pool_dict = {pool_entry: True, 'weight': weight, 'decrease_by': decrease_by, 'remove_on': remove_on}
+        pools.append(pool_dict)
+        print(f"    Found complex pool: {pool_dict}")
+    
+    # 단순 풀 엔트리들 찾기 (복잡한 엔트리로 처리되지 않은 것들만)
+    simple_matches = re.findall(r'RoomType\.ROOM_(\w+)', pool_data)
+    for match in simple_matches:
+        pool_entry = f"ROOM_{match}"
+        # 이미 복잡한 엔트리로 처리되지 않은 경우만 추가
+        if not any(isinstance(p, dict) and p.get(pool_entry) for p in pools):
+            pools.append(pool_entry)
+            print(f"    Added simple pool: {pool_entry}")
+    
+    print(f"  Final pools: {pools}")
     return pools
 
 def parse_lua_file(file_path):
@@ -80,6 +107,7 @@ def parse_lua_file(file_path):
     print(f"ItemData content: {itemdata_content[:200]}...")
     
     # find the item pattern (LIVE_EYE = { ... })
+    # 최상위 레벨의 아이템만 찾도록 수정
     item_pattern = r'(\w+)\s*=\s*{'
     item_matches = list(re.finditer(item_pattern, itemdata_content))
     
@@ -99,6 +127,16 @@ def parse_lua_file(file_path):
         
         item_data = itemdata_content[item_start+1:item_end]
         print(f"  item data: {item_data[:100]}...")
+        
+        # 아이템이 아닌 중첩된 테이블인지 확인
+        # id, name, type 중 하나라도 있으면 아이템으로 간주
+        has_id = re.search(r'id\s*=', item_data)
+        has_name = re.search(r'name\s*=', item_data)
+        has_type = re.search(r'type\s*=', item_data)
+        
+        if not (has_id or has_name or has_type):
+            print(f"  skipping {name} (not an item)")
+            continue
         
         item_info = {}
         
@@ -127,11 +165,15 @@ def parse_lua_file(file_path):
             print(f"  Description: {item_info['description']}")
         
         # extract pool (array form)
-        pool_match = re.search(r'pool\s*=\s*{([^}]+)}', item_data)
+        pool_match = re.search(r'pool\s*=\s*{', item_data)
         if pool_match:
-            pool_data = pool_match.group(1)
-            item_info['pools'] = parse_pool_array(pool_data)
-            print(f"  Pools: {item_info['pools']}")
+            # 중첩된 중괄호를 올바르게 처리하기 위해 find_matching_brace 사용
+            pool_start = pool_match.end() - 1  # { 위치
+            pool_end = find_matching_brace(item_data, pool_start)
+            if pool_end != -1:
+                pool_data = item_data[pool_start+1:pool_end]
+                item_info['pools'] = parse_pool_array(pool_data)
+                print(f"  Pools: {item_info['pools']}")
         else:
             # support single pool form
             pool_match = re.search(r'pool\s*=\s*RoomType\.ROOM_(\w+)', item_data)
@@ -306,8 +348,37 @@ def create_itempools_xml(items, output_path):
     """create the itempools.xml file (mattpack format)"""
     root = ET.Element("ItemPools")
     
-    # pool type mapping
+    # pool type mapping - 모든 RoomType 지원
     pool_mapping = {
+        'ROOM_DEFAULT': 'default',
+        'ROOM_SHOP': 'shop',
+        'ROOM_TREASURE': 'treasure',
+        'ROOM_BOSS': 'boss',
+        'ROOM_MINIBOSS': 'miniboss',
+        'ROOM_SECRET': 'secret',
+        'ROOM_SUPERSECRET': 'ultraSecret',
+        'ROOM_ARCADE': 'arcade',
+        'ROOM_CURSE': 'curse',
+        'ROOM_CHALLENGE': 'challenge',
+        'ROOM_LIBRARY': 'library',
+        'ROOM_SACRIFICE': 'sacrifice',
+        'ROOM_DEVIL': 'devil',
+        'ROOM_ANGEL': 'angel',
+        'ROOM_DUNGEON': 'dungeon',
+        'ROOM_BOSSRUSH': 'bossrush',
+        'ROOM_ISAACS': 'isaacs',
+        'ROOM_BARREN': 'barren',
+        'ROOM_CHEST': 'chest',
+        'ROOM_DICE': 'dice',
+        'ROOM_BLACK_MARKET': 'blackMarket',
+        'ROOM_GREED_EXIT': 'greedExit',
+        'ROOM_PLANETARIUM': 'planetarium',
+        'ROOM_TELEPORTER': 'teleporter',
+        'ROOM_TELEPORTER_EXIT': 'teleporterExit',
+        'ROOM_SECRET_EXIT': 'secretExit',
+        'ROOM_BLUE': 'blue',
+        'ROOM_ULTRASECRET': 'ultraSecret',
+        # 기존 호환성을 위한 별칭
         'TREASURE': 'treasure',
         'SHOP': 'shop',
         'SECRET': 'secret',
@@ -321,18 +392,43 @@ def create_itempools_xml(items, output_path):
     # group items by pool
     pool_items = {}
     for item_key, item_info in items.items():
-        pools = item_info.get('pools', ['TREASURE'])
-        weight = item_info.get('weight', 1.0)
-        decrease_by = item_info.get('DecreaseBy', 1)
-        remove_on = item_info.get('RemoveOn', 0.1)
+        pools = item_info.get('pools', ['ROOM_TREASURE'])
         
-        for pool_name in pools:
-            pool_type = pool_mapping.get(pool_name, 'treasure')
+        for pool_entry in pools:
+            # 풀 엔트리가 딕셔너리인지 단순 값인지 확인
+            if isinstance(pool_entry, dict):
+                # 딕셔너리 형태: {pool_type: True, weight=1.0, decrease_by=1, remove_on=0.1}
+                pool_type = None
+                weight = 1.0
+                decrease_by = 1
+                remove_on = 0.1
+                
+                for key, value in pool_entry.items():
+                    if key == 'weight':
+                        weight = value
+                    elif key == 'decrease_by':
+                        decrease_by = value
+                    elif key == 'remove_on':
+                        remove_on = value
+                    elif key.startswith('ROOM_'):
+                        # RoomType 값으로 간주
+                        pool_type = key
+                
+                if pool_type:
+                    pool_name = pool_mapping.get(str(pool_type), 'treasure')
+                else:
+                    continue
+            else:
+                # 단순 값: ROOM_XXX (기본값 사용)
+                pool_name = pool_mapping.get(str(pool_entry), 'treasure')
+                weight = 1.0
+                decrease_by = 1
+                remove_on = 0.1
             
-            if pool_type not in pool_items:
-                pool_items[pool_type] = []
+            if pool_name not in pool_items:
+                pool_items[pool_name] = []
             
-            pool_items[pool_type].append({
+            pool_items[pool_name].append({
                 'name': item_info.get('name', ''),
                 'weight': weight,
                 'DecreaseBy': decrease_by,

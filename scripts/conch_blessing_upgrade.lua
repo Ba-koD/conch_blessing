@@ -81,6 +81,11 @@ local function handleMagicConchResult(result)
                     
                     -- Save original item properties (including pedestal)
                     local pickup = entity:ToPickup()
+
+                    if pickup == nil then
+                        ConchBlessing.printError("Pickup is nil!")
+                        return
+                    end
                     
                     -- Only perform conversion (no purchase handling)
                     ConchBlessing.printDebug("Item conversion in progress")
