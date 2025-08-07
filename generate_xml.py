@@ -146,23 +146,31 @@ def parse_lua_file(file_path):
             item_info['id'] = id_match.group(1)
             print(f"  ID: {item_info['id']}")
         
-        # extract name
-        name_match = re.search(r'name\s*=\s*"([^"]+)"', item_data)
+        # extract name (multilingual structure)
+        name_match = re.search(r'name\s*=\s*{', item_data)
         if name_match:
-            item_info['name'] = name_match.group(1)
-            print(f"  Name: {item_info['name']}")
+            # 중첩된 중괄호를 올바르게 처리하기 위해 find_matching_brace 사용
+            name_start = name_match.end() - 1  # { 위치
+            name_end = find_matching_brace(item_data, name_start)
+            if name_end != -1:
+                name_data = item_data[name_start+1:name_end]
+                # 영어 이름 추출
+                en_name_match = re.search(r'en\s*=\s*"([^"]+)"', name_data)
+                if en_name_match:
+                    item_info['name'] = en_name_match.group(1)
+                    print(f"  Name (en): {item_info['name']}")
+        else:
+            # 단순 문자열 형태도 지원
+            simple_name_match = re.search(r'name\s*=\s*"([^"]+)"', item_data)
+            if simple_name_match:
+                item_info['name'] = simple_name_match.group(1)
+                print(f"  Name: {item_info['name']}")
         
         # extract type
         type_match = re.search(r'type\s*=\s*"([^"]+)"', item_data)
         if type_match:
             item_info['type'] = type_match.group(1)
             print(f"  Type: {item_info['type']}")
-        
-        # extract description
-        desc_match = re.search(r'description\s*=\s*"([^"]+)"', item_data)
-        if desc_match:
-            item_info['description'] = desc_match.group(1)
-            print(f"  Description: {item_info['description']}")
         
         # extract pool (array form)
         pool_match = re.search(r'pool\s*=\s*{', item_data)
@@ -295,7 +303,6 @@ def create_items_xml(items, output_path):
         
         item_elem.set("id", str(item_id_counter))
         item_elem.set("name", item_info.get('name', ''))
-        item_elem.set("description", item_info.get('description', ''))
         item_elem.set("gfx", f"{item_key.lower()}.png")
         item_elem.set("quality", str(item_info.get('quality', 3)))
         item_elem.set("tags", item_info.get('tags', 'offensive'))
@@ -429,7 +436,7 @@ def create_itempools_xml(items, output_path):
                 pool_items[pool_name] = []
             
             pool_items[pool_name].append({
-                'name': item_info.get('name', ''),
+                'name': item_info.get('name', item_key),  # name이 없으면 item_key 사용
                 'weight': weight,
                 'DecreaseBy': decrease_by,
                 'RemoveOn': remove_on

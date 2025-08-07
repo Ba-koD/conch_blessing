@@ -8,7 +8,6 @@ ConchBlessing.liveeye.data = {
     hitMultiplierIncrease = 0.1,  -- hit multiplier increase
     missMultiplierDecrease = 0.15,  -- miss multiplier decrease
     trackedTears = {},  -- tracked tears with lifetime
-    tearLifetime = 90,  -- 1.5 seconds at 60fps
 }
 
 -- on pickup
@@ -17,12 +16,6 @@ ConchBlessing.liveeye.onPickup = function(player, collectibleType, rng)
     -- add damage cache flag
     player:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
     player:EvaluateItems()
-end
-
--- on use (passive item but just in case)
-ConchBlessing.liveeye.onUse = function(collectibleType, rng, player, useFlags, activeSlot, customVarData)
-    ConchBlessing.printDebug("Live Eye used!")
-    return { Discharge = false, Remove = false, ShowAnim = false }
 end
 
 -- calculate damage multiplier
@@ -90,7 +83,6 @@ ConchBlessing.liveeye.onFireTear = function(tear)
             -- store tear tracking data
             ConchBlessing.liveeye.data.trackedTears[tearId] = {
                 tear = tear,
-                frameCount = Game():GetFrameCount(),
                 hit = false
             }
             
@@ -104,8 +96,8 @@ ConchBlessing.liveeye.onTearCollision = function(tear, collider, low)
     local player = Isaac.GetPlayer(0)
     
     if player and player:HasCollectible(Isaac.GetItemIdByName("Live Eye")) then
-        -- check if tear hits an enemy
-        if collider and collider:IsEnemy() and tear.Parent and tear.Parent:ToPlayer() then
+        -- check if this is a player's tear hitting an enemy
+        if tear.Parent and tear.Parent:ToPlayer() and collider and collider:IsEnemy() then
             -- find and mark this tear as hit
             local tearId = tostring(tear.Index) .. "_"
             
@@ -113,7 +105,22 @@ ConchBlessing.liveeye.onTearCollision = function(tear, collider, low)
                 if string.find(id, tearId) and not trackData.hit then
                     trackData.hit = true
                     ConchBlessing.liveeye.handleHit()
-                    ConchBlessing.printDebug("Live Eye: tear hit enemy!")
+                    ConchBlessing.printDebug("Live Eye: player tear hit enemy! (HIT)")
+                    break
+                end
+            end
+        end
+        
+        -- check if player's tear hits wall or other obstacles (miss)
+        if tear.Parent and tear.Parent:ToPlayer() and collider and not collider:IsEnemy() then
+            local tearId = tostring(tear.Index) .. "_"
+            
+            for id, trackData in pairs(ConchBlessing.liveeye.data.trackedTears) do
+                if string.find(id, tearId) and not trackData.hit then
+                    -- tear hit wall or obstacle - count as miss
+                    trackData.hit = true  -- mark as processed to avoid double counting
+                    ConchBlessing.liveeye.handleMiss()
+                    ConchBlessing.printDebug("Live Eye: player tear hit wall/obstacle (MISS)")
                     break
                 end
             end
@@ -124,45 +131,47 @@ ConchBlessing.liveeye.onTearCollision = function(tear, collider, low)
     return nil
 end
 
--- update every frame to check for missed tears (MC_POST_UPDATE)
+-- handle tear removal (MC_POST_ENTITY_REMOVE)
+ConchBlessing.liveeye.onTearRemoved = function(entity)
+    local player = Isaac.GetPlayer(0)
+    
+    if player and player:HasCollectible(Isaac.GetItemIdByName("Live Eye")) then
+        -- check if this is a tear from the player
+        if entity.Type == EntityType.ENTITY_TEAR and entity.Parent and entity.Parent:ToPlayer() then
+            local tearId = tostring(entity.Index) .. "_"
+            
+            -- check if this tear was tracked and didn't hit
+            for id, trackData in pairs(ConchBlessing.liveeye.data.trackedTears) do
+                if string.find(id, tearId) and not trackData.hit then
+                    -- tear was removed without hitting - count as miss
+                    ConchBlessing.liveeye.handleMiss()
+                    ConchBlessing.liveeye.data.trackedTears[id] = nil
+                    ConchBlessing.printDebug("Live Eye: tear removed without hitting (miss)")
+                    break
+                end
+            end
+        end
+    end
+end
+
+-- update every frame to cleanup old tracking data (MC_POST_UPDATE)
 ConchBlessing.liveeye.onUpdate = function()
     local player = Isaac.GetPlayer(0)
     
     if player and player:HasCollectible(Isaac.GetItemIdByName("Live Eye")) then
-        local currentFrame = Game():GetFrameCount()
         local toRemove = {}
         
-        -- check for missed tears (tears that exist too long without hitting)
+        -- cleanup old tracking data (only remove tears that already hit)
         for tearId, trackData in pairs(ConchBlessing.liveeye.data.trackedTears) do
-            if not trackData.hit then
-                -- check if tear still exists
-                if not trackData.tear or not trackData.tear:Exists() then
-                    -- tear disappeared without hitting - count as miss
-                    ConchBlessing.liveeye.handleMiss()
-                    table.insert(toRemove, tearId)
-                    ConchBlessing.printDebug("Live Eye: tear disappeared (miss)")
-                elseif (currentFrame - trackData.frameCount) >= ConchBlessing.liveeye.data.tearLifetime then
-                    -- tear lived too long - count as miss
-                    ConchBlessing.liveeye.handleMiss()
-                    table.insert(toRemove, tearId)
-                    ConchBlessing.printDebug("Live Eye: tear timeout (miss)")
-                end
-            else
+            if trackData.hit then
                 -- tear already hit, remove from tracking
                 table.insert(toRemove, tearId)
             end
         end
         
-        -- cleanup old tracking data
+        -- cleanup old entries
         for _, tearId in ipairs(toRemove) do
             ConchBlessing.liveeye.data.trackedTears[tearId] = nil
-        end
-        
-        -- also cleanup very old entries (over 5 seconds)
-        for tearId, trackData in pairs(ConchBlessing.liveeye.data.trackedTears) do
-            if (currentFrame - trackData.frameCount) >= 300 then  -- 5 seconds
-                ConchBlessing.liveeye.data.trackedTears[tearId] = nil
-            end
         end
     end
 end

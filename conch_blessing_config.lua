@@ -4,7 +4,7 @@ local Version = "1.0.0"
 ConchBlessing_Config.Version = Version
 
 local DefaultConfig = {
-    debugMode = false,
+    debugMode = true,
 }
 
 -- JSON library for saving and loading config

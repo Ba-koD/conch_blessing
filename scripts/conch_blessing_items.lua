@@ -50,8 +50,20 @@ ConchBlessing.ItemData = {
     LIVE_EYE = {
         type = "passive",
         id = Isaac.GetItemIdByName("Live Eye"),
-        name = "Live Eye",
-        description = "The eye moves!",
+        name = {
+            kr = "살아있는 눈", -- Korean
+            en = "Live Eye"
+        },
+        description = {
+            kr = "눈이 움직인다!", -- Korean
+            en = "The eye moves!",
+        },
+        eid ={
+            kr = {"몬스터를 적중시킬때 마다 {{Damage}}데미지 배수가 0.1씩 증가합니다.",
+            "#몬스터에 맞지 않으면 {{Damage}}데미지 배수가 0.15씩 감소합니다."},
+            en = {"{{Damage}}Damage multiplier increases by 0.1 as you hit enemies.",
+            "#{{Damage}}Damage multiplier decreases by 0.15 as you miss enemies."},
+        },
         pool = {
             -- Use default values (weight=1.0, decrease_by=1, remove_on=0.1)
             RoomType.ROOM_TREASURE,
@@ -61,10 +73,10 @@ ConchBlessing.ItemData = {
         },
         quality = 3,
         tags = "offensive",
-        cache = "all",
+        cache = "damage",
         hidden = false,
-        shopprice = 20, -- 상점에서의 가격 (코인)
-        devilprice = 2, -- 악마방에서의 가격 (하트)
+        shopprice = 20, -- shop price (coin)
+        devilprice = 2, -- devil price (heart)
         maxcharges = 0,
         chargetype = "normal",
         hearts = 0,
@@ -76,10 +88,10 @@ ConchBlessing.ItemData = {
         script = "scripts/items/live_eye",
         callbacks = {
             pickup = "liveeye.onPickup",
-            use = "liveeye.onUse",
             evaluateCache = "liveeye.onEvaluateCache",
             fireTear = "liveeye.onFireTear",
             tearCollision = "liveeye.onTearCollision",
+            tearRemoved = "liveeye.onTearRemoved",
             gameStarted = "liveeye.onGameStarted",
             update = "liveeye.onUpdate"
         }
@@ -90,143 +102,48 @@ ConchBlessing.ItemData = {
 local function loadAllItems()
     ConchBlessing.printDebug("Loading scripts and callbacks based on ItemData...")
     
+    -- Load external systems
+    local systems = {
+        { name = "EID language support", path = "scripts.eid_language" },
+        { name = "Callback manager", path = "scripts.callback_manager" }
+    }
+    
+    for _, system in ipairs(systems) do
+        local success, err = pcall(function()
+            require(system.path)
+        end)
+        if success then
+            ConchBlessing.printDebug(system.name .. " loaded successfully")
+        else
+            ConchBlessing.printError(system.name .. " load failed: " .. tostring(err))
+        end
+    end
+    
+    -- Load item scripts
     for itemKey, itemData in pairs(ConchBlessing.ItemData) do
         ConchBlessing.printDebug("Processing: " .. itemKey)
         
-        -- 1. load script
+        -- Load script
         local scriptPath = itemData.script
         if not scriptPath then
             ConchBlessing.printError("  Warning: " .. itemKey .. " has no script path!")
-        end
-        ConchBlessing.printDebug("  Loading script: " .. scriptPath)
-        
-        local scriptSuccess, scriptErr = pcall(function()
-            include(scriptPath)
-        end)
-        if scriptSuccess then
-            ConchBlessing.printDebug("  Script loaded successfully: " .. scriptPath)
         else
-            ConchBlessing.printError("  Script load failed: " .. scriptPath .. " - " .. tostring(scriptErr))
-        end
-        
-        -- 2. register callbacks
-        if itemData.callbacks then
-            -- helper function to find functions by dot notation
-            local function getFunctionByPath(path)
-                local parts = {}
-                for part in path:gmatch("[^%.]+") do
-                    table.insert(parts, part)
-                end
-                
-                local current = ConchBlessing
-                for _, part in ipairs(parts) do
-                    if current and current[part] then
-                        current = current[part]
-                    else
-                        return nil
-                    end
-                end
-                return current
-            end
+            ConchBlessing.printDebug("  Loading script: " .. scriptPath)
             
-            -- first check if item ID is valid
-            local itemId = itemData.id
-            if itemId == -1 or itemId == nil then
-                ConchBlessing.printError("  Warning: " .. itemKey .. " has an invalid item ID (" .. tostring(itemId) .. "). Skipping callback registration.")
-                ConchBlessing.printError("  Check if the item is properly registered in the XML file.")
+            local scriptSuccess, scriptErr = pcall(function()
+                require(scriptPath)
+            end)
+            if scriptSuccess then
+                ConchBlessing.printDebug("  Script loaded successfully: " .. scriptPath)
             else
-                ConchBlessing.printDebug("  Item ID check: " .. itemKey .. " = " .. itemId)
-                
-                if itemData.callbacks.pickup then
-                    local func = getFunctionByPath(itemData.callbacks.pickup)
-                    if func then
-                        ConchBlessing:AddCallback(ModCallbacks.MC_POST_PICKUP_INIT, func, itemId)
-                        ConchBlessing.printDebug("  pickup callback registered (ID: " .. itemId .. ")")
-                    else
-                        ConchBlessing.printError("  Warning: " .. tostring(itemData.callbacks.pickup) .. " function is not defined!")
-                    end
-                end
-                if itemData.callbacks.use then
-                    local func = getFunctionByPath(itemData.callbacks.use)
-                    if func then
-                        ConchBlessing:AddCallback(ModCallbacks.MC_USE_ITEM, func, itemId)
-                        ConchBlessing.printDebug("  use callback registered (ID: " .. itemId .. ")")
-                    else
-                        ConchBlessing.printError("  Warning: " .. tostring(itemData.callbacks.use) .. " function is not defined!")
-                    end
-                end
-            end
-            
-            -- ID가 필요하지 않은 콜백들
-            if itemData.callbacks.evaluateCache then
-                local func = getFunctionByPath(itemData.callbacks.evaluateCache)
-                if func then
-                    ConchBlessing:AddCallback(ModCallbacks.MC_EVALUATE_CACHE, func)
-                    ConchBlessing.printDebug("  evaluateCache callback registered")
-                else
-                    ConchBlessing.printError("  Warning: " .. tostring(itemData.callbacks.evaluateCache) .. " function is not defined!")
-                end
-            end
-            if itemData.callbacks.tearInit then
-                local func = getFunctionByPath(itemData.callbacks.tearInit)
-                if func then
-                    ConchBlessing:AddCallback(ModCallbacks.MC_POST_TEAR_INIT, func)
-                    ConchBlessing.printDebug("  tearInit callback registered")
-                else
-                    ConchBlessing.printError("  Warning: " .. tostring(itemData.callbacks.tearInit) .. " function is not defined!")
-                end
-            end
-            if itemData.callbacks.tearUpdate then
-                local func = getFunctionByPath(itemData.callbacks.tearUpdate)
-                if func then
-                    ConchBlessing:AddCallback(ModCallbacks.MC_POST_TEAR_UPDATE, func)
-                    ConchBlessing.printDebug("  tearUpdate callback registered")
-                else
-                    ConchBlessing.printError("  Warning: " .. tostring(itemData.callbacks.tearUpdate) .. " function is not defined!")
-                end
-            end
-            if itemData.callbacks.fireTear then
-                local func = getFunctionByPath(itemData.callbacks.fireTear)
-                if func then
-                    ConchBlessing:AddCallback(ModCallbacks.MC_POST_FIRE_TEAR, func)
-                    ConchBlessing.printDebug("  fireTear callback registered")
-                else
-                    ConchBlessing.printError("  Warning: " .. tostring(itemData.callbacks.fireTear) .. " function is not defined!")
-                end
-            end
-            if itemData.callbacks.tearCollision then
-                local func = getFunctionByPath(itemData.callbacks.tearCollision)
-                if func then
-                    ConchBlessing:AddCallback(ModCallbacks.MC_PRE_TEAR_COLLISION, func)
-                    ConchBlessing.printDebug("  tearCollision callback registered")
-                else
-                    ConchBlessing.printError("  Warning: " .. tostring(itemData.callbacks.tearCollision) .. " function is not defined!")
-                end
-            end
-            if itemData.callbacks.gameStarted then
-                local func = getFunctionByPath(itemData.callbacks.gameStarted)
-                if func then
-                    ConchBlessing:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, func)
-                    ConchBlessing.printDebug("  gameStarted callback registered")
-                else
-                    ConchBlessing.printError("  Warning: " .. tostring(itemData.callbacks.gameStarted) .. " function is not defined!")
-                end
-            end
-            if itemData.callbacks.update then
-                local func = getFunctionByPath(itemData.callbacks.update)
-                if func then
-                    ConchBlessing:AddCallback(ModCallbacks.MC_POST_UPDATE, func)
-                    ConchBlessing.printDebug("  update callback registered")
-                else
-                    ConchBlessing.printError("  Warning: " .. tostring(itemData.callbacks.update) .. " function is not defined!")
-                end
+                ConchBlessing.printError("  Script load failed: " .. scriptPath .. " - " .. tostring(scriptErr))
             end
         end
         
         ConchBlessing.printDebug("  " .. itemKey .. " processed")
     end
     
-    ConchBlessing.printDebug("Scripts and callbacks loaded successfully!")
+    ConchBlessing.printDebug("Scripts loaded successfully!")
 end
 
 loadAllItems()

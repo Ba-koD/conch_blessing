@@ -1,4 +1,4 @@
 <?xml version="1.0" ?>
 <items gfxroot="gfx/items/" version="1">
-    <passive id="0" name="Live Eye" description="The eye moves!" gfx="live_eye.png" quality="3" tags="offensive" cache="all" shopprice="20" devilprice="2" chargetype="normal"/>
+    <passive id="0" name="Live Eye" gfx="live_eye.png" quality="3" tags="offensive" cache="all" shopprice="20" devilprice="2" chargetype="normal"/>
 </items>
