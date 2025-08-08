@@ -55,14 +55,16 @@ ConchBlessing.ItemData = {
             en = "Live Eye"
         },
         description = {
-            kr = "눈이 움직인다!", -- Korean
-            en = "The eye moves!",
+            kr = "놓쳐도 괜찮아", -- Korean
+            en = "Misses happen",
         },
         eid ={
             kr = {"몬스터를 적중시킬때 마다 {{Damage}}데미지 배수가 0.1씩 증가합니다.",
-            "#몬스터에 맞지 않으면 {{Damage}}데미지 배수가 0.15씩 감소합니다."},
+            "#몬스터에 맞지 않으면 {{Damage}}데미지 배수가 0.15씩 감소합니다.",
+            "#{{Damage}}최대/최소 데미지 배수 (x3.0/x0.5)"},
             en = {"{{Damage}}Damage multiplier increases by 0.1 as you hit enemies.",
-            "#{{Damage}}Damage multiplier decreases by 0.15 as you miss enemies."},
+            "#{{Damage}}Damage multiplier decreases by 0.15 as you miss enemies.",
+            "#{{Damage}}Damage multiplier is capped at 3.0 and cannot go below 0.5."},
         },
         pool = {
             -- Use default values (weight=1.0, decrease_by=1, remove_on=0.1)
@@ -86,6 +88,12 @@ ConchBlessing.ItemData = {
         origin = CollectibleType.COLLECTIBLE_DEAD_EYE, -- original item information
         flag = "positive", -- match Magic Conch result type
         script = "scripts/items/live_eye",
+        -- optional functions/effects around morph
+        -- onBeforeChange / upgradeEffectsBefore: run BEFORE morph
+        -- onAfterChange / upgradeEffectsAfter: run AFTER morph
+        -- Back-compat: onUpgrade / upgradeEffects act as AFTER
+        onBeforeChange = "liveeye.onBeforeChange",
+        onAfterChange = "liveeye.onAfterChange",
         callbacks = {
             pickup = "liveeye.onPickup",
             evaluateCache = "liveeye.onEvaluateCache",
@@ -108,39 +116,47 @@ local function loadAllItems()
         { name = "Callback manager", path = "scripts.callback_manager" }
     }
     
-    for _, system in ipairs(systems) do
-        local success, err = pcall(function()
-            require(system.path)
-        end)
-        if success then
-            ConchBlessing.printDebug(system.name .. " loaded successfully")
-        else
-            ConchBlessing.printError(system.name .. " load failed: " .. tostring(err))
+    -- Load external systems only once per run
+    if not ConchBlessing._didLoadExternalSystems then
+        for _, system in ipairs(systems) do
+            local success, err = pcall(function()
+                require(system.path)
+            end)
+            if success then
+                ConchBlessing.printDebug(system.name .. " loaded successfully")
+            else
+                ConchBlessing.printError(system.name .. " load failed: " .. tostring(err))
+            end
         end
+        ConchBlessing._didLoadExternalSystems = true
+    else
+        ConchBlessing.printDebug("External systems already loaded; skipping.")
     end
     
     -- Load item scripts
-    for itemKey, itemData in pairs(ConchBlessing.ItemData) do
-        ConchBlessing.printDebug("Processing: " .. itemKey)
-        
-        -- Load script
-        local scriptPath = itemData.script
-        if not scriptPath then
-            ConchBlessing.printError("  Warning: " .. itemKey .. " has no script path!")
-        else
-            ConchBlessing.printDebug("  Loading script: " .. scriptPath)
-            
-            local scriptSuccess, scriptErr = pcall(function()
-                require(scriptPath)
-            end)
-            if scriptSuccess then
-                ConchBlessing.printDebug("  Script loaded successfully: " .. scriptPath)
+    -- Load item scripts only once per run
+    if not ConchBlessing._didLoadItemScripts then
+        for itemKey, itemData in pairs(ConchBlessing.ItemData) do
+            ConchBlessing.printDebug("Processing: " .. itemKey)
+            local scriptPath = itemData.script
+            if not scriptPath then
+                ConchBlessing.printError("  Warning: " .. itemKey .. " has no script path!")
             else
-                ConchBlessing.printError("  Script load failed: " .. scriptPath .. " - " .. tostring(scriptErr))
+                ConchBlessing.printDebug("  Loading script: " .. scriptPath)
+                local scriptSuccess, scriptErr = pcall(function()
+                    require(scriptPath)
+                end)
+                if scriptSuccess then
+                    ConchBlessing.printDebug("  Script loaded successfully: " .. scriptPath)
+                else
+                    ConchBlessing.printError("  Script load failed: " .. scriptPath .. " - " .. tostring(scriptErr))
+                end
             end
+            ConchBlessing.printDebug("  " .. itemKey .. " processed")
         end
-        
-        ConchBlessing.printDebug("  " .. itemKey .. " processed")
+        ConchBlessing._didLoadItemScripts = true
+    else
+        ConchBlessing.printDebug("Item scripts already loaded; skipping.")
     end
     
     ConchBlessing.printDebug("Scripts loaded successfully!")

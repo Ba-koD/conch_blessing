@@ -2,6 +2,7 @@
 -- Handles automatic callback registration for items
 
 ConchBlessing.CallbackManager = {}
+ConchBlessing.CallbackManager._didRegisterThisRun = false
 
 -- Callback mapping table
 -- Left side: callback abbreviation in ItemData
@@ -171,12 +172,17 @@ end
 
 -- Register callbacks for all items
 ConchBlessing.CallbackManager.registerAllCallbacks = function()
+    if ConchBlessing.CallbackManager._didRegisterThisRun then
+        ConchBlessing.printDebug("Callbacks already registered for this run; skipping.")
+        return
+    end
     ConchBlessing.printDebug("Registering callbacks for all items...")
     
     for itemKey, itemData in pairs(ConchBlessing.ItemData) do
         ConchBlessing.CallbackManager.registerItemCallbacks(itemKey, itemData)
     end
     
+    ConchBlessing.CallbackManager._didRegisterThisRun = true
     ConchBlessing.printDebug("All callbacks registered successfully!")
 end
 

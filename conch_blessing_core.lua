@@ -3,7 +3,11 @@ local ConchBlessing_MCM = require("scripts.conch_blessing_mcm")
 local isc = require("scripts.lib.isaacscript-common")
 
 ConchBlessing = RegisterMod("Conch's Blessing", 1)
-ConchBlessing = isc:upgradeMod(ConchBlessing, { isc.ISCFeature.PLAYER_INVENTORY, isc.ISCFeature.ROOM_HISTORY })
+ConchBlessing = isc:upgradeMod(ConchBlessing, {
+    isc.ISCFeature.PLAYER_INVENTORY,
+    isc.ISCFeature.ROOM_HISTORY,
+    isc.ISCFeature.GRID_ENTITY_COLLISION_DETECTION,
+})
 ConchBlessing_Config.Init(ConchBlessing)
 ConchBlessing_MCM.Setup(ConchBlessing)
 

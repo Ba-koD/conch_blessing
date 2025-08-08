@@ -3,6 +3,122 @@
 
 ConchBlessing.printDebug("Upgrade system loaded!")
 
+-- Upgrade job queue (ensures BEFORE fully completes before AFTER)
+ConchBlessing._upgradeJobs = ConchBlessing._upgradeJobs or {}
+
+local function _resolveFunction(path)
+    if type(path) ~= "string" or not ConchBlessing.CallbackManager or not ConchBlessing.CallbackManager.getFunctionByPath then
+        return nil
+    end
+    return ConchBlessing.CallbackManager.getFunctionByPath(path)
+end
+
+local function _spawnEffects(list, pos)
+    if not list then return end
+    for _, eff in ipairs(list) do
+        local count = eff.count or 1
+        local spread = eff.spread or 0
+        local etype = eff.entityType or EntityType.ENTITY_EFFECT
+        local evar = eff.variant or EffectVariant.POOF01
+        local esub = eff.subType or 0
+        for i = 1, count do
+            local offset = spread > 0 and Vector(math.random(-spread, spread), math.random(-spread, spread)) or Vector.Zero
+            local ent = Isaac.Spawn(etype, evar, esub, pos + offset, Vector.Zero, nil)
+            local effObj = ent:ToEffect()
+            if effObj then
+                if eff.timeout and eff.timeout > 0 then effObj.Timeout = eff.timeout end
+                if eff.depthOffset then effObj.DepthOffset = eff.depthOffset end
+                if eff.scale then effObj.SpriteScale = Vector(eff.scale, eff.scale) end
+                if eff.color then
+                    local c = eff.color
+                    effObj:SetColor(Color(c.r or 1, c.g or 1, c.b or 1, c.a or 1, c.ro or 0, c.go or 0, c.bo or 0), -1, 1, false, false)
+                end
+            end
+        end
+    end
+end
+
+local function _enqueueUpgradeJob(entityPickup, upgradeData, savedFields)
+    local itemData = upgradeData.itemData or {}
+    -- Frames to wait; will be set dynamically from callbacks or itemData
+    local beforeFrames = 0
+    local afterFrames = 0
+    table.insert(ConchBlessing._upgradeJobs, {
+        pickup = entityPickup,
+        pos = Vector(entityPickup.Position.X, entityPickup.Position.Y),
+        upgradeId = upgradeData.upgradeId,
+        itemData = itemData,
+        saved = savedFields or {},
+        phase = 0,           -- 0: run BEFORE, 1: wait BEFORE frames, 2: morph+run AFTER, 3: wait AFTER frames
+        counter = 0,
+        beforeFrames = beforeFrames,
+        afterFrames = afterFrames,
+    })
+end
+
+local function _processUpgradeJobs()
+    if #ConchBlessing._upgradeJobs == 0 then return end
+    for i = #ConchBlessing._upgradeJobs, 1, -1 do
+        local job = ConchBlessing._upgradeJobs[i]
+        local pickup = job.pickup and job.pickup:ToPickup() or nil
+        if not pickup or not pickup:Exists() then
+            table.remove(ConchBlessing._upgradeJobs, i)
+            goto continue
+        end
+        local advanced = true
+        while advanced do
+            advanced = false
+            if job.phase == 0 then
+            -- BEFORE hooks/effects
+                _spawnEffects(job.itemData.upgradeEffectsBefore, job.pos)
+                local fnBefore = _resolveFunction(job.itemData.onBeforeChange)
+            local beforeRet = nil
+            if type(fnBefore) == "function" then
+                local ok, ret = pcall(fnBefore, job.pos, pickup, job.itemData)
+                if ok then beforeRet = ret end
+            end
+            -- derive delay solely from callback return (frames)
+            local derivedBefore = tonumber(beforeRet) or 0
+            job.counter = (job.beforeFrames and job.beforeFrames > 0) and job.beforeFrames or derivedBefore
+                job.phase = 1
+                advanced = (job.counter <= 0)
+            elseif job.phase == 1 then
+                job.counter = job.counter - 1
+                if job.counter <= 0 then
+                    -- Morph while preserving pedestal/shop fields
+                    pickup:Morph(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_COLLECTIBLE, job.upgradeId, true, true, true)
+                    local s = job.saved or {}
+                    pickup.Price = s.price or pickup.Price
+                    pickup.OptionsPickupIndex = s.options or pickup.OptionsPickupIndex
+                    pickup.Wait = s.wait or pickup.Wait
+                    pickup.Timeout = s.timeout or pickup.Timeout
+                    pickup.Touched = s.touched or pickup.Touched
+                    pickup.ShopItemId = s.shopId or pickup.ShopItemId
+                    pickup.State = s.state or pickup.State
+                    -- AFTER hooks/effects
+                    _spawnEffects(job.itemData.upgradeEffectsAfter or job.itemData.upgradeEffects, job.pos)
+                    local fnAfter = _resolveFunction(job.itemData.onAfterChange or job.itemData.onUpgrade)
+                    local afterRet = nil
+                    if type(fnAfter) == "function" then
+                        local ok, ret = pcall(fnAfter, job.pos, pickup, job.itemData)
+                        if ok then afterRet = ret end
+                    end
+                    local derivedAfter = tonumber(afterRet) or 0
+                    job.counter = (job.afterFrames and job.afterFrames > 0) and job.afterFrames or derivedAfter
+                    job.phase = 3
+                    advanced = (job.counter <= 0)
+                end
+            elseif job.phase == 3 then
+                job.counter = job.counter - 1
+                if job.counter <= 0 then
+                    table.remove(ConchBlessing._upgradeJobs, i)
+                end
+            end
+        end
+        ::continue::
+    end
+end
+
 -- Check if ModCallbacks is defined
 if not ModCallbacks then
     ConchBlessing.printError("ModCallbacks is not defined!")
@@ -98,65 +214,21 @@ local function handleMagicConchResult(result)
                     local originalShopItemId = pickup.ShopItemId
                     local originalState = pickup.State
                     
-                    -- Replace with complete item config using GetCollectible
-                    if pickup then
-                        local itemConfig = Isaac.GetItemConfig()
-                        local newCollectible = itemConfig:GetCollectible(upgradeData.upgradeId)
-                        
-                        if newCollectible then
-                            ConchBlessing.printDebug("새 아이템 config 적용: " .. newCollectible.Name)
-                            
-                            -- Change item SubType
-                            entity.SubType = upgradeData.upgradeId
-                            
-                            -- Update with complete new item config
-                            -- Replace sprite
-                            local sprite = pickup:GetSprite()
-                            if sprite then
-                                sprite:Load("gfx/005.100_collectible.anm2", true)
-                                sprite:ReplaceSpritesheet(1, newCollectible.GfxFileName)
-                                sprite:LoadGraphics()
-                                sprite:Play("Idle", true)
-                                ConchBlessing.printDebug("  스프라이트 교체: " .. newCollectible.GfxFileName)
-                            end
-                            
-                            -- Restore pedestal state
-                            pickup.OptionsPickupIndex = originalOptions
-                            pickup.Wait = originalWait
-                            pickup.Timeout = originalTimeout
-                            pickup.Touched = originalTouched
-                            pickup.ShopItemId = originalShopItemId
-                            pickup.State = originalState
-                            
-                            -- Apply default attributes from new item config
-                            ConchBlessing.printDebug("  Apply new item config:")
-                            ConchBlessing.printDebug("    Name: " .. newCollectible.Name)
-                            ConchBlessing.printDebug("    Description: " .. newCollectible.Description)
-                            if newCollectible.Quality then
-                                ConchBlessing.printDebug("    Quality: " .. tostring(newCollectible.Quality))
-                            end
-                            
-                            ConchBlessing.printDebug("  Price is handled by shopprice/devilprice attributes in items.xml")
-                        else
-                            ConchBlessing.printDebug("ERROR: New item config not found: " .. tostring(upgradeData.upgradeId))
-                        end
-                    end
-                    
-                    -- add conversion effect
+                    -- add conversion effect immediately (sound)
                     local sfxManager = SFXManager()
                     sfxManager:Play(SoundEffect.SOUND_POWERUP_SPEWER, 0.5)
                     
-                    -- particle effect (optional)
-                    local particlePosition = Vector(entity.Position.X, entity.Position.Y - 10)
-                    for i = 1, 5 do
-                        Isaac.Spawn(
-                            EntityType.ENTITY_EFFECT,
-                            EffectVariant.POOF01,
-                            0,
-                            particlePosition + Vector(math.random(-10, 10), math.random(-10, 10)),
-                            Vector.Zero,
-                            nil
-                        )
+                    -- Enqueue staged job to ensure BEFORE completes before AFTER
+                    if pickup then
+                        _enqueueUpgradeJob(pickup, upgradeData, {
+                            price = originalPrice,
+                            options = originalOptions,
+                            wait = originalWait,
+                            timeout = originalTimeout,
+                            touched = originalTouched,
+                            shopId = originalShopItemId,
+                            state = originalState,
+                        })
                     end
                     
                     transformed = true
@@ -268,7 +340,10 @@ local function apiRegistrationCallback()
     end
 end
 
-ConchBlessing:AddCallback(ModCallbacks.MC_POST_UPDATE, apiRegistrationCallback)
+ConchBlessing:AddCallback(ModCallbacks.MC_POST_UPDATE, function()
+    apiRegistrationCallback()
+    _processUpgradeJobs()
+end)
 
 -- New Level Callback
 local function newLevelCallback()
