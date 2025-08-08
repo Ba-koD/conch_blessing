@@ -1,13 +1,15 @@
 local ConchBlessing_Config = require("conch_blessing_config")
+local ConchBlessing_MCM = require("scripts.conch_blessing_mcm")
+local isc = require("scripts.lib.isaacscript-common")
 
--- RegisterMod
 ConchBlessing = RegisterMod("Conch's Blessing", 1)
-
+ConchBlessing = isc:upgradeMod(ConchBlessing, { isc.ISCFeature.PLAYER_INVENTORY, isc.ISCFeature.ROOM_HISTORY })
 ConchBlessing_Config.Init(ConchBlessing)
+ConchBlessing_MCM.Setup(ConchBlessing)
 
 -- sound IDs
 ConchBlessing.Sounds = {
-    -- add sound IDs here
+    -- add sound IDs here (e.g., 1 = "sfx/sfx_item_pickup.wav")
 }
 
 -- debug print functions

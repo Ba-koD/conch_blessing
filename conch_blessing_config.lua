@@ -4,8 +4,39 @@ local Version = "1.0.0"
 ConchBlessing_Config.Version = Version
 
 local DefaultConfig = {
+    language = "auto", -- 0 = Auto, otherwise can be index into LANGUAGE_MAP or language code string (e.g., "en")
     debugMode = true,
 }
+
+-- Language map managed from config
+-- index starts at 1 for MCM (0 will mean Auto)
+ConchBlessing_Config.LANGUAGE_MAP = {
+    { code = "en", name = "English" },
+    { code = "kr", name = "Korean" },
+}
+
+---Resolve current language code from config and game options
+---@param mod table
+---@return string langCode
+function ConchBlessing_Config.GetCurrentLanguage(mod)
+    -- If user set a direct code string, honor it
+    local cfgLang = mod and mod.Config and mod.Config.language
+    if type(cfgLang) == "string" and cfgLang ~= "Auto" and cfgLang ~= "auto" then
+        return cfgLang
+    end
+
+    -- If user selected by index via MCM (1..#LANGUAGE_MAP)
+    if type(cfgLang) == "number" and cfgLang > 0 then
+        local langObj = ConchBlessing_Config.LANGUAGE_MAP[cfgLang]
+        if langObj and langObj.code then
+            return langObj.code
+        end
+    end
+
+    -- Fallback to game Options.Language then English
+    local opt = (Options and Options.Language) or "en"
+    return opt
+end
 
 -- JSON library for saving and loading config
 local json = nil

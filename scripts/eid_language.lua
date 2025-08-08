@@ -1,6 +1,17 @@
 -- EID Language Support for Conch's Blessing
 -- Handles multilingual item descriptions and names for EID mod
 
+local isc = require("scripts.lib.isaacscript-common")
+
+-- Inline language resolver to ensure immediate reflection of config
+local function getCurrentLang()
+    local cfg = ConchBlessing and ConchBlessing.Config and ConchBlessing.Config.language
+    if type(cfg) == "string" and cfg ~= "auto" then
+        return cfg
+    end
+    return (Options and Options.Language) or "en"
+end
+
 ConchBlessing.EID = {}
 
 -- Add multilingual description to EID
@@ -17,8 +28,8 @@ ConchBlessing.EID.addOptLangDescription = function(itemId, itemData)
         return
     end
     
-    -- Get current language from Options
-    local currentLang = Options.Language or "en"
+    -- Get current language from config / Options
+    local currentLang = getCurrentLang()
     ConchBlessing.printDebug("Current language: " .. currentLang)
     
     -- Extract name for current language
@@ -99,72 +110,38 @@ ConchBlessing:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function()
     ConchBlessing.EID.registerAllItems()
 end)
 
--- Show item text when picking up items
-ConchBlessing:AddCallback(
-    ModCallbacks.MC_PRE_PICKUP_COLLISION,
-    ---@param pickup EntityPickup
-    ---@param collider Entity
-    function(_, pickup, collider)
-        ConchBlessing.printDebug("MC_PRE_PICKUP_COLLISION called with pickup: " .. tostring(pickup) .. ", collider: " .. tostring(collider))
-        
-        -- Check if it's a collectible item and the collider is a player
-        if pickup.Variant == PickupVariant.PICKUP_COLLECTIBLE and collider:ToPlayer() then
-            local collectibleType = pickup.SubType
-            
-            -- Find the item data for this item
-            for itemKey, itemData in pairs(ConchBlessing.ItemData) do
-                ConchBlessing.printDebug("Checking item: " .. itemKey .. " (ID: " .. tostring(itemData.id) .. ")")
-                if itemData.id == collectibleType then
-                    -- Get current language
-                    local currentLang = Options.Language or "en"
-                    
-                    -- Extract name for current language
-                    local itemName = nil
-                    if type(itemData.name) == "table" then
-                        -- Check if current language exists, otherwise use English
-                        if itemData.name[currentLang] then
-                            itemName = itemData.name[currentLang]
-                        else
-                            itemName = itemData.name["en"]
-                        end
-                    else
-                        -- Simple string
-                        itemName = itemData.name
+-- Prefer custom callback if available; otherwise, fall back to vanilla collision callback
+ConchBlessing:AddCallbackCustom(
+    isc.ModCallbackCustom.PRE_ITEM_PICKUP,
+    ---@param player EntityPlayer
+    ---@param pickingUpItem { itemType: ItemType, subType: CollectibleType | TrinketType }
+    function(_, player, pickingUpItem)
+        ConchBlessing.printDebug("PRE_ITEM_PICKUP called with player: " .. tostring(player) .. ", pickingUpItem: " .. tostring(pickingUpItem))
+
+        if not pickingUpItem then
+            return
+        end
+        if pickingUpItem.itemType == ItemType.ITEM_TRINKET then
+            return
+        end
+
+        ConchBlessing.printDebug("Picking up item: " .. tostring(pickingUpItem.itemType) .. ", " .. tostring(pickingUpItem.subType))
+
+        local collectibleType = pickingUpItem.subType
+
+        for _, itemData in pairs(ConchBlessing.ItemData) do
+            if itemData and itemData.id == collectibleType then
+                local currentLang = getCurrentLang()
+                local itemName = type(itemData.name) == "table" and (itemData.name[currentLang] or itemData.name["en"]) or itemData.name
+                local itemDescription = type(itemData.description) == "table" and (itemData.description[currentLang] or itemData.description["en"]) or itemData.description
+                if itemName and itemDescription then
+                    local hud = Game():GetHUD()
+                    if hud then
+                        hud:ShowItemText(itemName, itemDescription)
                     end
-                    
-                    -- Extract description for current language (for ShowItemText)
-                    local itemDescription = nil
-                    if type(itemData.description) == "table" then
-                        -- Check if current language exists, otherwise use English
-                        itemDescription = itemData.description[currentLang] or itemData.description["en"]
-                    else
-                        -- Simple string
-                        itemDescription = itemData.description
-                    end
-                    
-                    -- Show item text if we have both name and description
-                    if itemName and itemDescription then
-                        ConchBlessing.printDebug("Attempting to show item text...")
-                        ConchBlessing.printDebug("Item name: " .. tostring(itemName))
-                        ConchBlessing.printDebug("Item description: " .. tostring(itemDescription))
-                        
-                        local hud = Game():GetHUD()
-                        if hud then
-                            ConchBlessing.printDebug("HUD found, calling ShowItemText...")
-                            hud:ShowItemText(itemName, itemDescription)
-                            ConchBlessing.printDebug("ShowItemText called successfully")
-                        else
-                            ConchBlessing.printDebug("HUD not found!")
-                        end
-                    else
-                        ConchBlessing.printDebug("Missing name or description for ShowItemText")
-                        ConchBlessing.printDebug("Name: " .. tostring(itemName))
-                        ConchBlessing.printDebug("Description: " .. tostring(itemDescription))
-                    end
-                    
-                    break
                 end
+                break
             end
         end
     end
-) 
+)
