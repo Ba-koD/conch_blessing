@@ -1,12 +1,9 @@
 <?xml version="1.0" ?>
 <ItemPools>
-    <Pool Name="treasure">
+    <Pool Name="angel">
         <Item Name="Live Eye" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
-    <Pool Name="bossrush">
-        <Item Name="Live Eye" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
-    </Pool>
-    <Pool Name="arcade">
+    <Pool Name="ultraSecret">
         <Item Name="Live Eye" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
 </ItemPools>

@@ -5,7 +5,8 @@ ConchBlessing_Config.Version = Version
 
 local DefaultConfig = {
     language = "auto", -- 0 = Auto, otherwise can be index into LANGUAGE_MAP or language code string (e.g., "en")
-    debugMode = true,
+    debugMode = false,
+    naturalSpawn = false, -- if false, mod items are removed from natural item pools (default)
 }
 
 -- Language map managed from config

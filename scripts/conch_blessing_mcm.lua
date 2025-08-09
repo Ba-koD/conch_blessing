@@ -76,6 +76,26 @@ function ConchBlessing_MCM.Setup(mod)
         end,
         Info = {"Select the output language.", "(Default: Auto uses game language)"},
     })
+
+    -- Natural spawn toggle
+    ModConfigMenu.AddSetting(category, "General", {
+        Type = ModConfigMenu.OptionType.BOOLEAN,
+        CurrentSetting = function()
+            return mod.Config.naturalSpawn and true or false
+        end,
+        Display = function()
+            return "Natural Spawn: " .. (mod.Config.naturalSpawn and "ON" or "OFF")
+        end,
+        OnChange = function(b)
+            mod.Config.naturalSpawn = (b == true)
+            ConchBlessing_Config.Save(mod)
+        end,
+        Info = {
+            "Allow items to appear naturally in pools.",
+            "OFF: remove from pools (default)",
+            "ON: allow natural spawns",
+        }
+    })
 end
 
 return ConchBlessing_MCM

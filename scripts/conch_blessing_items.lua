@@ -68,12 +68,12 @@ ConchBlessing.ItemData = {
         },
         pool = {
             -- Use default values (weight=1.0, decrease_by=1, remove_on=0.1)
-            RoomType.ROOM_TREASURE,
-            RoomType.ROOM_BOSSRUSH,
+            RoomType.ROOM_ANGEL,
+            RoomType.ROOM_ULTRASECRET
             -- Use custom values
-            { RoomType.ROOM_ARCADE, weight=1, decrease_by=1, remove_on=0.1 },
+            -- { RoomType.ROOM_ARCADE, weight=1, decrease_by=1, remove_on=0.1 },
         },
-        quality = 3,
+        quality = 4,
         tags = "offensive",
         cache = "damage",
         hidden = false,
@@ -168,3 +168,27 @@ loadAllItems()
 ConchBlessing.printDebug("Item pools are handled in the XML file (content/itempools.xml)")
 
 -- item management functions (add as needed)
+
+-- Apply natural spawn setting: remove our items from pools unless enabled
+local function applyNaturalSpawnSetting()
+    local pool = Game():GetItemPool()
+    if not pool then return end
+    local allow = ConchBlessing.Config and ConchBlessing.Config.naturalSpawn
+    for _, itemData in pairs(ConchBlessing.ItemData) do
+        if itemData.id and itemData.id ~= -1 then
+            if not allow then
+                -- Remove from all pools (call once is enough; engine tracks per-pool)
+                pool:RemoveCollectible(itemData.id)
+            end
+        end
+    end
+end
+
+ConchBlessing:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function()
+    applyNaturalSpawnSetting()
+end)
+
+-- Also apply when entering a new level (fresh pools)
+ConchBlessing:AddCallback(ModCallbacks.MC_POST_NEW_LEVEL, function()
+    applyNaturalSpawnSetting()
+end)
