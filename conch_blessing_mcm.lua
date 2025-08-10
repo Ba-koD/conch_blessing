@@ -21,7 +21,7 @@ function ConchBlessing_MCM.Setup(mod)
         Type = ModConfigMenu.OptionType.NUMBER,
         CurrentSetting = function()
             local lang = mod.Config.language
-            if type(lang) == "string" and lang ~= "auto" and lang ~= "Auto" then
+            if type(lang) == "string" and lang ~= "Auto" then
                 for i, langObj in ipairs(ConchBlessing_Config.LANGUAGE_MAP) do
                     if langObj.code == lang then
                         return i
@@ -35,7 +35,7 @@ function ConchBlessing_MCM.Setup(mod)
         Display = function()
             local idx = 0
             local lang = mod.Config.language
-            if type(lang) == "string" and lang ~= "auto" and lang ~= "Auto" then
+            if type(lang) == "string" and lang ~= "Auto" then
                 for i, langObj in ipairs(ConchBlessing_Config.LANGUAGE_MAP) do
                     if langObj.code == lang then
                         idx = i
@@ -60,7 +60,7 @@ function ConchBlessing_MCM.Setup(mod)
         end,
         OnChange = function(n)
             if n == 0 then
-                mod.Config.language = "auto"
+                mod.Config.language = "Auto"
             else
                 local langObj = ConchBlessing_Config.LANGUAGE_MAP[n]
                 if langObj then

@@ -61,10 +61,10 @@ ConchBlessing.ItemData = {
         eid ={
             kr = {"몬스터를 적중시킬때 마다 {{Damage}}데미지 배수가 0.1씩 증가합니다.",
             "#몬스터에 맞지 않으면 {{Damage}}데미지 배수가 0.15씩 감소합니다.",
-            "#{{Damage}}최대/최소 데미지 배수 (x3.0/x0.5)"},
+            "#{{Damage}}최대/최소 데미지 배수 (x3.0/x0.75)"},
             en = {"{{Damage}}Damage multiplier increases by 0.1 as you hit enemies.",
             "#{{Damage}}Damage multiplier decreases by 0.15 as you miss enemies.",
-            "#{{Damage}}Damage multiplier is capped at 3.0 and cannot go below 0.5."},
+            "#{{Damage}}Damage multiplier is capped at 3.0 and cannot go below 0.75."},
         },
         pool = {
             -- Use default values (weight=1.0, decrease_by=1, remove_on=0.1)

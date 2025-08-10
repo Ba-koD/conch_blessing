@@ -4,7 +4,7 @@ ConchBlessing.liveeye = {}
 ConchBlessing.liveeye.data = {
     damageMultiplier = 1.0,
     maxDamageMultiplier = 3.0,
-    minDamageMultiplier = 0.5,
+    minDamageMultiplier = 0.75,
     hitMultiplierIncrease = 0.1,
     missMultiplierDecrease = 0.15,
 }
@@ -54,17 +54,31 @@ ConchBlessing.liveeye.onPickup = function(_, player, collectibleType, rng)
     player:EvaluateItems()
 end
 
+local function supportsTearPoisonAPI(player)
+    return player and type(player.GetTearPoisonDamage) == "function" and type(player.SetTearPoisonDamage) == "function"
+end
+
 -- calculate damage multiplier
 ConchBlessing.liveeye.onEvaluateCache = function(_, player, cacheFlag)
     if cacheFlag == CacheFlag.CACHE_DAMAGE then
         if player:HasCollectible(LIVE_EYE_ID) then
             -- Engine recalculates base each EvaluateCache; multiply once by current (clamped) multiplier
-            local target = math.max(
+            local mult = math.max(
                 ConchBlessing.liveeye.data.minDamageMultiplier,
                 math.min(ConchBlessing.liveeye.data.damageMultiplier, ConchBlessing.liveeye.data.maxDamageMultiplier)
             )
-            player.Damage = player.Damage * target
-            ConchBlessing.printDebug(string.format("Live Eye applied multiplier: %.2f -> damage=%.2f", target, player.Damage))
+            player.Damage = player.Damage * mult
+            if supportsTearPoisonAPI(player) then
+                local pdata = player:GetData()
+                pdata.conch_liveeye_tpd_base = pdata.conch_liveeye_tpd_base or player:GetTearPoisonDamage()
+                if mult == 1.0 then
+                    pdata.conch_liveeye_tpd_base = player:GetTearPoisonDamage()
+                end
+                local base = pdata.conch_liveeye_tpd_base or 0
+                player:SetTearPoisonDamage(base * mult)
+                pdata.conch_liveeye_tpd_lastMult = mult
+            end
+            ConchBlessing.printDebug(string.format("Live Eye final mult=%.2f -> damage=%.2f", mult, player.Damage))
         end
     end
 end
@@ -119,25 +133,20 @@ ConchBlessing.liveeye.onFireTear = function(_, tear)
             local up = getAboveOneGlowRatio()
             local down = getBelowOneGlowRatio()
             if up > 0 then
-                -- Strong blue glow (Dead Eye 스타일의 강한 발광감을 파란색으로)
                 local r = 1.0 - 0.8 * up
                 local g = 1.0 - 0.5 * up
                 local b = 1.0
-                -- 강한 파랑/청록 계열의 additive 오프셋
                 local ro = 0.0
                 local go = 0.5 * up
                 local bo = 1.2 * up
                 tear:SetColor(Color(r, g, b, 1.0, ro, go, bo), -1, 1, false, false)
-                -- 살짝 크기도 키워 존재감 강화
                 tear.Scale = tear.Scale * (1.0 + 0.15 * up)
             elseif down > 0 then
-                -- 강한 검은 광휘 느낌: 채널을 크게 낮춰 어둡게
                 local dim = 0.8 * down
                 local r = 1.0 - dim
                 local g = 1.0 - dim
                 local b = 1.0 - dim
                 tear:SetColor(Color(r, g, b, 1.0, 0, 0, 0), -1, 1, false, false)
-                -- 약간 작아지게 해서 위축된 느낌
                 tear.Scale = tear.Scale * (1.0 - 0.1 * down)
             end
         end

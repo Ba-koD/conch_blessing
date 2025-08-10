@@ -5,9 +5,38 @@
     <dependencies>
         <dependency id="3540206030" />
     </dependencies>
-    <id>0</id>
-    <description>🐚 Conch's Blessing - Items and Upgrades</description>
-    <version>1.0.0</version>
+    <id>3545334858</id>
+    <description>🐚 소라고동의 축복 (Conch’s Blessing)
+
+아이작에 &quot;소라고동의 축복&quot; 업그레이드 시스템을 추가합니다. 기존 아이템을 세련된 연출과 함께 변환하고, 언어/스폰/타이밍을 세밀하게 커스터마이징할 수 있습니다.
+
+주요 기능:
+- 아이템 업그레이드 연출: Before → Morph → After로 자연스럽게 연결
+- 다국어 지원: HUD/EID 팝업 한/영 자동 적용(설정으로 언어 고정 가능)
+- 자연 스폰 토글: MCM에서 모드 아이템 자연 스폰 ON/OFF(기본 OFF)
+- Mod Config Menu 호환
+
+영감: Lazy MattPack [RGON] 모드에서 스타일적 영감을 받았습니다 (Steam Workshop: https://steamcommunity.com/sharedfiles/filedetails/?id=3408993906)
+
+Magic Conch모드 필수 (Steam Workshop: https://steamcommunity.com/sharedfiles/filedetails/?id=3540206030)
+
+---
+
+Conch’s Blessing
+
+Adds a polished &quot;Conch’s Blessing&quot; upgrade system. Transform items with bespoke visuals, language-aware HUD/EID, and flexible spawn/timing controls.
+
+Key Features:
+- Upgrade Sequence: Before → Morph → After
+- Multi-language: HUD/EID popups in KR/EN (optionally force a language)
+- Natural Spawn Toggle: Enable/disable mod item spawns via MCM (default OFF)
+- Compatible with Mod Config Menu
+
+Inspiration: Style inspired by &quot;Lazy MattPack [RGON]&quot; by Mr. Headcrab (Steam Workshop: https://steamcommunity.com/sharedfiles/filedetails/?id=3408993906)
+
+Required Mod: Magic Conch (Steam Workshop: https://steamcommunity.com/sharedfiles/filedetails/?id=3540206030)
+</description>
+    <version>1.0.2</version>
     <visibility>Public</visibility>
     <tag id="Lua"/>
     <tag id="Items"/>

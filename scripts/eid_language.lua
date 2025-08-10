@@ -6,7 +6,7 @@ local isc = require("scripts.lib.isaacscript-common")
 -- Inline language resolver to ensure immediate reflection of config
 local function getCurrentLang()
     local cfg = ConchBlessing and ConchBlessing.Config and ConchBlessing.Config.language
-    if type(cfg) == "string" and cfg ~= "auto" then
+    if type(cfg) == "string" and cfg ~= "Auto" then
         return cfg
     end
     return (Options and Options.Language) or "en"

@@ -1,5 +1,5 @@
 local ConchBlessing_Config = require("conch_blessing_config")
-local ConchBlessing_MCM = require("scripts.conch_blessing_mcm")
+local ConchBlessing_MCM = require("conch_blessing_mcm")
 local isc = require("scripts.lib.isaacscript-common")
 
 ConchBlessing = RegisterMod("Conch's Blessing", 1)
