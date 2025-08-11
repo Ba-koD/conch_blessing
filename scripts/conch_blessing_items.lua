@@ -103,6 +103,55 @@ ConchBlessing.ItemData = {
             gameStarted = "liveeye.onGameStarted",
             update = "liveeye.onUpdate"
         }
+    },
+    VOID_DAGGER = {
+        type = "passive",
+        id = Isaac.GetItemIdByName("Void Dagger"),
+        name = {
+            kr = "공허의 단검",
+            en = "Void Dagger"
+        },
+        description = {
+            kr = "공허가 열린다",
+            en = "The void opens"
+        },
+        eid = {
+            kr = {
+                "#적에게 명중 시 확률로 그 위치에 보이드 링을 소환합니다.",
+                "#{{Tears}}연사가 늘어나면 확률이 감소합니다. (최대 25%, 최소 1%)",
+                "#{{Luck}}운 수치에 따라 최종 확률이 증가합니다. (Luck*0.1)배 증가",
+                "#지속시간은 {{Damage}}에 따라 결정됩니다. (최대 60 프레임)",
+                "#{{BlackHeart}}블랙하트 드랍 효과는 발생하지 않습니다."
+            },
+            en = {
+                "#On hit, has a chance to spawn a void ring at impact",
+                "#Chance decreases with {{Tears}} (max 25%, min 1%)",
+                "#{{Luck}}Luck bonus: final p × (1+0.1×Luck), capped at ×2 at Luck 10",
+                "#Duration: {{Damage}} increases per 10 damage (max 60 frames)",
+                "#{{BlackHeart}}No black heart drops from the ring"
+            }
+        },
+        pool = {
+            RoomType.ROOM_DEVIL,
+            RoomType.ROOM_TREASURE
+        },
+        quality = 4,
+        tags = "offensive devil",
+        cache = "all",
+        hidden = false,
+        shopprice = 20,
+        devilprice = 2,
+        origin = CollectibleType.COLLECTIBLE_ATHAME,
+        flag = "neutral",
+        script = "scripts/items/void_dagger",
+        callbacks = {
+            tearCollision = "voiddagger.onTearCollision",
+            update = "voiddagger.onUpdate",
+            postPlayerUpdate = "voiddagger.onPlayerUpdate"
+        },
+        -- Upgrade visuals (Neutral flavor)
+        onBeforeChange = "voiddagger.onBeforeChange",
+        onAfterChange = "voiddagger.onAfterChange",
     }
 }
 

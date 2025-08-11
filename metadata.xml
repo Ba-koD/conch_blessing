@@ -2,9 +2,6 @@
 <metadata>
     <name>Conch's Blessing</name>
     <directory>conch_blessing</directory>
-    <dependencies>
-        <dependency id="3540206030" />
-    </dependencies>
     <id>3545334858</id>
     <description>🐚 소라고동의 축복 (Conch’s Blessing)
 
@@ -19,6 +16,8 @@
 영감: Lazy MattPack [RGON] 모드에서 스타일적 영감을 받았습니다 (Steam Workshop: https://steamcommunity.com/sharedfiles/filedetails/?id=3408993906)
 
 Magic Conch모드 필수 (Steam Workshop: https://steamcommunity.com/sharedfiles/filedetails/?id=3540206030)
+
+RGON 추천
 
 ---
 
@@ -35,8 +34,9 @@ Key Features:
 Inspiration: Style inspired by &quot;Lazy MattPack [RGON]&quot; by Mr. Headcrab (Steam Workshop: https://steamcommunity.com/sharedfiles/filedetails/?id=3408993906)
 
 Required Mod: Magic Conch (Steam Workshop: https://steamcommunity.com/sharedfiles/filedetails/?id=3540206030)
-</description>
-    <version>1.0.2</version>
+
+RGON Recommended</description>
+    <version>1.0.3</version>
     <visibility>Public</visibility>
     <tag id="Lua"/>
     <tag id="Items"/>
