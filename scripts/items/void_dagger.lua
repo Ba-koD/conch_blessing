@@ -1,15 +1,9 @@
 ConchBlessing.voiddagger = {}
 
--- Tunable parameters similar to live_eye style
+-- config
 ConchBlessing.voiddagger.data = {
-    -- p(S) = lerp(pMax ↘ pMin, t),  t = clamp((S - sMin) / (sMax - sMin), 0, 1)
-    -- S=sMin → pMax, S=sMax → pMin. Default: sMin=2.73→pMax=0.20, sMax=120→pMin=0.01
-    sMin = 2,   -- low S = start point
-    sMax = 120.0,  -- high S = end point
-    pMin = 0.01,   -- min p = 1%
-    pMax = 0.25,   -- max p = 25%
-    targetLockoutF = 20, -- frames per-target lockout
-    Radius = 15,
+    targetLockoutF = 20, -- per-target lockout frames
+    Radius = 15,         -- ring radius
 }
 
 local VOID_DAGGER_ID = Isaac.GetItemIdByName("Void Dagger")
@@ -19,13 +13,13 @@ ConchBlessing.voiddagger._lastProcFrameByNpc = {}
 ConchBlessing.voiddagger._lastGlobalSpawnFrame = -999
 ConchBlessing.voiddagger._upgradeAnim = nil
 
--- S ≈ 30 / (MaxFireDelay + 1)
+-- shots per second (SPS): S ≈ 30 / (MaxFireDelay + 1)
 local function getShotsPerSecond(player)
     local maxDelay = player.MaxFireDelay or 0
     return math.max(1.0, 30.0 / (maxDelay + 1.0))
 end
 
--- R = TearRange / 40
+-- display range: R = TearRange / 40
 local function getDisplayRange(player)
     local tr = player.TearRange
     return tr / 40.0
@@ -35,7 +29,7 @@ local function computeRingRadiusFromRange(player)
     return ConchBlessing.voiddagger.data.Radius
 end
 
--- Timeout = 10, 20, 30, 40, 50, 60 frames by damage buckets [0~10), [10~20) ... [50~∞)
+-- timeout frames by damage buckets: 10..60
 local function computeTimeoutFromDamage(damage)
     local dmg = tonumber(damage) or 0
     if dmg < 0 then dmg = 0 end
@@ -46,25 +40,18 @@ local function computeTimeoutFromDamage(damage)
     return timeout
 end
 
--- p(S) = lerp(pMax..pMin, t), t = clamp((S - sMin)/(sMax - sMin), 0, 1)
+-- base proc chance: p = max(5%, (30 - SPS)%)
 local function computeProcChanceFromS(shotsPerSecond)
-    local cfg = ConchBlessing.voiddagger.data
-    local s = math.max(0.001, shotsPerSecond)
-    local sMin, sMax = cfg.sMin, cfg.sMax
-    local pMin, pMax = cfg.pMin, cfg.pMax
-    local span = math.max(0.001, sMax - sMin)
-    local t = (s - sMin) / span
-    if t < 0 then t = 0 end
-    if t > 1 then t = 1 end
-    -- p(S) = lerp(pMax..pMin, t), t = clamp((S - sMin)/(sMax - sMin), 0, 1)
-    local p = pMax + (pMin - pMax) * t
-    if p < pMin then p = pMin end
-    if p > pMax then p = pMax end
+    local s = tonumber(shotsPerSecond) or 0
+    if s < 0 then s = 0 end
+    -- (30 - s)% guaranteed 5%
+    local p = (30.0 - s) / 100.0
+    if p < 0.05 then p = 0.05 end
+    if p > 1.0 then p = 1.0 end
     return p
 end
 
--- Luck bonus: pFinal = pBase × (1 + 0.1 × clamp(luck, 0, 10))
--- 0Luck → +0%, 10Luck → +100% (max 2x). Cap at 100%
+-- luck bonus: pFinal = pBase × (1 + 0.1 × clamp(luck, 0, 10)), capped at 100%
 local function applyLuckBonus(p, luck)
     local L = math.max(0.0, math.min(10.0, luck or 0.0))
     local factor = 1.0 + 0.1 * L
@@ -85,7 +72,7 @@ local function shouldProcForNpc(npc)
     return true
 end
 
--- Upgrade visual (Neutral): brief gray pulse before, soft poof after
+-- upgrade visuals
 ConchBlessing.voiddagger.onBeforeChange = function(upgradePos, pickup, _)
     ConchBlessing.voiddagger._upgradeAnim = {
         pickup = pickup,
@@ -126,25 +113,25 @@ local function spawnVoidRingAt(player, pos)
     local laser = ring:ToLaser()
     if not laser then return end
 
-    -- Set Timeout based on player's damage
+    -- set timeout by player's damage
     local timeoutF = computeTimeoutFromDamage(player.Damage)
     if laser.SetTimeout then laser:SetTimeout(timeoutF) end
     laser.Timeout = timeoutF
 
-    -- No black heart drops from the ring
+    -- prevent black heart drops
     if laser.SetBlackHpDropChance then
         laser:SetBlackHpDropChance(0)
     elseif laser.BlackHpDropChance ~= nil then
         laser.BlackHpDropChance = 0
     end
 
-    -- Detach from following player and lock at hit position
+    -- detach and lock at hit position
     laser.DisableFollowParent = true
     laser.Position = pos
     laser.ParentOffset = pos - player.Position
     laser.Velocity = Vector.Zero
 
-    -- Radius scales with player's range
+    -- set radius
     local radius = computeRingRadiusFromRange(player)
     if laser.Radius ~= nil then
         laser.Radius = radius
@@ -172,10 +159,10 @@ ConchBlessing.voiddagger.onTearCollision = function(_, tear, collider, _)
         return nil
     end
 
-    -- Compute chance scaled inversely with tears
+    -- compute proc chance
     local shotsPerSecond = getShotsPerSecond(player)          -- S ≈ 30/(MaxFireDelay+1)
-    local pBase = computeProcChanceFromS(shotsPerSecond)      -- base chance p(S)
-    local p, factor, L = applyLuckBonus(pBase, player.Luck)   -- apply luck bonus
+    local pBase = computeProcChanceFromS(shotsPerSecond)      -- 기본 확률
+    local p, luckFactor, clampedLuck = applyLuckBonus(pBase, player.Luck) -- 운 보정 적용
     local R = getDisplayRange(player)                         -- R = TearRange/40
     local dbgRadius = computeRingRadiusFromRange(player)      -- Radius
     local D = player.MaxFireDelay or 0                        -- current MaxFireDelay(frames)
@@ -188,8 +175,8 @@ ConchBlessing.voiddagger.onTearCollision = function(_, tear, collider, _)
         spawnVoidRingAt(player, hitPos)
         if ConchBlessing and ConchBlessing.printDebug then
             ConchBlessing.printDebug(string.format(
-                "VoidDagger PROC: pBase=%.2f%% pFinal=%.2f%% (x%.1f @Luck=%.1f) roll=%.3f S=%.2f D=%.2f R=%.2f radius=%.2f pos=(%.1f,%.1f) npcSeed=%s",
-                pBase * 100.0, p * 100.0, factor, L, roll, shotsPerSecond, D, R, dbgRadius, hitPos.X, hitPos.Y, tostring(npc.InitSeed or npc.Index)
+                "Void Dagger PROC: base=%.2f%% final=%.2f%% (luck x%.1f @Luck=%.1f) roll=%.3f S=%.2f D=%.2f R=%.2f radius=%.2f pos=(%.1f,%.1f) npcSeed=%s",
+                pBase * 100.0, p * 100.0, luckFactor, clampedLuck, roll, shotsPerSecond, D, R, dbgRadius, hitPos.X, hitPos.Y, tostring(npc.InitSeed or npc.Index)
             ))
         end
     end
@@ -247,10 +234,10 @@ ConchBlessing.voiddagger.onPlayerUpdate = function(_, player)
             local R = getDisplayRange(player)
             local radius = computeRingRadiusFromRange(player)
             local pBase = computeProcChanceFromS(S)
-            local p, factor, L = applyLuckBonus(pBase, player.Luck)
+            local p, luckFactor, clampedLuck = applyLuckBonus(pBase, player.Luck)
             ConchBlessing.printDebug(string.format(
-                "VoidDagger PICKUP: pBase=%.2f%% pFinal=%.2f%% (x%.1f @Luck=%.1f) S=%.2f D=%.2f R=%.2f radius=%.2f",
-                pBase * 100.0, p * 100.0, factor, L, S, D, R, radius
+                "Void Dagger 획득: 기본=%.2f%% 최종=%.2f%% (운 x%.1f @Luck=%.1f) S=%.2f D=%.2f R=%.2f 반지름=%.2f",
+                pBase * 100.0, p * 100.0, luckFactor, clampedLuck, S, D, R, radius
             ))
         end
     end
