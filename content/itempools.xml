@@ -2,9 +2,11 @@
 <ItemPools>
     <Pool Name="angel">
         <Item Name="Live Eye" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Eternal Flame" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
     <Pool Name="ultraSecret">
         <Item Name="Live Eye" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Eternal Flame" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
     <Pool Name="devil">
         <Item Name="Void Dagger" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>

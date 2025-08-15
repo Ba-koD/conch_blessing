@@ -11,9 +11,6 @@ ConchBlessing.liveeye.data = {
 
 local LIVE_EYE_ID = Isaac.GetItemIdByName("Live Eye")
 
--- transient state for upgrade BEFORE animation (energy gathering → whiteout)
-ConchBlessing.liveeye.upgradeAnim = nil
-
 -- Ratio only for values above 1.0 (no glow at <= 1.0), normalized to [0..1] over [1.0..max]
 local function getAboveOneGlowRatio()
     local maxM = ConchBlessing.liveeye.data.maxDamageMultiplier
@@ -261,81 +258,14 @@ end
 
 -- optional custom upgrade handlers (called by upgrade system)
 ConchBlessing.liveeye.onBeforeChange = function(upgradePos, pickup, itemData)
-    -- fade the pedestal item to bright white over 2 seconds (60 ticks)
-    ConchBlessing.liveeye.upgradeAnim = {
-        pickup = pickup,
-        pos = upgradePos,
-        frames = 60,
-        phase = "before",
-        maxAdd = 0.8,
-        soundId = SoundEffect.SOUND_POWERUP_SPEWER,
-    }
-    -- start charging sound at low volume (loop)
-    local sfx = SFXManager()
-    sfx:Stop(ConchBlessing.liveeye.upgradeAnim.soundId)
-    sfx:Play(ConchBlessing.liveeye.upgradeAnim.soundId, 0.05, 0, true, 1.0, 0)
-    return 60
+    return ConchBlessing.template.positive.onBeforeChange(upgradePos, pickup, ConchBlessing.liveeye.data)
 end
 
 ConchBlessing.liveeye.onAfterChange = function(upgradePos, pickup, itemData)
-    -- single Holy Light strike at the pedestal to finalize
-    Isaac.Spawn(EntityType.ENTITY_EFFECT, EffectVariant.CRACK_THE_SKY, 0, upgradePos, Vector.Zero, nil)
-    -- fade back from white to normal over 2 seconds (60 ticks)
-    ConchBlessing.liveeye.upgradeAnim = {
-        pickup = pickup,
-        pos = upgradePos,
-        frames = 60,
-        phase = "after",
-        maxAdd = 0.8,
-        soundId = SoundEffect.SOUND_POWERUP_SPEWER,
-    }
-    -- ensure sprite starts at white after morph
-    local sprite = pickup and pickup:GetSprite() or nil
-    if sprite then
-        sprite.Color = Color(1, 1, 1, 1, ConchBlessing.liveeye.upgradeAnim.maxAdd, ConchBlessing.liveeye.upgradeAnim.maxAdd, ConchBlessing.liveeye.upgradeAnim.maxAdd)
-    end
+    ConchBlessing.template.positive.onAfterChange(upgradePos, pickup, ConchBlessing.liveeye.data)
 end
 
 -- subtle blue halo when close to max multiplier
 ConchBlessing.liveeye.onUpdate = function(_)
-    -- drive upgrade BEFORE whiteout animation if active
-    local anim = ConchBlessing.liveeye.upgradeAnim
-    if anim and anim.frames and anim.frames > 0 and anim.pickup and anim.pickup:Exists() then
-        anim.frames = anim.frames - 1
-        local base = 60.0
-        local progress = 1.0 - (anim.frames / base)
-        local sprite = anim.pickup:GetSprite()
-        if sprite then
-            if anim.phase == "before" then
-                -- to white: boost channels and additive offsets gradually
-                local add = (anim.maxAdd or 0.8) * progress
-                sprite.Color = Color(1.0, 1.0, 1.0, 1.0, add, add, add)
-            elseif anim.phase == "after" then
-                -- from white back to normal
-                local add = (anim.maxAdd or 0.8) * (1.0 - progress)
-                sprite.Color = Color(1.0, 1.0, 1.0, 1.0, add, add, add)
-            end
-        end
-        -- fade sound volume
-        if anim.soundId then
-            local vol = 0.0
-            if anim.phase == "before" then
-                vol = 0.05 + 0.45 * progress
-            else
-                vol = 0.5 * (1.0 - progress)
-            end
-            SFXManager():AdjustVolume(anim.soundId, vol)
-        end
-        if anim.frames <= 0 then
-            -- reset color to default
-            if sprite then
-                sprite.Color = Color(1, 1, 1, 1, 0, 0, 0)
-            end
-            -- stop sound at end
-            if anim.soundId then
-                SFXManager():Stop(anim.soundId)
-            end
-            ConchBlessing.liveeye.upgradeAnim = nil
-        end
-    end
+    ConchBlessing.template.onUpdate(ConchBlessing.liveeye.data)
 end

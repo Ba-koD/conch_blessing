@@ -72,38 +72,6 @@ local function shouldProcForNpc(npc)
     return true
 end
 
--- upgrade visuals
-ConchBlessing.voiddagger.onBeforeChange = function(upgradePos, pickup, _)
-    ConchBlessing.voiddagger._upgradeAnim = {
-        pickup = pickup,
-        pos = upgradePos,
-        frames = 30,
-        phase = "before",
-        maxAdd = 0.6,
-        soundId = SoundEffect.SOUND_POWERUP_SPEWER,
-    }
-    local sfx = SFXManager()
-    sfx:Stop(SoundEffect.SOUND_POWERUP_SPEWER)
-    sfx:Play(SoundEffect.SOUND_POWERUP_SPEWER, 0.2, 0, true, 1.0, 0)
-    return 30
-end
-
-ConchBlessing.voiddagger.onAfterChange = function(upgradePos, pickup, _)
-    Isaac.Spawn(EntityType.ENTITY_EFFECT, EffectVariant.POOF01, 0, upgradePos, Vector.Zero, nil)
-    ConchBlessing.voiddagger._upgradeAnim = {
-        pickup = pickup,
-        pos = upgradePos,
-        frames = 30,
-        phase = "after",
-        maxAdd = 0.6,
-        soundId = SoundEffect.SOUND_POWERUP_SPEWER,
-    }
-    local spr = pickup and pickup:GetSprite() or nil
-    if spr then
-        spr.Color = Color(1, 1, 1, 1, 0.6, 0.6, 0.6)
-    end
-end
-
 -- Spawn a Maw of Void ring at position with fixed lifetime and no black heart drops
 local function spawnVoidRingAt(player, pos)
     -- Per request: use EntityPlayer:SpawnMawOfVoid
@@ -184,40 +152,6 @@ ConchBlessing.voiddagger.onTearCollision = function(_, tear, collider, _)
     return nil
 end
 
--- Optional cleanup each room to keep map light
-ConchBlessing.voiddagger.onUpdate = function(_)
-    -- Occasionally prune old entries
-    if Game():GetFrameCount() % 90 == 0 then
-        ConchBlessing.voiddagger._lastProcFrameByNpc = {}
-    end
-
-    -- Drive upgrade gray pulse animation
-    local anim = ConchBlessing.voiddagger._upgradeAnim
-    if anim and anim.frames and anim.frames > 0 and anim.pickup and anim.pickup:Exists() then
-        anim.frames = anim.frames - 1
-        local total = 30.0
-        local t = 1.0 - (anim.frames / total)
-        local spr = anim.pickup:GetSprite()
-        if spr then
-            if anim.phase == "before" then
-                local add = (anim.maxAdd or 0.6) * t
-                spr.Color = Color(1.0, 1.0, 1.0, 1.0, add, add, add)
-            elseif anim.phase == "after" then
-                local add = (anim.maxAdd or 0.6) * (1.0 - t)
-                spr.Color = Color(1.0, 1.0, 1.0, 1.0, add, add, add)
-            end
-        end
-        if anim.frames <= 0 then
-            if spr then
-                spr.Color = Color(1, 1, 1, 1, 0, 0, 0)
-            end
-            if anim.soundId then
-                SFXManager():Stop(anim.soundId)
-            end
-            ConchBlessing.voiddagger._upgradeAnim = nil
-        end
-    end
-end
 
 -- Debug: print once on pickup
 ConchBlessing.voiddagger.onPlayerUpdate = function(_, player)
@@ -243,3 +177,17 @@ ConchBlessing.voiddagger.onPlayerUpdate = function(_, player)
     end
 end
 
+
+-- Optional cleanup each room to keep map light
+ConchBlessing.voiddagger.onUpdate = function(_)
+    ConchBlessing.template.onUpdate(ConchBlessing.voiddagger.data)
+end
+
+-- upgrade visuals
+ConchBlessing.voiddagger.onBeforeChange = function(upgradePos, pickup, _)
+    return ConchBlessing.template.neutral.onBeforeChange(upgradePos, pickup, ConchBlessing.voiddagger.data)
+end
+
+ConchBlessing.voiddagger.onAfterChange = function(upgradePos, pickup, _)
+    return ConchBlessing.template.neutral.onAfterChange(upgradePos, pickup, ConchBlessing.voiddagger.data)
+end

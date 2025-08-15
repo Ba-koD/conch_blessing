@@ -1,5 +1,6 @@
 <?xml version="1.0" ?>
 <items gfxroot="gfx/items/" version="1">
     <passive id="0" name="Live Eye" gfx="live_eye.png" quality="4" tags="offensive" cache="damage" shopprice="20" devilprice="2" chargetype="normal"/>
-    <passive id="1" name="Void Dagger" gfx="void_dagger.png" quality="4" tags="offensive devil" cache="all" shopprice="20" devilprice="2"/>
+    <passive id="1" name="Void Dagger" gfx="void_dagger.png" quality="4" tags="offensive devil" cache="damage firedelay" shopprice="20" devilprice="2"/>
+    <passive id="2" name="Eternal Flame" gfx="eternal_flame.png" quality="4" tags="offensive angel" cache="damage firedelay" shopprice="20" devilprice="2"/>
 </items>

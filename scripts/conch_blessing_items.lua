@@ -37,6 +37,9 @@
 -- Conch's Blessing - Items System
 -- Item information and callback management system
 
+-- Load template system for upgrade animations
+ConchBlessing.template = require("scripts.template")
+
 ConchBlessing.printDebug("Item system loaded!")
 
 -- check if ModCallbacks is defined
@@ -137,7 +140,7 @@ ConchBlessing.ItemData = {
         },
         quality = 4,
         tags = "offensive devil",
-        cache = "all",
+        cache = "damage firedelay",
         hidden = false,
         shopprice = 20,
         devilprice = 2,
@@ -152,6 +155,54 @@ ConchBlessing.ItemData = {
         -- Upgrade visuals (Neutral flavor)
         onBeforeChange = "voiddagger.onBeforeChange",
         onAfterChange = "voiddagger.onAfterChange",
+    },
+    ETERNAL_FLAME = {
+        type = "passive",
+        id = Isaac.GetItemIdByName("Eternal Flame"),
+        name = {
+            kr = "영원한 불꽃",
+            en = "Eternal Flame"
+        },
+        description = {
+            kr = "정화의 불길",
+            en = "Baptize with fire"
+        },
+        eid = {
+            kr = {
+                "저주가 걸릴 때마다 저주를 제거합니다.",
+                "#저주 제거 시 고정 데미지 +3.0, 연사 +1.0을 영구적으로 부여합니다.",
+                "#저주가 걸릴 확률이 증가합니다."
+            },
+            en = {
+                "Removes curses when they are applied.",
+                "#Grants fixed damage +3.0 and fixed fire rate +1.0 permanently when removing curses.",
+                "#Increases curse chance."
+            }
+        },
+        pool = {
+            RoomType.ROOM_ANGEL,
+            RoomType.ROOM_ULTRASECRET
+        },
+        quality = 4,
+        tags = "offensive angel",
+        cache = "damage firedelay",
+        hidden = false,
+        shopprice = 20,
+        devilprice = 2,
+        origin = CollectibleType.COLLECTIBLE_BLACK_CANDLE,
+        flag = "positive",
+        script = "scripts/items/eternal_flame",
+        callbacks = {
+            pickup = "eternalflame.onPickup",
+            postPlayerUpdate = "eternalflame.onPlayerUpdate",
+            evaluateCache = "eternalflame.onEvaluateCache",
+            postNewLevel = "eternalflame.onNewLevel",
+            postNewRoom = "eternalflame.onNewRoom",
+            postCurseEval = "eternalflame.onCurseEval",
+            update = "eternalflame.onUpdate"
+        },
+        onBeforeChange = "eternalflame.onBeforeChange",
+        onAfterChange = "eternalflame.onAfterChange",
     }
 }
 
