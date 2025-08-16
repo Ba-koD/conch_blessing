@@ -1,6 +1,5 @@
 ConchBlessing.liveeye = {}
 
--- Live Eye effect variables
 ConchBlessing.liveeye.data = {
     damageMultiplier = 1.0,
     maxDamageMultiplier = 3.0,
@@ -11,7 +10,6 @@ ConchBlessing.liveeye.data = {
 
 local LIVE_EYE_ID = Isaac.GetItemIdByName("Live Eye")
 
--- Ratio only for values above 1.0 (no glow at <= 1.0), normalized to [0..1] over [1.0..max]
 local function getAboveOneGlowRatio()
     local maxM = ConchBlessing.liveeye.data.maxDamageMultiplier
     local curM = ConchBlessing.liveeye.data.damageMultiplier
@@ -27,7 +25,6 @@ local function getAboveOneGlowRatio()
     return t
 end
 
--- Ratio only for values below 1.0 (no glow at >= 1.0), normalized to [0..1] over [min..1.0]
 local function getBelowOneGlowRatio()
     local minM = ConchBlessing.liveeye.data.minDamageMultiplier
     local curM = ConchBlessing.liveeye.data.damageMultiplier
@@ -37,50 +34,36 @@ local function getBelowOneGlowRatio()
     if 1.0 <= minM then
         return 0
     end
+    if curM <= minM then
+        return 1
+    end
     local t = (1.0 - curM) / (1.0 - minM)
     if t < 0 then return 0 end
     if t > 1 then return 1 end
     return t
 end
 
--- on pickup
 ConchBlessing.liveeye.onPickup = function(_, player, collectibleType, rng)
     ConchBlessing.printDebug("Live Eye item picked up!")
-    -- add damage cache flag
     player:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
     player:EvaluateItems()
 end
 
-local function supportsTearPoisonAPI(player)
-    return player and type(player.GetTearPoisonDamage) == "function" and type(player.SetTearPoisonDamage) == "function"
-end
-
--- calculate damage multiplier
 ConchBlessing.liveeye.onEvaluateCache = function(_, player, cacheFlag)
     if cacheFlag == CacheFlag.CACHE_DAMAGE then
         if player:HasCollectible(LIVE_EYE_ID) then
-            -- Engine recalculates base each EvaluateCache; multiply once by current (clamped) multiplier
             local mult = math.max(
                 ConchBlessing.liveeye.data.minDamageMultiplier,
                 math.min(ConchBlessing.liveeye.data.damageMultiplier, ConchBlessing.liveeye.data.maxDamageMultiplier)
             )
-            player.Damage = player.Damage * mult
-            if supportsTearPoisonAPI(player) then
-                local pdata = player:GetData()
-                pdata.conch_liveeye_tpd_base = pdata.conch_liveeye_tpd_base or player:GetTearPoisonDamage()
-                if mult == 1.0 then
-                    pdata.conch_liveeye_tpd_base = player:GetTearPoisonDamage()
-                end
-                local base = pdata.conch_liveeye_tpd_base or 0
-                player:SetTearPoisonDamage(base * mult)
-                pdata.conch_liveeye_tpd_lastMult = mult
-            end
+            
+            ConchBlessing.stats.damage.applyMultiplier(player, mult)
+            
             ConchBlessing.printDebug(string.format("Live Eye final mult=%.2f -> damage=%.2f", mult, player.Damage))
         end
     end
 end
 
--- handle hit
 ConchBlessing.liveeye.handleHit = function()
     local oldMultiplier = ConchBlessing.liveeye.data.damageMultiplier
     ConchBlessing.liveeye.data.damageMultiplier = math.min(
@@ -98,7 +81,6 @@ ConchBlessing.liveeye.handleHit = function()
         oldMultiplier, ConchBlessing.liveeye.data.damageMultiplier))
 end
 
--- handle miss
 ConchBlessing.liveeye.handleMiss = function()
     local oldMultiplier = ConchBlessing.liveeye.data.damageMultiplier
     ConchBlessing.liveeye.data.damageMultiplier = math.max(
@@ -116,7 +98,6 @@ ConchBlessing.liveeye.handleMiss = function()
         oldMultiplier, ConchBlessing.liveeye.data.damageMultiplier))
 end
 
--- start tracking when tear is fired (MC_POST_FIRE_TEAR)
 ConchBlessing.liveeye.onFireTear = function(_, tear)
     local parent = tear.Parent
     if parent and parent:ToPlayer() then
@@ -126,7 +107,6 @@ ConchBlessing.liveeye.onFireTear = function(_, tear)
             data.conch_liveeye = { hit = false, ignoreRemoval = false }
             ConchBlessing.printDebug("Live Eye: tear tracking started (init)")
 
-            -- Tint tears more blue as multiplier approaches max
             local up = getAboveOneGlowRatio()
             local down = getBelowOneGlowRatio()
             if up > 0 then
@@ -150,7 +130,6 @@ ConchBlessing.liveeye.onFireTear = function(_, tear)
     end
 end
 
--- track tear collision with enemies (MC_PRE_TEAR_COLLISION)
 ConchBlessing.liveeye.onTearCollision = function(_, tear, collider, low)
     local parent = tear.Parent
     if not (parent and parent:ToPlayer()) then
@@ -176,8 +155,6 @@ ConchBlessing.liveeye.onTearCollision = function(_, tear, collider, low)
         end
     end
     if collider then
-        -- Non-enemy collisions should not count as MISS immediately.
-        -- If collided with poop/fire entity specifically, avoid MISS on removal.
         local isFireEnt = (collider.Type == EntityType.ENTITY_FIREPLACE)
         local isPoopEnt = (collider.Type == EntityType.ENTITY_POOP)
         if not isPoopEnt then
@@ -198,7 +175,6 @@ ConchBlessing.liveeye.onTearCollision = function(_, tear, collider, low)
     return nil
 end
 
--- handle tear removal (MC_POST_ENTITY_REMOVE)
 ConchBlessing.liveeye.onTearRemoved = function(_, entity)
     if entity.Type ~= EntityType.ENTITY_TEAR then
         return
@@ -223,7 +199,6 @@ ConchBlessing.liveeye.onTearRemoved = function(_, entity)
             data.conch_liveeye.hit = true
             return
         end
-        -- Check grid at position: ignore MISS if TNT/POOP/FIREPLACE grid
         local room = Game():GetRoom()
         local grid = room and room:GetGridEntityFromPos(tear.Position) or nil
         if grid then
@@ -243,12 +218,10 @@ ConchBlessing.liveeye.onTearRemoved = function(_, entity)
     end
 end
 
--- initialize data when game starts
 ConchBlessing.liveeye.onGameStarted = function(_)
     ConchBlessing.liveeye.data.damageMultiplier = 1.0
     ConchBlessing.printDebug("Live Eye data initialized!")
     
-    -- apply item effect when game starts
     local player = Isaac.GetPlayer(0)
     if player and player:HasCollectible(LIVE_EYE_ID) then
         player:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
@@ -256,7 +229,6 @@ ConchBlessing.liveeye.onGameStarted = function(_)
     end
 end
 
--- optional custom upgrade handlers (called by upgrade system)
 ConchBlessing.liveeye.onBeforeChange = function(upgradePos, pickup, itemData)
     return ConchBlessing.template.positive.onBeforeChange(upgradePos, pickup, ConchBlessing.liveeye.data)
 end
@@ -265,7 +237,6 @@ ConchBlessing.liveeye.onAfterChange = function(upgradePos, pickup, itemData)
     ConchBlessing.template.positive.onAfterChange(upgradePos, pickup, ConchBlessing.liveeye.data)
 end
 
--- subtle blue halo when close to max multiplier
 ConchBlessing.liveeye.onUpdate = function(_)
     ConchBlessing.template.onUpdate(ConchBlessing.liveeye.data)
 end

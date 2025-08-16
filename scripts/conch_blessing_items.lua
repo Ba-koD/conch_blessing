@@ -5,7 +5,7 @@
 --   name: "item name" - item display name
 --   description: "description" - item description
 --   pool: { RoomType.ROOM_XXX, ... } - item pools it appears in (can specify multiple pools as an array)
---     possible pools: ROOM_DEFAULT, ROOM_SHOP, ROOM_TREASURE, ROOM_BOSS, ROOM_MINIBOSS, ROOM_SECRET, ROOM_SUPERSECRET, ROOM_ARCADE, ROOM_CURSE, ROOM_CHALLENGE, ROOM_LIBRARY, ROOM_SACRIFICE, ROOM_DEVIL, ROOM_ANGEL, ROOM_DUNGEON, ROOM_BOSSRUSH, ROOM_ISAACS, ROOM_BARREN, ROOM_CHEST, ROOM_DICE, ROOM_BLACK_MARKET, ROOM_GREED_EXIT, ROOM_PLANETARIUM, ROOM_TELEPORTER, ROOM_TELEPORTER_EXIT, ROOM_SECRET_EXIT, ROOM_BLUE, ROOM_ULTRASECRET
+--     possible pools: ROOM_DEFAULT, ROOM_SHOP, ROOM_TREASURE, ROOM_BOSS, ROOM_MINIBOSS, ROOM_SECRET, ROOM_ARCADE, ROOM_CURSE, ROOM_CHALLENGE, ROOM_LIBRARY, ROOM_SACRIFICE, ROOM_DEVIL, ROOM_ANGEL, ROOM_DUNGEON, ROOM_BOSSRUSH, ROOM_ISAACS, ROOM_BARREN, ROOM_CHEST, ROOM_DICE, ROOM_BLACK_MARKET, ROOM_GREED_EXIT, ROOM_PLANETARIUM, ROOM_TELEPORTER, ROOM_TELEPORTER_EXIT, ROOM_SECRET_EXIT, ROOM_BLUE, ROOM_ULTRASECRET
 --     pool can be specified as:
 --       - RoomType.ROOM_XXX (uses default values: weight=1.0, decrease_by=1, remove_on=0.1)
 --       - {RoomType.ROOM_XXX, weight=1.0, decrease_by=1, remove_on=0.1} (custom values)
@@ -39,6 +39,7 @@
 
 -- Load template system for upgrade animations
 ConchBlessing.template = require("scripts.template")
+require("scripts.lib.stats")
 
 ConchBlessing.printDebug("Item system loaded!")
 
@@ -203,7 +204,96 @@ ConchBlessing.ItemData = {
         },
         onBeforeChange = "eternalflame.onBeforeChange",
         onAfterChange = "eternalflame.onAfterChange",
-    }
+    },
+    ORAL_STEROIDS = {
+        type = "passive",
+        id = Isaac.GetItemIdByName("Oral Steroids"),
+        name = {
+            kr = "경구형 스테로이드",
+            en = "Oral Steroids"
+        },
+        description = {
+            kr = "주사는 무서워",
+            en = "Shots are scary"
+        },
+        eid = {
+            kr = {
+                "획득시 모든 스탯이 0.8 ~ 1.5배가 됩니다."
+            },
+            en = {
+                "All stats are changed to 0.8 ~ 1.5x when obtained"
+            }
+        },
+        pool = {
+            RoomType.ROOM_DEVIL,
+            RoomType.ROOM_CURSE,
+            RoomType.ROOM_BLACK_MARKET,
+            RoomType.ROOM_SECRET
+        },
+        quality = 2,
+        tags = "offensive",
+        cache = "all",
+        hidden = false,
+        shopprice = 15,
+        devilprice = 1,
+        origin = CollectibleType.COLLECTIBLE_EXPERIMENTAL_TREATMENT,
+        flag = "neutral",
+        script = "scripts/items/oral_steroids",
+        callbacks = {
+            postGetCollectible = "oralsteroids.onGetCollectible",
+            evaluateCache = "oralsteroids.onEvaluateCache",
+            gameStarted = "oralsteroids.onGameStarted",
+            update = "oralsteroids.onUpdate"
+        },
+        onBeforeChange = "oralsteroids.onBeforeChange",
+        onAfterChange = "oralsteroids.onAfterChange",
+    },
+    INJECTABLE_STEROIDS = {
+        type = "active",
+        id = Isaac.GetItemIdByName("Injectable Steroids"),
+        name = {
+            kr = "주사 스테로이드",
+            en = "Injectable Steroids"
+        },
+        description = {
+            kr = "힘을 원해...",
+            en = "I need more power..."
+        },
+        eid = {
+            kr = {
+                "현재 사용 불가",
+            },
+            en = {
+                "Currently unavailable"
+            }
+        },
+        pool = {
+            RoomType.ROOM_DEVIL,
+            RoomType.ROOM_CURSE,
+            RoomType.ROOM_BLACK_MARKET,
+            RoomType.ROOM_ULTRASECRET
+        },
+        quality = 3,
+        tags = "offensive",
+        cache = "all",
+        hidden = false,
+        shopprice = 15,
+        devilprice = 3,
+        maxcharges = 3,
+        chargetype = "normal",
+        origin = CollectibleType.COLLECTIBLE_EXPERIMENTAL_TREATMENT,
+        flag = "negative",
+        script = "scripts/items/injectable_steroids",
+        callbacks = {
+            use = "injectablsteroids.onUseItem",
+            postGetCollectible = "injectablsteroids.onGetCollectible",
+            evaluateCache = "injectablsteroids.onEvaluateCache",
+            gameStarted = "injectablsteroids.onGameStarted",
+            update = "injectablsteroids.onUpdate"
+        },
+        onBeforeChange = "injectablsteroids.onBeforeChange",
+        onAfterChange = "injectablsteroids.onAfterChange",
+    },
 }
 
 -- automatically load scripts and callbacks based on ItemData

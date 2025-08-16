@@ -141,17 +141,22 @@ local function generateItemMaps()
         if itemData.origin and itemData.flag then
             ConchBlessing.printDebug("Upgrade item found: " .. itemKey .. " (origin: " .. tostring(itemData.origin) .. ", flag: " .. itemData.flag .. ")")
             
-            -- add origin item directly to conversion map
-            ConchBlessing.ItemMaps[itemData.origin] = {
+            -- 같은 origin에 대해 flag별로 다른 아이템을 매핑
+            if not ConchBlessing.ItemMaps[itemData.origin] then
+                ConchBlessing.ItemMaps[itemData.origin] = {}
+            end
+            
+            ConchBlessing.ItemMaps[itemData.origin][itemData.flag] = {
                 upgradeId = itemData.id,
                 flag = itemData.flag,
                 itemData = itemData -- reference to full item data
             }
-            ConchBlessing.printDebug("  Added to conversion map: " .. tostring(itemData.origin) .. " -> " .. tostring(itemData.id) .. " (flag: " .. itemData.flag .. ", price: " .. tostring(itemData.price) .. ")")
+            
+            ConchBlessing.printDebug("  Added to conversion map: " .. tostring(itemData.origin) .. "[" .. itemData.flag .. "] -> " .. tostring(itemData.id))
         end
     end
     
-    ConchBlessing.printDebug("Conversion map created! Total " .. ConchBlessing.tableLength(ConchBlessing.ItemMaps) .. " mappings created.")
+    ConchBlessing.printDebug("Conversion map created! Total " .. ConchBlessing.tableLength(ConchBlessing.ItemMaps) .. " origin mappings created.")
 end
 
 -- Table length helper function
@@ -185,15 +190,21 @@ local function handleMagicConchResult(result)
             ConchBlessing.printDebug("Field item found: " .. tostring(collectibleId))
             
             -- find item in conversion map
-            local upgradeData = ConchBlessing.ItemMaps[collectibleId]
-            if upgradeData then
+            local originMappings = ConchBlessing.ItemMaps[collectibleId]
+            if originMappings then
                 ConchBlessing.printDebug("Convertible item found: " .. tostring(collectibleId))
-                ConchBlessing.printDebug("  Required flag: " .. upgradeData.flag)
+                
+                local availableFlags = {}
+                for flag, _ in pairs(originMappings) do
+                    table.insert(availableFlags, flag)
+                end
+                ConchBlessing.printDebug("  Available flags: " .. table.concat(availableFlags, ", "))
                 ConchBlessing.printDebug("  Current result type: " .. result.type)
                 
-                -- check if flag matches result type
-                if upgradeData.flag == result.type then
+                local upgradeData = originMappings[result.type]
+                if upgradeData then
                     ConchBlessing.printDebug("Flag matches! Item conversion: " .. tostring(collectibleId) .. " -> " .. tostring(upgradeData.upgradeId))
+                    ConchBlessing.printDebug("  Flag type: " .. upgradeData.flag .. ", Result type: " .. result.type)
                     
                     -- Save original item properties (including pedestal)
                     local pickup = entity:ToPickup()
@@ -239,7 +250,7 @@ local function handleMagicConchResult(result)
                 end
             end
         end
-        ::continue:: -- goto continue 라벨
+        ::continue::
     end
     
     if not transformed then

@@ -137,12 +137,16 @@ ConchBlessing.CallbackManager.registerItemCallbacks = function(itemKey, itemData
     
     -- Register each callback
     for callbackKey, functionPath in pairs(itemData.callbacks) do
+        ConchBlessing.printDebug("  Processing callback: " .. callbackKey .. " -> " .. functionPath)
+        
         local callbackInfo = ConchBlessing.CallbackManager.callbackMapping[callbackKey]
         
         if not callbackInfo then
             ConchBlessing.printError("  Warning: Unknown callback type '" .. callbackKey .. "' for " .. itemKey)
             goto continue
         end
+        
+        ConchBlessing.printDebug("    Callback info: " .. callbackInfo.callback .. ", needsId: " .. tostring(callbackInfo.needsId))
         
         -- Check if callback needs valid item ID
         if callbackInfo.needsId and (itemId == -1 or itemId == nil) then
@@ -154,8 +158,11 @@ ConchBlessing.CallbackManager.registerItemCallbacks = function(itemKey, itemData
         local func = ConchBlessing.CallbackManager.getFunctionByPath(functionPath)
         if not func then
             ConchBlessing.printError("  Warning: " .. tostring(functionPath) .. " function is not defined for " .. itemKey)
+            ConchBlessing.printError("    Function path parts: " .. functionPath)
             goto continue
         end
+        
+        ConchBlessing.printDebug("    Function found: " .. tostring(func))
         
         -- Register the callback
         if callbackInfo.needsId then

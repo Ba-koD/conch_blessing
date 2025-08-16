@@ -130,16 +130,16 @@ local function detectCurseChanges(player)
 end
 
 -- callback functions
-function ConchBlessing.eternalflame.onPickup(player, collectibleType, itemPoolType, playSound, autoItem)
+function ConchBlessing.eternalflame.onPickup(_, player, collectibleType, rng)
     if collectibleType ~= ETERNAL_FLAME_ID then return end
     
     ConchBlessing.printDebug("Eternal Flame picked up by player")
     
-            -- initial data setup
-        local data = ConchBlessing.eternalflame.data
-        if data then
-            data.curseRemoved = false
-        end
+    -- initial data setup
+    local data = ConchBlessing.eternalflame.data
+    if data then
+        data.curseRemoved = false
+    end
 end
 
 function ConchBlessing.eternalflame.onEvaluateCache(_, player, cacheFlag)
@@ -279,4 +279,9 @@ end
 
 ConchBlessing.eternalflame.onAfterChange = function(upgradePos, pickup, itemData)
     ConchBlessing.template.positive.onAfterChange(upgradePos, pickup, ConchBlessing.eternalflame.data)
+end
+
+-- onPlayerUpdate function for callback registration
+function ConchBlessing.eternalflame.onPlayerUpdate(_, player)
+    if not player or not player:HasCollectible(ETERNAL_FLAME_ID) then return end
 end

@@ -3,4 +3,6 @@
     <passive id="0" name="Live Eye" gfx="live_eye.png" quality="4" tags="offensive" cache="damage" shopprice="20" devilprice="2" chargetype="normal"/>
     <passive id="1" name="Void Dagger" gfx="void_dagger.png" quality="4" tags="offensive devil" cache="damage firedelay" shopprice="20" devilprice="2"/>
     <passive id="2" name="Eternal Flame" gfx="eternal_flame.png" quality="4" tags="offensive angel" cache="damage firedelay" shopprice="20" devilprice="2"/>
+    <passive id="3" name="Oral Steroids" gfx="oral_steroids.png" quality="2" tags="offensive" cache="all" shopprice="15" devilprice="1"/>
+    <active id="4" name="Injectable Steroids" gfx="injectable_steroids.png" quality="3" tags="offensive" cache="all" shopprice="15" devilprice="3" maxcharges="3" chargetype="normal"/>
 </items>
