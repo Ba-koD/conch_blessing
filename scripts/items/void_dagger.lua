@@ -129,8 +129,8 @@ ConchBlessing.voiddagger.onTearCollision = function(_, tear, collider, _)
 
     -- compute proc chance
     local shotsPerSecond = getShotsPerSecond(player)          -- S ≈ 30/(MaxFireDelay+1)
-    local pBase = computeProcChanceFromS(shotsPerSecond)      -- 기본 확률
-    local p, luckFactor, clampedLuck = applyLuckBonus(pBase, player.Luck) -- 운 보정 적용
+    local pBase = computeProcChanceFromS(shotsPerSecond)      -- base chance
+    local p, luckFactor, clampedLuck = applyLuckBonus(pBase, player.Luck) -- luck bonus
     local R = getDisplayRange(player)                         -- R = TearRange/40
     local dbgRadius = computeRingRadiusFromRange(player)      -- Radius
     local D = player.MaxFireDelay or 0                        -- current MaxFireDelay(frames)
@@ -170,7 +170,7 @@ ConchBlessing.voiddagger.onPlayerUpdate = function(_, player)
             local pBase = computeProcChanceFromS(S)
             local p, luckFactor, clampedLuck = applyLuckBonus(pBase, player.Luck)
             ConchBlessing.printDebug(string.format(
-                "Void Dagger 획득: 기본=%.2f%% 최종=%.2f%% (운 x%.1f @Luck=%.1f) S=%.2f D=%.2f R=%.2f 반지름=%.2f",
+                "Void Dagger: base=%.2f%% final=%.2f%% (luck x%.1f @Luck=%.1f) S=%.2f D=%.2f R=%.2f radius=%.2f",
                 pBase * 100.0, p * 100.0, luckFactor, clampedLuck, S, D, R, radius
             ))
         end

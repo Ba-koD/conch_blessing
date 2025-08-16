@@ -261,10 +261,14 @@ ConchBlessing.ItemData = {
         },
         eid = {
             kr = {
-                "현재 사용 불가",
+                "사용시 모든 스탯이 0.5 ~ 2.0배가 됩니다.",
+                "#층 변경시 충전이 초기화됩니다.",
+                "#{{Warning}} 몸이 점점 노래집니다..."
             },
             en = {
-                "Currently unavailable"
+                "All stats are changed to 0.5 ~ 2.0x when used",
+                "#Charge is reset when changing floors",
+                "#{{Warning}}Your body is getting weaker..."
             }
         },
         pool = {
@@ -278,9 +282,10 @@ ConchBlessing.ItemData = {
         cache = "all",
         hidden = false,
         shopprice = 15,
-        devilprice = 3,
-        maxcharges = 3,
-        chargetype = "normal",
+        devilprice = 2,
+        maxcharges = 1,
+        chargetype = "special",
+        initcharge = 1,
         origin = CollectibleType.COLLECTIBLE_EXPERIMENTAL_TREATMENT,
         flag = "negative",
         script = "scripts/items/injectable_steroids",
@@ -289,6 +294,7 @@ ConchBlessing.ItemData = {
             postGetCollectible = "injectablsteroids.onGetCollectible",
             evaluateCache = "injectablsteroids.onEvaluateCache",
             gameStarted = "injectablsteroids.onGameStarted",
+            newLevel = "injectablsteroids.onNewLevel",
             update = "injectablsteroids.onUpdate"
         },
         onBeforeChange = "injectablsteroids.onBeforeChange",

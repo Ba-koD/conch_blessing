@@ -41,6 +41,7 @@ ConchBlessing.CallbackManager.callbackMapping = {
     postGameEnd = { callback = ModCallbacks.MC_POST_GAME_END, needsId = false },
     preGameExit = { callback = ModCallbacks.MC_PRE_GAME_EXIT, needsId = false },
     postNewLevel = { callback = ModCallbacks.MC_POST_NEW_LEVEL, needsId = false },
+    newLevel = { callback = ModCallbacks.MC_POST_NEW_LEVEL, needsId = false },
     postNewRoom = { callback = ModCallbacks.MC_POST_NEW_ROOM, needsId = false },
     getCard = { callback = ModCallbacks.MC_GET_CARD, needsId = false },
     getShaderParams = { callback = ModCallbacks.MC_GET_SHADER_PARAMS, needsId = false },

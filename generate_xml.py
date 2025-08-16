@@ -255,6 +255,12 @@ def parse_lua_file(file_path):
             item_info['chargetype'] = chargetype_match.group(1)
             print(f"  ChargeType: {item_info['chargetype']}")
         
+        # extract initcharge
+        initcharge_match = re.search(r'initcharge\s*=\s*(\d+)', item_data)
+        if initcharge_match:
+            item_info['initcharge'] = int(initcharge_match.group(1))
+            print(f"  InitCharge: {item_info['initcharge']}")
+        
         # extract hearts
         hearts_match = re.search(r'hearts\s*=\s*(-?\d+)', item_data)
         if hearts_match:
@@ -325,6 +331,9 @@ def create_items_xml(items, output_path):
         
         if item_info.get('chargetype'):
             item_elem.set("chargetype", item_info['chargetype'])
+        
+        if item_info.get('initcharge'):
+            item_elem.set("initcharge", str(item_info['initcharge']))
         
         if item_info.get('hearts'):
             item_elem.set("hearts", str(item_info['hearts']))

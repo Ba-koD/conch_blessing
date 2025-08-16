@@ -106,7 +106,7 @@ ConchBlessing.liveeye.onFireTear = function(_, tear)
             local data = tear:GetData()
             data.conch_liveeye = { hit = false, ignoreRemoval = false }
             ConchBlessing.printDebug("Live Eye: tear tracking started (init)")
-
+            
             local up = getAboveOneGlowRatio()
             local down = getBelowOneGlowRatio()
             if up > 0 then
