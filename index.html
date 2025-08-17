@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conch's Blessing - 아이템 가이드</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script src="texts.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <h1 class="title" id="pageTitle">🐚 Conch's Blessing</h1>
+            <p class="subtitle" id="pageSubtitle">소라고동의 축복 - 아이템 가이드</p>
+            <div class="language-selector">
+                <label for="languageSelect" id="languageLabel">언어:</label>
+                <select id="languageSelect" class="language-select">
+                    <option value="auto" id="autoDetect">자동 감지</option>
+                    <option value="kr" id="korean">한국어</option>
+                    <option value="en" id="english">English</option>
+                </select>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="intro">
+            <h2 class="section-title" id="introTitle">소개</h2>
+            <p class="intro-text" id="introText">Conch's Blessing은 아이작의 번제에 '소라고동의 축복' 업그레이드 시스템을 추가하는 모드입니다. 기존 아이템을 세련된 연출과 함께 변환하고, 언어/스폰/타이밍을 세밀하게 커스터마이징할 수 있습니다.</p>
+        </section>
+
+        <section class="items-grid">
+            <h2 class="section-title" id="itemsTitle">아이템 목록</h2>
+            
+            <div class="search-filter-section">
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="아이템 이름, Origin으로 검색...">
+                    <button id="searchBtn">검색</button>
+                </div>
+                
+                <div class="filter-options">
+                    <div class="filter-group">
+                        <label id="typeLabel">타입:</label>
+                        <select id="typeFilter">
+                            <option value="all" id="allTypes">모든 타입</option>
+                            <option value="passive" id="passive">패시브</option>
+                            <option value="active" id="active">액티브</option>
+                        </select>
+                    </div>
+                    
+                    <div class="filter-group">
+                        <label id="flagLabel">플래그:</label>
+                        <select id="flagFilter">
+                            <option value="all" id="allFlags">모든 플래그</option>
+                            <option value="positive" id="positive">긍정적</option>
+                            <option value="neutral" id="neutral">중립적</option>
+                            <option value="negative" id="negative">부정적</option>
+                        </select>
+                    </div>
+                    
+                    <div class="filter-group">
+                        <label id="sortLabel">정렬:</label>
+                        <select id="sortFilter">
+                            <option value="name" id="byName">이름순</option>
+                            <option value="quality" id="byQuality">품질순</option>
+                            <option value="type" id="byType">타입순</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="items-container" id="itemsContainer">
+            </div>
+        </section>
+
+        <section class="features">
+            <h2 class="section-title" id="featuresTitle">주요 기능</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <h3 id="itemUpgradeTitle">아이템 업그레이드 연출</h3>
+                    <p id="itemUpgradeDesc">Before → Morph → After로 자연스럽게 연결되는 업그레이드 시스템</p>
+                </div>
+                <div class="feature-card">
+                    <h3 id="multiLanguageTitle">다국어 지원</h3>
+                    <p id="multiLanguageDesc">HUD/EID 팝업 한/영 자동 적용</p>
+                </div>
+                <div class="feature-card">
+                    <h3 id="naturalSpawnTitle">자연 스폰 토글</h3>
+                    <p id="naturalSpawnDesc">MCM에서 모드 아이템 자연 스폰 ON/OFF</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p id="copyright">&copy; 2025 Conch's Blessing Mod</p>
+            <p id="required">Required: <a href="https://steamcommunity.com/sharedfiles/filedetails/?id=3540206030" target="_blank">Magic Conch</a></p>
+        </div>
+    </footer>
+
+    <script src="items.js"></script>
+    <script src="script.js"></script>
+</body>
+</html> 
