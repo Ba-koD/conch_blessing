@@ -281,7 +281,7 @@ function updatePageTexts(displayLang) {
     const copyright = document.getElementById('copyright');
     const required = document.getElementById('required');
     if (copyright) copyright.textContent = getText('copyright', displayLang);
-    if (required) required.textContent = getText('required', displayLang);
+    if (required) required.innerHTML = getText('required', displayLang);
 }
 
 function updateLanguageSelectorText() {

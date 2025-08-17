@@ -46,7 +46,7 @@ const texts = {
         
         // Footer
         copyright: "© 2025 Conch's Blessing Mod",
-        required: "Required:",
+        required: "Required: <a href=\"https://steamcommunity.com/sharedfiles/filedetails/?id=3540206030\" target=\"_blank\">Magic Conch</a>",
         
         // Modal and UI
         noResults: "No results found",
@@ -105,7 +105,7 @@ const texts = {
         
         // Footer
         copyright: "© 2025 Conch's Blessing Mod",
-        required: "필수 모드:",
+        required: "필수 모드: <a href=\"https://steamcommunity.com/sharedfiles/filedetails/?id=3540206030\" target=\"_blank\">Magic Conch</a>",
         
         // Modal and UI
         noResults: "검색 결과가 없습니다",

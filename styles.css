@@ -464,11 +464,17 @@ main {
 
 .footer a {
     color: var(--primary-color);
-    text-decoration: none;
+    text-decoration: underline;
+    font-weight: 500;
+    transition: all 0.3s ease;
 }
 
 .footer a:hover {
-    text-decoration: underline;
+    color: var(--secondary-color);
+    text-decoration: none;
+    background: rgba(139, 92, 246, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
 }
 
 /* Responsive */
