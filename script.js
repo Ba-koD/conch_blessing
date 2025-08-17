@@ -213,7 +213,7 @@ function updatePageContent() {
 function updatePageTexts(displayLang) {
     const pageTitle = document.getElementById('pageTitle');
     const pageSubtitle = document.getElementById('pageSubtitle');
-    if (pageTitle) pageTitle.textContent = getText('title', displayLang);
+    if (pageTitle) pageTitle.innerHTML = getText('title', displayLang);
     if (pageSubtitle) pageSubtitle.textContent = getText('subtitle', displayLang);
     
     const languageLabel = document.getElementById('languageLabel');

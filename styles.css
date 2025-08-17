@@ -42,6 +42,17 @@ body {
     font-weight: 700;
 }
 
+.title a {
+    color: white;
+    text-decoration: none;
+    transition: all 0.3s ease;
+}
+
+.title a:hover {
+    color: var(--secondary-color);
+    text-shadow: 0 0 20px rgba(6, 182, 212, 0.5);
+}
+
 .subtitle {
     font-size: 1.2rem;
     margin-bottom: 30px;

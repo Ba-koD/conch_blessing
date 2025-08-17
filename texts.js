@@ -4,7 +4,7 @@
 const texts = {
     en: {
         // Page titles and headers
-        title: "🐚 Conch's Blessing",
+        title: "🐚 <a href=\"https://steamcommunity.com/sharedfiles/filedetails/?id=3545334858\" target=\"_blank\">Conch's Blessing</a>",
         subtitle: "Conch's Blessing - Item Guide",
         introduction: "Introduction",
         items: "Items",
@@ -63,7 +63,7 @@ const texts = {
     
     kr: {
         // Page titles and headers
-        title: "🐚 Conch's Blessing",
+        title: "🐚 <a href=\"https://steamcommunity.com/sharedfiles/filedetails/?id=3545334858\" target=\"_blank\">Conch's Blessing</a>",
         subtitle: "소라고동의 축복 - 아이템 가이드",
         introduction: "소개",
         items: "아이템 목록",
