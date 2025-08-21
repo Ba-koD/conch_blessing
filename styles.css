@@ -763,6 +763,66 @@ main {
     color: #fef2f2;
 }
 
+/* 시너지 스타일 */
+.modal-synergies {
+    margin-top: 30px;
+}
+
+.modal-synergies h3 {
+    color: var(--primary-color);
+    margin-bottom: 20px;
+    font-size: 1.5rem;
+    border-bottom: 2px solid var(--primary-color);
+    padding-bottom: 10px;
+}
+
+.synergy-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.synergy-item {
+    background: rgba(139, 92, 246, 0.1);
+    border: 1px solid var(--primary-color);
+    border-radius: 15px;
+    padding: 20px;
+    transition: all 0.3s ease;
+}
+
+.synergy-item:hover {
+    background: rgba(139, 92, 246, 0.2);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
+}
+
+.synergy-header {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.synergy-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    border: 2px solid var(--primary-color);
+}
+
+.synergy-name {
+    font-weight: 600;
+    color: var(--primary-color);
+    font-size: 1.2rem;
+}
+
+.synergy-description {
+    color: var(--text-color);
+    font-size: 1rem;
+    line-height: 1.6;
+    padding-left: 55px;
+}
+
 .close {
     position: absolute;
     top: 20px;

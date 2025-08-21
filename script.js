@@ -579,6 +579,30 @@ function showItemModal(key, item) {
                     </div>
                 </div>
                 ` : ''}
+                
+                ${item.synergies && Object.keys(item.synergies).length > 0 ? `
+                <div class="modal-synergies">
+                    <h3 data-kr="시너지" data-en="Synergies">시너지</h3>
+                    <div class="synergy-list">
+                        ${Object.entries(item.synergies).map(([synergyKey, synergyData]) => {
+                            const synergyName = formatOriginName(synergyKey);
+                            const synergyDesc = synergyData[displayLang] || synergyData['en'] || getText('synergyNoDesc', displayLang);
+                            return `
+                                <div class="synergy-item">
+                                    <div class="synergy-header">
+                                        <img src="resources/gfx/items/collectibles/${synergyKey.toLowerCase()}.png" 
+                                             alt="${synergyName}" 
+                                             class="synergy-icon"
+                                             onerror="this.style.display='none';">
+                                        <span class="synergy-name">${synergyName}</span>
+                                    </div>
+                                    <div class="synergy-description">${synergyDesc}</div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+                ` : ''}
             </div>
         </div>
     `;

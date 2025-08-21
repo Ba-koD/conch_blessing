@@ -141,17 +141,23 @@ def parse_lua_file(file_path):
         has_name = re.search(r'name\s*=', item_data)
         has_type = re.search(r'type\s*=', item_data)
         
+        # 특정 키워드로 시작하는 것은 건너뛰기
+        skip_keywords = ['synergies', 'callbacks', 'onBeforeChange', 'onAfterChange']
+        if name in skip_keywords:
+            print(f"  skipping {name} (reserved keyword)")
+            continue
+        
         if not (has_name or has_type):
             print(f"  skipping {name} (not an item)")
             continue
         
         item_info = {}
         
-        # WORKING_NOW 확인
-        working_now_match = re.search(r'WORKING_NOW\s*=\s*true', item_data)
+        # WorkingNow 확인
+        working_now_match = re.search(r'WorkingNow\s*=\s*true', item_data)
         is_working_now = working_now_match is not None
         if is_working_now:
-            print(f"  WORKING_NOW detected - treating as work-in-progress item")
+            print(f"  WorkingNow detected - treating as work-in-progress item")
         
         # extract name (multilingual structure)
         name_match = re.search(r'name\s*=\s*{', item_data)
@@ -354,9 +360,57 @@ def parse_lua_file(file_path):
             item_info['flag'] = flag_match.group(1)
             print(f"  Flag: {item_info['flag']}")
         
+        # extract synergies
+        synergies_match = re.search(r'synergies\s*=\s*{', item_data)
+        print(f"  Looking for synergies in {name}: {'Found' if synergies_match else 'Not found'}")
+        if synergies_match:
+            synergies_start = synergies_match.end() - 1
+            synergies_end = find_matching_brace(item_data, synergies_start)
+            if synergies_end != -1:
+                synergies_data = item_data[synergies_start+1:synergies_end]
+                print(f"  Synergies data found: {synergies_data[:200]}...")
+                print(f"  Full synergies data: {synergies_data}")
+                
+                synergies = {}
+                # [CollectibleType.COLLECTIBLE_XXX] = { 형태의 시너지 찾기
+                synergy_pattern = r'\[CollectibleType\.COLLECTIBLE_(\w+)\]\s*=\s*{'
+                synergy_matches = re.finditer(synergy_pattern, synergies_data)
+                
+                print(f"    Synergy pattern: {synergy_pattern}")
+                print(f"    Synergies data to search: {synergies_data}")
+                
+                for match in synergy_matches:
+                    synergy_item = match.group(1)
+                    print(f"    Found synergy item: {synergy_item}")
+                    # 해당 시너지 블록의 시작과 끝 찾기
+                    block_start = match.end() - 1
+                    block_end = find_matching_brace(synergies_data, block_start)
+                    
+                    if block_end != -1:
+                        block_content = synergies_data[block_start+1:block_end]
+                        print(f"    Block content: {block_content}")
+                        # 다국어 설명 추출
+                        synergy_desc = {}
+                        for lang_match in re.finditer(r'(\w+)\s*=\s*"([^"]+)"', block_content):
+                            lang = lang_match.group(1)
+                            text = lang_match.group(2)
+                            synergy_desc[lang] = text
+                            print(f"    Synergy {synergy_item} ({lang}): {text}")
+                        
+                        synergies[synergy_item] = synergy_desc
+                    else:
+                        print(f"    Failed to find block end for {synergy_item}")
+                
+                print(f"    Final synergies dict: {synergies}")
+                if synergies:
+                    item_info['synergies'] = synergies
+                    print(f"  Synergies: {list(synergies.keys())}")
+                else:
+                    print(f"  No synergies extracted from data")
+        
         if item_info:
             if is_working_now:
-                # WORKING_NOW 아이템은 names, descriptions, eids만 남기고 나머지 제거
+                # WorkingNow 아이템은 names, descriptions, eids만 남기고 나머지 제거
                 working_item_info = {
                     'names': item_info.get('names', {}),
                     'descriptions': {
@@ -387,11 +441,11 @@ const items = {
 """
     
     for item_key, item_info in items.items():
-        # WORKING_NOW 아이템인지 확인
+        # WorkingNow 아이템인지 확인
         is_working_now = len(item_info) == 3 and 'names' in item_info and 'descriptions' in item_info and 'eids' in item_info
         
         if is_working_now:
-            # WORKING_NOW 아이템은 names, descriptions, eids, gfx만 출력
+            # WorkingNow 아이템은 names, descriptions, eids, gfx만 출력
             js_content += f"""    {item_key}: {{
         gfx: "resources/gfx/items/collectibles/{item_key.lower()}.png",
         names: {json.dumps(item_info['names'], ensure_ascii=False)},
@@ -431,6 +485,11 @@ const items = {
             if 'eids' in item_info:
                 js_content += f""",
         eids: {json.dumps(item_info['eids'], ensure_ascii=False)}"""
+            
+            # 시너지 정보 추가
+            if 'synergies' in item_info:
+                js_content += f""",
+        synergies: {json.dumps(item_info['synergies'], ensure_ascii=False)}"""
         
         js_content += """
     },

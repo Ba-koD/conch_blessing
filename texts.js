@@ -58,7 +58,11 @@ const texts = {
         tags: "Tags",
         origin: "Origin",
         flag: "Flag",
-        flagDesc: "Magic Conch's answer (Positive, Neutral, Negative)"
+        flagDesc: "Magic Conch's answer (Positive, Neutral, Negative)",
+        
+        // Synergies
+        synergies: "Synergies",
+        synergyNoDesc: "No synergy description"
     },
     
     kr: {
@@ -117,7 +121,11 @@ const texts = {
         tags: "태그",
         origin: "원본",
         flag: "플래그",
-        flagDesc: "마법의 소라고둥의 답변 (긍정적, 중립적, 부정적)"
+        flagDesc: "마법의 소라고둥의 답변 (긍정적, 중립적, 부정적)",
+        
+        // Synergies
+        synergies: "시너지",
+        synergyNoDesc: "시너지 설명 없음"
     }
 };
 

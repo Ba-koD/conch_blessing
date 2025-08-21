@@ -52,10 +52,17 @@ end
 ConchBlessing.liveeye.onEvaluateCache = function(_, player, cacheFlag)
     if cacheFlag == CacheFlag.CACHE_DAMAGE then
         if player:HasCollectible(LIVE_EYE_ID) then
-            local mult = math.max(
-                ConchBlessing.liveeye.data.minDamageMultiplier,
-                math.min(ConchBlessing.liveeye.data.damageMultiplier, ConchBlessing.liveeye.data.maxDamageMultiplier)
-            )
+            local mult = ConchBlessing.liveeye.data.damageMultiplier
+            
+            if player:HasCollectible(CollectibleType.COLLECTIBLE_ROCK_BOTTOM) then
+                mult = ConchBlessing.liveeye.data.maxDamageMultiplier
+                ConchBlessing.printDebug("Live Eye + Rock Bottom synergy: damage multiplier locked at maximum!")
+            else
+                mult = math.max(
+                    ConchBlessing.liveeye.data.minDamageMultiplier,
+                    math.min(mult, ConchBlessing.liveeye.data.maxDamageMultiplier)
+                )
+            end
             
             ConchBlessing.stats.damage.applyMultiplier(player, mult)
             
@@ -107,8 +114,15 @@ ConchBlessing.liveeye.onFireTear = function(_, tear)
             data.conch_liveeye = { hit = false, ignoreRemoval = false }
             ConchBlessing.printDebug("Live Eye: tear tracking started (init)")
             
-            local up = getAboveOneGlowRatio()
-            local down = getBelowOneGlowRatio()
+            local up, down
+            if player:HasCollectible(CollectibleType.COLLECTIBLE_ROCK_BOTTOM) then
+                up = 1.0
+                down = 0.0
+            else
+                up = getAboveOneGlowRatio()
+                down = getBelowOneGlowRatio()
+            end
+            
             if up > 0 then
                 local r = 1.0 - 0.8 * up
                 local g = 1.0 - 0.5 * up

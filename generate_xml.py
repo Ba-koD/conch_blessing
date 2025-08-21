@@ -140,11 +140,11 @@ def parse_lua_file(file_path):
         
         item_info = {}
         
-        # WORKING_NOW 확인
-        working_now_match = re.search(r'WORKING_NOW\s*=\s*true', item_data)
+        # WorkingNow 확인
+        working_now_match = re.search(r'WorkingNow\s*=\s*true', item_data)
         is_working_now = working_now_match is not None
         if is_working_now:
-            print(f"  WORKING_NOW detected - skipping XML generation for {name}")
+            print(f"  WorkingNow detected - skipping XML generation for {name}")
             continue
         
         # extract id

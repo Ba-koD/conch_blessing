@@ -33,6 +33,7 @@
 --     tearHit: "function name" - called when tear hits
 --     tearCollision: "function name" - called when tear collides
 --     gameStarted: "function name" - called when game starts
+--   WorkingNow: true/false - item is working now
 
 -- Conch's Blessing - Items System
 -- Item information and callback management system
@@ -106,6 +107,12 @@ ConchBlessing.ItemData = {
             tearRemoved = "liveeye.onTearRemoved",
             gameStarted = "liveeye.onGameStarted",
             update = "liveeye.onUpdate"
+        },
+        synergies = {
+            [CollectibleType.COLLECTIBLE_ROCK_BOTTOM] = {
+                kr = "획득하는 즉시 데미지 배수가 최대치가 됩니다",
+                en = "When obtained, damage multiplier is set to the maximum value"
+            },
         }
     },
     VOID_DAGGER = {
@@ -300,7 +307,226 @@ ConchBlessing.ItemData = {
         onBeforeChange = "injectablsteroids.onBeforeChange",
         onAfterChange = "injectablsteroids.onAfterChange",
     },
+    RAT = {
+        WorkingNow = true,
+        type = "passive",
+        id = Isaac.GetItemIdByName("Rat"),
+        name = {
+            kr = "자",
+            en = "Rat"
+        },
+        description = {
+            kr = "자",
+            en = "Rat"
+        },
+    },
+    OX = {
+        WorkingNow = true,
+        type = "passive",
+        id = Isaac.GetItemIdByName("Ox"),
+        name = {
+            kr = "축",
+            en = "Ox"
+        },
+        description = {
+            kr = "축",
+            en = "Ox"
+        },
+    },
+    TIGER = {
+        WorkingNow = true,
+        type = "passive",
+        id = Isaac.GetItemIdByName("Tiger"),
+        name = {
+            kr = "인",
+            en = "Tiger"
+        },
+        description = {
+            kr = "인",
+            en = "Tiger"
+        },
+    },
+    RABBIT = {
+        WorkingNow = true,
+        type = "passive",
+        id = Isaac.GetItemIdByName("Rabbit"),
+        name = {
+            kr = "묘",
+            en = "Rabbit"
+        },
+        description = {
+            kr = "묘",
+            en = "Rabbit"
+        },
+    },
+    DRAGON = {
+        WorkingNow = true,
+        type = "passive",
+        id = Isaac.GetItemIdByName("Dragon"),
+        name = {
+            kr = "진",
+            en = "Dragon"
+        },
+        description = {
+            kr = "진",
+            en = "Dragon"
+        },
+    },
+    SNAKE = {
+        WorkingNow = true,
+        type = "passive",
+        id = Isaac.GetItemIdByName("Snake"),
+        name = {
+            kr = "사",
+            en = "Snake"
+        },
+        description = {
+            kr = "사",
+            en = "Snake"
+        },
+    },
+    HORSE = {
+        WorkingNow = true,
+        type = "passive",
+        id = Isaac.GetItemIdByName("Horse"),
+        name = {
+            kr = "오",
+            en = "Horse"
+        },
+        description = {
+            kr = "오",
+            en = "Horse"
+        },
+    },
+    GOAT = {
+        WorkingNow = true,
+        type = "passive",
+        id = Isaac.GetItemIdByName("Goat"),
+        name = {
+            kr = "미",
+            en = "Goat"
+        },
+        description = {
+            kr = "미",
+            en = "Goat"
+        },
+    },
+    MONKEY = {
+        WorkingNow = true,
+        type = "passive",
+        id = Isaac.GetItemIdByName("Monkey"),
+        name = {
+            kr = "신",
+            en = "Monkey"
+        },
+    },
+    CHICKEN = {
+        WorkingNow = true,
+        type = "passive",
+        id = Isaac.GetItemIdByName("Chicken"),
+        name = {
+            kr = "유",
+            en = "Chicken"
+        },
+        description = {
+            kr = "유",
+            en = "Chicken"
+        },
+    },
+    DOG = {
+        WorkingNow = true,
+        type = "passive",
+        id = Isaac.GetItemIdByName("Dog"),
+        name = {
+            kr = "술",
+            en = "Dog"
+        },
+        description = {
+            kr = "술",
+            en = "Dog"
+        },
+    },
+    PIG = {
+        WorkingNow = true,
+        type = "passive",
+        id = Isaac.GetItemIdByName("Pig"),
+        name = {
+            kr = "해",
+            en = "Pig"
+        },
+        description = {
+            kr = "해",
+            en = "Pig"
+        },
+    },
 }
+
+--[[
+Capricorn(염소자리)
+↑ {{Heart}}최대 체력 +1
+↑ {{Coin}}동전, {{Bomb}}폭탄, {{Key}}열쇠 +1
+↑ {{DamageSmall}}공격력 +0.5
+↑ {{TearsSmall}}눈물 딜레이 -1
+↑ {{RangeSmall}}사거리 +1.5
+↑ {{SpeedSmall}}이동속도 +0.1
+자 (쥐) Rat
+
+Aquarius(물병자리)
+캐릭터가 지나간 자리에 파란 장판이 생깁니다.
+파란 장판에 닿은 적은 초당 6의 피해를 받습니다.
+축 (소) Ox
+
+Pisces(물고기자리)
+↑ {{TearsSmall}}연사 +0.2
+↑ {{TearsizeSmall}}눈물크기 x1.25
+공격이 적을 더 강하게 밀쳐냅니다.
+인 (호랑이) Tiger
+
+Aries(양자리)
+↑ {{SpeedSmall}}이동속도 +0.25
+높은 속도로 적과 접촉시 적에게 18의 피해를 줍니다.
+묘 (토끼) Rabbit
+
+Taurus(황소자리)
+↓ {{SpeedSmall}}이동속도{{ColorOrange}}(상한){{CR}} -0.3
+그 방에 적이 있는 동안 이동속도가 점점 증가합니다.
+{{Collectible77}} 이동속도가 2.0이 되면 5초간 무적 상태가 됩니다.
+진 (용) Dragon
+
+Gemini(쌍둥이자리)
+캐릭터와 연결되어 이동하며 적을 따라다닙니다.
+접촉한 적에게 초당 6의 피해를 줍니다.
+사 (뱀) Snake
+
+Cancer(게자리)
+↑ {{SoulHeart}}소울하트 +3
+{{Collectible108}} 피격 시 이후 그 방에서 받는 피해를 절반으로 줄여줍니다.
+오 (말) Horse
+
+Leo(사자자리)
+장애물을 부술 수 있습니다.
+미 (양) Goat
+
+Virgo(처녀자리)
+{{Pill}} 부정적인 알약 효과가 등장하지 않습니다.
+{{Collectible58}} 피격 시 일정 확률로 10초간 무적 상태가 됩니다.
+{{LuckSmall}} 행운 10 이상일 때 100% 확률
+신 (원숭이) Monkey
+
+Libra(천칭자리)
+{{Coin}}동전, {{Bomb}}폭탄, {{Key}}열쇠 +6
+{{ArrowUpDown}} {{DamageSmall}}공격력, {{TearsSmall}}연사, {{RangeSmall}}사거리, {{SpeedSmall}}이동속도가 항상 균등하게 조정됩니다.
+유 (닭) Chicken
+
+Scorpio(전갈자리)
+{{Poison}} 항상 적을 중독시키는 공격이 나갑니다.
+술 (개) Dog
+
+Sagitarius(사수자리)
+↑ {{SpeedSmall}}이동속도 +0.2
+공격이 적을 관통합니다.
+해 (돼지) Pig
+--]]
 
 -- automatically load scripts and callbacks based on ItemData
 local function loadAllItems()

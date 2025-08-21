@@ -23,7 +23,8 @@ const items = {
         pools: ["ROOM_ANGEL", "ROOM_ULTRASECRET"],
         names: {"kr": "살아있는 눈", "en": "Live Eye"},
         descriptions: {"kr": "놓쳐도 괜찮아", "en": "Misses happen"},
-        eids: {"kr": ["몬스터를 적중시킬때 마다 데미지 배수가 0.1씩 증가합니다.", "몬스터에 맞지 않으면 데미지 배수가 0.15씩 감소합니다.", "최대/최소 데미지 배수 (x3.0/x0.75)"], "en": ["Damage multiplier increases by 0.1 as you hit enemies.", "Damage multiplier decreases by 0.15 as you miss enemies.", "Damage multiplier is capped at 3.0 and cannot go below 0.75."]}
+        eids: {"kr": ["몬스터를 적중시킬때 마다 데미지 배수가 0.1씩 증가합니다.", "몬스터에 맞지 않으면 데미지 배수가 0.15씩 감소합니다.", "최대/최소 데미지 배수 (x3.0/x0.75)"], "en": ["Damage multiplier increases by 0.1 as you hit enemies.", "Damage multiplier decreases by 0.15 as you miss enemies.", "Damage multiplier is capped at 3.0 and cannot go below 0.75."]},
+        synergies: {"ROCK_BOTTOM": {"kr": "획득하는 즉시 데미지 배수가 최대치가 됩니다", "en": "When obtained, damage multiplier is set to the maximum value"}}
     },
     VOID_DAGGER: {
         type: "passive",
@@ -116,6 +117,78 @@ const items = {
         names: {"kr": "주사 스테로이드", "en": "Injectable Steroids"},
         descriptions: {"kr": "힘을 원해...", "en": "I need more power..."},
         eids: {"kr": ["사용시 모든 스탯이 0.5 ~ 2.0배가 됩니다.", "층 변경시 충전이 초기화됩니다.", "몸이 점점 노래집니다..."], "en": ["All stats are changed to 0.5 ~ 2.0x when used", "Charge is reset when changing floors", "Your body is getting weaker..."]}
+    },
+    RAT: {
+        gfx: "resources/gfx/items/collectibles/rat.png",
+        names: {"kr": "자", "en": "Rat"},
+        descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
+        eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
+    },
+    OX: {
+        gfx: "resources/gfx/items/collectibles/ox.png",
+        names: {"kr": "축", "en": "Ox"},
+        descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
+        eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
+    },
+    TIGER: {
+        gfx: "resources/gfx/items/collectibles/tiger.png",
+        names: {"kr": "인", "en": "Tiger"},
+        descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
+        eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
+    },
+    RABBIT: {
+        gfx: "resources/gfx/items/collectibles/rabbit.png",
+        names: {"kr": "묘", "en": "Rabbit"},
+        descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
+        eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
+    },
+    DRAGON: {
+        gfx: "resources/gfx/items/collectibles/dragon.png",
+        names: {"kr": "진", "en": "Dragon"},
+        descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
+        eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
+    },
+    SNAKE: {
+        gfx: "resources/gfx/items/collectibles/snake.png",
+        names: {"kr": "사", "en": "Snake"},
+        descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
+        eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
+    },
+    HORSE: {
+        gfx: "resources/gfx/items/collectibles/horse.png",
+        names: {"kr": "오", "en": "Horse"},
+        descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
+        eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
+    },
+    GOAT: {
+        gfx: "resources/gfx/items/collectibles/goat.png",
+        names: {"kr": "미", "en": "Goat"},
+        descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
+        eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
+    },
+    MONKEY: {
+        gfx: "resources/gfx/items/collectibles/monkey.png",
+        names: {"kr": "신", "en": "Monkey"},
+        descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
+        eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
+    },
+    CHICKEN: {
+        gfx: "resources/gfx/items/collectibles/chicken.png",
+        names: {"kr": "유", "en": "Chicken"},
+        descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
+        eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
+    },
+    DOG: {
+        gfx: "resources/gfx/items/collectibles/dog.png",
+        names: {"kr": "술", "en": "Dog"},
+        descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
+        eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
+    },
+    PIG: {
+        gfx: "resources/gfx/items/collectibles/pig.png",
+        names: {"kr": "해", "en": "Pig"},
+        descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
+        eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
     },
 };
 
