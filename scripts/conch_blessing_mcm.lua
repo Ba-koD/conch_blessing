@@ -8,7 +8,7 @@ function ConchBlessing_MCM.Setup(mod)
         return
     end
 
-    local ConchBlessing_Config = require("conch_blessing_config")
+    local ConchBlessing_Config = require("scripts.conch_blessing_config")
     local category = "Conch's Blessing v" .. tostring(mod.Config.Version or "")
 
     -- Recreate category to reflect any text changes

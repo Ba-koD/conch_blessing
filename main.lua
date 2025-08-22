@@ -1,5 +1,5 @@
 -- Conch's Blessing - Loader
-require("conch_blessing_core")
+require("scripts/conch_blessing_core")
 -----------------------------------------------------------
 ----=         Conch's Blessing Mod               =----
 ----=    Enhanced Items for Isaac           =----
