@@ -125,10 +125,6 @@ ConchBlessing.oralsteroids.onEvaluateCache = function(_, player, cacheFlag)
     if cacheFlag == CacheFlag.CACHE_LUCK and player.Luck > 0 then
         player.Luck = player.Luck * totalLuck
     end
-    
-    if cacheFlag == CacheFlag.CACHE_SHOTSPEED then
-        player.ShotSpeed = player.ShotSpeed * totalShotSpeed
-    end
 end
 
 -- initialize data when game started
