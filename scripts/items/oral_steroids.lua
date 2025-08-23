@@ -7,7 +7,10 @@ local SaveManager = require("scripts.lib.save_manager")
 
 ConchBlessing.oralsteroids.data = {
     minMultiplier = 0.8,
-    maxMultiplier = 1.5
+    maxMultiplier = 1.5,
+    speedDecrease = 0,
+    shotSpeedMin = 0.9,
+    shotSpeedMax = 1.1
 }
 
 ConchBlessing.oralsteroids.onEvaluateCache = function(_, player, cacheFlag)
@@ -29,30 +32,51 @@ ConchBlessing.oralsteroids.onEvaluateCache = function(_, player, cacheFlag)
     local storedCount = #ConchBlessing.oralsteroids.storedMultipliers[playerID]
     if itemNum > storedCount then
         for i = storedCount + 1, itemNum do
-                         local newMultipliers = {
-                 speed = math.floor((math.random() * (ConchBlessing.oralsteroids.data.maxMultiplier - ConchBlessing.oralsteroids.data.minMultiplier) + ConchBlessing.oralsteroids.data.minMultiplier) * 100) / 100,
-                 tears = math.floor((math.random() * (ConchBlessing.oralsteroids.data.maxMultiplier - ConchBlessing.oralsteroids.data.minMultiplier) + ConchBlessing.oralsteroids.data.minMultiplier) * 100) / 100,
-                 damage = math.floor((math.random() * (ConchBlessing.oralsteroids.data.maxMultiplier - ConchBlessing.oralsteroids.data.minMultiplier) + ConchBlessing.oralsteroids.data.minMultiplier) * 100) / 100,
-                 range = math.floor((math.random() * (ConchBlessing.oralsteroids.data.maxMultiplier - ConchBlessing.oralsteroids.data.minMultiplier) + ConchBlessing.oralsteroids.data.minMultiplier) * 100) / 100,
-                 shotSpeed = math.floor((math.random() * (ConchBlessing.oralsteroids.data.maxMultiplier - ConchBlessing.oralsteroids.data.minMultiplier) + ConchBlessing.oralsteroids.data.minMultiplier) * 100) / 100,
-                 luck = math.floor((math.random() * (ConchBlessing.oralsteroids.data.maxMultiplier - ConchBlessing.oralsteroids.data.minMultiplier) + ConchBlessing.oralsteroids.data.minMultiplier) * 100) / 100
-             }
-                         table.insert(ConchBlessing.oralsteroids.storedMultipliers[playerID], newMultipliers)
-             
-             ConchBlessing.printDebug(string.format("Oral Steroids #%d: Speed=%.2fx Tears=%.2fx Damage=%.2fx Range=%.2fx ShotSpeed=%.2fx Luck=%.2fx", 
-                 i, newMultipliers.speed, newMultipliers.tears, newMultipliers.damage, newMultipliers.range, newMultipliers.shotSpeed, newMultipliers.luck))
-         end
-         ConchBlessing.printDebug("Oral Steroids: Added " .. (itemNum - storedCount) .. " new multipliers")
-         
-         local playerSave = SaveManager.GetRunSave(player)
-         if playerSave then
-             if not playerSave.oralSteroids then
-                 playerSave.oralSteroids = {}
-             end
-             playerSave.oralSteroids = ConchBlessing.oralsteroids.storedMultipliers[playerID]
-             SaveManager.Save()
-             ConchBlessing.printDebug("Oral Steroids: Data saved to SaveManager!")
-         end
+            local rng = RNG()
+            local gameSeed = Game():GetSeeds():GetStartSeedString()
+            local gameSeedHash = 0
+            
+            for j = 1, #gameSeed do
+                local char = string.byte(gameSeed, j)
+                gameSeedHash = gameSeedHash + char * (j * 31 + char)
+            end
+            
+            local combinedSeed = i * 1000000 + gameSeedHash
+            
+            ConchBlessing.printDebug("Oral Steroids RNG Debug #" .. i .. ":")
+            ConchBlessing.printDebug("  Game Seed: " .. gameSeed)
+            ConchBlessing.printDebug("  Game Seed Hash: " .. gameSeedHash)
+            ConchBlessing.printDebug("  Item Count: " .. i)
+            ConchBlessing.printDebug("  Combined Seed: " .. combinedSeed)
+            
+            rng:SetSeed(combinedSeed, 35)
+            
+            local newMultipliers = {
+                --speed = math.floor((rng:RandomFloat() * (ConchBlessing.oralsteroids.data.maxMultiplier - ConchBlessing.oralsteroids.data.minMultiplier) + ConchBlessing.oralsteroids.data.minMultiplier) * 100) / 100,
+                tears = math.floor((rng:RandomFloat() * (ConchBlessing.oralsteroids.data.maxMultiplier - ConchBlessing.oralsteroids.data.minMultiplier) + ConchBlessing.oralsteroids.data.minMultiplier) * 100) / 100,
+                damage = math.floor((rng:RandomFloat() * (ConchBlessing.oralsteroids.data.maxMultiplier - ConchBlessing.oralsteroids.data.minMultiplier) + ConchBlessing.oralsteroids.data.minMultiplier) * 100) / 100,
+                range = math.floor((rng:RandomFloat() * (ConchBlessing.oralsteroids.data.maxMultiplier - ConchBlessing.oralsteroids.data.minMultiplier) + ConchBlessing.oralsteroids.data.minMultiplier) * 100) / 100,
+                shotSpeed = math.floor((rng:RandomFloat() * (ConchBlessing.oralsteroids.data.shotSpeedMax - ConchBlessing.oralsteroids.data.shotSpeedMin) + ConchBlessing.oralsteroids.data.shotSpeedMin) * 100) / 100,
+                luck = math.floor((rng:RandomFloat() * (ConchBlessing.oralsteroids.data.maxMultiplier - ConchBlessing.oralsteroids.data.minMultiplier) + ConchBlessing.oralsteroids.data.minMultiplier) * 100) / 100
+            }
+            
+            table.insert(ConchBlessing.oralsteroids.storedMultipliers[playerID], newMultipliers)
+            
+            ConchBlessing.printDebug(string.format("Oral Steroids #%d: Tears=%.2fx Damage=%.2fx Range=%.2fx ShotSpeed=%.2fx Luck=%.2fx", 
+                i, newMultipliers.tears, newMultipliers.damage, newMultipliers.range, newMultipliers.shotSpeed, newMultipliers.luck))
+        end
+        
+        ConchBlessing.printDebug("Oral Steroids: Added " .. (itemNum - storedCount) .. " new multipliers")
+        
+        local playerSave = SaveManager.GetRunSave(player)
+        if playerSave then
+            if not playerSave.oralSteroids then
+                playerSave.oralSteroids = {}
+            end
+            playerSave.oralSteroids = ConchBlessing.oralsteroids.storedMultipliers[playerID]
+            SaveManager.Save()
+            ConchBlessing.printDebug("Oral Steroids: Data saved to SaveManager!")
+        end
     end
     
     if cacheFlag == CacheFlag.CACHE_DAMAGE and itemNum ~= ConchBlessing.oralsteroids._lastDebugItemNum then
@@ -70,7 +94,7 @@ ConchBlessing.oralsteroids.onEvaluateCache = function(_, player, cacheFlag)
     local storedMultipliers = ConchBlessing.oralsteroids.storedMultipliers[playerID]
     for i = 1, math.min(itemNum, #storedMultipliers) do
         local multipliers = storedMultipliers[i]
-        totalSpeed = totalSpeed * multipliers.speed
+        --totalSpeed = totalSpeed * multipliers.speed
         totalTears = totalTears * multipliers.tears
         totalDamage = totalDamage * multipliers.damage
         totalRange = totalRange * multipliers.range
@@ -78,7 +102,7 @@ ConchBlessing.oralsteroids.onEvaluateCache = function(_, player, cacheFlag)
         totalLuck = totalLuck * multipliers.luck
     end
     
-    totalSpeed = math.max(ConchBlessing.oralsteroids.data.minMultiplier, totalSpeed)
+    --totalSpeed = math.max(ConchBlessing.oralsteroids.data.minMultiplier, totalSpeed)
     totalTears = math.max(ConchBlessing.oralsteroids.data.minMultiplier, totalTears)
     totalDamage = math.max(ConchBlessing.oralsteroids.data.minMultiplier, totalDamage)
     totalRange = math.max(ConchBlessing.oralsteroids.data.minMultiplier, totalRange)
@@ -86,8 +110,8 @@ ConchBlessing.oralsteroids.onEvaluateCache = function(_, player, cacheFlag)
     totalLuck = math.max(ConchBlessing.oralsteroids.data.minMultiplier, totalLuck)
     
     if cacheFlag == CacheFlag.CACHE_DAMAGE and itemNum ~= ConchBlessing.oralsteroids._lastFinalDebugItemNum then
-        ConchBlessing.printDebug(string.format("Oral Steroids Final (x%d): Speed=%.2fx Tears=%.2fx Damage=%.2fx Range=%.2fx ShotSpeed=%.2fx Luck=%.2fx", 
-            itemNum, totalSpeed, totalTears, totalDamage, totalRange, totalShotSpeed, totalLuck))
+        ConchBlessing.printDebug(string.format("Oral Steroids Final (x%d): Tears=%.2fx Damage=%.2fx Range=%.2fx ShotSpeed=%.2fx Luck=%.2fx", 
+            itemNum, totalTears, totalDamage, totalRange, totalShotSpeed, totalLuck))
         ConchBlessing.oralsteroids._lastFinalDebugItemNum = itemNum
     end
     
@@ -100,7 +124,8 @@ ConchBlessing.oralsteroids.onEvaluateCache = function(_, player, cacheFlag)
     end
     
     if cacheFlag == CacheFlag.CACHE_SPEED then
-        player.MoveSpeed = player.MoveSpeed * totalSpeed
+        local speedDecrease = ConchBlessing.oralsteroids.data.speedDecrease * itemNum
+        player.MoveSpeed = player.MoveSpeed - speedDecrease
     end
     
     if cacheFlag == CacheFlag.CACHE_RANGE then

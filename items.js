@@ -93,7 +93,7 @@ const items = {
         pools: ["ROOM_DEVIL", "ROOM_CURSE", "ROOM_BLACK_MARKET", "ROOM_SECRET"],
         names: {"kr": "경구형 스테로이드", "en": "Oral Steroids"},
         descriptions: {"kr": "주사는 무서워", "en": "Shots are scary"},
-        eids: {"kr": ["획득시 모든 스탯이 0.8 ~ 1.5배가 됩니다."], "en": ["All stats are changed to 0.8 ~ 1.5x when obtained"]}
+        eids: {"kr": ["획득시 데미지, 연사, 사거리, 행운이 0.8 ~ 1.5배가 됩니다.", "발사속도는 0.9 ~ 1.1배가 됩니다."], "en": ["Damage, fire rate, range, and luck are changed to 0.8 ~ 1.5x when obtained", "Shot speed becomes 0.9~1.1x"]}
     },
     INJECTABLE_STEROIDS: {
         type: "active",

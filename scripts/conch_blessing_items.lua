@@ -225,10 +225,12 @@ ConchBlessing.ItemData = {
         },
         eid = {
             kr = {
-                "획득시 모든 스탯이 0.8 ~ 1.5배가 됩니다."
+                "획득시 데미지, 연사, 사거리, 행운이 0.8 ~ 1.5배가 됩니다.",
+                "#발사속도는 0.9 ~ 1.1배가 됩니다."
             },
             en = {
-                "All stats are changed to 0.8 ~ 1.5x when obtained"
+                "Damage, fire rate, range, and luck are changed to 0.8 ~ 1.5x when obtained",
+                "#Shot speed becomes 0.9~1.1x"
             }
         },
         pool = {

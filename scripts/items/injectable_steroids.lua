@@ -71,13 +71,32 @@ ConchBlessing.injectablsteroids.onUseItem = function(player, collectibleID, useF
     local newIndex = #ConchBlessing.injectablsteroids.storedMultipliers[playerID] + 1
     ConchBlessing.printDebug("New index: " .. tostring(newIndex))
     
+    local rng = RNG()
+    local gameSeed = Game():GetSeeds():GetStartSeedString()
+    local gameSeedHash = 0
+    
+    for j = 1, #gameSeed do
+        local char = string.byte(gameSeed, j)
+        gameSeedHash = gameSeedHash + char * (j * 31 + char)
+    end
+    
+    local combinedSeed = newIndex * 1000000 + gameSeedHash
+    
+    ConchBlessing.printDebug("Injectable Steroids RNG Debug:")
+    ConchBlessing.printDebug("  Game Seed: " .. gameSeed)
+    ConchBlessing.printDebug("  Game Seed Hash: " .. gameSeedHash)
+    ConchBlessing.printDebug("  New Index: " .. newIndex)
+    ConchBlessing.printDebug("  Combined Seed: " .. combinedSeed)
+    
+    rng:SetSeed(combinedSeed, 35)
+    
     local newMultipliers = {
-        speed = math.floor((math.random() * (ConchBlessing.injectablsteroids.data.maxMultiplier - ConchBlessing.injectablsteroids.data.minMultiplier) + ConchBlessing.injectablsteroids.data.minMultiplier) * 100) / 100,
-        tears = math.floor((math.random() * (ConchBlessing.injectablsteroids.data.maxMultiplier - ConchBlessing.injectablsteroids.data.minMultiplier) + ConchBlessing.injectablsteroids.data.minMultiplier) * 100) / 100,
-        damage = math.floor((math.random() * (ConchBlessing.injectablsteroids.data.maxMultiplier - ConchBlessing.injectablsteroids.data.minMultiplier) + ConchBlessing.injectablsteroids.data.minMultiplier) * 100) / 100,
-        range = math.floor((math.random() * (ConchBlessing.injectablsteroids.data.maxMultiplier - ConchBlessing.injectablsteroids.data.minMultiplier) + ConchBlessing.injectablsteroids.data.minMultiplier) * 100) / 100,
-        shotSpeed = math.floor((math.random() * (ConchBlessing.injectablsteroids.data.shotSpeedMax - ConchBlessing.injectablsteroids.data.shotSpeedMin) + ConchBlessing.injectablsteroids.data.shotSpeedMin) * 100) / 100,
-        luck = math.floor((math.random() * (ConchBlessing.injectablsteroids.data.maxMultiplier - ConchBlessing.injectablsteroids.data.minMultiplier) + ConchBlessing.injectablsteroids.data.minMultiplier) * 100) / 100
+        speed = math.floor((rng:RandomFloat() * (ConchBlessing.injectablsteroids.data.maxMultiplier - ConchBlessing.injectablsteroids.data.minMultiplier) + ConchBlessing.injectablsteroids.data.minMultiplier) * 100) / 100,
+        tears = math.floor((rng:RandomFloat() * (ConchBlessing.injectablsteroids.data.maxMultiplier - ConchBlessing.injectablsteroids.data.minMultiplier) + ConchBlessing.injectablsteroids.data.minMultiplier) * 100) / 100,
+        damage = math.floor((rng:RandomFloat() * (ConchBlessing.injectablsteroids.data.maxMultiplier - ConchBlessing.injectablsteroids.data.minMultiplier) + ConchBlessing.injectablsteroids.data.minMultiplier) * 100) / 100,
+        range = math.floor((rng:RandomFloat() * (ConchBlessing.injectablsteroids.data.maxMultiplier - ConchBlessing.injectablsteroids.data.minMultiplier) + ConchBlessing.injectablsteroids.data.minMultiplier) * 100) / 100,
+        shotSpeed = math.floor((rng:RandomFloat() * (ConchBlessing.injectablsteroids.data.shotSpeedMax - ConchBlessing.injectablsteroids.data.shotSpeedMin) + ConchBlessing.injectablsteroids.data.shotSpeedMin) * 100) / 100,
+        luck = math.floor((rng:RandomFloat() * (ConchBlessing.injectablsteroids.data.maxMultiplier - ConchBlessing.injectablsteroids.data.minMultiplier) + ConchBlessing.injectablsteroids.data.minMultiplier) * 100) / 100
     }
     
     ConchBlessing.printDebug("Generated multipliers: " .. json.encode(newMultipliers))
