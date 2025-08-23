@@ -6,9 +6,7 @@ local INJECTABLE_STEROIDS_ID = Isaac.GetItemIdByName("Injectable Steroids")
 ConchBlessing.injectablsteroids.data = {
     minMultiplier = 0.5,
     maxMultiplier = 2.0,
-    speedDecrease = 0,
-    shotSpeedMin = 0.8,
-    shotSpeedMax = 1.2
+    speedDecrease = 0
 }
 
 local SaveManager = require("scripts.lib.save_manager")
@@ -59,6 +57,14 @@ ConchBlessing.injectablsteroids.onUseItem = function(player, collectibleID, useF
     local playerID = player:GetPlayerType()
     ConchBlessing.printDebug("Player ID: " .. tostring(playerID))
     
+    local playerSave = SaveManager.GetRunSave(player)
+    if not playerSave.injectableSteroids then
+        playerSave.injectableSteroids = {}
+    end
+    
+    local newIndex = #playerSave.injectableSteroids + 1
+    ConchBlessing.printDebug("New index: " .. tostring(newIndex))
+    
     if not ConchBlessing.injectablsteroids.storedMultipliers then
         ConchBlessing.printDebug("Initializing storedMultipliers")
         ConchBlessing.injectablsteroids.storedMultipliers = {}
@@ -67,9 +73,6 @@ ConchBlessing.injectablsteroids.onUseItem = function(player, collectibleID, useF
         ConchBlessing.printDebug("Initializing storedMultipliers for player " .. tostring(playerID))
         ConchBlessing.injectablsteroids.storedMultipliers[playerID] = {}
     end
-    
-    local newIndex = #ConchBlessing.injectablsteroids.storedMultipliers[playerID] + 1
-    ConchBlessing.printDebug("New index: " .. tostring(newIndex))
     
     local rng = RNG()
     local gameSeed = Game():GetSeeds():GetStartSeedString()
@@ -95,7 +98,6 @@ ConchBlessing.injectablsteroids.onUseItem = function(player, collectibleID, useF
         tears = math.floor((rng:RandomFloat() * (ConchBlessing.injectablsteroids.data.maxMultiplier - ConchBlessing.injectablsteroids.data.minMultiplier) + ConchBlessing.injectablsteroids.data.minMultiplier) * 100) / 100,
         damage = math.floor((rng:RandomFloat() * (ConchBlessing.injectablsteroids.data.maxMultiplier - ConchBlessing.injectablsteroids.data.minMultiplier) + ConchBlessing.injectablsteroids.data.minMultiplier) * 100) / 100,
         range = math.floor((rng:RandomFloat() * (ConchBlessing.injectablsteroids.data.maxMultiplier - ConchBlessing.injectablsteroids.data.minMultiplier) + ConchBlessing.injectablsteroids.data.minMultiplier) * 100) / 100,
-        shotSpeed = math.floor((rng:RandomFloat() * (ConchBlessing.injectablsteroids.data.shotSpeedMax - ConchBlessing.injectablsteroids.data.shotSpeedMin) + ConchBlessing.injectablsteroids.data.shotSpeedMin) * 100) / 100,
         luck = math.floor((rng:RandomFloat() * (ConchBlessing.injectablsteroids.data.maxMultiplier - ConchBlessing.injectablsteroids.data.minMultiplier) + ConchBlessing.injectablsteroids.data.minMultiplier) * 100) / 100
     }
     
@@ -119,8 +121,8 @@ ConchBlessing.injectablsteroids.onUseItem = function(player, collectibleID, useF
     SaveManager.Save()
     ConchBlessing.printDebug("SaveManager.Save() completed!")
     
-    ConchBlessing.printDebug(string.format("Injectable Steroids #%d used: Speed=-%.2f Tears=%.2fx Damage=%.2fx Range=%.2fx ShotSpeed=%.2fx Luck=%.2fx", 
-        newIndex, ConchBlessing.injectablsteroids.data.speedDecrease, newMultipliers.tears, newMultipliers.damage, newMultipliers.range, newMultipliers.shotSpeed, newMultipliers.luck))
+    ConchBlessing.printDebug(string.format("Injectable Steroids #%d used: Speed=-%.2f Tears=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx", 
+        newIndex, ConchBlessing.injectablsteroids.data.speedDecrease, newMultipliers.tears, newMultipliers.damage, newMultipliers.range, newMultipliers.luck))
     
     SFXManager():Play(SoundEffect.SOUND_ISAAC_HURT_GRUNT, 1.0, 0, false, 1.0, 0)
     
@@ -189,7 +191,6 @@ ConchBlessing.injectablsteroids.onEvaluateCache = function(_, player, cacheFlag)
     local totalTears = 1.0
     local totalDamage = 1.0
     local totalRange = 1.0
-    local totalShotSpeed = 1.0
     local totalLuck = 1.0
     
     for i = 1, useCount do
@@ -199,7 +200,6 @@ ConchBlessing.injectablsteroids.onEvaluateCache = function(_, player, cacheFlag)
             totalTears = totalTears * multipliers.tears
             totalDamage = totalDamage * multipliers.damage
             totalRange = totalRange * multipliers.range
-            totalShotSpeed = totalShotSpeed * multipliers.shotSpeed
             totalLuck = totalLuck * multipliers.luck
         end
     end
@@ -208,13 +208,12 @@ ConchBlessing.injectablsteroids.onEvaluateCache = function(_, player, cacheFlag)
     totalTears = math.max(ConchBlessing.injectablsteroids.data.minMultiplier, totalTears)
     totalDamage = math.max(ConchBlessing.injectablsteroids.data.minMultiplier, totalDamage)
     totalRange = math.max(ConchBlessing.injectablsteroids.data.minMultiplier, totalRange)
-    totalShotSpeed = math.max(ConchBlessing.injectablsteroids.data.minMultiplier, totalShotSpeed)
     totalLuck = math.max(ConchBlessing.injectablsteroids.data.minMultiplier, totalLuck)
     
     if cacheFlag == CacheFlag.CACHE_DAMAGE and useCount ~= (ConchBlessing.injectablsteroids._lastFinalDebugUseCount or 0) then
         local speedDecrease = ConchBlessing.injectablsteroids.data.speedDecrease * useCount
-        ConchBlessing.printDebug(string.format("Injectable Steroids Final (x%d uses): Speed=-%.2f Tears=%.2fx Damage=%.2fx Range=%.2fx ShotSpeed=%.2fx Luck=%.2fx", 
-            useCount, speedDecrease, totalTears, totalDamage, totalRange, totalShotSpeed, totalLuck))
+        ConchBlessing.printDebug(string.format("Injectable Steroids Final (x%d uses): Speed=-%.2f Tears=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx", 
+            useCount, speedDecrease, totalTears, totalDamage, totalRange, totalLuck))
         ConchBlessing.injectablsteroids._lastFinalDebugUseCount = useCount
     end
     
@@ -269,7 +268,6 @@ ConchBlessing.injectablsteroids.onGameStarted = function(_)
                 local totalTears = 1.0
                 local totalDamage = 1.0
                 local totalRange = 1.0
-                local totalShotSpeed = 1.0
                 local totalLuck = 1.0
                 
                 for i = 1, useCount do
@@ -279,7 +277,6 @@ ConchBlessing.injectablsteroids.onGameStarted = function(_)
                         totalTears = totalTears * multipliers.tears
                         totalDamage = totalDamage * multipliers.damage
                         totalRange = totalRange * multipliers.range
-                        totalShotSpeed = totalShotSpeed * multipliers.shotSpeed
                         totalLuck = totalLuck * multipliers.luck
                     end
                 end
@@ -288,12 +285,11 @@ ConchBlessing.injectablsteroids.onGameStarted = function(_)
                 totalTears = math.max(ConchBlessing.injectablsteroids.data.minMultiplier, totalTears)
                 totalDamage = math.max(ConchBlessing.injectablsteroids.data.minMultiplier, totalDamage)
                 totalRange = math.max(ConchBlessing.injectablsteroids.data.minMultiplier, totalRange)
-                totalShotSpeed = math.max(ConchBlessing.injectablsteroids.data.minMultiplier, totalShotSpeed)
                 totalLuck = math.max(ConchBlessing.injectablsteroids.data.minMultiplier, totalLuck)
                 
                 local speedDecrease = ConchBlessing.injectablsteroids.data.speedDecrease * useCount
-                ConchBlessing.printDebug(string.format("Calculated final multipliers: Speed=-%.2f Tears=%.2fx Damage=%.2fx Range=%.2fx ShotSpeed=%.2fx Luck=%.2fx", 
-                    speedDecrease, totalTears, totalDamage, totalRange, totalShotSpeed, totalLuck))
+                ConchBlessing.printDebug(string.format("Calculated final multipliers: Speed=-%.2f Tears=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx", 
+                    speedDecrease, totalTears, totalDamage, totalRange, totalLuck))
                 
                 if player:HasCollectible(INJECTABLE_STEROIDS_ID) then
                     local speedDecrease = ConchBlessing.injectablsteroids.data.speedDecrease * useCount
@@ -303,7 +299,6 @@ ConchBlessing.injectablsteroids.onGameStarted = function(_)
                     if player.Luck > 0 then
                         player.Luck = player.Luck * totalLuck
                     end
-                    player.ShotSpeed = player.ShotSpeed * totalShotSpeed
                     
                     ConchBlessing.stats.damage.applyMultiplier(player, totalDamage, ConchBlessing.injectablsteroids.data.minMultiplier)
                     ConchBlessing.stats.tears.applyMultiplier(player, totalTears, ConchBlessing.injectablsteroids.data.minMultiplier)

@@ -13,8 +13,41 @@
 --   DecreaseBy: number - weight decrease when item is selected from pool
 --   RemoveOn: number - probability of item being removed from pool (0.0-1.0)
 --   quality: number - item quality (0-5, 5 is highest quality)
---   tags: "tag1 tag2" - item tags (offensive, defensive, summonable, mushroom, devil, angel, etc.)
---     possible tags: dead, syringe, mom, tech, battery, guppy, fly, bob, mushroom, baby, angel, devil, poop, book, spider, quest, monstermanual, nogreed
+--   tags: "tag1 tag2" - item tags (multiple tags must be separated with a space)
+--     possible tags (from IsaacDocs items.xml):
+--       dead - Dead things (for the Parasite unlock)
+--       syringe - Syringes (for Little Baggy and the Spun! transformation)
+--       mom - Mom's things (for Mom's Contact and the Yes Mother? transformation)
+--       tech - Technology items (for the Technology Zero unlock)
+--       battery - Battery items (for the Jumper Cables unlock)
+--       guppy - Guppy items (Guppy transformation)
+--       fly - Fly items (Beelzebub transformation)
+--       bob - Bob items (Bob transformation)
+--       mushroom - Mushroom items (Fun Guy transformation)
+--       baby - Baby items (Conjoined transformation)
+--       angel - Angel items (Seraphim transformation)
+--       devil - Devil items (Leviathan transformation)
+--       poop - Poop items (Oh Shit transformation)
+--       book - Book items (Book Worm transformation)
+--       spider - Spider items (Spider Baby transformation)
+--       quest - Quest item (cannot be rerolled or randomly obtained)
+--       monstermanual - Can be spawned by Monster Manual
+--       nogreed - Cannot appear in Greed Mode
+--       food - Food item (for Binge Eater)
+--       tearsup - Tears up item (for Lachryphagy unlock detection)
+--       offensive - Whitelisted item for Tainted Lost
+--       nokeeper - Blacklisted item for Keeper/Tainted Keeper
+--       nolostbr - Blacklisted item for Lost's Birthright
+--       stars - Star themed items (for the Planetarium unlock)
+--       summonable - Summonable items (for Lemegeton)
+--       nocantrip - Can't be obtained in Cantripped challenge
+--       wisp - Active items that have wisps attached to them (automatically set)
+--       uniquefamiliar - Unique familiars that cannot be duplicated
+--       nochallenge - Items that shouldn't be obtainable in challenges
+--       nodaily - Items that shouldn't be obtainable in daily runs
+--       lazarusshared - Items that should be shared between Tainted Lazarus' forms
+--       lazarussharedglobal - Items that should be shared between Tainted Lazarus' forms but only through global checks
+--       noeden - Items that can't be randomly rolled
 --   cache: "cache flag" - cache flag (all, damage, firedelay, shotspeed, range, tearflag, etc.)
 --   hidden: true/false - hidden item
 --   devilprice: number - price in devil room (heart count)
@@ -212,6 +245,51 @@ ConchBlessing.ItemData = {
         onBeforeChange = "eternalflame.onBeforeChange",
         onAfterChange = "eternalflame.onAfterChange",
     },
+    POWER_TRAINING = {
+        type = "active",
+        id = Isaac.GetItemIdByName("Power Training"),
+        name = {
+            kr = "파워 트레이닝",
+            en = "Power Training"
+        },
+        description = {
+            kr = "라잇웨잇 베이비!",
+            en = "Lightweight Baby!"
+        },
+        eid = {
+            kr = {
+                "사용시 데미지, 연사(딜레이 나누기), 사거리, 행운이 1.0~1.3배가 됩니다."
+            },
+            en = {
+                "Damage, fire rate (delay division), range, and luck are changed to 1.0~1.3x when used"
+            }
+        },
+        pool = {
+            RoomType.ROOM_TREASURE,
+            RoomType.ROOM_SHOP,
+            RoomType.ROOM_ANGEL
+        },
+        quality = 4,
+        tags = "offensive",
+        cache = "damage firedelay range luck",
+        hidden = false,
+        shopprice = 20,
+        devilprice = 2,
+        maxcharges = 6,
+        chargetype = "normal",
+        initcharge = 6,
+        origin = CollectibleType.COLLECTIBLE_EXPERIMENTAL_TREATMENT,
+        flag = "positive",
+        script = "scripts/items/power_training",
+        callbacks = {
+            use = "powertraining.onUseItem",
+            evaluateCache = "powertraining.onEvaluateCache",
+            gameStarted = "powertraining.onGameStarted",
+            update = "powertraining.onUpdate"
+        },
+        onBeforeChange = "powertraining.onBeforeChange",
+        onAfterChange = "powertraining.onAfterChange",
+    },
     ORAL_STEROIDS = {
         type = "passive",
         id = Isaac.GetItemIdByName("Oral Steroids"),
@@ -225,12 +303,10 @@ ConchBlessing.ItemData = {
         },
         eid = {
             kr = {
-                "획득시 데미지, 연사, 사거리, 행운이 0.8 ~ 1.5배가 됩니다.",
-                "#발사속도는 0.9 ~ 1.1배가 됩니다."
+                "획득시 데미지, 연사, 사거리, 행운이 0.8 ~ 1.5배가 됩니다."
             },
             en = {
-                "Damage, fire rate, range, and luck are changed to 0.8 ~ 1.5x when obtained",
-                "#Shot speed becomes 0.9~1.1x"
+                "Damage, fire rate, range, and luck are changed to 0.8 ~ 1.5x when obtained"
             }
         },
         pool = {
@@ -241,7 +317,7 @@ ConchBlessing.ItemData = {
         },
         quality = 2,
         tags = "offensive",
-        cache = "all",
+        cache = "damage firedelay range luck",
         hidden = false,
         shopprice = 15,
         devilprice = 1,
@@ -270,13 +346,11 @@ ConchBlessing.ItemData = {
         eid = {
             kr = {
                 "사용시 데미지, 연사, 사거리, 행운이 0.5~2.0배가 됩니다.",
-                "#발사속도는 0.8~1.2배가 됩니다.",
                 "#스테이지마다 한번 사용할수 있으며 배터리나 방 클리어로 충전되지 않습니다.",
                 "#{{Warning}} 몸이 점점 노래집니다..."
             },
             en = {
                 "Damage, fire rate, range, and luck are changed to 0.5~2.0x when used",
-                "#Shot speed becomes 0.8~1.2x",
                 "#Can be used once per stage, and is not charged by batteries or clearing rooms",
                 "#{{Warning}}Your body is gradually turning yellow..."
             }
@@ -289,7 +363,7 @@ ConchBlessing.ItemData = {
         },
         quality = 3,
         tags = "offensive",
-        cache = "all",
+        cache = "damage firedelay range luck",
         hidden = false,
         shopprice = 15,
         devilprice = 2,

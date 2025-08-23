@@ -1,0 +1,276 @@
+ConchBlessing.powertraining = {}
+
+local POWER_TRAINING_ID = Isaac.GetItemIdByName("Power Training")
+
+-- SaveManager integration
+local SaveManager = require("scripts.lib.save_manager")
+
+local json = nil
+pcall(function() json = require("json") end)
+if not json then
+    json = {
+        encode = function(data) 
+            if type(data) == "table" then
+                local result = "{"
+                for k, v in pairs(data) do
+                    if result ~= "{" then result = result .. ", " end
+                    result = result .. tostring(k) .. "=" .. tostring(v)
+                end
+                result = result .. "}"
+                return result
+            else
+                return tostring(data)
+            end
+        end,
+        decode = function(str) return {} end,
+    }
+end
+
+ConchBlessing.powertraining.data = {
+    minMultiplier = 1.0,
+    maxMultiplier = 1.3,
+    speedDecrease = 0
+}
+
+ConchBlessing.powertraining.onUseItem = function(player, collectibleID, useFlags, activeSlot, customVarData)
+    ConchBlessing.printDebug("=== Power Training onUseItem START ===")
+    ConchBlessing.printDebug("collectibleID: " .. tostring(collectibleID))
+    ConchBlessing.printDebug("POWER_TRAINING_ID: " .. tostring(POWER_TRAINING_ID))
+    
+    if collectibleID ~= POWER_TRAINING_ID then
+        ConchBlessing.printDebug("collectibleID mismatch, returning")
+        return
+    end
+    
+    if not player or not player.Position or not player.GetPlayerType then
+        ConchBlessing.printDebug("Invalid player, getting player 0")
+        player = Isaac.GetPlayer(0)
+        if not player then
+            ConchBlessing.printDebug("Failed to get player 0")
+            return
+        end
+    end
+    
+    ConchBlessing.printDebug("Player found, animating collectible")
+    player:AnimateCollectible(POWER_TRAINING_ID, "Pickup", "PlayerPickupSparkle")
+    
+    local playerID = player:GetPlayerType()
+    ConchBlessing.printDebug("Player ID: " .. tostring(playerID))
+    
+    local playerSave = SaveManager.GetRunSave(player)
+    if not playerSave.powerTraining then
+        playerSave.powerTraining = {}
+    end
+    
+    local newIndex = #playerSave.powerTraining + 1
+    ConchBlessing.printDebug("New index: " .. tostring(newIndex))
+    
+    if not ConchBlessing.powertraining.storedMultipliers then
+        ConchBlessing.printDebug("Initializing storedMultipliers")
+        ConchBlessing.powertraining.storedMultipliers = {}
+    end
+    if not ConchBlessing.powertraining.storedMultipliers[playerID] then
+        ConchBlessing.printDebug("Initializing storedMultipliers for player " .. tostring(playerID))
+        ConchBlessing.powertraining.storedMultipliers[playerID] = {}
+    end
+    
+    local rng = RNG()
+    local gameSeed = Game():GetSeeds():GetStartSeedString()
+    local gameSeedHash = 0
+    
+    for j = 1, #gameSeed do
+        local char = string.byte(gameSeed, j)
+        gameSeedHash = gameSeedHash + char * (j * 31 + char)
+    end
+    
+    local combinedSeed = newIndex * 1000000 + gameSeedHash
+    
+    ConchBlessing.printDebug("Power Training RNG Debug:")
+    ConchBlessing.printDebug("  Game Seed: " .. gameSeed)
+    ConchBlessing.printDebug("  Game Seed Hash: " .. gameSeedHash)
+    ConchBlessing.printDebug("  New Index: " .. newIndex)
+    ConchBlessing.printDebug("  Combined Seed: " .. combinedSeed)
+    
+    rng:SetSeed(combinedSeed, 35)
+    
+    local newMultipliers = {
+        speed = math.floor((rng:RandomFloat() * (ConchBlessing.powertraining.data.maxMultiplier - ConchBlessing.powertraining.data.minMultiplier) + ConchBlessing.powertraining.data.minMultiplier) * 100) / 100,
+        fireDelay = math.floor((rng:RandomFloat() * (ConchBlessing.powertraining.data.maxMultiplier - ConchBlessing.powertraining.data.minMultiplier) + ConchBlessing.powertraining.data.minMultiplier) * 100) / 100,
+        damage = math.floor((rng:RandomFloat() * (ConchBlessing.powertraining.data.maxMultiplier - ConchBlessing.powertraining.data.minMultiplier) + ConchBlessing.powertraining.data.minMultiplier) * 100) / 100,
+        range = math.floor((rng:RandomFloat() * (ConchBlessing.powertraining.data.maxMultiplier - ConchBlessing.powertraining.data.minMultiplier) + ConchBlessing.powertraining.data.minMultiplier) * 100) / 100,
+        luck = math.floor((rng:RandomFloat() * (ConchBlessing.powertraining.data.maxMultiplier - ConchBlessing.powertraining.data.minMultiplier) + ConchBlessing.powertraining.data.minMultiplier) * 100) / 100
+    }
+    
+    ConchBlessing.printDebug("Generated multipliers: " .. json.encode(newMultipliers))
+    
+    ConchBlessing.printDebug("Attempting to save to SaveManager...")
+    ConchBlessing.printDebug("SaveManager.GetRunSave result type: " .. type(playerSave))
+    
+    table.insert(playerSave.powerTraining, newMultipliers)
+    ConchBlessing.printDebug("Data inserted into playerSave.powerTraining")
+    
+    ConchBlessing.printDebug("Power Training: Data saved to SaveManager! Use count: " .. #playerSave.powerTraining)
+    
+    ConchBlessing.printDebug("Forcing SaveManager.Save() to persist data...")
+    SaveManager.Save()
+    ConchBlessing.printDebug("SaveManager.Save() completed!")
+    
+    ConchBlessing.printDebug(string.format("Power Training #%d used: Speed=-%.2f FireDelay=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx", 
+        newIndex, ConchBlessing.powertraining.data.speedDecrease, newMultipliers.fireDelay, newMultipliers.damage, newMultipliers.range, newMultipliers.luck))
+    
+    SFXManager():Play(SoundEffect.SOUND_BATTERYCHARGE, 1.0, 0, false, 1.0, 0)
+    
+    player:AnimateCollectible(POWER_TRAINING_ID, "Drop", "PlayerPickupSparkle")
+    
+    ConchBlessing.printDebug("Power Training use effect completed! Use count: " .. newIndex)
+    ConchBlessing.printDebug("=== Power Training onUseItem END ===")
+    
+    return { Discharge = true, Remove = false, ShowAnim = true }
+end
+
+ConchBlessing.powertraining.onEvaluateCache = function(_, player, cacheFlag)
+    if not player:HasCollectible(POWER_TRAINING_ID) then return end
+    
+    local playerSave = SaveManager.GetRunSave(player)
+    if not playerSave or not playerSave.powerTraining then return end
+    
+    local useCount = #playerSave.powerTraining
+    if useCount <= 0 then return end
+    
+    local totalSpeed = 1.0
+    local totalFireDelay = 1.0
+    local totalDamage = 1.0
+    local totalRange = 1.0
+    local totalLuck = 1.0
+    
+    for i = 1, useCount do
+        local multipliers = playerSave.powerTraining[i]
+        if multipliers then
+            totalSpeed = totalSpeed * (multipliers.speed or 1.0)
+            totalFireDelay = totalFireDelay * (multipliers.fireDelay or 1.0)
+            totalDamage = totalDamage * (multipliers.damage or 1.0)
+            totalRange = totalRange * (multipliers.range or 1.0)
+            totalLuck = totalLuck * (multipliers.luck or 1.0)
+        end
+    end
+    
+    totalSpeed = math.max(ConchBlessing.powertraining.data.minMultiplier, totalSpeed)
+    totalFireDelay = math.max(ConchBlessing.powertraining.data.minMultiplier, totalFireDelay)
+    totalDamage = math.max(ConchBlessing.powertraining.data.minMultiplier, totalDamage)
+    totalRange = math.max(ConchBlessing.powertraining.data.minMultiplier, totalRange)
+    totalLuck = math.max(ConchBlessing.powertraining.data.minMultiplier, totalLuck)
+    
+    if cacheFlag == CacheFlag.CACHE_DAMAGE then
+        ConchBlessing.stats.damage.applyMultiplier(player, totalDamage, ConchBlessing.powertraining.data.minMultiplier)
+    end
+    
+    if cacheFlag == CacheFlag.CACHE_FIREDELAY then
+        if player.MaxFireDelay then
+            player.MaxFireDelay = player.MaxFireDelay / totalFireDelay
+        end
+    end
+    
+    if cacheFlag == CacheFlag.CACHE_SPEED then
+        local speedDecrease = ConchBlessing.powertraining.data.speedDecrease * useCount
+        player.MoveSpeed = player.MoveSpeed - speedDecrease
+    end
+    
+    if cacheFlag == CacheFlag.CACHE_RANGE then
+        player.TearRange = player.TearRange * totalRange
+    end
+    
+    if cacheFlag == CacheFlag.CACHE_LUCK and player.Luck > 0 then
+        player.Luck = player.Luck * totalLuck
+    end
+end
+
+-- initialize data when game started
+ConchBlessing.powertraining.onGameStarted = function(_)
+    ConchBlessing.printDebug("=== Power Training onGameStarted START ===")
+    ConchBlessing.printDebug("Power Training: Game started, attempting to restore previous stats...")
+    
+    -- SaveManager automatically loads data, no manual loading needed
+    
+    ConchBlessing.printDebug("SaveManager.VERSION: " .. tostring(SaveManager.VERSION))
+    ConchBlessing.printDebug("SaveManager.Debug: " .. tostring(SaveManager.Debug))
+    
+    local player = Isaac.GetPlayer(0)
+    if player then
+        ConchBlessing.printDebug("Player found, attempting to restore stats from SaveManager...")
+        
+        local playerSave = SaveManager.GetRunSave(player)
+        if playerSave and playerSave.powerTraining then
+            local useCount = #playerSave.powerTraining
+            ConchBlessing.printDebug("Found saved data with use count: " .. tostring(useCount))
+            
+            if useCount > 0 then
+                local totalSpeed = 1.0
+                local totalFireDelay = 1.0
+                local totalDamage = 1.0
+                local totalRange = 1.0
+                local totalLuck = 1.0
+                
+                for i = 1, useCount do
+                    local multipliers = playerSave.powerTraining[i]
+                    if multipliers then
+                        totalSpeed = totalSpeed * (multipliers.speed or 1.0)
+                        totalFireDelay = totalFireDelay * (multipliers.fireDelay or 1.0)
+                        totalDamage = totalDamage * (multipliers.damage or 1.0)
+                        totalRange = totalRange * (multipliers.range or 1.0)
+                        totalLuck = totalLuck * (multipliers.luck or 1.0)
+                    end
+                end
+                
+                totalSpeed = math.max(ConchBlessing.powertraining.data.minMultiplier, totalSpeed)
+                totalFireDelay = math.max(ConchBlessing.powertraining.data.minMultiplier, totalFireDelay)
+                totalDamage = math.max(ConchBlessing.powertraining.data.minMultiplier, totalDamage)
+                totalRange = math.max(ConchBlessing.powertraining.data.minMultiplier, totalRange)
+                totalLuck = math.max(ConchBlessing.powertraining.data.minMultiplier, totalLuck)
+                
+                local speedDecrease = ConchBlessing.powertraining.data.speedDecrease * useCount
+                ConchBlessing.printDebug(string.format("Calculated final multipliers: Speed=-%.2f FireDelay=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx", 
+                    speedDecrease, totalFireDelay, totalDamage, totalRange, totalLuck))
+                
+                if player:HasCollectible(POWER_TRAINING_ID) then
+                    local speedDecrease = ConchBlessing.powertraining.data.speedDecrease * useCount
+                    player.MoveSpeed = player.MoveSpeed - speedDecrease
+                    
+                    if player.MaxFireDelay then
+                        player.MaxFireDelay = player.MaxFireDelay / totalFireDelay
+                    end
+                    
+                    player.TearRange = player.TearRange * totalRange
+                    if player.Luck > 0 then
+                        player.Luck = player.Luck * totalLuck
+                    end
+                    
+                    ConchBlessing.stats.damage.applyMultiplier(player, totalDamage, ConchBlessing.powertraining.data.minMultiplier)
+                    
+                    ConchBlessing.printDebug("All stats (including damage and fire delay) restored successfully on game start!")
+                end
+            else
+                ConchBlessing.printDebug("No saved data found, starting with base stats")
+            end
+        else
+            ConchBlessing.printDebug("No SaveManager data found")
+        end
+    else
+        ConchBlessing.printDebug("No player found on game start")
+    end
+    
+    ConchBlessing.printDebug("Power Training: Data initialization completed")
+    ConchBlessing.printDebug("=== Power Training onGameStarted END ===")
+end
+
+-- upgrade related functions
+ConchBlessing.powertraining.onBeforeChange = function(upgradePos, pickup, itemData)
+    return ConchBlessing.template.positive.onBeforeChange(upgradePos, pickup, ConchBlessing.powertraining.data)
+end
+
+ConchBlessing.powertraining.onAfterChange = function(upgradePos, pickup, itemData)
+    return ConchBlessing.template.positive.onAfterChange(upgradePos, pickup, ConchBlessing.powertraining.data)
+end
+
+ConchBlessing.powertraining.onUpdate = function(_)
+    ConchBlessing.template.onUpdate(ConchBlessing.powertraining.data)
+end 
