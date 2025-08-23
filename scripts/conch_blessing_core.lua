@@ -60,11 +60,6 @@ ConchBlessing.printDebug = function(text)
     if ConchBlessing.Config.debugMode then
         Isaac.ConsoleOutput("[ConchBlessing][DEBUG] " .. tostring(text) .. "\n")
     end
-    -- Enable SaveManager debug
-    if ConchBlessing.SaveManager then
-        ConchBlessing.SaveManager.Debug = ConchBlessing.Config.debugMode
-        Isaac.ConsoleOutput("[Core] SaveManager.Debug = " .. tostring(ConchBlessing.Config.debugMode) .. "\n")
-    end
 end
 
 ConchBlessing.printError = function(text)
