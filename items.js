@@ -116,7 +116,7 @@ const items = {
         pools: ["ROOM_DEVIL", "ROOM_CURSE", "ROOM_BLACK_MARKET", "ROOM_ULTRASECRET"],
         names: {"kr": "주사 스테로이드", "en": "Injectable Steroids"},
         descriptions: {"kr": "힘을 원해...", "en": "I need more power..."},
-        eids: {"kr": ["사용시 모든 스탯이 0.5 ~ 2.0배가 됩니다.", "층 변경시 충전이 초기화됩니다.", "몸이 점점 노래집니다..."], "en": ["All stats are changed to 0.5 ~ 2.0x when used", "Charge is reset when changing floors", "Your body is getting weaker..."]}
+        eids: {"kr": ["사용시 데미지, 연사, 사거리, 행운이 0.5~2.0배가 됩니다.", "발사속도는 0.8~1.2배가 됩니다.", "스테이지마다 한번 사용할수 있으며 배터리나 방 클리어로 충전되지 않습니다.", "몸이 점점 노래집니다..."], "en": ["Damage, fire rate, range, and luck are changed to 0.5~2.0x when used", "Shot speed becomes 0.8~1.2x", "Can be used once per stage, and is not charged by batteries or clearing rooms", "Your body is gradually turning yellow..."]}
     },
     RAT: {
         gfx: "resources/gfx/items/collectibles/rat.png",

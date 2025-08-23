@@ -54,12 +54,20 @@ end
 ---@return table
 function ConchBlessing_Config.Init(mod)
     mod.Config = {}
+    
     for k, v in pairs(DefaultConfig) do
-        if mod.Config[k] == nil then
-            mod.Config[k] = v
-        end
+        mod.Config[k] = v
     end
+    
     mod.Config.Version = Version
+    
+    if mod.SaveManager and mod.SaveManager.IsLoaded() then
+        Isaac.ConsoleOutput("[Config] SaveManager is initialized, trying to load config\n")
+        ConchBlessing_Config.Load(mod)
+    else
+        Isaac.ConsoleOutput("[Config] SaveManager is not initialized, using default values\n")
+    end
+    
     return mod.Config
 end
 
@@ -70,9 +78,11 @@ function ConchBlessing_Config.Load(mod)
     if mod:HasData() then
         local ok, data = pcall(function() return json.decode(Isaac.LoadModData(mod)) end)
         if ok and type(data) == "table" then
+            Isaac.ConsoleOutput("[Config] Loaded existing JSON config\n")
             for k, v in pairs(DefaultConfig) do
                 if data[k] ~= nil then
                     mod.Config[k] = data[k]
+                    Isaac.ConsoleOutput(string.format("[Config] Loaded from JSON: %s = %s\n", tostring(k), tostring(v)))
                 end
             end
             return true

@@ -247,7 +247,6 @@ ConchBlessing.ItemData = {
         flag = "neutral",
         script = "scripts/items/oral_steroids",
         callbacks = {
-            postGetCollectible = "oralsteroids.onGetCollectible",
             evaluateCache = "oralsteroids.onEvaluateCache",
             gameStarted = "oralsteroids.onGameStarted",
             update = "oralsteroids.onUpdate"
@@ -268,14 +267,16 @@ ConchBlessing.ItemData = {
         },
         eid = {
             kr = {
-                "사용시 모든 스탯이 0.5 ~ 2.0배가 됩니다.",
-                "#층 변경시 충전이 초기화됩니다.",
+                "사용시 데미지, 연사, 사거리, 행운이 0.5~2.0배가 됩니다.",
+                "#발사속도는 0.8~1.2배가 됩니다.",
+                "#스테이지마다 한번 사용할수 있으며 배터리나 방 클리어로 충전되지 않습니다.",
                 "#{{Warning}} 몸이 점점 노래집니다..."
             },
             en = {
-                "All stats are changed to 0.5 ~ 2.0x when used",
-                "#Charge is reset when changing floors",
-                "#{{Warning}}Your body is getting weaker..."
+                "Damage, fire rate, range, and luck are changed to 0.5~2.0x when used",
+                "#Shot speed becomes 0.8~1.2x",
+                "#Can be used once per stage, and is not charged by batteries or clearing rooms",
+                "#{{Warning}}Your body is gradually turning yellow..."
             }
         },
         pool = {
@@ -298,7 +299,6 @@ ConchBlessing.ItemData = {
         script = "scripts/items/injectable_steroids",
         callbacks = {
             use = "injectablsteroids.onUseItem",
-            postGetCollectible = "injectablsteroids.onGetCollectible",
             evaluateCache = "injectablsteroids.onEvaluateCache",
             gameStarted = "injectablsteroids.onGameStarted",
             newLevel = "injectablsteroids.onNewLevel",

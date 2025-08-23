@@ -77,7 +77,6 @@ ConchBlessing.EID.addOptLangDescription = function(itemId, itemData)
     end
 end
 
--- Add EID Collectible function similar to Astro:AddEIDCollectible
 ConchBlessing.EID.AddEIDCollectible = function(id, name, description, eidDescription)
     if EID then
         EID:addCollectible(id, eidDescription, name)
@@ -110,7 +109,6 @@ ConchBlessing:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function()
     ConchBlessing.EID.registerAllItems()
 end)
 
--- Prefer custom callback if available; otherwise, fall back to vanilla collision callback
 ConchBlessing:AddCallbackCustom(
     isc.ModCallbackCustom.PRE_ITEM_PICKUP,
     ---@param player EntityPlayer
