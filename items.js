@@ -47,7 +47,7 @@ const items = {
         pools: ["ROOM_DEVIL", "ROOM_TREASURE"],
         names: {"kr": "공허의 단검", "en": "Void Dagger"},
         descriptions: {"kr": "공허가 열린다", "en": "The void opens"},
-        eids: {"kr": ["적에게 명중 시 확률로 그 위치에 내 데미지의 보이드 링을 소환합니다.", "확률은 (30 - 연사)%로 5%보다 작아지지 않습니다", "위 확률은 운에 따라 (1+0.1×운) 배수로 증가합니다. (최대 2배)", "지속시간은 데미지에 따라 증가하며 데미지 10당 6단계로 증가합니다.", "블랙하트는 드랍되지 않습니다."], "en": ["On hit, has a chance to spawn a void ring at the impact that deals your damage", "Chance is (30 − Tears)% guaranteed 5%", "chance is increased by (1+0.1×Luck) (up to 2x)", "Duration increases by 10 frames per 10 Damage by 6 steps", "No black heart drops"]}
+        eids: {"kr": ["눈물이 적에게 명중 시 확률로 그 위치에 내 데미지의 보이드 링을 소환합니다.", "확률은 (30 - 연사)%로 5%보다 작아지지 않습니다", "위 확률은 운에 따라 (1+0.1×운) 배수로 증가합니다. (최대 2배)", "지속시간은 데미지에 따라 증가하며 데미지 10당 6단계로 증가합니다.", "블랙하트는 드랍되지 않습니다."], "en": ["On hit, has a chance to spawn a void ring at the impact that deals your damage", "Chance is (30 − Tears)% guaranteed 5%", "chance is increased by (1+0.1×Luck) (up to 2x)", "Duration increases by 10 frames per 10 Damage by 6 steps", "No black heart drops"]}
     },
     ETERNAL_FLAME: {
         type: "passive",
@@ -81,9 +81,9 @@ const items = {
         hidden: false,
         shopprice: 20,
         devilprice: 2,
-        maxcharges: 6,
+        maxcharges: 8,
         chargetype: "normal",
-        initcharge: 6,
+        initcharge: 8,
         hearts: 0,
         maxhearts: 0,
         blackhearts: 0,

@@ -287,20 +287,18 @@ ConchBlessing.injectablsteroids.onGameStarted = function(_)
                 ConchBlessing.printDebug(string.format("Calculated final multipliers: Speed=-%.2f Tears=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx", 
                     speedDecrease, totalTears, totalDamage, totalRange, totalLuck))
                 
-                if player:HasCollectible(INJECTABLE_STEROIDS_ID) then
-                    local speedDecrease = ConchBlessing.injectablsteroids.data.speedDecrease * useCount
-                    player.MoveSpeed = player.MoveSpeed - speedDecrease
-                    
-                    player.TearRange = player.TearRange * totalRange
-                    if player.Luck > 0 then
-                        player.Luck = player.Luck * totalLuck
-                    end
-                    
-                    ConchBlessing.stats.damage.applyMultiplier(player, totalDamage, ConchBlessing.injectablsteroids.data.minMultiplier)
-                    ConchBlessing.stats.tears.applyMultiplier(player, totalTears, ConchBlessing.injectablsteroids.data.minMultiplier)
-                    
-                    ConchBlessing.printDebug("All stats (including damage and tears) restored successfully on game start!")
+                local speedDecrease = ConchBlessing.injectablsteroids.data.speedDecrease * useCount
+                player.MoveSpeed = player.MoveSpeed - speedDecrease
+                
+                player.TearRange = player.TearRange * totalRange
+                if player.Luck > 0 then
+                    player.Luck = player.Luck * totalLuck
                 end
+                
+                ConchBlessing.stats.damage.applyMultiplier(player, totalDamage, ConchBlessing.injectablsteroids.data.minMultiplier)
+                ConchBlessing.stats.tears.applyMultiplier(player, totalTears, ConchBlessing.injectablsteroids.data.minMultiplier)
+                
+                ConchBlessing.printDebug("All stats (including damage and tears) restored successfully on game start!")
             else
                 ConchBlessing.printDebug("No saved data found, starting with base stats")
             end

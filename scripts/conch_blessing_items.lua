@@ -161,7 +161,7 @@ ConchBlessing.ItemData = {
         },
         eid = {
             kr = {
-                "#적에게 명중 시 확률로 그 위치에 내 데미지의 보이드 링을 소환합니다.",
+                "#눈물이 적에게 명중 시 확률로 그 위치에 내 데미지의 보이드 링을 소환합니다.",
                 "#확률은 (30 - {{Tears}}연사)%로 5%보다 작아지지 않습니다",
                 "#위 확률은 {{Luck}}운에 따라 (1+0.1×{{Luck}}운) 배수로 증가합니다. (최대 2배)",
                 "#지속시간은 {{Damage}}데미지에 따라 증가하며 데미지 10당 6단계로 증가합니다.",
@@ -275,9 +275,9 @@ ConchBlessing.ItemData = {
         hidden = false,
         shopprice = 20,
         devilprice = 2,
-        maxcharges = 6,
+        maxcharges = 8,
         chargetype = "normal",
-        initcharge = 6,
+        initcharge = 8,
         origin = CollectibleType.COLLECTIBLE_EXPERIMENTAL_TREATMENT,
         flag = "positive",
         script = "scripts/items/power_training",
@@ -447,6 +447,27 @@ ConchBlessing.ItemData = {
             kr = "진",
             en = "Dragon"
         },
+        eid = {
+            kr = {"공중을 얻습니다.",
+                  "#방에 입장하고 5초가 지나면, 5초간 지속되는 불꽃 브레스를 쏠 수 있습니다."},
+            en = {"Gain flight.",
+                  "#After entering a room for 5 seconds, can shoot fire breath for 5 seconds."}
+        },
+        pool = {
+            RoomType.ROOM_TREASURE,
+            RoomType.ROOM_PLANETARIUM
+        },
+        quality = 4,
+        tags = "offensive",
+        cache = "flying",
+        hidden = false,
+        origin = CollectibleType.COLLECTIBLE_TAURUS,
+        flag = "positive",
+        script = "scripts/items/dragon",
+        callbacks = {
+        },
+        onBeforeChange = "dragon.onBeforeChange",
+        onAfterChange = "dragon.onAfterChange"
     },
     SNAKE = {
         WorkingNow = true,
@@ -568,6 +589,9 @@ Taurus(황소자리)
 그 방에 적이 있는 동안 이동속도가 점점 증가합니다.
 {{Collectible77}} 이동속도가 2.0이 되면 5초간 무적 상태가 됩니다.
 진 (용) Dragon
+공중을 얻습니다.
+방에 입장하고 10초가 지나면, 5초간 지속되는 불꽃 브레스를 쏠 수 있습니다.
+https://wofsauge.github.io/IsaacDocs/rep/enums/TearVariant.html#FIRE
 
 Gemini(쌍둥이자리)
 캐릭터와 연결되어 이동하며 적을 따라다닙니다.
