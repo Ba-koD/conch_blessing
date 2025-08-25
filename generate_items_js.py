@@ -445,9 +445,10 @@ const items = {
         is_working_now = len(item_info) == 3 and 'names' in item_info and 'descriptions' in item_info and 'eids' in item_info
         
         if is_working_now:
-            # WorkingNow 아이템은 names, descriptions, eids, gfx만 출력
+            # WorkingNow 아이템은 names, descriptions, eids, gfx, workingnowflag만 출력
             js_content += f"""    {item_key}: {{
         gfx: "resources/gfx/items/collectibles/{item_key.lower()}.png",
+        workingnowflag: true,
         names: {json.dumps(item_info['names'], ensure_ascii=False)},
         descriptions: {json.dumps(item_info['descriptions'], ensure_ascii=False)},
         eids: {json.dumps(item_info['eids'], ensure_ascii=False)}"""

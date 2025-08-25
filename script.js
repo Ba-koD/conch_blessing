@@ -167,6 +167,13 @@ function performSearch() {
         console.log(`Sorting ${Object.keys(filteredItems).length} items by: ${sortBy}`);
         
         const sortedItems = Object.entries(filteredItems).sort(([keyA, itemA], [keyB, itemB]) => {
+            const isWorkingNowA = itemA.workingnowflag === true;
+            const isWorkingNowB = itemB.workingnowflag === true;
+            
+            if (isWorkingNowA && !isWorkingNowB) return 1;
+            if (!isWorkingNowA && isWorkingNowB) return -1;
+            if (isWorkingNowA && isWorkingNowB) return 0;
+            
             switch (sortBy) {
                 case 'name':
                     const nameA = getLocalizedText(itemA, 'names', getDisplayLanguage()) || '';
@@ -337,7 +344,18 @@ function updateItemsDisplay() {
             displayCount: Object.keys(itemsToDisplay).length 
         });
         
-        Object.entries(itemsToDisplay).forEach(([key, item]) => {
+        const sortedItemsToDisplay = Object.entries(itemsToDisplay).sort(([keyA, itemA], [keyB, itemB]) => {
+            const isWorkingNowA = itemA.workingnowflag === true;
+            const isWorkingNowB = itemB.workingnowflag === true;
+            
+            if (isWorkingNowA && !isWorkingNowB) return 1;
+            if (!isWorkingNowA && isWorkingNowB) return -1;
+            if (isWorkingNowA && isWorkingNowB) return 0;
+            
+            return 0;
+        });
+        
+        sortedItemsToDisplay.forEach(([key, item]) => {
             const itemCard = createItemCard(key, item);
             
             if (container.classList.contains('searching')) {
@@ -371,7 +389,7 @@ function createItemCard(key, item) {
     const card = document.createElement('div');
     card.className = 'item-card';
     
-    const isWorkingNow = item.quality === undefined;
+    const isWorkingNow = item.workingnowflag === true;
     
     const qualityStars = !isWorkingNow ? '⭐'.repeat(item.quality || 3) : '';
     
@@ -508,7 +526,7 @@ function showItemModal(key, item) {
     const itemName = getLocalizedText(item, 'names', displayLang) || 'Unknown';
     const itemDescription = getLocalizedText(item, 'descriptions', displayLang) || '';
     
-    const isWorkingNow = item.quality === undefined;
+    const isWorkingNow = item.workingnowflag === true;
     
     const qualityStars = !isWorkingNow ? '⭐'.repeat(item.quality || 3) : '';
     

@@ -143,24 +143,28 @@ const items = {
     },
     RAT: {
         gfx: "resources/gfx/items/collectibles/rat.png",
+        workingnowflag: true,
         names: {"kr": "자", "en": "Rat"},
         descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
         eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
     },
     OX: {
         gfx: "resources/gfx/items/collectibles/ox.png",
+        workingnowflag: true,
         names: {"kr": "축", "en": "Ox"},
         descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
         eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
     },
     TIGER: {
         gfx: "resources/gfx/items/collectibles/tiger.png",
+        workingnowflag: true,
         names: {"kr": "인", "en": "Tiger"},
         descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
         eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
     },
     RABBIT: {
         gfx: "resources/gfx/items/collectibles/rabbit.png",
+        workingnowflag: true,
         names: {"kr": "묘", "en": "Rabbit"},
         descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
         eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
@@ -190,42 +194,49 @@ const items = {
     },
     SNAKE: {
         gfx: "resources/gfx/items/collectibles/snake.png",
+        workingnowflag: true,
         names: {"kr": "사", "en": "Snake"},
         descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
         eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
     },
     HORSE: {
         gfx: "resources/gfx/items/collectibles/horse.png",
+        workingnowflag: true,
         names: {"kr": "오", "en": "Horse"},
         descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
         eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
     },
     GOAT: {
         gfx: "resources/gfx/items/collectibles/goat.png",
+        workingnowflag: true,
         names: {"kr": "미", "en": "Goat"},
         descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
         eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
     },
     MONKEY: {
         gfx: "resources/gfx/items/collectibles/monkey.png",
+        workingnowflag: true,
         names: {"kr": "신", "en": "Monkey"},
         descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
         eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
     },
     CHICKEN: {
         gfx: "resources/gfx/items/collectibles/chicken.png",
+        workingnowflag: true,
         names: {"kr": "유", "en": "Chicken"},
         descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
         eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
     },
     DOG: {
         gfx: "resources/gfx/items/collectibles/dog.png",
+        workingnowflag: true,
         names: {"kr": "술", "en": "Dog"},
         descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
         eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
     },
     PIG: {
         gfx: "resources/gfx/items/collectibles/pig.png",
+        workingnowflag: true,
         names: {"kr": "해", "en": "Pig"},
         descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
         eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
