@@ -436,7 +436,6 @@ ConchBlessing.ItemData = {
         },
     },
     DRAGON = {
-        WorkingNow = true,
         type = "passive",
         id = Isaac.GetItemIdByName("Dragon"),
         name = {
@@ -448,9 +447,9 @@ ConchBlessing.ItemData = {
             en = "Dragon"
         },
         eid = {
-            kr = {"공중을 얻습니다.",
+            kr = {"공중과 지형관통을 얻습니다.",
                   "#방에 입장하고 5초가 지나면, 5초간 지속되는 불꽃 브레스를 쏠 수 있습니다."},
-            en = {"Gain flight.",
+            en = {"Gain flight and Spectral tears.",
                   "#After entering a room for 5 seconds, can shoot fire breath for 5 seconds."}
         },
         pool = {
@@ -459,15 +458,19 @@ ConchBlessing.ItemData = {
         },
         quality = 4,
         tags = "offensive",
-        cache = "flying",
+        cache = "flying tearflag",
         hidden = false,
         origin = CollectibleType.COLLECTIBLE_TAURUS,
         flag = "positive",
         script = "scripts/items/dragon",
         callbacks = {
+            evaluateCache = "dragon.onEvaluateCache",
+            fireTear = "dragon.onFireTear",
+            update = "dragon.onUpdate",
+            gameStarted = "dragon.onGameStarted"
         },
         onBeforeChange = "dragon.onBeforeChange",
-        onAfterChange = "dragon.onAfterChange"
+        onAfterChange = "dragon.onAfterChange",
     },
     SNAKE = {
         WorkingNow = true,

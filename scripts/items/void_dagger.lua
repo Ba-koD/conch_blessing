@@ -189,5 +189,5 @@ ConchBlessing.voiddagger.onBeforeChange = function(upgradePos, pickup, _)
 end
 
 ConchBlessing.voiddagger.onAfterChange = function(upgradePos, pickup, _)
-    return ConchBlessing.template.neutral.onAfterChange(upgradePos, pickup, ConchBlessing.voiddagger.data)
+    ConchBlessing.template.neutral.onAfterChange(upgradePos, pickup, ConchBlessing.voiddagger.data)
 end

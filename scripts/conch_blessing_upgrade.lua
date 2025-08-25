@@ -7,10 +7,42 @@ ConchBlessing.printDebug("Upgrade system loaded!")
 ConchBlessing._upgradeJobs = ConchBlessing._upgradeJobs or {}
 
 local function _resolveFunction(path)
-    if type(path) ~= "string" or not ConchBlessing.CallbackManager or not ConchBlessing.CallbackManager.getFunctionByPath then
+    if type(path) ~= "string" then
         return nil
     end
-    return ConchBlessing.CallbackManager.getFunctionByPath(path)
+    
+    ConchBlessing.printDebug("_resolveFunction called with path: " .. tostring(path))
+    
+    -- Try to use CallbackManager first if available
+    if ConchBlessing.CallbackManager and ConchBlessing.CallbackManager.getFunctionByPath then
+        local func = ConchBlessing.CallbackManager.getFunctionByPath(path)
+        ConchBlessing.printDebug("  CallbackManager result: " .. tostring(func))
+        if func then
+            return func
+        end
+    end
+    
+    -- Fallback: direct function lookup
+    local parts = {}
+    for part in path:gmatch("[^%.]+") do
+        table.insert(parts, part)
+    end
+    
+    ConchBlessing.printDebug("  Direct lookup parts: " .. table.concat(parts, ", "))
+    
+    local current = ConchBlessing
+    for _, part in ipairs(parts) do
+        if current and current[part] then
+            current = current[part]
+            ConchBlessing.printDebug("    Found part: " .. part .. " -> " .. tostring(current))
+        else
+            ConchBlessing.printDebug("    Missing part: " .. part)
+            return nil
+        end
+    end
+    
+    ConchBlessing.printDebug("  Final result: " .. tostring(current))
+    return current
 end
 
 local function _spawnEffects(list, pos)
@@ -95,14 +127,23 @@ local function _processUpgradeJobs()
                     pickup.Touched = s.touched or pickup.Touched
                     pickup.ShopItemId = s.shopId or pickup.ShopItemId
                     pickup.State = s.state or pickup.State
-                    -- AFTER hooks/effects
-                    _spawnEffects(job.itemData.upgradeEffectsAfter or job.itemData.upgradeEffects, job.pos)
-                    local fnAfter = _resolveFunction(job.itemData.onAfterChange or job.itemData.onUpgrade)
-                    local afterRet = nil
-                    if type(fnAfter) == "function" then
-                        local ok, ret = pcall(fnAfter, job.pos, pickup, job.itemData)
-                        if ok then afterRet = ret end
-                    end
+                                -- AFTER hooks/effects
+            _spawnEffects(job.itemData.upgradeEffectsAfter or job.itemData.upgradeEffects, job.pos)
+            local fnAfter = _resolveFunction(job.itemData.onAfterChange or job.itemData.onUpgrade)
+            ConchBlessing.printDebug("  onAfterChange function resolved: " .. tostring(fnAfter))
+            local afterRet = nil
+            if type(fnAfter) == "function" then
+                ConchBlessing.printDebug("  Calling onAfterChange function...")
+                local ok, ret = pcall(fnAfter, job.pos, pickup, job.itemData)
+                if ok then 
+                    afterRet = ret 
+                    ConchBlessing.printDebug("  onAfterChange returned: " .. tostring(ret))
+                else
+                    ConchBlessing.printError("  onAfterChange error: " .. tostring(ret))
+                end
+            else
+                ConchBlessing.printError("  onAfterChange is not a function! Type: " .. type(fnAfter))
+            end
                     local derivedAfter = tonumber(afterRet) or 0
                     job.counter = (job.afterFrames and job.afterFrames > 0) and job.afterFrames or derivedAfter
                     job.phase = 3
@@ -180,8 +221,12 @@ local function handleMagicConchResult(result)
     local room = Game():GetRoom()
     local entities = Isaac.GetRoomEntities()
     local transformed = false
+    local upgradeCount = 0
     
     ConchBlessing.printDebug("Number of entities in room: " .. tostring(#entities))
+    
+    -- 먼저 모든 변환 가능한 아이템을 찾아서 수집
+    local upgradeableItems = {}
     
     for _, entity in ipairs(entities) do
         -- check if it's an item pickup
@@ -206,51 +251,70 @@ local function handleMagicConchResult(result)
                     ConchBlessing.printDebug("Flag matches! Item conversion: " .. tostring(collectibleId) .. " -> " .. tostring(upgradeData.upgradeId))
                     ConchBlessing.printDebug("  Flag type: " .. upgradeData.flag .. ", Result type: " .. result.type)
                     
-                    -- Save original item properties (including pedestal)
-                    local pickup = entity:ToPickup()
-
-                    if pickup == nil then
-                        ConchBlessing.printError("Pickup is nil!")
-                        return
-                    end
-                    
-                    -- Only perform conversion (no purchase handling)
-                    ConchBlessing.printDebug("Item conversion in progress")
-                    
-                    local originalPrice = pickup.Price
-                    local originalOptions = pickup.OptionsPickupIndex
-                    local originalWait = pickup.Wait
-                    local originalTimeout = pickup.Timeout
-                    local originalTouched = pickup.Touched
-                    local originalShopItemId = pickup.ShopItemId
-                    local originalState = pickup.State
-                    
-                    -- add conversion effect immediately (sound)
-                    local sfxManager = SFXManager()
-                    sfxManager:Play(SoundEffect.SOUND_POWERUP_SPEWER, 0.5)
-                    
-                    -- Enqueue staged job to ensure BEFORE completes before AFTER
-                    if pickup then
-                        _enqueueUpgradeJob(pickup, upgradeData, {
-                            price = originalPrice,
-                            options = originalOptions,
-                            wait = originalWait,
-                            timeout = originalTimeout,
-                            touched = originalTouched,
-                            shopId = originalShopItemId,
-                            state = originalState,
-                        })
-                    end
-                    
-                    transformed = true
-                    ConchBlessing.printDebug("Item conversion complete! (SubType changed)")
-                    break
+                    -- 변환 가능한 아이템 정보를 수집
+                    table.insert(upgradeableItems, {
+                        entity = entity,
+                        upgradeData = upgradeData
+                    })
                 else
                     ConchBlessing.printDebug("Flag does not match. No conversion.")
                 end
             end
         end
-        ::continue::
+    end
+    
+    -- 수집된 모든 아이템을 한꺼번에 업그레이드
+    if #upgradeableItems > 0 then
+        ConchBlessing.printDebug("Found " .. #upgradeableItems .. " upgradeable items. Processing all upgrades...")
+        
+        for _, itemInfo in ipairs(upgradeableItems) do
+            local entity = itemInfo.entity
+            local upgradeData = itemInfo.upgradeData
+            
+            -- Save original item properties (including pedestal)
+            local pickup = entity:ToPickup()
+
+            if pickup == nil then
+                ConchBlessing.printError("Pickup is nil!")
+                goto continue
+            end
+            
+            -- Only perform conversion (no purchase handling)
+            ConchBlessing.printDebug("Item conversion in progress for item " .. tostring(entity.SubType))
+            
+            local originalPrice = pickup.Price
+            local originalOptions = pickup.OptionsPickupIndex
+            local originalWait = pickup.Wait
+            local originalTimeout = pickup.Timeout
+            local originalTouched = pickup.Touched
+            local originalShopItemId = pickup.ShopItemId
+            local originalState = pickup.State
+            
+            -- add conversion effect immediately (sound)
+            local sfxManager = SFXManager()
+            sfxManager:Play(SoundEffect.SOUND_POWERUP_SPEWER, 0.5)
+            
+            -- Enqueue staged job to ensure BEFORE completes before AFTER
+            if pickup then
+                _enqueueUpgradeJob(pickup, upgradeData, {
+                    price = originalPrice,
+                    options = originalOptions,
+                    wait = originalWait,
+                    timeout = originalTimeout,
+                    touched = originalTouched,
+                    shopId = originalShopItemId,
+                    state = originalState,
+                })
+            end
+            
+            upgradeCount = upgradeCount + 1
+            transformed = true
+            ConchBlessing.printDebug("Item conversion queued for item " .. tostring(entity.SubType))
+            
+            ::continue::
+        end
+        
+        ConchBlessing.printDebug("Total " .. upgradeCount .. " items queued for upgrade!")
     end
     
     if not transformed then

@@ -43,8 +43,9 @@ Template.positive.onAfterChange = function(upgradePos, pickup, itemData, soundId
         ConchBlessing.printDebug("Template.positive.onAfterChange called")
     end
     
-    -- single Holy Light strike at the pedestal to finalize
-    Isaac.Spawn(EntityType.ENTITY_EFFECT, EffectVariant.CRACK_THE_SKY, 0, upgradePos, Vector.Zero, nil)
+    -- single Holy Light strike at the pedestal to finalize (안전한 enum 처리)
+    local crackTheSkyVariant = EffectVariant.CRACK_THE_SKY or 0
+    Isaac.Spawn(EntityType.ENTITY_EFFECT, crackTheSkyVariant, 0, upgradePos, Vector.Zero, nil)
     
     -- fade back from white to normal over 2 seconds (60 ticks)
     local upgradeAnim = {
@@ -108,23 +109,11 @@ Template.neutral.onAfterChange = function(upgradePos, pickup, itemData, soundId)
         ConchBlessing.printDebug("Template.neutral.onAfterChange called")
     end
     
-    -- 짙은 회색 스파클 이펙트 (CRACK_THE_SKY 대신)
-    Isaac.Spawn(EntityType.ENTITY_EFFECT, EffectVariant.SPARKLE, 0, upgradePos, Vector.Zero, nil)
-    
-    -- before 페이즈의 마지막 색상 저장 (회색)
-    local sprite = pickup and pickup:GetSprite() or nil
-    local beforeColor = { r = 0.3, g = 0.3, b = 0.3, a = 1.0, ro = 0, go = 0, bo = 0 }
-    if sprite then
-        beforeColor = {
-            r = sprite.Color.Red,
-            g = sprite.Color.Green,
-            b = sprite.Color.Blue,
-            a = sprite.Color.Alpha,
-            ro = sprite.Color.RedOffset,
-            go = sprite.Color.GreenOffset,
-            bo = sprite.Color.BlueOffset
-        }
-    end
+    -- -- 먼지 구름 효과와 스파클 이펙트 추가 (안전한 enum 처리)
+    -- local dustCloudVariant = EffectVariant.DUST_CLOUD or 0
+    -- local sparkleVariant = EffectVariant.SPARKLE or 0
+    -- Isaac.Spawn(EntityType.ENTITY_EFFECT, dustCloudVariant, 0, upgradePos, Vector.Zero, nil)
+    -- Isaac.Spawn(EntityType.ENTITY_EFFECT, sparkleVariant, 0, upgradePos, Vector.Zero, nil)
     
     -- fade back from gray to normal over 2 seconds (60 ticks)
     local upgradeAnim = {
@@ -134,8 +123,7 @@ Template.neutral.onAfterChange = function(upgradePos, pickup, itemData, soundId)
         phase = "after",
         maxAdd = 0.6,  -- 더 큰 값으로 회색 효과 강화
         soundId = soundId or SoundEffect.SOUND_POWERUP_SPEWER,
-        type = "neutral",
-        beforeColor = beforeColor  -- before 페이즈의 마지막 색상 저장
+        type = "neutral"
     }
     
     -- Store animation data in the item's data
@@ -143,7 +131,11 @@ Template.neutral.onAfterChange = function(upgradePos, pickup, itemData, soundId)
         itemData.upgradeAnim = upgradeAnim
     end
     
-    -- 스프라이트 색상을 즉시 설정하지 않음 - 애니메이션에서 점진적 복원
+    -- ensure sprite starts at gray after morph (like positive does)
+    local sprite = pickup and pickup:GetSprite() or nil
+    if sprite then
+        sprite.Color = Color(0.3, 0.3, 0.3, 1.0, upgradeAnim.maxAdd * 0.5, upgradeAnim.maxAdd * 0.5, upgradeAnim.maxAdd * 0.5)
+    end
 end
 
 -- Negative upgrade animation (dark black with dust gathering effect)
@@ -185,23 +177,11 @@ Template.negative.onAfterChange = function(upgradePos, pickup, itemData, soundId
         ConchBlessing.printDebug("Template.negative.onAfterChange called")
     end
     
-    -- dark dust burst effect
-    Isaac.Spawn(EntityType.ENTITY_EFFECT, EffectVariant.BURST, 0, upgradePos, Vector.Zero, nil)
-    
-    -- before 페이즈의 마지막 색상 저장 (어두운 색)
-    local sprite = pickup and pickup:GetSprite() or nil
-    local beforeColor = { r = 0.4, g = 0.4, b = 0.4, a = 1.0, ro = 0, go = 0, bo = 0 }
-    if sprite then
-        beforeColor = {
-            r = sprite.Color.Red,
-            g = sprite.Color.Green,
-            b = sprite.Color.Blue,
-            a = sprite.Color.Alpha,
-            ro = sprite.Color.RedOffset,
-            go = sprite.Color.GreenOffset,
-            bo = sprite.Color.BlueOffset
-        }
-    end
+    -- -- 먼지 구름 효과와 어두운 폭발 이펙트 (안전한 enum 처리)
+    -- local dustCloudVariant = EffectVariant.DUST_CLOUD or 0
+    -- local burstVariant = EffectVariant.BURST or 0
+    -- Isaac.Spawn(EntityType.ENTITY_EFFECT, dustCloudVariant, 0, upgradePos, Vector.Zero, nil)
+    -- Isaac.Spawn(EntityType.ENTITY_EFFECT, burstVariant, 0, upgradePos, Vector.Zero, nil)
     
     -- fade back from dark to normal over 2 seconds (60 ticks)
     local upgradeAnim = {
@@ -211,8 +191,7 @@ Template.negative.onAfterChange = function(upgradePos, pickup, itemData, soundId
         phase = "after",
         maxAdd = 0.7,
         soundId = soundId or SoundEffect.SOUND_POWERUP_SPEWER,
-        type = "negative",
-        beforeColor = beforeColor  -- before 페이즈의 마지막 색상 저장
+        type = "negative"
     }
     
     -- Store animation data in the item's data
@@ -220,7 +199,11 @@ Template.negative.onAfterChange = function(upgradePos, pickup, itemData, soundId
         itemData.upgradeAnim = upgradeAnim
     end
     
-    -- 스프라이트 색상을 즉시 설정하지 않음 - 애니메이션에서 점진적 복원
+    -- ensure sprite starts at dark after morph (like positive does)
+    local sprite = pickup and pickup:GetSprite() or nil
+    if sprite then
+        sprite.Color = Color(0.2, 0.2, 0.2, 1.0, upgradeAnim.maxAdd * 0.6, 0, 0)
+    end
 end
 
 -- Update function for handling all upgrade animations
@@ -254,27 +237,17 @@ Template.onUpdate = function(itemData)
                     sprite.Color = Color(brightness, brightness, brightness, 1.0, saturation, saturation, saturation)
                 end
             elseif anim.type == "neutral" then
-                -- Neutral: 원래색 → 회색 → 원래색 (더 부드럽게)
+                -- Neutral: 원래색 → 회색 → 원래색
                 if anim.phase == "before" then
                     local add = (anim.maxAdd or 0.6) * progress
                     -- 원래색에서 회색으로 점진적 변화
                     local gray = 1.0 - add * 0.7  -- 1.0(원래색)에서 0.3(회색)으로
                     sprite.Color = Color(gray, gray, gray, 1.0, 0, 0, 0)
                 elseif anim.phase == "after" then
-                    local add = (anim.maxAdd or 0.6) * (1.0 - progress)
-                    -- 회색에서 원래색으로 점진적 복원 (beforeColor 기반)
-                    local easedProgress = add * add * (3.0 - 2.0 * add)  -- smoothstep easing
-                    if anim.beforeColor then
-                        -- beforeColor에서 원래색(1.0, 1.0, 1.0)으로 점진적 복원
-                        local r = anim.beforeColor.r + (1.0 - anim.beforeColor.r) * easedProgress
-                        local g = anim.beforeColor.g + (1.0 - anim.beforeColor.g) * easedProgress
-                        local b = anim.beforeColor.b + (1.0 - anim.beforeColor.b) * easedProgress
-                        sprite.Color = Color(r, g, b, 1.0, 0, 0, 0)
-                    else
-                        -- fallback: 기본 점진적 복원
-                        local gray = 0.3 + easedProgress * 0.7
-                        sprite.Color = Color(gray, gray, gray, 1.0, 0, 0, 0)
-                    end
+                    local add = (anim.maxAdd or 0.6) * progress
+                    -- 회색에서 원래색으로 점진적 복원 (progress가 0에서 1로 증가)
+                    local brightness = 0.3 + add * 0.7  -- 0.3(회색)에서 1.0(원래색)으로
+                    sprite.Color = Color(brightness, brightness, brightness, 1.0, 0, 0, 0)
                 end
             elseif anim.type == "negative" then
                 -- Negative: 원래색 → 붉은 검은색 → 원래색
@@ -285,21 +258,11 @@ Template.onUpdate = function(itemData)
                     local redTint = add * 0.5      -- 빨간색 톤 추가
                     sprite.Color = Color(dark + redTint, dark, dark, 1.0, 0, 0, 0)
                 elseif anim.phase == "after" then
-                    local add = (anim.maxAdd or 0.7) * (1.0 - progress)
-                    -- 붉은 검은색에서 원래색으로 점진적 복원 (beforeColor 기반)
-                    local easedProgress = add * add * (3.0 - 2.0 * add)  -- smoothstep easing
-                    if anim.beforeColor then
-                        -- beforeColor에서 원래색(1.0, 1.0, 1.0)으로 점진적 복원
-                        local r = anim.beforeColor.r + (1.0 - anim.beforeColor.r) * easedProgress
-                        local g = anim.beforeColor.g + (1.0 - anim.beforeColor.g) * easedProgress
-                        local b = anim.beforeColor.b + (1.0 - anim.beforeColor.b) * easedProgress
-                        sprite.Color = Color(r, g, b, 1.0, 0, 0, 0)
-                    else
-                        -- fallback: 기본 점진적 복원
-                        local dark = 0.2 + add * 0.8
-                        local redTint = add * 0.5
-                        sprite.Color = Color(dark + redTint, dark, dark, 1.0, 0, 0, 0)
-                    end
+                    local add = (anim.maxAdd or 0.7) * progress
+                    -- 붉은 검은색에서 원래색으로 점진적 복원 (progress가 0에서 1로 증가)
+                    local brightness = 0.2 + add * 0.8  -- 0.2(어두움)에서 1.0(원래색)으로
+                    local redTint = add * 0.5            -- 빨간색 톤 감소
+                    sprite.Color = Color(brightness + redTint, brightness, brightness, 1.0, 0, 0, 0)
                 end
             end
         end
@@ -322,9 +285,22 @@ Template.onUpdate = function(itemData)
                 ConchBlessing.printDebug(string.format("Template: %s phase animation completed", anim.phase))
             end
             
-            -- reset color to default
+            -- 색상을 자연스럽게 복원 (강제 설정하지 않음)
             if sprite then
-                sprite.Color = Color(1, 1, 1, 1, 0, 0, 0)
+                -- 애니메이션의 마지막 색상을 유지하거나 자연스럽게 복원
+                if anim.type == "neutral" then
+                    -- neutral의 경우 회색에서 원래색으로 점진적 복원 완료
+                    sprite.Color = Color(1, 1, 1, 1, 0, 0, 0)
+                elseif anim.type == "positive" then
+                    -- positive의 경우 밝은 색상에서 원래색으로 복원 완료
+                    sprite.Color = Color(1, 1, 1, 1, 0, 0, 0)
+                elseif anim.type == "negative" then
+                    -- negative의 경우 어두운 색상에서 원래색으로 복원 완료
+                    sprite.Color = Color(1, 1, 1, 1, 0, 0, 0)
+                else
+                    -- 기본 복원
+                    sprite.Color = Color(1, 1, 1, 1, 0, 0, 0)
+                end
             end
             -- stop sound at end
             if anim.soundId then
