@@ -240,7 +240,8 @@ ConchBlessing.ItemData = {
             postNewLevel = "eternalflame.onNewLevel",
             postNewRoom = "eternalflame.onNewRoom",
             postCurseEval = "eternalflame.onCurseEval",
-            update = "eternalflame.onUpdate"
+            update = "eternalflame.onUpdate",
+            gameStarted = "eternalflame.onGameStarted"
         },
         onBeforeChange = "eternalflame.onBeforeChange",
         onAfterChange = "eternalflame.onAfterChange",

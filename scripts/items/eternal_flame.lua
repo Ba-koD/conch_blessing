@@ -1,5 +1,8 @@
 ConchBlessing.eternalflame = {}
 
+-- SaveManager integration
+local SaveManager = require("scripts.lib.save_manager")
+
 ConchBlessing.eternalflame.data = {
     curseRemoved = false,
     curseRemovalTimer = nil,
@@ -162,6 +165,17 @@ function ConchBlessing.eternalflame.onEvaluateCache(_, player, cacheFlag)
                 local totalDamage = base + totalDamageBonus
                 player:SetTearPoisonDamage(totalDamage)
             end
+            
+            -- Save curse count to SaveManager
+            local playerSave = SaveManager.GetRunSave(player)
+            if playerSave then
+                if not playerSave.eternalFlame then
+                    playerSave.eternalFlame = {}
+                end
+                playerSave.eternalFlame.curseCount = data.curseCount
+                SaveManager.Save()
+                ConchBlessing.printDebug("Eternal Flame: Curse count saved to SaveManager: " .. data.curseCount)
+            end
         end
         
     elseif cacheFlag == CacheFlag.CACHE_FIREDELAY then
@@ -282,4 +296,59 @@ end
 -- onPlayerUpdate function for callback registration
 function ConchBlessing.eternalflame.onPlayerUpdate(_, player)
     if not player or not player:HasCollectible(ETERNAL_FLAME_ID) then return end
+end
+
+-- initialize data when game started
+ConchBlessing.eternalflame.onGameStarted = function(_)
+    local player = Isaac.GetPlayer(0)
+    if player then
+        local playerSave = SaveManager.GetRunSave(player)
+        
+        -- Check if this is a new game (no saved data)
+        if not playerSave or not playerSave.eternalFlame or not playerSave.eternalFlame.curseCount or playerSave.eternalFlame.curseCount == 0 then
+            -- New game - reset data
+            local data = ConchBlessing.eternalflame.data
+            if data then
+                data.curseCount = 0
+                data.curseRemoved = false
+                data.curseRemovalTimer = nil
+                data.pendingCurses = nil
+                data.pendingCurseCount = nil
+            end
+            
+            -- Clear saved data
+            if playerSave then
+                if not playerSave.eternalFlame then
+                    playerSave.eternalFlame = {}
+                end
+                playerSave.eternalFlame.curseCount = 0
+                SaveManager.Save()
+            end
+            
+            ConchBlessing.printDebug("Eternal Flame: New game detected, data reset to 0")
+        else
+            -- Continue game - load saved data
+            if playerSave.eternalFlame.curseCount then
+                local data = ConchBlessing.eternalflame.data
+                if data then
+                    data.curseCount = playerSave.eternalFlame.curseCount
+                    ConchBlessing.printDebug("Eternal Flame: Loaded curse count from SaveManager: " .. data.curseCount)
+                    
+                    -- Apply stats on game start if player has the item
+                    if player:HasCollectible(ETERNAL_FLAME_ID) then
+                        ConchBlessing.printDebug("Eternal Flame: Applying stats on game start for " .. data.curseCount .. " curses")
+                        player:AddCacheFlags(CacheFlag.CACHE_DAMAGE | CacheFlag.CACHE_FIREDELAY)
+                        player:EvaluateItems()
+                        ConchBlessing.printDebug("Eternal Flame: Stats applied on game start!")
+                    end
+                end
+            else
+                ConchBlessing.printDebug("Eternal Flame: No saved data, starting with 0 curse count")
+            end
+        end
+    else
+        ConchBlessing.printDebug("Eternal Flame: No player found on game start")
+    end
+    
+    ConchBlessing.printDebug("Eternal Flame: onGameStarted called!")
 end
