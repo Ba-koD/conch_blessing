@@ -1,10 +1,9 @@
 <?xml version="1.0" ?>
-<items gfxroot="gfx/items/" version="1">
+<items gfxroot="gfx/items/" deathanm2="gfx/death_items.anm2" version="1">
     <passive id="0" name="Live Eye" gfx="live_eye.png" quality="4" tags="offensive" cache="damage" shopprice="20" devilprice="2" chargetype="normal"/>
     <passive id="1" name="Void Dagger" gfx="void_dagger.png" quality="4" tags="offensive devil" cache="damage firedelay" shopprice="20" devilprice="2"/>
     <passive id="2" name="Eternal Flame" gfx="eternal_flame.png" quality="4" tags="offensive angel" cache="damage firedelay" shopprice="20" devilprice="2"/>
     <active id="3" name="Power Training" gfx="power_training.png" quality="4" tags="offensive" cache="damage firedelay range luck" shopprice="20" devilprice="2" maxcharges="8" chargetype="normal" initcharge="8"/>
     <passive id="4" name="Oral Steroids" gfx="oral_steroids.png" quality="2" tags="offensive" cache="damage firedelay range luck" shopprice="15" devilprice="1"/>
     <active id="5" name="Injectable Steroids" gfx="injectable_steroids.png" quality="3" tags="offensive" cache="damage firedelay range luck" shopprice="15" devilprice="2" maxcharges="1" chargetype="special" initcharge="1"/>
-    <passive id="6" name="Dragon" gfx="dragon.png" quality="4" tags="offensive" cache="flying tearflag"/>
 </items>

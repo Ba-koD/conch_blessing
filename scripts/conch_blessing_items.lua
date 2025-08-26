@@ -436,6 +436,7 @@ ConchBlessing.ItemData = {
         },
     },
     DRAGON = {
+        WorkingNow = true,
         type = "passive",
         id = Isaac.GetItemIdByName("Dragon"),
         name = {
@@ -460,6 +461,8 @@ ConchBlessing.ItemData = {
         tags = "offensive",
         cache = "flying tearflag",
         hidden = false,
+        shopprice = 20,
+        devilprice = 2,
         origin = CollectibleType.COLLECTIBLE_TAURUS,
         flag = "positive",
         script = "scripts/items/dragon",

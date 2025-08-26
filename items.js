@@ -170,27 +170,11 @@ const items = {
         eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
     },
     DRAGON: {
-        type: "passive",
         gfx: "resources/gfx/items/collectibles/dragon.png",
-        quality: 4,
-        tags: "offensive",
-        cache: "flying tearflag",
-        hidden: false,
-        shopprice: 0,
-        devilprice: 0,
-        maxcharges: 0,
-        chargetype: "normal",
-        initcharge: 0,
-        hearts: 0,
-        maxhearts: 0,
-        blackhearts: 0,
-        soulhearts: 0,
-        origin: "TAURUS",
-        flag: "positive",
-        pools: ["ROOM_TREASURE", "ROOM_PLANETARIUM"],
+        workingnowflag: true,
         names: {"kr": "진", "en": "Dragon"},
-        descriptions: {"kr": "진", "en": "Dragon"},
-        eids: {"kr": ["공중과 지형관통을 얻습니다.", "방에 입장하고 5초가 지나면, 5초간 지속되는 불꽃 브레스를 쏠 수 있습니다."], "en": ["Gain flight and Spectral tears.", "After entering a room for 5 seconds, can shoot fire breath for 5 seconds."]}
+        descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
+        eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
     },
     SNAKE: {
         gfx: "resources/gfx/items/collectibles/snake.png",

@@ -18,7 +18,6 @@
     <Pool Name="treasure">
         <Item Name="Void Dagger" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Power Training" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
-        <Item Name="Dragon" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
     <Pool Name="shop">
         <Item Name="Power Training" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
@@ -33,8 +32,5 @@
     </Pool>
     <Pool Name="secret">
         <Item Name="Oral Steroids" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
-    </Pool>
-    <Pool Name="planetarium">
-        <Item Name="Dragon" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
 </ItemPools>

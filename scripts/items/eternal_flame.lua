@@ -57,8 +57,6 @@ local function removeCurses(player)
         player:AddCacheFlags(CacheFlag.CACHE_DAMAGE | CacheFlag.CACHE_FIREDELAY)
         player:EvaluateItems()
         
-        ConchBlessing.template.positive.onAfterChange(player.Position, nil, ConchBlessing.eternalflame.data)
-        
         local flameEffect = Isaac.Spawn(EntityType.ENTITY_EFFECT, 1, 0, player.Position, Vector.Zero, player)
         if flameEffect then
             local sprite = flameEffect:GetSprite()
