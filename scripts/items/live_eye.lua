@@ -64,7 +64,13 @@ ConchBlessing.liveeye.onEvaluateCache = function(_, player, cacheFlag)
                 )
             end
             
-            ConchBlessing.stats.damage.applyMultiplier(player, mult)
+            -- Apply damage multiplier using stats system
+            ConchBlessing.stats.damage.applyMultiplier(player, mult, nil, true)
+            
+            -- Show detailed multiplier display
+            ConchBlessing.stats.multiplierDisplay:ShowDetailedMultipliers(
+                player, "Damage", mult, mult, "Live Eye"
+            )
             
             ConchBlessing.printDebug(string.format("Live Eye final mult=%.2f -> damage=%.2f", mult, player.Damage))
         end

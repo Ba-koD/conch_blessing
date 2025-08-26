@@ -124,6 +124,24 @@ ConchBlessing.injectablsteroids.onUseItem = function(player, collectibleID, useF
     ConchBlessing.printDebug(string.format("Injectable Steroids #%d used: Speed=-%.2f Tears=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx", 
         newIndex, ConchBlessing.injectablsteroids.data.speedDecrease, newMultipliers.tears, newMultipliers.damage, newMultipliers.range, newMultipliers.luck))
     
+    -- Update unified multiplier system with the new multipliers
+    local uniqueKey = INJECTABLE_STEROIDS_ID .. "_" .. newIndex
+    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+        player, uniqueKey, "Tears", newMultipliers.tears, "Injectable Steroids #" .. newIndex
+    )
+    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+        player, uniqueKey, "Damage", newMultipliers.damage, "Injectable Steroids #" .. newIndex
+    )
+    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+        player, uniqueKey, "Range", newMultipliers.range, "Injectable Steroids #" .. newIndex
+    )
+    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+        player, uniqueKey, "Luck", newMultipliers.luck, "Injectable Steroids #" .. newIndex
+    )
+    
+    -- Save unified multipliers to SaveManager
+    ConchBlessing.stats.unifiedMultipliers:SaveToSaveManager(player)
+    
     SFXManager():Play(SoundEffect.SOUND_ISAAC_HURT_GRUNT, 1.0, 0, false, 1.0, 0)
     
     if not ConchBlessing.injectablsteroids._yellowIntensity then
@@ -136,6 +154,13 @@ ConchBlessing.injectablsteroids.onUseItem = function(player, collectibleID, useF
     player:AnimateCollectible(INJECTABLE_STEROIDS_ID, "Drop", "PlayerPickupSparkle")
     
     ConchBlessing.printDebug("Injectable Steroids use effect completed! Use count: " .. newIndex)
+    
+    -- Notify Oral Steroids that Injectable was just used
+    if ConchBlessing.oralsteroids then
+        ConchBlessing.oralsteroids._lastInjectableUseFrame = Game():GetFrameCount()
+        ConchBlessing.printDebug("Injectable Steroids: Notified Oral Steroids of recent use (frame " .. Game():GetFrameCount() .. ")")
+    end
+    
     ConchBlessing.printDebug("=== Injectable Steroids onUseItem END ===")
     
     return { Discharge = true, Remove = false, ShowAnim = true }
@@ -143,6 +168,34 @@ end
 
 
 ConchBlessing.injectablsteroids.onEvaluateCache = function(_, player, cacheFlag)
+    -- Prevent duplicate processing in the same frame
+    local currentFrame = Game():GetFrameCount()
+    local playerID = player:GetPlayerType()
+    
+    if ConchBlessing.injectablsteroids._lastProcessedFrame == currentFrame and 
+       ConchBlessing.injectablsteroids._lastProcessedPlayer == playerID then
+        return
+    end
+    
+    -- Only process if this is actually a stat change for Injectable Steroids
+    -- Don't process if this is just a cache refresh from other items
+    if not ConchBlessing.injectablsteroids._lastUseCount then
+        ConchBlessing.injectablsteroids._lastUseCount = {}
+    end
+    if not ConchBlessing.injectablsteroids._lastUseCount[playerID] then
+        ConchBlessing.injectablsteroids._lastUseCount[playerID] = 0
+    end
+    
+    -- Get current use count from SaveManager
+    local playerSave = SaveManager.GetRunSave(player)
+    local currentUseCount = playerSave and playerSave.injectableSteroids and #playerSave.injectableSteroids or 0
+    
+    -- Only process if use count actually changed
+    if ConchBlessing.injectablsteroids._lastUseCount[playerID] == currentUseCount then
+        ConchBlessing.printDebug("Injectable Steroids: Use count unchanged (" .. currentUseCount .. "), skipping cache refresh")
+        return
+    end
+    
     if cacheFlag == CacheFlag.CACHE_DAMAGE then
         ConchBlessing.printDebug("=== Injectable Steroids onEvaluateCache START ===")
         ConchBlessing.printDebug("cacheFlag: CACHE_DAMAGE")
@@ -218,25 +271,32 @@ ConchBlessing.injectablsteroids.onEvaluateCache = function(_, player, cacheFlag)
     end
     
     if cacheFlag == CacheFlag.CACHE_FIREDELAY then
-        ConchBlessing.stats.tears.applyMultiplier(player, totalTears, ConchBlessing.injectablsteroids.data.minMultiplier)
+        ConchBlessing.stats.tears.applyMultiplier(player, totalTears, ConchBlessing.injectablsteroids.data.minMultiplier, true)
     end
     
     if cacheFlag == CacheFlag.CACHE_DAMAGE then
-        ConchBlessing.stats.damage.applyMultiplier(player, totalDamage, ConchBlessing.injectablsteroids.data.minMultiplier)
+        ConchBlessing.stats.damage.applyMultiplier(player, totalDamage, ConchBlessing.injectablsteroids.data.minMultiplier, true)
     end
     
     if cacheFlag == CacheFlag.CACHE_SPEED then
         local speedDecrease = ConchBlessing.injectablsteroids.data.speedDecrease * useCount
-        player.MoveSpeed = player.MoveSpeed - speedDecrease
+        ConchBlessing.stats.speed.applyAddition(player, -speedDecrease, ConchBlessing.injectablsteroids.data.minMultiplier)
     end
     
     if cacheFlag == CacheFlag.CACHE_RANGE then
-        player.TearRange = player.TearRange * totalRange
+        ConchBlessing.stats.range.applyMultiplier(player, totalRange, ConchBlessing.injectablsteroids.data.minMultiplier, true)
     end
     
-    if cacheFlag == CacheFlag.CACHE_LUCK and player.Luck > 0 then
-        player.Luck = player.Luck * totalLuck
+    if cacheFlag == CacheFlag.CACHE_LUCK then
+        ConchBlessing.stats.luck.applyMultiplier(player, totalLuck, ConchBlessing.injectablsteroids.data.minMultiplier, true)
     end
+    
+    -- Mark this frame as processed to prevent duplicate calls
+    ConchBlessing.injectablsteroids._lastProcessedFrame = currentFrame
+    ConchBlessing.injectablsteroids._lastProcessedPlayer = playerID
+    
+    -- Record the use count that was processed
+    ConchBlessing.injectablsteroids._lastUseCount[playerID] = currentUseCount
 end
 
 -- initialize data when game started
@@ -288,15 +348,37 @@ ConchBlessing.injectablsteroids.onGameStarted = function(_)
                     speedDecrease, totalTears, totalDamage, totalRange, totalLuck))
                 
                 local speedDecrease = ConchBlessing.injectablsteroids.data.speedDecrease * useCount
-                player.MoveSpeed = player.MoveSpeed - speedDecrease
+                ConchBlessing.stats.speed.applyAddition(player, -speedDecrease, ConchBlessing.injectablsteroids.data.minMultiplier)
                 
-                player.TearRange = player.TearRange * totalRange
-                if player.Luck > 0 then
-                    player.Luck = player.Luck * totalLuck
+                ConchBlessing.stats.range.applyMultiplier(player, totalRange, ConchBlessing.injectablsteroids.data.minMultiplier, true)
+                ConchBlessing.stats.luck.applyMultiplier(player, totalLuck, ConchBlessing.injectablsteroids.data.minMultiplier, true)
+                
+                ConchBlessing.stats.damage.applyMultiplier(player, totalDamage, ConchBlessing.injectablsteroids.data.minMultiplier, true)
+                ConchBlessing.stats.tears.applyMultiplier(player, totalTears, ConchBlessing.injectablsteroids.data.minMultiplier, true)
+                
+                -- Load unified multipliers from SaveManager
+                ConchBlessing.stats.unifiedMultipliers:LoadFromSaveManager(player)
+                
+                -- Update unified multiplier system with the last individual multipliers
+                local lastMultipliers = playerSave.injectableSteroids[useCount]
+                if lastMultipliers then
+                    local uniqueKey = INJECTABLE_STEROIDS_ID .. "_" .. useCount
+                    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+                        player, uniqueKey, "Tears", lastMultipliers.tears, "Injectable Steroids #" .. useCount
+                    )
+                    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+                        player, uniqueKey, "Damage", lastMultipliers.damage, "Injectable Steroids #" .. useCount
+                    )
+                    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+                        player, uniqueKey, "Range", lastMultipliers.range, "Injectable Steroids #" .. useCount
+                    )
+                    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+                        player, uniqueKey, "Luck", lastMultipliers.luck, "Injectable Steroids #" .. useCount
+                    )
                 end
                 
-                ConchBlessing.stats.damage.applyMultiplier(player, totalDamage, ConchBlessing.injectablsteroids.data.minMultiplier)
-                ConchBlessing.stats.tears.applyMultiplier(player, totalTears, ConchBlessing.injectablsteroids.data.minMultiplier)
+                -- Save unified multipliers to SaveManager
+                ConchBlessing.stats.unifiedMultipliers:SaveToSaveManager(player)
                 
                 ConchBlessing.printDebug("All stats (including damage and tears) restored successfully on game start!")
             else

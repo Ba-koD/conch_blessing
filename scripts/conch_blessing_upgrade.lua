@@ -173,9 +173,9 @@ ConchBlessing.ItemMaps = {}
 local function generateItemMaps()
     ConchBlessing.printDebug("Generating conversion map based on ItemData...")
     
-    if not ConchBlessing.ItemData then
-        ConchBlessing.printError("ConchBlessing.ItemData is not defined!")
-        return
+    if not ConchBlessing.ItemData or not ConchBlessing.ItemDataReady then
+        ConchBlessing.printDebug("ConchBlessing.ItemData not ready yet (ItemData: " .. tostring(ConchBlessing.ItemData ~= nil) .. ", ItemDataReady: " .. tostring(ConchBlessing.ItemDataReady) .. "), skipping conversion map generation")
+        return false
     end
     
     for itemKey, itemData in pairs(ConchBlessing.ItemData) do
@@ -198,6 +198,7 @@ local function generateItemMaps()
     end
     
     ConchBlessing.printDebug("Conversion map created! Total " .. ConchBlessing.tableLength(ConchBlessing.ItemMaps) .. " origin mappings created.")
+    return true
 end
 
 -- Table length helper function
@@ -351,7 +352,7 @@ end
 
 -- Generate conversion map on game start
 ConchBlessing:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function()
-    generateItemMaps() -- Generate conversion map
+    generateItemMaps()
 end)
 
 -- Initialize Magic Conch on new floor start

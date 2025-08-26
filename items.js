@@ -93,7 +93,7 @@ const items = {
         pools: ["ROOM_TREASURE", "ROOM_SHOP", "ROOM_ANGEL"],
         names: {"kr": "파워 트레이닝", "en": "Power Training"},
         descriptions: {"kr": "라잇웨잇 베이비!", "en": "Lightweight Baby!"},
-        eids: {"kr": ["사용시 데미지, 연사(딜레이 나누기), 사거리, 행운이 1.0~1.3배가 됩니다."], "en": ["Damage, fire rate (delay division), range, and luck are changed to 1.0~1.3x when used"]}
+        eids: {"kr": ["사용시 데미지, 연사, 사거리, 행운이 1.0~1.3배가 됩니다."], "en": ["Damage, tears, range, and luck are changed to 1.0~1.3x when used"]}
     },
     ORAL_STEROIDS: {
         type: "passive",

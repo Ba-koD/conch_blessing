@@ -95,7 +95,7 @@ ConchBlessing.powertraining.onUseItem = function(player, collectibleID, useFlags
     
     local newMultipliers = {
         speed = math.floor((rng:RandomFloat() * (ConchBlessing.powertraining.data.maxMultiplier - ConchBlessing.powertraining.data.minMultiplier) + ConchBlessing.powertraining.data.minMultiplier) * 100) / 100,
-        fireDelay = math.floor((rng:RandomFloat() * (ConchBlessing.powertraining.data.maxMultiplier - ConchBlessing.powertraining.data.minMultiplier) + ConchBlessing.powertraining.data.minMultiplier) * 100) / 100,
+        tears = math.floor((rng:RandomFloat() * (ConchBlessing.powertraining.data.maxMultiplier - ConchBlessing.powertraining.data.minMultiplier) + ConchBlessing.powertraining.data.minMultiplier) * 100) / 100,
         damage = math.floor((rng:RandomFloat() * (ConchBlessing.powertraining.data.maxMultiplier - ConchBlessing.powertraining.data.minMultiplier) + ConchBlessing.powertraining.data.minMultiplier) * 100) / 100,
         range = math.floor((rng:RandomFloat() * (ConchBlessing.powertraining.data.maxMultiplier - ConchBlessing.powertraining.data.minMultiplier) + ConchBlessing.powertraining.data.minMultiplier) * 100) / 100,
         luck = math.floor((rng:RandomFloat() * (ConchBlessing.powertraining.data.maxMultiplier - ConchBlessing.powertraining.data.minMultiplier) + ConchBlessing.powertraining.data.minMultiplier) * 100) / 100
@@ -115,8 +115,34 @@ ConchBlessing.powertraining.onUseItem = function(player, collectibleID, useFlags
     SaveManager.Save()
     ConchBlessing.printDebug("SaveManager.Save() completed!")
     
-    ConchBlessing.printDebug(string.format("Power Training #%d used: Speed=-%.2f FireDelay=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx", 
-        newIndex, ConchBlessing.powertraining.data.speedDecrease, newMultipliers.fireDelay, newMultipliers.damage, newMultipliers.range, newMultipliers.luck))
+    ConchBlessing.printDebug(string.format("Power Training #%d used: Speed=-%.2f Tears=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx", 
+        newIndex, ConchBlessing.powertraining.data.speedDecrease, newMultipliers.tears, newMultipliers.damage, newMultipliers.range, newMultipliers.luck))
+    
+    -- Calculate total accumulated multipliers for display
+    local playerSave = SaveManager.GetRunSave(player)
+    local totalSpeed = 1.0
+    local totalTears = 1.0
+    local totalDamage = 1.0
+    local totalRange = 1.0
+    local totalLuck = 1.0
+    
+    -- Multiply all previous multipliers
+    for i = 1, #playerSave.powerTraining do
+        local multipliers = playerSave.powerTraining[i]
+        if multipliers then
+            totalSpeed = totalSpeed * multipliers.speed
+            totalTears = totalTears * multipliers.tears
+            totalDamage = totalDamage * multipliers.damage
+            totalRange = totalRange * multipliers.range
+            totalLuck = totalLuck * multipliers.luck
+        end
+    end
+    
+    -- Show multiplier display for each stat (current = new, total = calculated by stats system)
+    ConchBlessing.stats.multiplierDisplay:ShowDetailedMultipliers(player, "Tears", newMultipliers.tears, "Power Training #" .. newIndex, POWER_TRAINING_ID)
+    ConchBlessing.stats.multiplierDisplay:ShowDetailedMultipliers(player, "Damage", newMultipliers.damage, "Power Training #" .. newIndex, POWER_TRAINING_ID)
+    ConchBlessing.stats.multiplierDisplay:ShowDetailedMultipliers(player, "Range", newMultipliers.range, "Power Training #" .. newIndex, POWER_TRAINING_ID)
+    ConchBlessing.stats.multiplierDisplay:ShowDetailedMultipliers(player, "Luck", newMultipliers.luck, "Power Training #" .. newIndex, POWER_TRAINING_ID)
     
     SFXManager():Play(SoundEffect.SOUND_BATTERYCHARGE, 1.0, 0, false, 1.0, 0)
     
@@ -129,6 +155,34 @@ ConchBlessing.powertraining.onUseItem = function(player, collectibleID, useFlags
 end
 
 ConchBlessing.powertraining.onEvaluateCache = function(_, player, cacheFlag)
+    -- Prevent duplicate processing in the same frame
+    local currentFrame = Game():GetFrameCount()
+    local playerID = player:GetPlayerType()
+    
+    if ConchBlessing.powertraining._lastProcessedFrame == currentFrame and 
+       ConchBlessing.powertraining._lastProcessedPlayer == playerID then
+        return
+    end
+    
+    -- Only process if this is actually a stat change for Power Training
+    -- Don't process if this is just a cache refresh from other items
+    if not ConchBlessing.powertraining._lastUseCount then
+        ConchBlessing.powertraining._lastUseCount = {}
+    end
+    if not ConchBlessing.powertraining._lastUseCount[playerID] then
+        ConchBlessing.powertraining._lastUseCount[playerID] = 0
+    end
+    
+    -- Get current use count from SaveManager
+    local playerSave = SaveManager.GetRunSave(player)
+    local currentUseCount = playerSave and playerSave.powerTraining and #playerSave.powerTraining or 0
+    
+    -- Only process if use count actually changed
+    if ConchBlessing.powertraining._lastUseCount[playerID] == currentUseCount then
+        ConchBlessing.printDebug("Power Training: Use count unchanged (" .. currentUseCount .. "), skipping cache refresh")
+        return
+    end
+    
     if cacheFlag == CacheFlag.CACHE_DAMAGE then
         ConchBlessing.printDebug("=== Power Training onEvaluateCache START ===")
         ConchBlessing.printDebug("cacheFlag: CACHE_DAMAGE")
@@ -174,7 +228,7 @@ ConchBlessing.powertraining.onEvaluateCache = function(_, player, cacheFlag)
     end
     
     local totalSpeed = 1.0
-    local totalFireDelay = 1.0
+    local totalTears = 1.0
     local totalDamage = 1.0
     local totalRange = 1.0
     local totalLuck = 1.0
@@ -183,7 +237,7 @@ ConchBlessing.powertraining.onEvaluateCache = function(_, player, cacheFlag)
         local multipliers = playerSave.powerTraining[i]
         if multipliers then
             totalSpeed = totalSpeed * (multipliers.speed or 1.0)
-            totalFireDelay = totalFireDelay * (multipliers.fireDelay or 1.0)
+            totalTears = totalTears * (multipliers.tears or 1.0)
             totalDamage = totalDamage * (multipliers.damage or 1.0)
             totalRange = totalRange * (multipliers.range or 1.0)
             totalLuck = totalLuck * (multipliers.luck or 1.0)
@@ -191,40 +245,52 @@ ConchBlessing.powertraining.onEvaluateCache = function(_, player, cacheFlag)
     end
     
     totalSpeed = math.max(ConchBlessing.powertraining.data.minMultiplier, totalSpeed)
-    totalFireDelay = math.max(ConchBlessing.powertraining.data.minMultiplier, totalFireDelay)
+    totalTears = math.max(ConchBlessing.powertraining.data.minMultiplier, totalTears)
     totalDamage = math.max(ConchBlessing.powertraining.data.minMultiplier, totalDamage)
     totalRange = math.max(ConchBlessing.powertraining.data.minMultiplier, totalRange)
     totalLuck = math.max(ConchBlessing.powertraining.data.minMultiplier, totalLuck)
     
     if cacheFlag == CacheFlag.CACHE_DAMAGE and useCount ~= (ConchBlessing.powertraining._lastFinalDebugUseCount or 0) then
         local speedDecrease = ConchBlessing.powertraining.data.speedDecrease * useCount
-        ConchBlessing.printDebug(string.format("Power Training Final (x%d uses): Speed=-%.2f FireDelay=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx", 
-            useCount, speedDecrease, totalFireDelay, totalDamage, totalRange, totalLuck))
+        ConchBlessing.printDebug(string.format("Power Training Final (x%d uses): Speed=-%.2f Tears=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx", 
+            useCount, speedDecrease, totalTears, totalDamage, totalRange, totalLuck))
         ConchBlessing.powertraining._lastFinalDebugUseCount = useCount
     end
     
     if cacheFlag == CacheFlag.CACHE_DAMAGE then
-        ConchBlessing.stats.damage.applyMultiplier(player, totalDamage, ConchBlessing.powertraining.data.minMultiplier)
+        ConchBlessing.stats.damage.applyMultiplier(player, totalDamage, ConchBlessing.powertraining.data.minMultiplier, true)
     end
     
     if cacheFlag == CacheFlag.CACHE_FIREDELAY then
-        if player.MaxFireDelay then
-            player.MaxFireDelay = player.MaxFireDelay / totalFireDelay
-        end
+        ConchBlessing.stats.tears.applyMultiplier(player, totalTears, ConchBlessing.powertraining.data.minMultiplier, true)
     end
     
     if cacheFlag == CacheFlag.CACHE_SPEED then
         local speedDecrease = ConchBlessing.powertraining.data.speedDecrease * useCount
-        player.MoveSpeed = player.MoveSpeed - speedDecrease
+        ConchBlessing.stats.speed.applyAddition(player, -speedDecrease, ConchBlessing.powertraining.data.minMultiplier)
     end
     
     if cacheFlag == CacheFlag.CACHE_RANGE then
-        player.TearRange = player.TearRange * totalRange
+        ConchBlessing.stats.range.applyMultiplier(player, totalRange, ConchBlessing.powertraining.data.minMultiplier, true)
     end
     
     if cacheFlag == CacheFlag.CACHE_LUCK and player.Luck > 0 then
-        player.Luck = player.Luck * totalLuck
+        ConchBlessing.stats.luck.applyMultiplier(player, totalLuck, ConchBlessing.powertraining.data.minMultiplier, true)
     end
+    
+    -- Show unified multiplier display
+    if cacheFlag == CacheFlag.CACHE_DAMAGE then
+        ConchBlessing.stats.multiplierDisplay:ShowDetailedMultipliers(
+            player, "All Stats", 1.0, 1.0, "Power Training"
+        )
+    end
+    
+    -- Mark this frame as processed to prevent duplicate calls
+    ConchBlessing.powertraining._lastProcessedFrame = currentFrame
+    ConchBlessing.powertraining._lastProcessedPlayer = playerID
+    
+    -- Record the use count that was processed
+    ConchBlessing.powertraining._lastUseCount[playerID] = currentUseCount
 end
 
 -- initialize data when game started
@@ -248,7 +314,7 @@ ConchBlessing.powertraining.onGameStarted = function(_)
             
             if useCount > 0 then
                 local totalSpeed = 1.0
-                local totalFireDelay = 1.0
+                local totalTears = 1.0
                 local totalDamage = 1.0
                 local totalRange = 1.0
                 local totalLuck = 1.0
@@ -257,7 +323,7 @@ ConchBlessing.powertraining.onGameStarted = function(_)
                     local multipliers = playerSave.powerTraining[i]
                     if multipliers then
                         totalSpeed = totalSpeed * (multipliers.speed or 1.0)
-                        totalFireDelay = totalFireDelay * (multipliers.fireDelay or 1.0)
+                        totalTears = totalTears * (multipliers.tears or 1.0)
                         totalDamage = totalDamage * (multipliers.damage or 1.0)
                         totalRange = totalRange * (multipliers.range or 1.0)
                         totalLuck = totalLuck * (multipliers.luck or 1.0)
@@ -265,7 +331,7 @@ ConchBlessing.powertraining.onGameStarted = function(_)
                 end
                 
                 totalSpeed = math.max(ConchBlessing.powertraining.data.minMultiplier, totalSpeed)
-                totalFireDelay = math.max(ConchBlessing.powertraining.data.minMultiplier, totalFireDelay)
+                totalTears = math.max(ConchBlessing.powertraining.data.minMultiplier, totalTears)
                 totalDamage = math.max(ConchBlessing.powertraining.data.minMultiplier, totalDamage)
                 totalRange = math.max(ConchBlessing.powertraining.data.minMultiplier, totalRange)
                 totalLuck = math.max(ConchBlessing.powertraining.data.minMultiplier, totalLuck)
@@ -275,18 +341,16 @@ ConchBlessing.powertraining.onGameStarted = function(_)
                     speedDecrease, totalFireDelay, totalDamage, totalRange, totalLuck))
                 
                 local speedDecrease = ConchBlessing.powertraining.data.speedDecrease * useCount
-                player.MoveSpeed = player.MoveSpeed - speedDecrease
+                ConchBlessing.stats.speed.applyAddition(player, -speedDecrease, ConchBlessing.powertraining.data.minMultiplier)
                 
-                if player.MaxFireDelay then
-                    player.MaxFireDelay = player.MaxFireDelay / totalFireDelay
-                end
+                ConchBlessing.stats.tears.applyMultiplier(player, totalFireDelay, ConchBlessing.powertraining.data.minMultiplier, true)
                 
-                player.TearRange = player.TearRange * totalRange
+                ConchBlessing.stats.range.applyMultiplier(player, totalRange, ConchBlessing.powertraining.data.minMultiplier, true)
                 if player.Luck > 0 then
-                    player.Luck = player.Luck * totalLuck
+                    ConchBlessing.stats.luck.applyMultiplier(player, totalLuck, ConchBlessing.powertraining.data.minMultiplier, true)
                 end
                 
-                ConchBlessing.stats.damage.applyMultiplier(player, totalDamage, ConchBlessing.powertraining.data.minMultiplier)
+                ConchBlessing.stats.damage.applyMultiplier(player, totalDamage, ConchBlessing.powertraining.data.minMultiplier, true)
                 
                 ConchBlessing.printDebug("All stats (including damage and fire delay) restored successfully on game start!")
             else

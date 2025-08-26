@@ -42,6 +42,37 @@ Isaac.ConsoleOutput("[Core] MCM.Setup() completed\n")
 Isaac.ConsoleOutput("[Core] Registering MC_POST_GAME_STARTED callback\n")
 mod:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function()
     Isaac.ConsoleOutput("[Core] Game started, trying to load MCM config\n")
+    
+    -- Reset multiplier display data for new game
+    if ConchBlessing.stats and ConchBlessing.stats.multiplierDisplay then
+        Isaac.ConsoleOutput("[Core] Resetting multiplier display data\n")
+        ConchBlessing.stats.multiplierDisplay:ResetForNewGame()
+    end
+    
+    -- Reset unified multiplier system for new game
+    if ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers then
+        Isaac.ConsoleOutput("[Core] Resetting unified multiplier system\n")
+        local player = Isaac.GetPlayer(0)
+        if player then
+            ConchBlessing.stats.unifiedMultipliers:ResetPlayer(player)
+        end
+    end
+    
+    -- Reset all item tracking states for new game
+    Isaac.ConsoleOutput("[Core] Resetting item tracking states\n")
+    if ConchBlessing.oralsteroids and ConchBlessing.oralsteroids._lastItemCount then
+        ConchBlessing.oralsteroids._lastItemCount = {}
+        Isaac.ConsoleOutput("[Core] Reset oralsteroids._lastItemCount\n")
+    end
+    if ConchBlessing.injectablsteroids and ConchBlessing.injectablsteroids._lastUseCount then
+        ConchBlessing.injectablsteroids._lastUseCount = {}
+        Isaac.ConsoleOutput("[Core] Reset injectablsteroids._lastUseCount\n")
+    end
+    if ConchBlessing.powertraining and ConchBlessing.powertraining._lastUseCount then
+        ConchBlessing.powertraining._lastUseCount = {}
+        Isaac.ConsoleOutput("[Core] Reset powertraining._lastUseCount\n")
+    end
+    
     if ConchBlessing.SaveManager and ConchBlessing.SaveManager.IsLoaded() then
         Isaac.ConsoleOutput("[Core] SaveManager loaded, starting MCM config load\n")
         ConchBlessing_MCM.loadConfigFromSaveManager(ConchBlessing)
@@ -58,7 +89,8 @@ ConchBlessing.Sounds = {
 -- debug print functions
 ConchBlessing.printDebug = function(text)
     if ConchBlessing.Config.debugMode then
-        Isaac.ConsoleOutput("[ConchBlessing][DEBUG] " .. tostring(text) .. "\n")
+        local frame = (Game and Game():GetFrameCount()) or -1
+        Isaac.DebugString("[ConchBlessing][DEBUG][F:" .. tostring(frame) .. "] " .. tostring(text))
     end
 end
 
@@ -68,6 +100,16 @@ end
 
 ConchBlessing.print = function(text)
     Isaac.ConsoleOutput("[ConchBlessing] " .. tostring(text) .. "\n")
+end
+
+-- load stats library first (before items and upgrade systems)
+local statsSuccess, statsErr = pcall(function()
+    require("scripts.lib.stats")
+end)
+if statsSuccess then
+    ConchBlessing.print("Stats library loaded successfully!")
+else
+    ConchBlessing.printError("Stats library load failed: " .. tostring(statsErr))
 end
 
 -- load items and management
@@ -84,6 +126,14 @@ local upgradeSuccess, upgradeErr = pcall(function()
 end)
 if not upgradeSuccess then
     ConchBlessing.printError("Upgrade system load failed: " .. tostring(upgradeErr))
+end
+
+-- Initialize stats system after everything is loaded
+if ConchBlessing.stats and ConchBlessing.stats.multiplierDisplay then
+    ConchBlessing.stats.multiplierDisplay:Initialize()
+    ConchBlessing.print("Stats system initialized!")
+else
+    ConchBlessing.printError("Stats system not found during initialization!")
 end
 
 -- print message when mode is loaded

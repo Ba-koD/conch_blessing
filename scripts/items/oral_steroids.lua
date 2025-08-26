@@ -19,6 +19,28 @@ ConchBlessing.oralsteroids.onEvaluateCache = function(_, player, cacheFlag)
     
     if itemNum <= 0 then return end
     
+    -- Prevent duplicate processing in the same frame
+    if ConchBlessing.oralsteroids._lastProcessedFrame == Game():GetFrameCount() and 
+       ConchBlessing.oralsteroids._lastProcessedPlayer == playerID and
+       ConchBlessing.oralsteroids._lastProcessedItemNum == itemNum then
+        return
+    end
+    
+    -- Only process if this is actually a stat change for Oral Steroids
+    -- Don't process if this is just a cache refresh from other items
+    if not ConchBlessing.oralsteroids._lastItemCount then
+        ConchBlessing.oralsteroids._lastItemCount = {}
+    end
+    if not ConchBlessing.oralsteroids._lastItemCount[playerID] then
+        ConchBlessing.oralsteroids._lastItemCount[playerID] = 0
+    end
+    
+    -- Only process if item count actually changed
+    if ConchBlessing.oralsteroids._lastItemCount[playerID] == itemNum then
+        ConchBlessing.printDebug("Oral Steroids: Item count unchanged (" .. itemNum .. "), skipping cache refresh")
+        return
+    end
+    
     if not ConchBlessing.oralsteroids.storedMultipliers then
         ConchBlessing.oralsteroids.storedMultipliers = {}
     end
@@ -106,25 +128,119 @@ ConchBlessing.oralsteroids.onEvaluateCache = function(_, player, cacheFlag)
     end
     
     if cacheFlag == CacheFlag.CACHE_FIREDELAY then
-        ConchBlessing.stats.tears.applyMultiplier(player, totalTears, ConchBlessing.oralsteroids.data.minMultiplier)
+        ConchBlessing.printDebug("Oral Steroids CACHE_FIREDELAY triggered")
+        ConchBlessing.stats.tears.applyMultiplier(player, totalTears, ConchBlessing.oralsteroids.data.minMultiplier, true)
+        
+        -- Update unified multiplier system with ALL stats for this Oral Steroids instance
+        local lastIndividualMultipliers = storedMultipliers[#storedMultipliers]
+        local uniqueKey = ORAL_STEROIDS_ID .. "_" .. #storedMultipliers
+        
+        -- Set all stats at once
+        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+            player, uniqueKey, "Tears", lastIndividualMultipliers.tears, "Oral Steroids #" .. #storedMultipliers
+        )
+        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+            player, uniqueKey, "Damage", lastIndividualMultipliers.damage, "Oral Steroids #" .. #storedMultipliers
+        )
+        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+            player, uniqueKey, "Range", lastIndividualMultipliers.range, "Oral Steroids #" .. #storedMultipliers
+        )
+        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+            player, uniqueKey, "Luck", lastIndividualMultipliers.luck, "Oral Steroids #" .. #storedMultipliers
+        )
+        
+        ConchBlessing.printDebug("Oral Steroids: All stats set in unified system from CACHE_FIREDELAY")
     end
     
     if cacheFlag == CacheFlag.CACHE_DAMAGE then
-        ConchBlessing.stats.damage.applyMultiplier(player, totalDamage, ConchBlessing.oralsteroids.data.minMultiplier)
+        ConchBlessing.printDebug("Oral Steroids CACHE_DAMAGE triggered")
+        ConchBlessing.stats.damage.applyMultiplier(player, totalDamage, ConchBlessing.oralsteroids.data.minMultiplier, true)
+        
+        -- Update unified multiplier system with ALL stats for this Oral Steroids instance
+        local lastIndividualMultipliers = storedMultipliers[#storedMultipliers]
+        local uniqueKey = ORAL_STEROIDS_ID .. "_" .. #storedMultipliers
+        
+        -- Set all stats at once
+        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+            player, uniqueKey, "Tears", lastIndividualMultipliers.tears, "Oral Steroids #" .. #storedMultipliers
+        )
+        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+            player, uniqueKey, "Damage", lastIndividualMultipliers.damage, "Oral Steroids #" .. #storedMultipliers
+        )
+        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+            player, uniqueKey, "Range", lastIndividualMultipliers.range, "Oral Steroids #" .. #storedMultipliers
+        )
+        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+            player, uniqueKey, "Luck", lastIndividualMultipliers.luck, "Oral Steroids #" .. #storedMultipliers
+        )
+        
+        ConchBlessing.printDebug("Oral Steroids: All stats set in unified system from CACHE_DAMAGE")
     end
     
     if cacheFlag == CacheFlag.CACHE_SPEED then
         local speedDecrease = ConchBlessing.oralsteroids.data.speedDecrease * itemNum
-        player.MoveSpeed = player.MoveSpeed - speedDecrease
+        ConchBlessing.stats.speed.applyAddition(player, -speedDecrease, ConchBlessing.oralsteroids.data.minMultiplier)
     end
     
     if cacheFlag == CacheFlag.CACHE_RANGE then
-        player.TearRange = player.TearRange * totalRange
+        ConchBlessing.printDebug("Oral Steroids CACHE_RANGE triggered")
+        ConchBlessing.stats.range.applyMultiplier(player, totalRange, ConchBlessing.oralsteroids.data.minMultiplier, true)
+        
+        -- Update unified multiplier system with ALL stats for this Oral Steroids instance
+        local lastIndividualMultipliers = storedMultipliers[#storedMultipliers]
+        local uniqueKey = ORAL_STEROIDS_ID .. "_" .. #storedMultipliers
+        
+        -- Set all stats at once
+        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+            player, uniqueKey, "Tears", lastIndividualMultipliers.tears, "Oral Steroids #" .. #storedMultipliers
+        )
+        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+            player, uniqueKey, "Damage", lastIndividualMultipliers.damage, "Oral Steroids #" .. #storedMultipliers
+        )
+        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+            player, uniqueKey, "Range", lastIndividualMultipliers.range, "Oral Steroids #" .. #storedMultipliers
+        )
+        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+            player, uniqueKey, "Luck", lastIndividualMultipliers.luck, "Oral Steroids #" .. #storedMultipliers
+        )
+        
+        ConchBlessing.printDebug("Oral Steroids: All stats set in unified system from CACHE_RANGE")
     end
     
-    if cacheFlag == CacheFlag.CACHE_LUCK and player.Luck > 0 then
-        player.Luck = player.Luck * totalLuck
+    if cacheFlag == CacheFlag.CACHE_LUCK then
+        ConchBlessing.printDebug(string.format("Oral Steroids CACHE_LUCK: player.Luck = %.2f, totalLuck = %.2f", player.Luck, totalLuck))
+        
+        -- Always apply Luck multiplier regardless of current player.Luck value
+        ConchBlessing.stats.luck.applyMultiplier(player, totalLuck, ConchBlessing.oralsteroids.data.minMultiplier, true)
+        
+        -- Update unified multiplier system with ALL stats for this Oral Steroids instance
+        local lastIndividualMultipliers = storedMultipliers[#storedMultipliers]
+        local uniqueKey = ORAL_STEROIDS_ID .. "_" .. #storedMultipliers
+        
+        -- Set all stats at once
+        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+            player, uniqueKey, "Tears", lastIndividualMultipliers.tears, "Oral Steroids #" .. #storedMultipliers
+        )
+        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+            player, uniqueKey, "Damage", lastIndividualMultipliers.damage, "Oral Steroids #" .. #storedMultipliers
+        )
+        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+            player, uniqueKey, "Range", lastIndividualMultipliers.range, "Oral Steroids #" .. #storedMultipliers
+        )
+        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+            player, uniqueKey, "Luck", lastIndividualMultipliers.luck, "Oral Steroids #" .. #storedMultipliers
+        )
+        
+        ConchBlessing.printDebug("Oral Steroids: All stats set in unified system from CACHE_LUCK")
     end
+    
+    -- Mark this frame as processed to prevent duplicate calls
+    ConchBlessing.oralsteroids._lastProcessedFrame = Game():GetFrameCount()
+    ConchBlessing.oralsteroids._lastProcessedPlayer = playerID
+    ConchBlessing.oralsteroids._lastProcessedItemNum = itemNum
+    
+    -- Record the item count that was processed
+    ConchBlessing.oralsteroids._lastItemCount[playerID] = itemNum
 end
 
 -- initialize data when game started
@@ -143,11 +259,32 @@ ConchBlessing.oralsteroids.onGameStarted = function(_)
             local itemNum = player:GetCollectibleNum(ORAL_STEROIDS_ID)
             if itemNum > 0 then
                 ConchBlessing.printDebug("Oral Steroids: Applying stats on game start for " .. itemNum .. " items")
-                ConchBlessing.oralsteroids.onEvaluateCache(_, player, CacheFlag.CACHE_DAMAGE)
-                ConchBlessing.oralsteroids.onEvaluateCache(_, player, CacheFlag.CACHE_FIREDELAY)
-                ConchBlessing.oralsteroids.onEvaluateCache(_, player, CacheFlag.CACHE_SPEED)
-                ConchBlessing.oralsteroids.onEvaluateCache(_, player, CacheFlag.CACHE_RANGE)
-                ConchBlessing.oralsteroids.onEvaluateCache(_, player, CacheFlag.CACHE_LUCK)
+                
+                -- Load unified multipliers from SaveManager
+                ConchBlessing.stats.unifiedMultipliers:LoadFromSaveManager(player)
+                
+                -- Apply stats and update unified system with unique keys
+                for i = 1, #ConchBlessing.oralsteroids.storedMultipliers[playerID] do
+                    local multipliers = ConchBlessing.oralsteroids.storedMultipliers[playerID][i]
+                    local uniqueKey = ORAL_STEROIDS_ID .. "_" .. i
+                    
+                    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+                        player, uniqueKey, "Tears", multipliers.tears, "Oral Steroids #" .. i
+                    )
+                    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+                        player, uniqueKey, "Damage", multipliers.damage, "Oral Steroids #" .. i
+                    )
+                    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+                        player, uniqueKey, "Range", multipliers.range, "Oral Steroids #" .. i
+                    )
+                    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+                        player, uniqueKey, "Luck", multipliers.luck, "Oral Steroids #" .. i
+                    )
+                end
+                
+                -- Save unified multipliers to SaveManager
+                ConchBlessing.stats.unifiedMultipliers:SaveToSaveManager(player)
+                
                 ConchBlessing.printDebug("Oral Steroids: Stats applied on game start!")
             end
         else

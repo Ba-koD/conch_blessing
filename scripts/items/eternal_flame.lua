@@ -153,18 +153,15 @@ function ConchBlessing.eternalflame.onEvaluateCache(_, player, cacheFlag)
     if cacheFlag == CacheFlag.CACHE_DAMAGE then
         if data.curseCount > 0 then
             local totalDamageBonus = data.curseCount * data.fixedDamageBonus
-            player.Damage = player.Damage + totalDamageBonus
+            local damageMultiplier = 1.0 + (totalDamageBonus / player.Damage)
             
-            if supportsTearPoisonAPI(player) then
-                local pdata = player:GetData()
-                pdata.conch_eternalflame_tpd_base = pdata.conch_eternalflame_tpd_base or player:GetTearPoisonDamage()
-                if data.fixedDamageBonus == 0 then
-                    pdata.conch_eternalflame_tpd_base = player:GetTearPoisonDamage()
-                end
-                local base = pdata.conch_eternalflame_tpd_base or 0
-                local totalDamage = base + totalDamageBonus
-                player:SetTearPoisonDamage(totalDamage)
-            end
+            -- Use stats system with display
+            ConchBlessing.stats.damage.applyMultiplier(player, damageMultiplier, nil, true)
+            
+            -- Show detailed multiplier display
+            ConchBlessing.stats.multiplierDisplay:ShowDetailedMultipliers(
+                player, "Damage", damageMultiplier, damageMultiplier, "Eternal Flame"
+            )
             
             -- Save curse count to SaveManager
             local playerSave = SaveManager.GetRunSave(player)
@@ -185,12 +182,17 @@ function ConchBlessing.eternalflame.onEvaluateCache(_, player, cacheFlag)
             local totalFireDelayBonus = data.curseCount * data.fixedFireDelayBonus
             local targetSPS = currentSPS + totalFireDelayBonus
             
-            local newMaxFireDelay = math.max(0, (30 / targetSPS) - 1)
+            local fireDelayMultiplier = targetSPS / currentSPS
             
-            local fireDelayReduction = currentMaxFireDelay - newMaxFireDelay
-            player.MaxFireDelay = math.max(0, currentMaxFireDelay - fireDelayReduction)
+            -- Use stats system with display
+            ConchBlessing.stats.tears.applyMultiplier(player, fireDelayMultiplier, nil, true)
             
-            ConchBlessing.printDebug("Eternal Flame: FireDelay -" .. string.format("%.2f", fireDelayReduction) .. 
+            -- Show detailed multiplier display
+            ConchBlessing.stats.multiplierDisplay:ShowDetailedMultipliers(
+                player, "Tears", fireDelayMultiplier, fireDelayMultiplier, "Eternal Flame"
+            )
+            
+            ConchBlessing.printDebug("Eternal Flame: FireDelay multiplier: " .. string.format("%.2f", fireDelayMultiplier) .. 
                 " (SPS: " .. string.format("%.2f", currentSPS) .. " -> " .. string.format("%.2f", targetSPS) .. 
                 " | Curse bonus: +" .. totalFireDelayBonus .. ")")
         end

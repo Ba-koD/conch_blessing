@@ -73,7 +73,6 @@
 
 -- Load template system for upgrade animations
 ConchBlessing.template = require("scripts.template")
-require("scripts.lib.stats")
 
 ConchBlessing.printDebug("Item system loaded!")
 
@@ -259,10 +258,10 @@ ConchBlessing.ItemData = {
         },
         eid = {
             kr = {
-                "사용시 데미지, 연사(딜레이 나누기), 사거리, 행운이 1.0~1.3배가 됩니다."
+                "사용시 데미지, 연사, 사거리, 행운이 1.0~1.3배가 됩니다."
             },
             en = {
-                "Damage, fire rate (delay division), range, and luck are changed to 1.0~1.3x when used"
+                "Damage, tears, range, and luck are changed to 1.0~1.3x when used"
             }
         },
         pool = {
@@ -692,6 +691,10 @@ local function loadAllItems()
 end
 
 loadAllItems()
+
+-- Signal that ItemData is fully loaded and ready
+ConchBlessing.ItemDataReady = true
+ConchBlessing.printDebug("ItemData is now fully loaded and ready for use!")
 
 -- item pools are handled in the XML file (content/itempools.xml)
 ConchBlessing.printDebug("Item pools are handled in the XML file (content/itempools.xml)")
