@@ -40,7 +40,7 @@ Isaac.ConsoleOutput("[Core] MCM.Setup() completed\n")
 
 -- Register callback for MCM config loading after game starts
 Isaac.ConsoleOutput("[Core] Registering MC_POST_GAME_STARTED callback\n")
-mod:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function()
+mod:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function(_, isContinued)
     Isaac.ConsoleOutput("[Core] Game started, trying to load MCM config\n")
     
     -- Reset multiplier display data for new game
@@ -52,9 +52,32 @@ mod:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function()
     -- Reset unified multiplier system for new game
     if ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers then
         Isaac.ConsoleOutput("[Core] Resetting unified multiplier system\n")
-        local player = Isaac.GetPlayer(0)
-        if player then
-            ConchBlessing.stats.unifiedMultipliers:ResetPlayer(player)
+        local um = ConchBlessing.stats.unifiedMultipliers
+        local numPlayers = Game():GetNumPlayers()
+        for i = 0, numPlayers - 1 do
+            local player = Isaac.GetPlayer(i)
+            if player then
+                um:ResetPlayer(player)
+            end
+        end
+        -- Clear any pending deferred cache updates
+        um._hasPending = false
+        for i = 0, (Game():GetNumPlayers() - 1) do
+            local player = Isaac.GetPlayer(i)
+            if player then
+                local pid = player:GetPlayerType()
+                if um[pid] then
+                    um[pid].pendingCache = {}
+                end
+            end
+        end
+        -- Force a fresh cache rebuild to base values
+        for i = 0, numPlayers - 1 do
+            local player = Isaac.GetPlayer(i)
+            if player then
+                player:AddCacheFlags(CacheFlag.CACHE_ALL)
+                player:EvaluateItems()
+            end
         end
     end
     
@@ -78,6 +101,23 @@ mod:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function()
         ConchBlessing_MCM.loadConfigFromSaveManager(ConchBlessing)
     else
         Isaac.ConsoleOutput("[Core] SaveManager not loaded, using default settings\n")
+    end
+
+    -- New run safeguard: if not continued, clear run-scoped saved multipliers to prevent carry-over
+    if not isContinued and ConchBlessing.SaveManager then
+        local player = Isaac.GetPlayer(0)
+        if player then
+            local SaveManager = ConchBlessing.SaveManager
+            local playerSave = SaveManager.GetRunSave(player)
+            if playerSave then
+                playerSave.unifiedMultipliers = nil
+                playerSave.oralSteroids = nil
+                playerSave.injectableSteroids = nil
+                playerSave.powerTraining = nil
+                SaveManager.Save()
+                Isaac.ConsoleOutput("[Core] Cleared run-scope saved multipliers for new run\n")
+            end
+        end
     end
 end)
 

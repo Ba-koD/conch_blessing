@@ -83,7 +83,7 @@ ConchBlessing.injectablsteroids.onUseItem = function(player, collectibleID, useF
         gameSeedHash = gameSeedHash + char * (j * 31 + char)
     end
     
-    local combinedSeed = newIndex * 1000000 + gameSeedHash
+    local combinedSeed = newIndex + gameSeedHash
     
     ConchBlessing.printDebug("Injectable Steroids RNG Debug:")
     ConchBlessing.printDebug("  Game Seed: " .. gameSeed)
@@ -271,11 +271,11 @@ ConchBlessing.injectablsteroids.onEvaluateCache = function(_, player, cacheFlag)
     end
     
     if cacheFlag == CacheFlag.CACHE_FIREDELAY then
-        ConchBlessing.stats.tears.applyMultiplier(player, totalTears, ConchBlessing.injectablsteroids.data.minMultiplier, true)
+        -- unified system will apply via central handler
     end
     
     if cacheFlag == CacheFlag.CACHE_DAMAGE then
-        ConchBlessing.stats.damage.applyMultiplier(player, totalDamage, ConchBlessing.injectablsteroids.data.minMultiplier, true)
+        -- unified system will apply via central handler
     end
     
     if cacheFlag == CacheFlag.CACHE_SPEED then
@@ -284,11 +284,11 @@ ConchBlessing.injectablsteroids.onEvaluateCache = function(_, player, cacheFlag)
     end
     
     if cacheFlag == CacheFlag.CACHE_RANGE then
-        ConchBlessing.stats.range.applyMultiplier(player, totalRange, ConchBlessing.injectablsteroids.data.minMultiplier, true)
+        -- unified system will apply via central handler
     end
     
     if cacheFlag == CacheFlag.CACHE_LUCK then
-        ConchBlessing.stats.luck.applyMultiplier(player, totalLuck, ConchBlessing.injectablsteroids.data.minMultiplier, true)
+        -- unified system will apply via central handler
     end
     
     -- Mark this frame as processed to prevent duplicate calls

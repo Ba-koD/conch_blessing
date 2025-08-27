@@ -1,4 +1,6 @@
 ConchBlessing.stats = {}
+-- Define local flag to avoid linter warning when REPENTANCE_PLUS is not globally defined
+local REPENTANCE_PLUS = rawget(_G, "REPENTANCE_PLUS")
 
 -- base stats
 ConchBlessing.stats.BASE_STATS = {
@@ -23,7 +25,8 @@ function ConchBlessing.stats.unifiedMultipliers:InitPlayer(player)
             itemMultipliers = {},    -- Individual item multipliers by item ID
             statMultipliers = {},    -- Current multipliers for each stat
             lastUpdateFrame = 0,     -- Last frame when multipliers were updated
-            sequenceCounter = 0      -- Counter for tracking item addition order
+            sequenceCounter = 0,     -- Counter for tracking item addition order
+            pendingCache = {}        -- Deferred cache flags to apply on next update
         }
         ConchBlessing.printDebug(string.format("Unified Multipliers: Initialized for player %d", playerID))
     end
@@ -38,6 +41,15 @@ function ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, itemID
     
     self:InitPlayer(player)
     local playerID = player:GetPlayerType()
+    local currentFrame = Game():GetFrameCount()
+    self[playerID].lastSetFrame = self[playerID].lastSetFrame or {}
+    local key = tostring(itemID) .. ":" .. tostring(statType)
+    
+    -- Skip duplicate SetItemMultiplier calls within the same frame for the same item+stat
+    if self[playerID].lastSetFrame[key] == currentFrame then
+        ConchBlessing.printDebug(string.format("SetItemMultiplier skipped (same frame) for %s", key))
+        return
+    end
     
     ConchBlessing.printDebug(string.format("SetItemMultiplier: Player %d, Item %s, Stat %s, Value %.2fx", 
         playerID, tostring(itemID), statType, multiplier))
@@ -48,15 +60,27 @@ function ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, itemID
         ConchBlessing.printDebug(string.format("  Created new item entry for item %s", tostring(itemID)))
     end
     
-    -- Store the multiplier for this specific item and stat
-    self[playerID].sequenceCounter = self[playerID].sequenceCounter + 1
+    -- Only advance sequence if this is a new entry or the multiplier value actually changed
+    local existing = self[playerID].itemMultipliers[itemID][statType]
+    local willAdvanceSequence = true
+    if existing and type(existing.value) == "number" and existing.value == multiplier then
+        willAdvanceSequence = false
+    end
+    
+    if willAdvanceSequence then
+        self[playerID].sequenceCounter = self[playerID].sequenceCounter + 1
+    end
     local currentSequence = self[playerID].sequenceCounter
     
-    ConchBlessing.printDebug(string.format("  Setting sequence counter to %d for this item", currentSequence))
+    if willAdvanceSequence then
+        ConchBlessing.printDebug(string.format("  Advancing sequence to %d for %s", currentSequence, key))
+    else
+        ConchBlessing.printDebug(string.format("  Sequence unchanged (%d) for %s (same value)", currentSequence, key))
+    end
     
     self[playerID].itemMultipliers[itemID][statType] = {
         value = multiplier,
-        description = description or "Unknown",
+        description = description or (existing and existing.description) or "Unknown",
         sequence = currentSequence
     }
     
@@ -70,6 +94,9 @@ function ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, itemID
     
     -- Recalculate total multipliers for this stat
     self:RecalculateStatMultiplier(player, statType)
+    
+    -- Mark this item+stat as updated this frame (to avoid multiple increments across cache flags)
+    self[playerID].lastSetFrame[key] = currentFrame
 end
 
 -- Remove multiplier for a specific item and stat
@@ -150,8 +177,10 @@ function ConchBlessing.stats.unifiedMultipliers:RecalculateStatMultiplier(player
         ConchBlessing.stats.multiplierDisplay:UpdateFromUnifiedSystem(player, statType, lastItemMultiplier, totalMultiplier)
     end
     
-    -- Apply the total multiplier to the actual player stat
-    self:ApplyStatMultiplier(player, statType, totalMultiplier)
+    -- Defer cache update to next frame to avoid re-entrant EvaluateCache loops
+    if not self._isEvaluatingCache then
+        self:QueueCacheUpdate(player, statType)
+    end
 end
 
 -- Get current and total multipliers for a stat
@@ -1176,4 +1205,107 @@ function ConchBlessing.stats.unifiedMultipliers:ApplyStatMultiplier(player, stat
     ConchBlessing.printDebug(string.format("Applied %s multiplier %.2fx and updated cache", statType, totalMultiplier))
 end
 
-ConchBlessing.printDebug("Enhanced Stats library with unified multiplier system loaded successfully!") 
+-- Centralized cache handler that applies unified total multipliers during MC_EVALUATE_CACHE
+do
+    local CACHE_FLAG_TO_STAT = {
+        [CacheFlag.CACHE_DAMAGE] = "Damage",
+        [CacheFlag.CACHE_FIREDELAY] = "Tears",
+        [CacheFlag.CACHE_SPEED] = "Speed",
+        [CacheFlag.CACHE_RANGE] = "Range",
+        [CacheFlag.CACHE_LUCK] = "Luck",
+        [CacheFlag.CACHE_SHOTSPEED] = "ShotSpeed"
+    }
+
+    function ConchBlessing.stats.unifiedMultipliers:OnEvaluateCache(player, cacheFlag)
+        if not player or not cacheFlag then return end
+        local statType = CACHE_FLAG_TO_STAT[cacheFlag]
+        if not statType then return end
+        self._isEvaluatingCache = true -- mark evaluating
+
+        self:InitPlayer(player)
+        local playerID = player:GetPlayerType()
+        local total = 1.0
+        if self[playerID]
+            and self[playerID].statMultipliers
+            and self[playerID].statMultipliers[statType]
+            and type(self[playerID].statMultipliers[statType].total) == "number" then
+            total = self[playerID].statMultipliers[statType].total
+        end
+
+        ConchBlessing.printDebug(string.format("[Unified] Evaluating %s cache: applying total %.2fx", statType, total))
+
+        if statType == "Tears" then
+            ConchBlessing.stats.tears.applyMultiplier(player, total, 0.1, false)
+        elseif statType == "Damage" then
+            ConchBlessing.stats.damage.applyMultiplier(player, total, 0.1, false)
+        elseif statType == "Range" then
+            ConchBlessing.stats.range.applyMultiplier(player, total, 0.1, false)
+        elseif statType == "Luck" then
+            ConchBlessing.stats.luck.applyMultiplier(player, total, 0.1, false)
+        elseif statType == "Speed" then
+            ConchBlessing.stats.speed.applyMultiplier(player, total, 0.1, false)
+        elseif statType == "ShotSpeed" then
+            ConchBlessing.stats.shotSpeed.applyMultiplier(player, total, 0.1, false)
+        end
+        self._isEvaluatingCache = false -- unmark evaluating
+    end
+
+    -- Register global MC_EVALUATE_CACHE to enforce unified multipliers during cache eval
+    ConchBlessing.originalMod:AddCallback(ModCallbacks.MC_EVALUATE_CACHE, function(_, player, cacheFlag)
+        if ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers and ConchBlessing.stats.unifiedMultipliers.OnEvaluateCache then
+            ConchBlessing.stats.unifiedMultipliers:OnEvaluateCache(player, cacheFlag)
+        end
+    end)
+
+    -- Map stat to cache flag (shared)
+    local STAT_TO_CACHE_FLAG = {
+        Damage = CacheFlag.CACHE_DAMAGE,
+        Tears = CacheFlag.CACHE_FIREDELAY,
+        Speed = CacheFlag.CACHE_SPEED,
+        Range = CacheFlag.CACHE_RANGE,
+        Luck = CacheFlag.CACHE_LUCK,
+        ShotSpeed = CacheFlag.CACHE_SHOTSPEED
+    }
+
+    -- Queue a cache update for a specific stat to be processed next frame
+    function ConchBlessing.stats.unifiedMultipliers:QueueCacheUpdate(player, statType)
+        if not player or not statType then return end
+        self:InitPlayer(player)
+        local playerID = player:GetPlayerType()
+        local flag = STAT_TO_CACHE_FLAG[statType] or CacheFlag.CACHE_ALL
+        self[playerID].pendingCache[flag] = true
+        self._hasPending = true
+        ConchBlessing.printDebug(string.format("[Unified] Queued cache update for %s (flag %d)", statType, flag))
+    end
+
+    -- Flush all queued cache updates safely in POST_UPDATE
+    ConchBlessing.originalMod:AddCallback(ModCallbacks.MC_POST_UPDATE, function()
+        if not ConchBlessing.stats or not ConchBlessing.stats.unifiedMultipliers or not ConchBlessing.stats.unifiedMultipliers._hasPending then
+            return
+        end
+        local um = ConchBlessing.stats.unifiedMultipliers
+        local numPlayers = Game():GetNumPlayers()
+        for i = 0, numPlayers - 1 do
+            local player = Isaac.GetPlayer(i)
+            if player then
+                local playerID = player:GetPlayerType()
+                if um[playerID] and um[playerID].pendingCache then
+                    local combined = 0
+                    for flag, pending in pairs(um[playerID].pendingCache) do
+                        if pending then
+                            combined = combined | flag
+                        end
+                    end
+                    if combined ~= 0 then
+                        player:AddCacheFlags(combined)
+                        player:EvaluateItems()
+                        um[playerID].pendingCache = {}
+                    end
+                end
+            end
+        end
+        um._hasPending = false
+    end)
+end
+
+ConchBlessing.printDebug("Enhanced Stats library with unified multiplier system loaded successfully!")
