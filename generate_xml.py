@@ -347,7 +347,7 @@ def create_items_xml(items, output_path):
         if item_info.get('chargetype'):
             item_elem.set("chargetype", item_info['chargetype'])
         
-        if item_info.get('initcharge'):
+        if item_info.get('initcharge') is not None:
             item_elem.set("initcharge", str(item_info['initcharge']))
         
         if item_info.get('hearts'):

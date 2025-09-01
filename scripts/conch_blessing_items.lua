@@ -210,11 +210,13 @@ ConchBlessing.ItemData = {
         eid = {
             kr = {
                 "저주가 걸릴 때마다 저주를 제거합니다.",
-                "#저주 제거 시 고정 데미지 +3.0, 연사 +1.0을 영구적으로 부여합니다."
+                "#저주 제거 시 고정 데미지 +3.0, 연사 +1.0을 영구적으로 부여합니다.",
+                "#이터널 하트 1개를 획득합니다."
             },
             en = {
                 "Removes curses when they are applied.",
-                "#Grants fixed damage +3.0 and fixed fire rate +1.0 permanently when removing curses."
+                "#Grants fixed damage +3.0 and fixed fire rate +1.0 permanently when removing curses.",
+                "#Gains 1 eternal heart."
             }
         },
         pool = {

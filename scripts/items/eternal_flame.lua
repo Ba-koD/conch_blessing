@@ -116,7 +116,8 @@ local function monitorCurseChanges(player)
         
         local curseNames = {}
         for curseName, curseValue in pairs(LevelCurse) do
-            if curseValue > 0 and currentCurses & curseValue > 0 then
+            -- Skip NUM_CURSES as it's not an actual curse
+            if curseName ~= "NUM_CURSES" and curseValue > 0 and currentCurses & curseValue > 0 then
                 table.insert(curseNames, curseName)
             end
         end
@@ -160,13 +161,21 @@ end
 -- Apply stat bonuses when cache is evaluated
 function ConchBlessing.eternalflame.onEvaluateCache(_, player, cacheFlag)
     if not player:HasCollectible(ETERNAL_FLAME_ID) then return end
-    if cacheFlag ~= CacheFlag.CACHE_DAMAGE and cacheFlag ~= CacheFlag.CACHE_FIREDELAY then return end
     
     local data = ConchBlessing.eternalflame.data
     if not data then return end
     
     -- Update item count for current evaluation
     data.itemCount = player:GetCollectibleNum(ETERNAL_FLAME_ID)
+    
+    -- Give eternal heart on first evaluation (when item is first obtained)
+    if not data.eternalHeartGiven then
+        player:AddEternalHearts(1)
+        data.eternalHeartGiven = true
+        ConchBlessing.printDebug("Eternal Flame: Added 1 eternal heart to player on first evaluation")
+    end
+    
+    if cacheFlag ~= CacheFlag.CACHE_DAMAGE and cacheFlag ~= CacheFlag.CACHE_FIREDELAY then return end
     
     if cacheFlag == CacheFlag.CACHE_DAMAGE then
         if data.curseCount > 0 then
@@ -320,6 +329,7 @@ ConchBlessing.eternalflame.onGameStarted = function(_)
                 data.curseRemovalTimer = nil
                 data.pendingCurses = nil
                 data.pendingCurseCount = nil
+                data.eternalHeartGiven = false
             end
             
             -- Clear saved data
