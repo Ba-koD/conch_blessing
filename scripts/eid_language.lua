@@ -5,11 +5,23 @@ local isc = require("scripts.lib.isaacscript-common")
 
 -- Inline language resolver to ensure immediate reflection of config
 local function getCurrentLang()
+    local normalize = (ConchBlessing and ConchBlessing.Config and ConchBlessing.NormalizeLanguage)
+        or (require("scripts.conch_blessing_config").NormalizeLanguage)
+
     local cfg = ConchBlessing and ConchBlessing.Config and ConchBlessing.Config.language
-    if type(cfg) == "string" and cfg ~= "Auto" then
-        return cfg
+    if type(cfg) == "string" and cfg ~= "Auto" and cfg ~= "auto" then
+        return normalize(cfg)
     end
-    return (Options and Options.Language) or "en"
+
+    -- If Auto, prefer EID language first (if available), else fall back to Options
+    if EID then
+        local eidLang = (EID.Config and EID.Config.Language) or (EID.UserConfig and EID.UserConfig.Language)
+        if eidLang and eidLang ~= "auto" then
+            return normalize(eidLang)
+        end
+    end
+
+    return normalize((Options and Options.Language) or "en")
 end
 
 ConchBlessing.EID = {}
@@ -32,39 +44,57 @@ ConchBlessing.EID.addOptLangDescription = function(itemId, itemData)
     local currentLang = getCurrentLang()
     ConchBlessing.printDebug("Current language: " .. currentLang)
     
-    -- Extract name for current language
+    -- Extract name for current language with fallback to English
     local itemName = nil
     if type(itemData.name) == "table" then
-        -- Multilingual structure: { kr = "...", en = "..." }
         itemName = itemData.name[currentLang] or itemData.name["en"]
-        ConchBlessing.printDebug("Found multilingual name: " .. (itemName or "nil"))
+        ConchBlessing.printDebug("Resolved name (" .. currentLang .. "): " .. tostring(itemName))
     else
-        -- Simple string
         itemName = itemData.name
-        ConchBlessing.printDebug("Found simple name: " .. (itemName or "nil"))
+        ConchBlessing.printDebug("Resolved name (string): " .. tostring(itemName))
     end
     
-    -- Extract eid description for current language
+    -- Extract eid description for current language with fallback to English
     local eidDescription = nil
     if type(itemData.eid) == "table" then
-        -- Multilingual structure: { kr = {...}, en = {...} }
         local eidData = itemData.eid[currentLang] or itemData.eid["en"]
         if type(eidData) == "table" then
-            -- Join multiple lines with newlines for EID
             eidDescription = table.concat(eidData, "\n")
         else
             eidDescription = eidData
         end
-        ConchBlessing.printDebug("Found multilingual eid description: " .. tostring(eidDescription))
+        ConchBlessing.printDebug("Resolved eid (" .. currentLang .. "): " .. tostring(eidDescription))
     else
-        -- Simple string
         eidDescription = itemData.eid
-        ConchBlessing.printDebug("Found simple eid description: " .. (eidDescription or "nil"))
+        ConchBlessing.printDebug("Resolved eid (string): " .. tostring(eidDescription))
     end
     
     -- Register with EID if we have both name and eid description
     if itemName and eidDescription then
-        EID:addCollectible(itemId, eidDescription, itemName)
+        -- helper: map internal code -> EID code
+        local function toEIDLang(code)
+            local map = { en = "en_us", kr = "ko_kr", ja = "ja_jp", zh = "zh_cn" }
+            return map[code] or (EID and EID.Config and EID.Config.Language) or (EID and EID.DefaultLanguageCode) or "en_us"
+        end
+
+        -- Always register English as fallback so EID's internal fallback works for any unsupported language
+        local englishName = (type(itemData.name) == "table" and (itemData.name["en"] or itemData.name.en)) or itemData.name
+        local englishDesc
+        if type(itemData.eid) == "table" then
+            local enEid = itemData.eid["en"] or itemData.eid.en
+            englishDesc = type(enEid) == "table" and table.concat(enEid, "\n") or enEid
+        else
+            englishDesc = itemData.eid
+        end
+        if englishName and englishDesc then
+            EID:addCollectible(itemId, englishDesc, englishName, "en_us")
+        end
+
+        -- Additionally register the currently resolved language if it isn't English
+        if currentLang ~= "en" then
+            local eidLangCode = toEIDLang(currentLang)
+            EID:addCollectible(itemId, eidDescription, itemName, eidLangCode)
+        end
         ConchBlessing.printDebug(string.format("EID registered: %s - %s", itemName, eidDescription))
         
         -- Store in ConchBlessing.EID table for reference

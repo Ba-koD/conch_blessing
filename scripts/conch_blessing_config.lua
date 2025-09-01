@@ -20,23 +20,55 @@ ConchBlessing_Config.LANGUAGE_MAP = {
 ---@param mod table
 ---@return string langCode
 function ConchBlessing_Config.GetCurrentLanguage(mod)
+    local normalize = ConchBlessing_Config.NormalizeLanguage
+    local function isSupported(code)
+        for _, l in ipairs(ConchBlessing_Config.LANGUAGE_MAP) do
+            if l.code == code then return true end
+        end
+        return false
+    end
+
     -- If user set a direct code string, honor it
     local cfgLang = mod and mod.Config and mod.Config.language
     if type(cfgLang) == "string" and cfgLang ~= "Auto" and cfgLang ~= "auto" then
-        return cfgLang
+        local c = normalize(cfgLang)
+        return isSupported(c) and c or "en"
     end
 
     -- If user selected by index via MCM (1..#LANGUAGE_MAP)
     if type(cfgLang) == "number" and cfgLang > 0 then
         local langObj = ConchBlessing_Config.LANGUAGE_MAP[cfgLang]
         if langObj and langObj.code then
-            return langObj.code
+            local c = normalize(langObj.code)
+            return isSupported(c) and c or "en"
         end
     end
 
-    -- Fallback to game Options.Language then English
-    local opt = (Options and Options.Language) or "en"
-    return opt
+    -- Auto: prefer EID language first; if not available, use Options
+    local eidLang = (EID and ((EID.Config and EID.Config.Language) or (EID.UserConfig and EID.UserConfig.Language)))
+    if eidLang and eidLang ~= "auto" then
+        local c = normalize(eidLang)
+        return isSupported(c) and c or "en"
+    end
+    local opt = normalize((Options and Options.Language) or "en")
+    return isSupported(opt) and opt or "en"
+end
+
+---Normalize various language codes to our internal codes
+---@param code string|nil
+---@return string
+function ConchBlessing_Config.NormalizeLanguage(code)
+    local m = {
+        en_us = "en",
+        en = "en",
+        ko_kr = "kr",
+        kr = "kr",
+        ja_jp = "ja",
+        ja = "ja",
+        zh_cn = "zh",
+        zh = "zh",
+    }
+    return m[code] or code or "en"
 end
 
 -- JSON library for saving and loading config

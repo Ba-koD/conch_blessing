@@ -98,10 +98,10 @@ ConchBlessing.ItemData = {
         eid ={
             kr = {"몬스터를 적중시킬때 마다 {{Damage}}데미지 배수가 0.1씩 증가합니다.",
             "#몬스터에 맞지 않으면 {{Damage}}데미지 배수가 0.15씩 감소합니다.",
-            "#{{Damage}}최대/최소 데미지 배수 (x3.0/x0.75)"},
-            en = {"{{Damage}}Damage multiplier increases by 0.1 as you hit enemies.",
-            "#{{Damage}}Damage multiplier decreases by 0.15 as you miss enemies.",
-            "#{{Damage}}Damage multiplier is capped at 3.0 and cannot go below 0.75."},
+            "#{{Damage}} 최대/최소 데미지 배수 (x3.0/x0.75)"},
+            en = {"{{Damage}} Damage multiplier increases by 0.1 as you hit enemies.",
+            "#{{Damage}} Damage multiplier decreases by 0.15 as you miss enemies.",
+            "#{{Damage}} Damage multiplier is capped at 3.0 and cannot go below 0.75."},
         },
         pool = {
             -- Use default values (weight=1.0, decrease_by=1, remove_on=0.1)
@@ -650,7 +650,6 @@ local function loadAllItems()
         { name = "Callback manager", path = "scripts.callback_manager" }
     }
     
-    -- Load external systems only once per run
     if not ConchBlessing._didLoadExternalSystems then
         for _, system in ipairs(systems) do
             local success, err = pcall(function()
@@ -667,11 +666,23 @@ local function loadAllItems()
         ConchBlessing.printDebug("External systems already loaded; skipping.")
     end
     
-    -- Load item scripts
-    -- Load item scripts only once per run
+    local originItemFlags = {}
+    
+    -- Load item scripts and build origin mapping
     if not ConchBlessing._didLoadItemScripts then
         for itemKey, itemData in pairs(ConchBlessing.ItemData) do
             ConchBlessing.printDebug("Processing: " .. itemKey)
+            
+            -- Build origin mapping for conch mode descriptions
+            if itemData.origin and itemData.flag then
+                local originID = itemData.origin
+                if not originItemFlags[originID] then
+                    originItemFlags[originID] = {}
+                end
+                table.insert(originItemFlags[originID], itemKey)
+                ConchBlessing.printDebug("  Auto-mapped " .. itemKey .. " (flag: " .. itemData.flag .. ") to origin: " .. originID)
+            end
+            
             local scriptPath = itemData.script
             if not scriptPath then
                 ConchBlessing.printError("  Warning: " .. itemKey .. " has no script path!")
@@ -691,6 +702,208 @@ local function loadAllItems()
         ConchBlessing._didLoadItemScripts = true
     else
         ConchBlessing.printDebug("Item scripts already loaded; skipping.")
+    end
+    
+    if not ConchBlessing._didGenerateConchDescriptions then
+        ConchBlessing.printDebug("Generating conch mode descriptions...")
+        
+        local conchModeDescriptions = {
+            kr = {
+                positive = "소라고둥 모드 긍정시 {{item_name}}으로 변환",
+                neutral = "소라고둥 모드 중립시 {{item_name}}으로 변환",
+                negative = "소라고둥 모드 부정시 {{item_name}}으로 변환"
+            },
+            en = {
+                positive = "Conch mode positive: transforms into {{item_name}}",
+                neutral = "Conch mode neutral: transforms into {{item_name}}",
+                negative = "Conch mode negative: transforms into {{item_name}}"
+            }
+        }
+        
+        if EID then
+            -- unify: prepare data and register a single modifier handling both conch-mode and synergies
+            local function resolveModLang()
+                local normalize = (ConchBlessing and ConchBlessing.Config and ConchBlessing.NormalizeLanguage)
+                    or (require("scripts.conch_blessing_config").NormalizeLanguage)
+                local cfg = ConchBlessing and ConchBlessing.Config and ConchBlessing.Config.language
+                local base = cfg or "Auto"
+                if base == "Auto" or base == "auto" then
+                    local eidLang = (EID and EID.Config and EID.Config.Language) or (EID and EID.UserConfig and EID.UserConfig.Language)
+                    if eidLang and eidLang ~= "auto" then
+                        base = eidLang
+                    else
+                        base = (Options and Options.Language) or "en"
+                    end
+                end
+                return normalize(base)
+            end
+
+            ConchBlessing._originItemFlags = originItemFlags
+            ConchBlessing._conchModeTemplates = conchModeDescriptions
+            ConchBlessing._conchDescCache = ConchBlessing._conchDescCache or {}
+
+            -- Build synergy lookup maps once
+            if not ConchBlessing._builtSynergyMaps then
+                ConchBlessing._synergyByTarget = {}
+                ConchBlessing._synergyByMod = {}
+                for key, data in pairs(ConchBlessing.ItemData) do
+                    if data and data.synergies and data.id and data.id ~= -1 then
+                        for targetId, text in pairs(data.synergies) do
+                            ConchBlessing._synergyByTarget[targetId] = ConchBlessing._synergyByTarget[targetId] or {}
+                            table.insert(ConchBlessing._synergyByTarget[targetId], { key = key, text = text })
+                            ConchBlessing._synergyByMod[data.id] = ConchBlessing._synergyByMod[data.id] or {}
+                            table.insert(ConchBlessing._synergyByMod[data.id], { target = targetId, text = text })
+                        end
+                    end
+                end
+                ConchBlessing._builtSynergyMaps = true
+            end
+
+            local function anyPlayerHasCollectible(id)
+                local game = Game()
+                local n = game:GetNumPlayers()
+                for i = 0, n - 1 do
+                    local p = game:GetPlayer(i)
+                    if p and p:HasCollectible(id) then return true end
+                end
+                return false
+            end
+
+            if not ConchBlessing._didRegisterUnifiedModifier then
+                EID:addDescriptionModifier(
+                    "ConchBlessing_Unified",
+                    function(descObj)
+                        return descObj.ObjType == 5 and descObj.ObjVariant == 100
+                    end,
+                    function(descObj)
+                        local lang = resolveModLang()
+                        -- Conch mode (origin) part
+                        local itemKeys = (ConchBlessing._originItemFlags or {})[descObj.ObjSubType]
+                        local templates = ConchBlessing._conchModeTemplates or {}
+                        if itemKeys and templates[lang] then
+                            local cacheKey = tostring(descObj.ObjSubType) .. "|" .. lang
+                            local cached = ConchBlessing._conchDescCache[cacheKey]
+                            if not cached then
+                                local lines = {}
+                                local order = { "positive", "neutral", "negative" }
+                                for _, f in ipairs(order) do
+                                    for _, dynKey in ipairs(itemKeys) do
+                                        local d = ConchBlessing.ItemData[dynKey]
+                                        if d and d.flag == f then
+                                            local name = (type(d.name) == "table" and (d.name[lang] or d.name.en)) or d.name or dynKey
+                                            local tmpl = templates[lang] and templates[lang][f]
+                                            if tmpl then
+                                                local iconNameDyn = "icon_" .. string.lower(dynKey)
+                                                local finalLine = string.gsub(tmpl, "{{item_name}}", "{{" .. iconNameDyn .. "}}(" .. name .. ")")
+                                                table.insert(lines, "#{{ConchMode}} " .. finalLine)
+                                            end
+                                        end
+                                    end
+                                end
+                                cached = table.concat(lines, "")
+                                ConchBlessing._conchDescCache[cacheKey] = cached
+                            end
+                            if cached and #cached > 0 then
+                                EID:appendToDescription(descObj, cached)
+                            end
+                        end
+
+                        -- Synergy part
+                        local targets = ConchBlessing._synergyByTarget and ConchBlessing._synergyByTarget[descObj.ObjSubType]
+                        if targets then
+                            for _, entry in ipairs(targets) do
+                                local d = ConchBlessing.ItemData[entry.key]
+                                if d and d.id and anyPlayerHasCollectible(d.id) then
+                                    local text = (type(entry.text) == "table" and (entry.text[lang] or entry.text.en)) or tostring(entry.text)
+                                    local iconToken = "{{icon_" .. string.lower(entry.key) .. "}}"
+                                    EID:appendToDescription(descObj, "#" .. iconToken .. " " .. text)
+                                end
+                            end
+                        end
+
+                        local asMod = ConchBlessing._synergyByMod and ConchBlessing._synergyByMod[descObj.ObjSubType]
+                        if asMod then
+                            for _, entry in ipairs(asMod) do
+                                if anyPlayerHasCollectible(entry.target) then
+                                    local text = (type(entry.text) == "table" and (entry.text[lang] or entry.text.en)) or tostring(entry.text)
+                                    local iconToken = "{{Collectible" .. tostring(entry.target) .. "}}"
+                                    EID:appendToDescription(descObj, "#" .. iconToken .. " " .. text)
+                                end
+                            end
+                        end
+
+                        return descObj
+                    end
+                )
+                ConchBlessing._didRegisterUnifiedModifier = true
+                ConchBlessing.printDebug("Unified EID description modifier registered")
+            end
+        end
+
+        ConchBlessing._didGenerateConchDescriptions = true
+        ConchBlessing.printDebug("Conch mode descriptions generated successfully!")
+        
+        ConchBlessing:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function()
+            if EID then
+                ConchBlessing.printDebug("Adding item icons to EID after game start...")
+                
+                local ICON_PATHS = {
+                    collectibles = "gfx/items/collectibles/",
+                    familiars = "gfx/items/familiars/",
+                    ui = "gfx/ui/"
+                }
+                
+                local conchIconSprite = Sprite()
+                conchIconSprite:Load("gfx/005.350_trinket.anm2")
+                conchIconSprite:ReplaceSpritesheet(0, ICON_PATHS.ui .. 'MagicConch.png', true)
+                conchIconSprite:GetLayer(0):SetSize(Vector.One * (1/3))
+                EID:addIcon("ConchMode", "Idle", 0, 16, 16, 6, 8, conchIconSprite)
+                
+                for itemKey, itemData in pairs(ConchBlessing.ItemData) do
+                    local iconName = "icon_" .. string.lower(itemKey)
+                    local iconPath = ""
+                    
+                    if itemData.type == "active" or itemData.type == "passive" then
+                        iconPath = ICON_PATHS.collectibles .. string.lower(itemKey) .. ".png"
+                    elseif itemData.type == "familiar" then
+                        iconPath = ICON_PATHS.familiars .. string.lower(itemKey) .. ".png"
+                    else
+                        iconPath = ICON_PATHS.collectibles .. string.lower(itemKey) .. ".png"
+                    end
+                    
+                    local success, itemIconSprite = pcall(function()
+                        local sprite = Sprite()
+                        sprite:Load("gfx/005.350_trinket.anm2")
+                        sprite:ReplaceSpritesheet(0, iconPath, true)
+                        sprite:GetLayer(0):SetSize(Vector.One * (1/2))
+                        return sprite
+                    end)
+                    
+                    if success and itemIconSprite then
+                        ConchBlessing.printDebug("Attempting to add EID icon: " .. iconName .. " with path: " .. iconPath)
+                        EID:addIcon(iconName, "Idle", 0, 16, 16, 10, 9, itemIconSprite)
+                        ConchBlessing.printDebug("Successfully added EID icon for " .. itemKey .. ": " .. iconName .. " -> " .. iconPath)
+                    else
+                        ConchBlessing.printDebug("Failed to create sprite for " .. itemKey .. " (path: " .. iconPath .. ")")
+                    end
+                end
+                
+                ConchBlessing.printDebug("Item icons added to EID successfully!")
+                
+                if EID and EID.icons then
+                    ConchBlessing.printDebug("EID icons loaded. Available icons:")
+                    for iconName, _ in pairs(EID.icons) do
+                        ConchBlessing.printDebug("  - " .. iconName)
+                    end
+                else
+                    ConchBlessing.printDebug("Warning: EID.icons not available")
+                end
+            else
+                ConchBlessing.printDebug("EID not available during POST_GAME_STARTED")
+            end
+        end)
+    else
+        ConchBlessing.printDebug("Conch mode descriptions already generated; skipping.")
     end
     
     ConchBlessing.printDebug("Scripts loaded successfully!")
