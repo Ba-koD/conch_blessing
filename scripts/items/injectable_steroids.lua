@@ -91,14 +91,21 @@ ConchBlessing.injectablsteroids.onUseItem = function(player, collectibleID, useF
     ConchBlessing.printDebug("  New Index: " .. newIndex)
     ConchBlessing.printDebug("  Combined Seed: " .. combinedSeed)
     
-    rng:SetSeed(combinedSeed, 35)
-    
+    -- Use math.random() for independent randomness per stat (requested)
+    local function rollStat()
+        local r = math.random()
+        local span = ConchBlessing.injectablsteroids.data.maxMultiplier - ConchBlessing.injectablsteroids.data.minMultiplier
+        local value = math.floor((r * span + ConchBlessing.injectablsteroids.data.minMultiplier) * 100) / 100
+        ConchBlessing.printDebug("Injectable Steroids: rollStat() r=" .. string.format("%.6f", r) .. ", value=" .. string.format("%.2f", value))
+        return value
+    end
+
     local newMultipliers = {
-        speed = math.floor((rng:RandomFloat() * (ConchBlessing.injectablsteroids.data.maxMultiplier - ConchBlessing.injectablsteroids.data.minMultiplier) + ConchBlessing.injectablsteroids.data.minMultiplier) * 100) / 100,
-        tears = math.floor((rng:RandomFloat() * (ConchBlessing.injectablsteroids.data.maxMultiplier - ConchBlessing.injectablsteroids.data.minMultiplier) + ConchBlessing.injectablsteroids.data.minMultiplier) * 100) / 100,
-        damage = math.floor((rng:RandomFloat() * (ConchBlessing.injectablsteroids.data.maxMultiplier - ConchBlessing.injectablsteroids.data.minMultiplier) + ConchBlessing.injectablsteroids.data.minMultiplier) * 100) / 100,
-        range = math.floor((rng:RandomFloat() * (ConchBlessing.injectablsteroids.data.maxMultiplier - ConchBlessing.injectablsteroids.data.minMultiplier) + ConchBlessing.injectablsteroids.data.minMultiplier) * 100) / 100,
-        luck = math.floor((rng:RandomFloat() * (ConchBlessing.injectablsteroids.data.maxMultiplier - ConchBlessing.injectablsteroids.data.minMultiplier) + ConchBlessing.injectablsteroids.data.minMultiplier) * 100) / 100
+        speed = rollStat(),
+        tears = rollStat(),
+        damage = rollStat(),
+        range = rollStat(),
+        luck = rollStat()
     }
     
     ConchBlessing.printDebug("Generated multipliers: " .. json.encode(newMultipliers))
@@ -126,18 +133,33 @@ ConchBlessing.injectablsteroids.onUseItem = function(player, collectibleID, useF
     
     -- Update unified multiplier system with the new multipliers
     local uniqueKey = INJECTABLE_STEROIDS_ID .. "_" .. newIndex
-    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
-        player, uniqueKey, "Tears", newMultipliers.tears, "Injectable Steroids #" .. newIndex
-    )
-    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
-        player, uniqueKey, "Damage", newMultipliers.damage, "Injectable Steroids #" .. newIndex
-    )
-    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
-        player, uniqueKey, "Range", newMultipliers.range, "Injectable Steroids #" .. newIndex
-    )
-    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
-        player, uniqueKey, "Luck", newMultipliers.luck, "Injectable Steroids #" .. newIndex
-    )
+    if newIndex == 1 then
+        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+            player, INJECTABLE_STEROIDS_ID, "Tears", newMultipliers.tears, "Injectable Steroids #" .. newIndex
+        )
+        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+            player, INJECTABLE_STEROIDS_ID, "Damage", newMultipliers.damage, "Injectable Steroids #" .. newIndex
+        )
+        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+            player, INJECTABLE_STEROIDS_ID, "Range", newMultipliers.range, "Injectable Steroids #" .. newIndex
+        )
+        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+            player, INJECTABLE_STEROIDS_ID, "Luck", newMultipliers.luck, "Injectable Steroids #" .. newIndex
+        )
+    else
+        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(
+            player, INJECTABLE_STEROIDS_ID, "Tears", newMultipliers.tears, "Injectable Steroids #" .. newIndex
+        )
+        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(
+            player, INJECTABLE_STEROIDS_ID, "Damage", newMultipliers.damage, "Injectable Steroids #" .. newIndex
+        )
+        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(
+            player, INJECTABLE_STEROIDS_ID, "Range", newMultipliers.range, "Injectable Steroids #" .. newIndex
+        )
+        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(
+            player, INJECTABLE_STEROIDS_ID, "Luck", newMultipliers.luck, "Injectable Steroids #" .. newIndex
+        )
+    end
     
     -- Save unified multipliers to SaveManager
     ConchBlessing.stats.unifiedMultipliers:SaveToSaveManager(player)
@@ -359,22 +381,36 @@ ConchBlessing.injectablsteroids.onGameStarted = function(_)
                 -- Load unified multipliers from SaveManager
                 ConchBlessing.stats.unifiedMultipliers:LoadFromSaveManager(player)
                 
-                -- Update unified multiplier system with the last individual multipliers
-                local lastMultipliers = playerSave.injectableSteroids[useCount]
-                if lastMultipliers then
-                    local uniqueKey = INJECTABLE_STEROIDS_ID .. "_" .. useCount
-                    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
-                        player, uniqueKey, "Tears", lastMultipliers.tears, "Injectable Steroids #" .. useCount
-                    )
-                    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
-                        player, uniqueKey, "Damage", lastMultipliers.damage, "Injectable Steroids #" .. useCount
-                    )
-                    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
-                        player, uniqueKey, "Range", lastMultipliers.range, "Injectable Steroids #" .. useCount
-                    )
-                    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
-                        player, uniqueKey, "Luck", lastMultipliers.luck, "Injectable Steroids #" .. useCount
-                    )
+                -- Update unified multiplier system from saved data: first multiplier, rest additive on same item ID
+                for i = 1, useCount do
+                    local multipliers = playerSave.injectableSteroids[i]
+                    if i == 1 then
+                        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+                            player, INJECTABLE_STEROIDS_ID, "Tears", multipliers.tears, "Injectable Steroids #1"
+                        )
+                        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+                            player, INJECTABLE_STEROIDS_ID, "Damage", multipliers.damage, "Injectable Steroids #1"
+                        )
+                        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+                            player, INJECTABLE_STEROIDS_ID, "Range", multipliers.range, "Injectable Steroids #1"
+                        )
+                        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
+                            player, INJECTABLE_STEROIDS_ID, "Luck", multipliers.luck, "Injectable Steroids #1"
+                        )
+                    else
+                        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(
+                            player, INJECTABLE_STEROIDS_ID, "Tears", multipliers.tears, "Injectable Steroids #" .. i
+                        )
+                        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(
+                            player, INJECTABLE_STEROIDS_ID, "Damage", multipliers.damage, "Injectable Steroids #" .. i
+                        )
+                        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(
+                            player, INJECTABLE_STEROIDS_ID, "Range", multipliers.range, "Injectable Steroids #" .. i
+                        )
+                        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(
+                            player, INJECTABLE_STEROIDS_ID, "Luck", multipliers.luck, "Injectable Steroids #" .. i
+                        )
+                    end
                 end
                 
                 -- Save unified multipliers to SaveManager

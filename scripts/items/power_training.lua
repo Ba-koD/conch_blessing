@@ -74,31 +74,21 @@ ConchBlessing.powertraining.onUseItem = function(player, collectibleID, useFlags
         ConchBlessing.powertraining.storedMultipliers[playerID] = {}
     end
     
-    local rng = RNG()
-    local gameSeed = Game():GetSeeds():GetStartSeedString()
-    local gameSeedHash = 0
-    
-    for j = 1, #gameSeed do
-        local char = string.byte(gameSeed, j)
-        gameSeedHash = gameSeedHash + char * (j * 31 + char)
+    -- Use math.random() per stat for independent randomness
+    local function rollStat()
+        local r = math.random()
+        local span = ConchBlessing.powertraining.data.maxMultiplier - ConchBlessing.powertraining.data.minMultiplier
+        local value = math.floor((r * span + ConchBlessing.powertraining.data.minMultiplier) * 100) / 100
+        ConchBlessing.printDebug("Power Training rollStat r=" .. string.format("%.6f", r) .. ", value=" .. string.format("%.2f", value))
+        return value
     end
-    
-    local combinedSeed = newIndex + gameSeedHash
-    
-    ConchBlessing.printDebug("Power Training RNG Debug:")
-    ConchBlessing.printDebug("  Game Seed: " .. gameSeed)
-    ConchBlessing.printDebug("  Game Seed Hash: " .. gameSeedHash)
-    ConchBlessing.printDebug("  New Index: " .. newIndex)
-    ConchBlessing.printDebug("  Combined Seed: " .. combinedSeed)
-    
-    rng:SetSeed(combinedSeed, 35)
-    
+
     local newMultipliers = {
-        speed = math.floor((rng:RandomFloat() * (ConchBlessing.powertraining.data.maxMultiplier - ConchBlessing.powertraining.data.minMultiplier) + ConchBlessing.powertraining.data.minMultiplier) * 100) / 100,
-        tears = math.floor((rng:RandomFloat() * (ConchBlessing.powertraining.data.maxMultiplier - ConchBlessing.powertraining.data.minMultiplier) + ConchBlessing.powertraining.data.minMultiplier) * 100) / 100,
-        damage = math.floor((rng:RandomFloat() * (ConchBlessing.powertraining.data.maxMultiplier - ConchBlessing.powertraining.data.minMultiplier) + ConchBlessing.powertraining.data.minMultiplier) * 100) / 100,
-        range = math.floor((rng:RandomFloat() * (ConchBlessing.powertraining.data.maxMultiplier - ConchBlessing.powertraining.data.minMultiplier) + ConchBlessing.powertraining.data.minMultiplier) * 100) / 100,
-        luck = math.floor((rng:RandomFloat() * (ConchBlessing.powertraining.data.maxMultiplier - ConchBlessing.powertraining.data.minMultiplier) + ConchBlessing.powertraining.data.minMultiplier) * 100) / 100
+        speed = rollStat(),
+        tears = rollStat(),
+        damage = rollStat(),
+        range = rollStat(),
+        luck = rollStat()
     }
     
     ConchBlessing.printDebug("Generated multipliers: " .. json.encode(newMultipliers))
@@ -140,10 +130,17 @@ ConchBlessing.powertraining.onUseItem = function(player, collectibleID, useFlags
     
     -- Update unified multipliers (current = last rolled, total = unified product)
     local uniqueKey = POWER_TRAINING_ID .. "_" .. newIndex
-    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, uniqueKey, "Tears", newMultipliers.tears, "Power Training #" .. newIndex)
-    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, uniqueKey, "Damage", newMultipliers.damage, "Power Training #" .. newIndex)
-    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, uniqueKey, "Range", newMultipliers.range, "Power Training #" .. newIndex)
-    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, uniqueKey, "Luck", newMultipliers.luck, "Power Training #" .. newIndex)
+    if newIndex == 1 then
+        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, POWER_TRAINING_ID, "Tears", newMultipliers.tears, "Power Training #" .. newIndex)
+        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, POWER_TRAINING_ID, "Damage", newMultipliers.damage, "Power Training #" .. newIndex)
+        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, POWER_TRAINING_ID, "Range", newMultipliers.range, "Power Training #" .. newIndex)
+        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, POWER_TRAINING_ID, "Luck", newMultipliers.luck, "Power Training #" .. newIndex)
+    else
+        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Tears", newMultipliers.tears, "Power Training #" .. newIndex)
+        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Damage", newMultipliers.damage, "Power Training #" .. newIndex)
+        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Range", newMultipliers.range, "Power Training #" .. newIndex)
+        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Luck", newMultipliers.luck, "Power Training #" .. newIndex)
+    end
     
     SFXManager():Play(SoundEffect.SOUND_BATTERYCHARGE, 1.0, 0, false, 1.0, 0)
     
@@ -338,14 +335,20 @@ ConchBlessing.powertraining.onGameStarted = function(_)
                 
                 ConchBlessing.stats.speed.applyAddition(player, -speedDecrease, ConchBlessing.powertraining.data.minMultiplier)
                 
-                -- Update unified system from saved data (last instance current, totals applied centrally)
+                -- Update unified system from saved data: first entry multiplier, rest additive
                 for i = 1, useCount do
                     local multipliers = playerSave.powerTraining[i]
-                    local uniqueKeySaved = POWER_TRAINING_ID .. "_" .. i
-                    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, uniqueKeySaved, "Tears", multipliers.tears or 1.0, "Power Training #" .. i)
-                    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, uniqueKeySaved, "Damage", multipliers.damage or 1.0, "Power Training #" .. i)
-                    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, uniqueKeySaved, "Range", multipliers.range or 1.0, "Power Training #" .. i)
-                    ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, uniqueKeySaved, "Luck", multipliers.luck or 1.0, "Power Training #" .. i)
+                    if i == 1 then
+                        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, POWER_TRAINING_ID, "Tears", multipliers.tears or 1.0, "Power Training #1")
+                        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, POWER_TRAINING_ID, "Damage", multipliers.damage or 1.0, "Power Training #1")
+                        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, POWER_TRAINING_ID, "Range", multipliers.range or 1.0, "Power Training #1")
+                        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, POWER_TRAINING_ID, "Luck", multipliers.luck or 1.0, "Power Training #1")
+                    else
+                        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Tears", multipliers.tears or 1.0, "Power Training #" .. i)
+                        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Damage", multipliers.damage or 1.0, "Power Training #" .. i)
+                        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Range", multipliers.range or 1.0, "Power Training #" .. i)
+                        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Luck", multipliers.luck or 1.0, "Power Training #" .. i)
+                    end
                 end
             else
                 ConchBlessing.printDebug("No saved data found, starting with base stats")

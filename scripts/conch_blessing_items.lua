@@ -255,10 +255,12 @@ ConchBlessing.ItemData = {
         },
         eid = {
             kr = {
-                "사용시 데미지, 연사, 사거리, 행운이 1.0~1.3배가 됩니다."
+                "사용시 데미지, 연사, 사거리, 행운이 1.0~1.3배가 됩니다.",
+                "#중첩시 합연산으로 증가합니다."
             },
             en = {
-                "Damage, tears, range, and luck are changed to 1.0~1.3x when used"
+                "Damage, tears, range, and luck are changed to 1.0~1.3x when used",
+                "#When stacked, increases by addition"
             }
         },
         pool = {
@@ -274,7 +276,7 @@ ConchBlessing.ItemData = {
         devilprice = 2,
         maxcharges = 12,
         chargetype = "normal",
-        initcharge = 12,
+        initcharge = 0,
         origin = CollectibleType.COLLECTIBLE_EXPERIMENTAL_TREATMENT,
         flag = "positive",
         script = "scripts/items/power_training",
@@ -300,10 +302,12 @@ ConchBlessing.ItemData = {
         },
         eid = {
             kr = {
-                "획득시 데미지, 연사, 사거리, 행운이 0.8 ~ 1.5배가 됩니다."
+                "획득시 데미지, 연사, 사거리, 행운이 0.8 ~ 1.5배가 됩니다.",
+                "#중첩시 합연산으로 증가합니다."
             },
             en = {
-                "Damage, fire rate, range, and luck are changed to 0.8 ~ 1.5x when obtained"
+                "Damage, fire rate, range, and luck are changed to 0.8 ~ 1.5x when obtained",
+                "#When stacked, increases by addition"
             }
         },
         pool = {
@@ -344,11 +348,13 @@ ConchBlessing.ItemData = {
             kr = {
                 "사용시 데미지, 연사, 사거리, 행운이 0.5~2.0배가 됩니다.",
                 "#스테이지마다 한번 사용할수 있으며 배터리나 방 클리어로 충전되지 않습니다.",
+                "#중첩시 합연산으로 증가합니다.",
                 "#{{Warning}} 몸이 점점 노래집니다..."
             },
             en = {
                 "Damage, fire rate, range, and luck are changed to 0.5~2.0x when used",
                 "#Can be used once per stage, and is not charged by batteries or clearing rooms",
+                "#When stacked, increases by addition",
                 "#{{Warning}}Your body is gradually turning yellow..."
             }
         },

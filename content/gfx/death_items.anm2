@@ -1,5 +1,5 @@
 <AnimatedActor>
-	<Info CreatedBy="ConchBlessing XML Generator" CreatedOn="26.08.2025 15:39:04" Version="50" Fps="30"/>
+	<Info CreatedBy="ConchBlessing XML Generator" CreatedOn="02.09.2025 01:06:49" Version="50" Fps="30"/>
 	<Content>
 		<Spritesheets>
 			<Spritesheet Path="death_items.png" Id="0"/>

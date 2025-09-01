@@ -83,7 +83,7 @@ const items = {
         devilprice: 2,
         maxcharges: 12,
         chargetype: "normal",
-        initcharge: 12,
+        initcharge: 0,
         hearts: 0,
         maxhearts: 0,
         blackhearts: 0,
@@ -93,7 +93,7 @@ const items = {
         pools: ["ROOM_TREASURE", "ROOM_SHOP", "ROOM_ANGEL"],
         names: {"kr": "파워 트레이닝", "en": "Power Training"},
         descriptions: {"kr": "라잇웨잇 베이비!", "en": "Lightweight Baby!"},
-        eids: {"kr": ["사용시 데미지, 연사, 사거리, 행운이 1.0~1.3배가 됩니다."], "en": ["Damage, tears, range, and luck are changed to 1.0~1.3x when used"]}
+        eids: {"kr": ["사용시 데미지, 연사, 사거리, 행운이 1.0~1.3배가 됩니다.", "중첩시 합연산으로 증가합니다."], "en": ["Damage, tears, range, and luck are changed to 1.0~1.3x when used", "When stacked, increases by addition"]}
     },
     ORAL_STEROIDS: {
         type: "passive",
@@ -116,7 +116,7 @@ const items = {
         pools: ["ROOM_DEVIL", "ROOM_CURSE", "ROOM_BLACK_MARKET", "ROOM_SECRET"],
         names: {"kr": "경구형 스테로이드", "en": "Oral Steroids"},
         descriptions: {"kr": "주사는 무서워", "en": "Shots are scary"},
-        eids: {"kr": ["획득시 데미지, 연사, 사거리, 행운이 0.8 ~ 1.5배가 됩니다."], "en": ["Damage, fire rate, range, and luck are changed to 0.8 ~ 1.5x when obtained"]}
+        eids: {"kr": ["획득시 데미지, 연사, 사거리, 행운이 0.8 ~ 1.5배가 됩니다.", "중첩시 합연산으로 증가합니다."], "en": ["Damage, fire rate, range, and luck are changed to 0.8 ~ 1.5x when obtained", "When stacked, increases by addition"]}
     },
     INJECTABLE_STEROIDS: {
         type: "active",
@@ -139,7 +139,7 @@ const items = {
         pools: ["ROOM_DEVIL", "ROOM_CURSE", "ROOM_BLACK_MARKET", "ROOM_ULTRASECRET"],
         names: {"kr": "주사 스테로이드", "en": "Injectable Steroids"},
         descriptions: {"kr": "힘을 원해...", "en": "I need more power..."},
-        eids: {"kr": ["사용시 데미지, 연사, 사거리, 행운이 0.5~2.0배가 됩니다.", "스테이지마다 한번 사용할수 있으며 배터리나 방 클리어로 충전되지 않습니다.", "몸이 점점 노래집니다..."], "en": ["Damage, fire rate, range, and luck are changed to 0.5~2.0x when used", "Can be used once per stage, and is not charged by batteries or clearing rooms", "Your body is gradually turning yellow..."]}
+        eids: {"kr": ["사용시 데미지, 연사, 사거리, 행운이 0.5~2.0배가 됩니다.", "스테이지마다 한번 사용할수 있으며 배터리나 방 클리어로 충전되지 않습니다.", "중첩시 합연산으로 증가합니다.", "몸이 점점 노래집니다..."], "en": ["Damage, fire rate, range, and luck are changed to 0.5~2.0x when used", "Can be used once per stage, and is not charged by batteries or clearing rooms", "When stacked, increases by addition", "Your body is gradually turning yellow..."]}
     },
     RAT: {
         gfx: "resources/gfx/items/collectibles/rat.png",
