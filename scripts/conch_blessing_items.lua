@@ -210,13 +210,11 @@ ConchBlessing.ItemData = {
         eid = {
             kr = {
                 "저주가 걸릴 때마다 저주를 제거합니다.",
-                "#저주 제거 시 고정 데미지 +3.0, 연사 +1.0을 영구적으로 부여합니다.",
-                "#저주가 걸릴 확률이 증가합니다."
+                "#저주 제거 시 고정 데미지 +3.0, 연사 +1.0을 영구적으로 부여합니다."
             },
             en = {
                 "Removes curses when they are applied.",
-                "#Grants fixed damage +3.0 and fixed fire rate +1.0 permanently when removing curses.",
-                "#Increases curse chance."
+                "#Grants fixed damage +3.0 and fixed fire rate +1.0 permanently when removing curses."
             }
         },
         pool = {
@@ -238,7 +236,6 @@ ConchBlessing.ItemData = {
             evaluateCache = "eternalflame.onEvaluateCache",
             postNewLevel = "eternalflame.onNewLevel",
             postNewRoom = "eternalflame.onNewRoom",
-            postCurseEval = "eternalflame.onCurseEval",
             update = "eternalflame.onUpdate",
             gameStarted = "eternalflame.onGameStarted"
         },
@@ -470,6 +467,7 @@ ConchBlessing.ItemData = {
             evaluateCache = "dragon.onEvaluateCache",
             fireTear = "dragon.onFireTear",
             update = "dragon.onUpdate",
+            postNewRoom = "dragon.onNewRoom",
             gameStarted = "dragon.onGameStarted"
         },
         onBeforeChange = "dragon.onBeforeChange",
