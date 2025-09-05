@@ -441,7 +441,6 @@ ConchBlessing.ItemData = {
         },
     },
     DRAGON = {
-        WorkingNow = true,
         type = "passive",
         id = Isaac.GetItemIdByName("Dragon"),
         name = {
@@ -449,14 +448,19 @@ ConchBlessing.ItemData = {
             en = "Dragon"
         },
         description = {
-            kr = "진",
-            en = "Dragon"
+            kr = "날씨의 신",
+            en = "God of Weather"
         },
         eid = {
             kr = {"공중과 지형관통을 얻습니다.",
-                  "#방에 입장하고 5초가 지나면, 5초간 지속되는 불꽃 브레스를 쏠 수 있습니다."},
+                  "#방에 입장하고 5초가 지나면, 5블럭 내 최대 5명의 적에게 5초간 지속되는 낙뢰를 내립니다.",
+                  "#위 과정이 한싸이클로 방마다 5번씩 반복됩니다.",
+                  "#낙뢰는 데미지의 10%만큼 줍니다."
+                },
             en = {"Gain flight and Spectral tears.",
-                  "#After entering a room for 5 seconds, can shoot fire breath for 5 seconds."}
+                  "#After entering a room for 5 seconds, can shoot up to 5 lightning bolts to up to 5 enemies within 5 blocks for 5 seconds.",
+                  "#This process repeats 5 times per room as a cycle.",
+                  "#Lightning bolts deal 10% of the player's damage."}
         },
         pool = {
             RoomType.ROOM_TREASURE,
@@ -473,9 +477,11 @@ ConchBlessing.ItemData = {
         script = "scripts/items/dragon",
         callbacks = {
             evaluateCache = "dragon.onEvaluateCache",
-            fireTear = "dragon.onFireTear",
             update = "dragon.onUpdate",
             postNewRoom = "dragon.onNewRoom",
+            postRoomEnter = "dragon.onRoomEnter",
+            postRoomClear = "dragon.onRoomClear",
+            postLaserUpdate = "dragon.onLaserUpdate",
             gameStarted = "dragon.onGameStarted"
         },
         onBeforeChange = "dragon.onBeforeChange",

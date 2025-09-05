@@ -6,4 +6,5 @@
     <active id="3" name="Power Training" gfx="power_training.png" quality="4" tags="offensive" cache="damage firedelay range luck" shopprice="20" devilprice="2" maxcharges="12" chargetype="normal" initcharge="0"/>
     <passive id="4" name="Oral Steroids" gfx="oral_steroids.png" quality="2" tags="offensive" cache="damage firedelay range luck" shopprice="15" devilprice="1"/>
     <active id="5" name="Injectable Steroids" gfx="injectable_steroids.png" quality="3" tags="offensive" cache="damage firedelay range luck" shopprice="15" devilprice="2" maxcharges="1" chargetype="special" initcharge="1"/>
+    <passive id="6" name="Dragon" gfx="dragon.png" quality="4" tags="offensive" cache="flying tearflag" shopprice="20" devilprice="2"/>
 </items>

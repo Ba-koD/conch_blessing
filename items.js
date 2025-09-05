@@ -170,11 +170,27 @@ const items = {
         eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
     },
     DRAGON: {
+        type: "passive",
         gfx: "resources/gfx/items/collectibles/dragon.png",
-        workingnowflag: true,
+        quality: 4,
+        tags: "offensive",
+        cache: "flying tearflag",
+        hidden: false,
+        shopprice: 20,
+        devilprice: 2,
+        maxcharges: 0,
+        chargetype: "normal",
+        initcharge: 0,
+        hearts: 0,
+        maxhearts: 0,
+        blackhearts: 0,
+        soulhearts: 0,
+        origin: "TAURUS",
+        flag: "positive",
+        pools: ["ROOM_TREASURE", "ROOM_PLANETARIUM"],
         names: {"kr": "진", "en": "Dragon"},
-        descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
-        eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
+        descriptions: {"kr": "날씨의 신", "en": "God of Weather"},
+        eids: {"kr": ["공중과 지형관통을 얻습니다.", "방에 입장하고 5초가 지나면, 5블럭 내 최대 5명의 적에게 5초간 지속되는 낙뢰를 내립니다.", "위 과정이 한싸이클로 방마다 5번씩 반복됩니다."], "en": ["Gain flight and Spectral tears.", "After entering a room for 5 seconds, can shoot up to 5 lightning bolts to up to 5 enemies within 5 blocks for 5 seconds.", "This process repeats 5 times per room as a cycle."]}
     },
     SNAKE: {
         gfx: "resources/gfx/items/collectibles/snake.png",

@@ -141,8 +141,6 @@ end)
 
 ConchBlessing:AddCallbackCustom(
     isc.ModCallbackCustom.PRE_ITEM_PICKUP,
-    ---@param player EntityPlayer
-    ---@param pickingUpItem { itemType: ItemType, subType: CollectibleType | TrinketType }
     function(_, player, pickingUpItem)
         ConchBlessing.printDebug("PRE_ITEM_PICKUP called with player: " .. tostring(player) .. ", pickingUpItem: " .. tostring(pickingUpItem))
 
