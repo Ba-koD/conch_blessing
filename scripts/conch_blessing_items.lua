@@ -351,13 +351,15 @@ ConchBlessing.ItemData = {
                 "사용시 데미지, 연사, 사거리, 행운이 0.5~2.0배가 됩니다.",
                 "#스테이지마다 한번 사용할수 있으며 배터리나 방 클리어로 충전되지 않습니다.",
                 "#중첩시 합연산으로 증가합니다.",
-                "#{{Warning}} 몸이 점점 노래집니다..."
+                "#{{Warning}} 몸이 점점 노래집니다...",
+                "#{{Warning}} 1% 확률로 즉사합니다."
             },
             en = {
                 "Damage, fire rate, range, and luck are changed to 0.5~2.0x when used",
                 "#Can be used once per stage, and is not charged by batteries or clearing rooms",
                 "#When stacked, increases by addition",
-                "#{{Warning}}Your body is gradually turning yellow..."
+                "#{{Warning}}Your body is gradually turning yellow...",
+                "#{{Warning}}1% chance of instant death when used"
             }
         },
         pool = {

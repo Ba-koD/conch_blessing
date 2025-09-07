@@ -6,7 +6,8 @@ local INJECTABLE_STEROIDS_ID = Isaac.GetItemIdByName("Injectable Steroids")
 ConchBlessing.injectablsteroids.data = {
     minMultiplier = 0.5,
     maxMultiplier = 2.0,
-    speedDecrease = 0
+    speedDecrease = 0,
+    instantDeathPercent = 1  -- 1% chance of instant death when used
 }
 
 local SaveManager = require("scripts.lib.save_manager")
@@ -53,6 +54,23 @@ ConchBlessing.injectablsteroids.onUseItem = function(player, collectibleID, useF
     
     ConchBlessing.printDebug("Player found, animating collectible")
     player:AnimateCollectible(INJECTABLE_STEROIDS_ID, "Pickup", "PlayerPickupSparkle")
+    
+    -- Check for instant death chance
+    local instantDeathChance = ConchBlessing.injectablsteroids.data.instantDeathPercent
+    ConchBlessing.printDebug("Instant death chance: " .. tostring(instantDeathChance) .. "%")
+    
+    if instantDeathChance > 0 then
+        local deathRoll = math.random(1, 100)
+        ConchBlessing.printDebug("Death roll: " .. tostring(deathRoll) .. " (need <= " .. tostring(instantDeathChance) .. " for death)")
+        
+        if deathRoll <= instantDeathChance then
+            ConchBlessing.printDebug("INSTANT DEATH TRIGGERED! Player dies from Injectable Steroids overdose")
+            player:TakeDamage(999, DamageFlag.DAMAGE_NO_PENALTIES, EntityRef(player), 0)
+            return { Discharge = true, Remove = false, ShowAnim = true }
+        else
+            ConchBlessing.printDebug("Instant death avoided, continuing with normal effect")
+        end
+    end
     
     local playerID = player:GetPlayerType()
     ConchBlessing.printDebug("Player ID: " .. tostring(playerID))
