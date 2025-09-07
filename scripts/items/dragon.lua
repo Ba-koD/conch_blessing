@@ -54,14 +54,15 @@ function ConchBlessing.dragon.hasEnemies(player, range)
 end
 
 function ConchBlessing.dragon.createTechLaser(player, targetPosition)
-    local playerDamage = player.Damage
-    local percent = ConchBlessing.dragon.data.laserDamagePercent or 10
-    local laserDamage = math.max(0.1, playerDamage * (percent / 100))
-    
+    local percent = ConchBlessing.dragon.data.laserDamagePercent
+    -- For Tech lasers, the last parameter is a damage MULTIPLIER to player damage.
+    local damageMultiplier = percent / 100
+    local expectedDamage = player.Damage * damageMultiplier
+
     local skyPosition = Vector(targetPosition.X, targetPosition.Y - 200)
     local direction = Vector(0, 1)
-    local laser = player:FireTechLaser(skyPosition, LaserOffset.LASER_TECH1_OFFSET, direction, false, false, player, laserDamage)
-    
+    local laser = player:FireTechLaser(skyPosition, LaserOffset.LASER_TECH1_OFFSET, direction, false, false, player, damageMultiplier)
+
     if laser then
         laser:SetMaxDistance(200)
         laser:SetTimeout(10)
@@ -75,10 +76,10 @@ function ConchBlessing.dragon.createTechLaser(player, targetPosition)
         end
         laser:GetData().DragonTechLaser = true
         laser:GetData().Duration = 30
-        ConchBlessing.printDebug("Dragon: Created Tech Laser from sky at pos (" .. math.floor(skyPosition.X) .. "," .. math.floor(skyPosition.Y) .. ") targeting (" .. math.floor(targetPosition.X) .. "," .. math.floor(targetPosition.Y) .. ") with damage " .. laserDamage)
+        ConchBlessing.printDebug("Dragon: Created Tech Laser from sky at pos (" .. math.floor(skyPosition.X) .. "," .. math.floor(skyPosition.Y) .. ") targeting (" .. math.floor(targetPosition.X) .. "," .. math.floor(targetPosition.Y) .. ") with mul " .. string.format("%.3f", damageMultiplier) .. " (expected ~" .. string.format("%.3f", expectedDamage) .. ")")
         return laser
     end
-    
+
     ConchBlessing.printDebug("Dragon: Failed to create Tech Laser")
     return nil
 end
