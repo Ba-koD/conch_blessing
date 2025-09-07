@@ -144,15 +144,40 @@ function ConchBlessing.dragon.handleLaserSystem(player, dragonData)
     end
     
     if dragonData.phase == "charging" then
+        -- Check if we've used all available cycles (5 times)
+        if ConchBlessing.dragon.data.laserPerRoom and ConchBlessing.dragon.data.laserPerRoom > 0 then
+            if (dragonData.cyclesUsed or 0) >= ConchBlessing.dragon.data.laserPerRoom then
+                -- Remove all effects and stop charging
+                if dragonData.rangeRing and dragonData.rangeRing:Exists() then dragonData.rangeRing:Remove() end
+                dragonData.rangeRing = nil
+                if dragonData.blingList then
+                    for _, eff in ipairs(dragonData.blingList) do
+                        if eff and eff:Exists() then eff:Remove() end
+                    end
+                    dragonData.blingList = nil
+                end
+                if dragonData.indicator and dragonData.indicator:Exists() then dragonData.indicator:Remove() end
+                dragonData.indicator = nil
+                ConchBlessing.printDebug("Dragon: All cycles used (" .. dragonData.cyclesUsed .. "), stopping charging")
+                return true
+            end
+        end
+        
         -- only charge when there are any enemies in the room
         local hasEnemies = ConchBlessing.dragon.hasEnemies()
         if not hasEnemies then
+            -- Remove visual effects but keep charging progress
             if dragonData.indicator and dragonData.indicator:Exists() then dragonData.indicator:Remove() end
             dragonData.indicator = nil
-            dragonData.sparkTimer = 0
-            dragonData.laserTimer = 0
             if dragonData.rangeRing and dragonData.rangeRing:Exists() then dragonData.rangeRing:Remove() end
             dragonData.rangeRing = nil
+            if dragonData.blingList then
+                for _, eff in ipairs(dragonData.blingList) do
+                    if eff and eff:Exists() then eff:Remove() end
+                end
+                dragonData.blingList = nil
+            end
+            -- Keep laserTimer and sparkTimer - don't reset charging progress
             return true
         end
         
@@ -178,17 +203,40 @@ function ConchBlessing.dragon.handleLaserSystem(player, dragonData)
         local blingVariant = (EffectVariant and (EffectVariant.ULTRA_GREED_BLING or EffectVariant.GROUND_GLOW)) or 0
         local progress = math.max(0, math.min(1, dragonData.laserTimer / ConchBlessing.dragon.data.laserDelay))
         local targetCount = math.floor(progress * ConchBlessing.dragon.data.indicatorMaxBling)
+        
+        -- Clean up any dead effects first
+        for i = #dragonData.blingList, 1, -1 do
+            local eff = dragonData.blingList[i]
+            if not eff or not eff:Exists() then 
+                table.remove(dragonData.blingList, i)
+            end
+        end
+        
+        -- Remove excess bling effects if we have too many
+        while #dragonData.blingList > targetCount do
+            local eff = dragonData.blingList[#dragonData.blingList]
+            if eff and eff:Exists() then eff:Remove() end
+            table.remove(dragonData.blingList, #dragonData.blingList)
+        end
+        
+        -- Add new bling effects if we need more
         while #dragonData.blingList < targetCount do
             local angle = math.random() * math.pi * 2
             local radius = 18 + math.random(0, 10)
             local offset = Vector(math.cos(angle), math.sin(angle)) * radius
             local e = Isaac.Spawn(EntityType.ENTITY_EFFECT, blingVariant, 0, player.Position + offset, Vector(0,0), player):ToEffect()
-            if e then e.DepthOffset = 15 table.insert(dragonData.blingList, e) else break end
+            if e then 
+                e.DepthOffset = 15 
+                table.insert(dragonData.blingList, e) 
+            else 
+                break 
+            end
         end
-        for i = #dragonData.blingList, 1, -1 do
+        
+        -- Update existing bling effects
+        for i = 1, #dragonData.blingList do
             local eff = dragonData.blingList[i]
-            if not eff or not eff:Exists() then table.remove(dragonData.blingList, i)
-            else
+            if eff and eff:Exists() then
                 eff.Position = player.Position + (eff.Position - player.Position):Resized((eff.Position - player.Position):Length())
                 eff:SetColor(Color(1, 1, 0.4, 0.4 + 0.4 * progress, 0.2, 0.2, 0), -1, 1, false, false)
             end
@@ -208,8 +256,13 @@ function ConchBlessing.dragon.handleLaserSystem(player, dragonData)
             dragonData.laserTimer = 0
             dragonData.firingTimer = 0
             ConchBlessing.printDebug("Dragon: Charging complete! Starting firing phase")
-            -- start firing: gradually clear bling effects
-            dragonData.blingFade = true
+            -- start firing: immediately clear all bling effects
+            if dragonData.blingList then
+                for _, eff in ipairs(dragonData.blingList) do
+                    if eff and eff:Exists() then eff:Remove() end
+                end
+                dragonData.blingList = nil
+            end
         else
             if dragonData.laserTimer % 30 == 0 then
                 local remaining = ConchBlessing.dragon.data.laserDelay - dragonData.laserTimer
@@ -241,17 +294,7 @@ function ConchBlessing.dragon.handleLaserSystem(player, dragonData)
         end
 
 
-        -- fade out charging blings while firing
-        if dragonData.blingList then
-            for i = #dragonData.blingList, 1, -1 do
-                local eff = dragonData.blingList[i]
-                if eff and eff:Exists() then
-                    eff:SetColor(Color(1, 1, 0.4, math.max(0, 0.6 - dragonData.firingTimer / ConchBlessing.dragon.data.laserDuration), 0.2, 0.2, 0), -1, 1, false, false)
-                else
-                    table.remove(dragonData.blingList, i)
-                end
-            end
-        end
+        -- All bling effects are removed when firing starts, no need to manage them here
 
         if dragonData.firingTimer >= ConchBlessing.dragon.data.laserDuration then
             dragonData.phase = "charging"
@@ -259,12 +302,6 @@ function ConchBlessing.dragon.handleLaserSystem(player, dragonData)
             dragonData.firingTimer = 0
             dragonData.cyclesUsed = (dragonData.cyclesUsed or 0) + 1
             ConchBlessing.printDebug("Dragon: Firing complete! Back to charging phase")
-            if dragonData.blingList then
-                for _, eff in ipairs(dragonData.blingList) do
-                    if eff and eff:Exists() then eff:Remove() end
-                end
-                dragonData.blingList = nil
-            end
             -- keep range ring for next charging; do not remove here
         else
             local interval = ConchBlessing.dragon.data.fireIntervalFrames or 2
@@ -299,15 +336,39 @@ function ConchBlessing.dragon.onEvaluateCache(_, player, cacheFlag)
     end
 end
 
+-- Function to clean EntityEffect objects before saving
+function ConchBlessing.dragon.cleanEntityEffects(dragonData)
+    if dragonData then
+        -- Remove rangeRing EntityEffect object
+        if dragonData.rangeRing then
+            dragonData.rangeRing = nil
+        end
+        
+        -- Remove blingList EntityEffect objects
+        if dragonData.blingList then
+            dragonData.blingList = nil
+        end
+        
+        -- Remove indicator EntityEffect object
+        if dragonData.indicator then
+            dragonData.indicator = nil
+        end
+    end
+end
+
 function ConchBlessing.dragon.onUpdate()
     ConchBlessing.template.onUpdate(ConchBlessing.dragon.data)
     
     local player = Isaac.GetPlayer(0)
-    if not player or type(player) ~= "userdata" or not player.HasCollectible then return end
+    if not player or type(player) ~= "userdata" then return end
+    player = player:ToPlayer()
+    if not player then return end
     
     if not DRAGON_ID or not player:HasCollectible(DRAGON_ID) then return end
     
-    local dragonData = ConchBlessing.SaveManager.GetRunSave(player).dragon
+    local playerSave = ConchBlessing.SaveManager.GetRunSave(player)
+    if not playerSave then return end
+    local dragonData = playerSave.dragon
     if not dragonData then
         dragonData = {
             laserTimer = 0,
@@ -317,9 +378,12 @@ function ConchBlessing.dragon.onUpdate()
             phase = "charging",
             firingTimer = 0
         }
-        ConchBlessing.SaveManager.GetRunSave(player).dragon = dragonData
+        playerSave.dragon = dragonData
         ConchBlessing.printDebug("Dragon: Initialized dragon data with phase=charging")
     end
+    
+    -- Clean EntityEffect objects before SaveManager tries to save
+    ConchBlessing.dragon.cleanEntityEffects(dragonData)
     
     if not dragonData.hasAppliedEffects then
         ConchBlessing.dragon.onEvaluateCache(nil, player, CacheFlag.CACHE_FLYING)
@@ -374,6 +438,7 @@ function ConchBlessing.dragon.onRoomClear()
         dragonData.firingTimer = 0
         dragonData.phase = "charging"
         dragonData.lasersUsed = 0
+        dragonData.cyclesUsed = 0  -- Reset cycles for new room
     end
 end
 
@@ -387,7 +452,7 @@ function ConchBlessing.dragon.onRoomEnter()
         dragonData.firingTimer = 0
         dragonData.phase = "charging"
         dragonData.lasersUsed = 0
-        dragonData.cyclesUsed = 0
+        dragonData.cyclesUsed = 0  -- Reset cycles for new room
         ConchBlessing.printDebug("Dragon: Room entered - reset to charging phase")
     end
 end
@@ -402,7 +467,20 @@ function ConchBlessing.dragon.onNewRoom()
         dragonData.firingTimer = 0
         dragonData.phase = "charging"
         dragonData.lasersUsed = 0
-        dragonData.cyclesUsed = 0
+        dragonData.cyclesUsed = 0  -- Reset cycles for new room
         ConchBlessing.printDebug("Dragon: New room - reset to charging phase")
     end
+end
+
+-- SaveManager PRE_DATA_SAVE callback to clean EntityEffect objects before saving
+function ConchBlessing.dragon.onPreDataSave(saveData)
+    if saveData and saveData.game and saveData.game.run then
+        for playerID, playerData in pairs(saveData.game.run) do
+            if playerData and playerData.dragon then
+                ConchBlessing.dragon.cleanEntityEffects(playerData.dragon)
+                ConchBlessing.printDebug("Dragon: Cleaned EntityEffect objects before save")
+            end
+        end
+    end
+    return saveData
 end

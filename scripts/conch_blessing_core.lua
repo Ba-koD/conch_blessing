@@ -24,6 +24,18 @@ Isaac.ConsoleOutput("[Core] SaveManager.Init() called\n")
 SaveManager.Init(mod)
 Isaac.ConsoleOutput("[Core] SaveManager.Init() completed\n")
 
+-- Register SaveManager PRE_DATA_SAVE callback to clean EntityEffect objects
+Isaac.ConsoleOutput("[Core] Registering SaveManager PRE_DATA_SAVE callback\n")
+local callbackKey = mod.__SAVEMANAGER_UNIQUE_KEY .. SaveManager.SaveCallbacks.PRE_DATA_SAVE
+mod:AddCallback(callbackKey, function(saveData)
+    -- Clean dragon EntityEffect objects before saving
+    if ConchBlessing.dragon and ConchBlessing.dragon.onPreDataSave then
+        return ConchBlessing.dragon.onPreDataSave(saveData)
+    end
+    return saveData
+end)
+Isaac.ConsoleOutput("[Core] SaveManager PRE_DATA_SAVE callback registered\n")
+
 -- Check SaveManager status
 Isaac.ConsoleOutput("[Core] SaveManager.IsLoaded() = " .. tostring(SaveManager.IsLoaded()) .. "\n")
 Isaac.ConsoleOutput("[Core] SaveManager.VERSION = " .. tostring(SaveManager.VERSION) .. "\n")
@@ -114,6 +126,7 @@ mod:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function(_, isContinued)
                 playerSave.oralSteroids = nil
                 playerSave.injectableSteroids = nil
                 playerSave.powerTraining = nil
+                playerSave.dragon = nil
                 SaveManager.Save()
                 Isaac.ConsoleOutput("[Core] Cleared run-scope saved multipliers for new run\n")
             end
