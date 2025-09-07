@@ -457,12 +457,12 @@ ConchBlessing.ItemData = {
             kr = {"공중과 지형관통을 얻습니다.",
                   "#방에 입장하고 5초가 지나면, 5블럭 내 최대 5명의 적에게 5초간 지속되는 낙뢰를 내립니다.",
                   "#위 과정이 한싸이클로 방마다 5번씩 반복됩니다.",
-                  "#낙뢰는 데미지의 10%만큼 줍니다."
+                  "#낙뢰는 데미지의 5%만큼 줍니다."
                 },
             en = {"Gain flight and Spectral tears.",
                   "#After entering a room for 5 seconds, can shoot up to 5 lightning bolts to up to 5 enemies within 5 blocks for 5 seconds.",
                   "#This process repeats 5 times per room as a cycle.",
-                  "#Lightning bolts deal 10% of the player's damage."}
+                  "#Lightning bolts deal 5% of the player's damage."}
         },
         pool = {
             RoomType.ROOM_TREASURE,
