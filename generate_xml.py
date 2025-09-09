@@ -10,12 +10,43 @@ import os
 import time
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
+import hashlib
 try:
     from PIL import Image
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
     print("Warning: PIL (Pillow) not available. death_items.png generation will be skipped.")
+
+def calculate_file_hash(file_path):
+    """Calculate MD5 hash of a file"""
+    if not os.path.exists(file_path):
+        return None
+    hash_md5 = hashlib.md5()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            hash_md5.update(chunk)
+    return hash_md5.hexdigest()
+
+def calculate_items_hash(items):
+    """Calculate hash of items data for comparison"""
+    # Create a string representation of items data
+    items_str = ""
+    for item_key in sorted(items.keys()):
+        item_info = items[item_key]
+        # Skip WorkingNow items for death_items generation
+        if item_info.get('WorkingNow'):
+            continue
+        
+        # Safely get name - handle both string and dict cases
+        name = item_info.get('name', '')
+        if isinstance(name, dict):
+            name = name.get('en', '')
+        elif not isinstance(name, str):
+            name = str(name)
+            
+        items_str += f"{item_key}:{item_info.get('id', '')}:{name}\n"
+    return hashlib.md5(items_str.encode()).hexdigest()
 
 def find_matching_brace(content, start_pos):
     """detect the matching brace position"""
@@ -377,13 +408,33 @@ def create_items_xml(items, output_path):
 
 def create_death_items_anm2(items, output_path):
     """create the death_items.anm2 file for death animation"""
+    # WorkingNow가 아닌 아이템만 필터링
+    filtered_items = {k: v for k, v in items.items() if not v.get('WorkingNow')}
+    
     # 한 줄에 20개씩 배치
     items_per_row = 20
     frame_width = 16
     frame_height = 16
     
     # 아이템 개수 계산
-    item_count = len(items)
+    item_count = len(filtered_items)
+    
+    # 현재 아이템 데이터의 해시 계산
+    current_hash = calculate_items_hash(items)
+    
+    # 기존 파일이 있고 해시가 같으면 스킵
+    if os.path.exists(output_path):
+        # 기존 파일의 마지막 수정 시간과 현재 아이템 해시를 비교
+        # 간단한 방법으로 파일 크기와 아이템 개수로 비교
+        try:
+            with open(output_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                # 파일에 아이템 개수가 포함되어 있는지 확인
+                if f'FrameNum="{item_count}"' in content:
+                    print(f"death_items.anm2 unchanged, skipping: {output_path}")
+                    return
+        except:
+            pass
     
     # XML 내용 생성
     xml_content = f'''<AnimatedActor>
@@ -556,13 +607,36 @@ def generate_death_items_png(items, output_path):
         print("PIL not available, skipping death_items.png generation.")
         return
 
+    # WorkingNow가 아닌 아이템만 필터링
+    filtered_items = {k: v for k, v in items.items() if not v.get('WorkingNow')}
+    
+    # 현재 아이템 데이터의 해시 계산
+    current_hash = calculate_items_hash(items)
+    
+    # 기존 파일이 있고 해시가 같으면 스킵
+    if os.path.exists(output_path):
+        # 간단한 방법으로 파일 크기로 비교
+        try:
+            file_size = os.path.getsize(output_path)
+            # 예상 파일 크기 계산 (대략적인 추정)
+            expected_items = len(filtered_items)
+            if expected_items > 0:
+                items_per_row = 20
+                rows_needed = (expected_items + items_per_row - 1) // items_per_row
+                expected_width = min(items_per_row * 16, expected_items * 16)
+                expected_height = rows_needed * 16
+                expected_size = expected_width * expected_height * 4  # RGBA
+                
+                # 파일 크기가 비슷하면 스킵 (10% 오차 허용)
+                if abs(file_size - expected_size) < expected_size * 0.1:
+                    print(f"death_items.png unchanged, skipping: {output_path}")
+                    return
+        except:
+            pass
+
     # 16x16 이미지를 저장할 딕셔너리
     images = {}
-    for item_key, item_info in items.items():
-        # WorkingNow 체크 - PNG 생성 시에는 제외
-        if item_info.get('WorkingNow'):
-            print(f"  Skipping {item_key} for PNG generation (WorkingNow)")
-            continue
+    for item_key, item_info in filtered_items.items():
             
         # 아이템 이미지 파일 경로: resources/gfx/items/collectibles/item_name.png
         item_gfx_path = os.path.join("resources/gfx/items/collectibles", f"{item_key.lower()}.png")
@@ -606,8 +680,8 @@ def generate_death_items_png(items, output_path):
     y_offset = 0
     item_count = 0
     
-    # items.xml에 나온 순서대로 정렬 (items 딕셔너리의 키 순서 유지)
-    for item_key in items.keys():
+    # items.xml에 나온 순서대로 정렬 (filtered_items 딕셔너리의 키 순서 유지)
+    for item_key in filtered_items.keys():
         if item_key in images:  # WorkingNow가 아닌 아이템만
             img = images[item_key]
             

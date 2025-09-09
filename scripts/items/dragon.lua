@@ -66,7 +66,8 @@ function ConchBlessing.dragon.createTechLaser(player, targetPosition)
     if laser then
         laser:SetMaxDistance(200)
         laser:SetTimeout(10)
-        laser:SetColor(Color(1, 1, 0, 1, 0, 0, 0), -1, 1, false, false)
+        -- Apply strong yellow color - using pure yellow with high intensity
+        laser:SetColor(Color(2, 2, 0, 1, 0.8, 0.8, 0), -1, 1, false, false)
         -- Add Hook Worm-like tear flag if available
         if TearFlags and laser.AddTearFlags then
             local hookFlag = TearFlags.TEAR_WORM or TearFlags.TEAR_HOOK or TearFlags.TEAR_WIGGLE
@@ -81,6 +82,65 @@ function ConchBlessing.dragon.createTechLaser(player, targetPosition)
     end
 
     ConchBlessing.printDebug("Dragon: Failed to create Tech Laser")
+    return nil
+end
+
+function ConchBlessing.dragon.createBrimstone(player, targetPosition, dragonCount)
+    local percent = ConchBlessing.dragon.data.laserDamagePercent * dragonCount
+    local damageMultiplier = percent / 100
+
+    -- Compute sky position and exact direction towards the target
+    local skyPosition = Vector(targetPosition.X, targetPosition.Y - 200)
+    local maxDistance = skyPosition:Distance(targetPosition)
+
+    -- Create BRIM_TECH laser directly using ShootAngle
+    local dir = targetPosition - skyPosition
+    -- Lua 5.3: use math.atan(y, x) instead of atan2
+    local angleDeg = math.deg(math.atan(dir.Y, dir.X))
+    local laser = EntityLaser.ShootAngle(9, skyPosition, angleDeg, 1, Vector(0,0), player) -- 1 frame duration, player as owner
+
+    if laser then
+        laser:SetMaxDistance(maxDistance)
+        -- Apply damage scaling
+        laser.CollisionDamage = player.Damage * damageMultiplier
+        -- Apply sky blue color - lighter blue with cyan tint
+        laser:SetColor(Color(0.3, 0.8, 1.2, 1, 0.2, 0.4, 0.6), -1, 1, false, false)
+        local data = laser:GetData()
+        data.DragonBrimTech = true
+        data.Duration = ConchBlessing.dragon.data.laserDuration
+        data.SkyPosition = skyPosition
+        data.TargetPosition = Vector(targetPosition.X, targetPosition.Y)
+        ConchBlessing.printDebug("Dragon: Created BRIM_TECH at sky (" .. math.floor(skyPosition.X) .. "," .. math.floor(skyPosition.Y) .. ") to target (" .. math.floor(targetPosition.X) .. "," .. math.floor(targetPosition.Y) .. ") angle=" .. string.format("%.1f", angleDeg))
+        return laser
+    end
+
+    ConchBlessing.printDebug("Dragon: Failed to create BRIM_TECH")
+    return nil
+end
+
+-- Create a Tech laser overlay that visually wraps around the brimstone beam.
+-- The overlay deals no damage and lasts as long as the brimstone duration.
+function ConchBlessing.dragon.createBrimTechOverlay(player, targetPosition)
+    local skyPosition = Vector(targetPosition.X, targetPosition.Y - 200)
+    local direction = (targetPosition - skyPosition):Resized(1)
+    local maxDistance = skyPosition:Distance(targetPosition)
+    -- Use near-zero damage multiplier to avoid extra damage, this is visual only
+    local visualDamageMultiplier = 0
+    local laser = player:FireTechLaser(skyPosition, LaserOffset.LASER_TECH1_OFFSET, direction, false, false, player, visualDamageMultiplier)
+    if laser then
+        laser:SetMaxDistance(maxDistance)
+        laser:SetTimeout(ConchBlessing.dragon.data.laserDuration)
+        -- Use BRIM_TECH variant (9) for wrapped look
+        laser.Variant = 9
+        -- Blue coil tint
+        laser:SetColor(Color(0.5, 0.8, 1, 1, 0.3, 0.3, 0.3), -1, 1, false, false)
+        local ldata = laser:GetData()
+        ldata.DragonTechOverlay = true
+        ldata.Duration = ConchBlessing.dragon.data.laserDuration
+        ldata.SkyPosition = skyPosition
+        ldata.TargetPosition = Vector(targetPosition.X, targetPosition.Y)
+        return laser
+    end
     return nil
 end
 
@@ -108,27 +168,65 @@ function ConchBlessing.dragon.fireTechLasers(player)
     table.sort(nearbyEnemies, function(a,b) return a.dist < b.dist end)
     local lasersFired = 0
     local maxTargets = math.min(ConchBlessing.dragon.data.laserCount, #nearbyEnemies)
+    
+    -- Check if player has 2 or more Dragon items
+    local dragonCount = player:GetCollectibleNum(DRAGON_ID)
+    ConchBlessing.printDebug("Dragon: Player has " .. dragonCount .. " Dragon items")
+    
     for i = 1, maxTargets do
         local enemy = nearbyEnemies[i].ent
-        ConchBlessing.dragon.createTechLaser(player, enemy.Position)
+        if dragonCount >= 2 then
+            -- Use Brimstone for 2+ Dragon items
+            ConchBlessing.dragon.createBrimstone(player, enemy.Position, dragonCount)
+        else
+            -- Use Tech Laser for 1 Dragon item
+            ConchBlessing.dragon.createTechLaser(player, enemy.Position)
+        end
         lasersFired = lasersFired + 1
     end
     
-    ConchBlessing.printDebug("Dragon: Fired " .. lasersFired .. " lasers total")
+    ConchBlessing.printDebug("Dragon: Fired " .. lasersFired .. " " .. (dragonCount >= 2 and "Brimstone" or "Tech Laser") .. " total")
     return lasersFired
 end
 
 function ConchBlessing.dragon.updateTechLaser(laser)
-    if not laser:GetData().DragonTechLaser then return end
-    
     local data = laser:GetData()
+    if not (data.DragonTechLaser or data.DragonTechOverlay) then return end
     if data.Duration <= 0 then
         laser:Remove()
         return
     end
     data.Duration = data.Duration - 1
-    -- enforce yellow tint every tick (use offsets to overpower red base)
-    laser:SetColor(Color(1, 1, 0.3, 1, 0.35, 0.35, 0), -1, 1, false, false)
+    -- Maintain position if sky position stored
+    if data.SkyPosition then
+        laser.Position = data.SkyPosition
+    end
+    -- Color per type
+    if data.DragonTechOverlay then
+        -- Blue coil overlay
+        laser:SetColor(Color(0.3, 0.8, 1.2, 1, 0.2, 0.4, 0.6), -1, 1, false, false)
+    else
+        -- Default yellow for regular tech lasers
+        laser:SetColor(Color(2, 2, 0, 1, 0.8, 0.8, 0), -1, 1, false, false)
+    end
+end
+
+function ConchBlessing.dragon.updateBrimstone(brimstone)
+    if not brimstone:GetData().DragonBrimTech then return end
+    
+    local data = brimstone:GetData()
+    if data.Duration <= 0 then
+        brimstone:Remove()
+        return
+    end
+    data.Duration = data.Duration - 1
+    
+    -- Force the laser to stay at the original sky position to prevent following player
+    if data.SkyPosition then
+        brimstone.Position = data.SkyPosition
+        -- Also set parent to nil to prevent inheritance from player
+        brimstone.Parent = nil
+    end
 end
 
 function ConchBlessing.dragon.handleLaserSystem(player, dragonData)
@@ -296,21 +394,37 @@ function ConchBlessing.dragon.handleLaserSystem(player, dragonData)
 
         -- All bling effects are removed when firing starts, no need to manage them here
 
+        -- No need for persistent beams since we're firing 1-frame Brimstones every frame
+
         if dragonData.firingTimer >= ConchBlessing.dragon.data.laserDuration then
             dragonData.phase = "charging"
             dragonData.laserTimer = 0
             dragonData.firingTimer = 0
             dragonData.cyclesUsed = (dragonData.cyclesUsed or 0) + 1
+            -- No need to cleanup beams since they're 1-frame duration
             ConchBlessing.printDebug("Dragon: Firing complete! Back to charging phase")
             -- keep range ring for next charging; do not remove here
         else
             local interval = ConchBlessing.dragon.data.fireIntervalFrames or 2
             if interval < 1 then interval = 1 end
-            if dragonData.firingTimer % interval == 0 then
-                ConchBlessing.printDebug("Dragon: 2-frame fire tick")
+            local dragonCount = player:GetCollectibleNum(DRAGON_ID)
+            
+            -- Fire every frame for both single and multiple Dragon cases
+            if dragonCount < 2 then
+                -- Single Dragon: use Tech Lasers with interval
+                if dragonData.firingTimer % interval == 0 then
+                    ConchBlessing.printDebug("Dragon: Tech Laser fire tick")
+                    local lasersFired = ConchBlessing.dragon.fireTechLasers(player)
+                    if lasersFired > 0 then
+                        ConchBlessing.printDebug("Dragon: Fired " .. lasersFired .. " Tech Lasers this tick")
+                    end
+                end
+            else
+                -- Multiple Dragons: fire 1-frame Brimstones every frame
+                ConchBlessing.printDebug("Dragon: Brimstone fire tick (frame " .. dragonData.firingTimer .. ")")
                 local lasersFired = ConchBlessing.dragon.fireTechLasers(player)
                 if lasersFired > 0 then
-                    ConchBlessing.printDebug("Dragon: Fired " .. lasersFired .. " lasers this tick")
+                    ConchBlessing.printDebug("Dragon: Fired " .. lasersFired .. " Brimstones this tick")
                 end
             end
         end
@@ -404,6 +518,10 @@ end
 
 function ConchBlessing.dragon.onLaserUpdate(_, laser)
     ConchBlessing.dragon.updateTechLaser(laser)
+end
+
+function ConchBlessing.dragon.onBrimstoneUpdate(_, brimstone)
+    ConchBlessing.dragon.updateBrimstone(brimstone)
 end
 
 ConchBlessing.dragon.onBeforeChange = function(upgradePos, pickup, itemData)

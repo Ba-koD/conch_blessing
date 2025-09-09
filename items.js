@@ -139,7 +139,7 @@ const items = {
         pools: ["ROOM_DEVIL", "ROOM_CURSE", "ROOM_BLACK_MARKET", "ROOM_ULTRASECRET"],
         names: {"kr": "주사 스테로이드", "en": "Injectable Steroids"},
         descriptions: {"kr": "힘을 원해...", "en": "I need more power..."},
-        eids: {"kr": ["사용시 데미지, 연사, 사거리, 행운이 0.5~2.0배가 됩니다.", "스테이지마다 한번 사용할수 있으며 배터리나 방 클리어로 충전되지 않습니다.", "중첩시 합연산으로 증가합니다.", "몸이 점점 노래집니다..."], "en": ["Damage, fire rate, range, and luck are changed to 0.5~2.0x when used", "Can be used once per stage, and is not charged by batteries or clearing rooms", "When stacked, increases by addition", "Your body is gradually turning yellow..."]}
+        eids: {"kr": ["사용시 데미지, 연사, 사거리, 행운이 0.5~2.0배가 됩니다.", "스테이지마다 한번 사용할수 있으며 배터리나 방 클리어로 충전되지 않습니다.", "중첩시 합연산으로 증가합니다.", "몸이 점점 노래집니다...", "1% 확률로 즉사합니다."], "en": ["Damage, fire rate, range, and luck are changed to 0.5~2.0x when used", "Can be used once per stage, and is not charged by batteries or clearing rooms", "When stacked, increases by addition", "Your body is gradually turning yellow...", "1% chance of instant death when used"]}
     },
     RAT: {
         gfx: "resources/gfx/items/collectibles/rat.png",
@@ -190,7 +190,7 @@ const items = {
         pools: ["ROOM_TREASURE", "ROOM_PLANETARIUM"],
         names: {"kr": "진", "en": "Dragon"},
         descriptions: {"kr": "날씨의 신", "en": "God of Weather"},
-        eids: {"kr": ["공중과 지형관통을 얻습니다.", "방에 입장하고 5초가 지나면, 5블럭 내 최대 5명의 적에게 5초간 지속되는 낙뢰를 내립니다.", "위 과정이 한싸이클로 방마다 5번씩 반복됩니다."], "en": ["Gain flight and Spectral tears.", "After entering a room for 5 seconds, can shoot up to 5 lightning bolts to up to 5 enemies within 5 blocks for 5 seconds.", "This process repeats 5 times per room as a cycle."]}
+        eids: {"kr": ["공중과 지형관통을 얻습니다.", "방에 입장하고 5초가 지나면, 5블럭 내 최대 5명의 적에게 5초간 지속되는 낙뢰를 내립니다.", "위 과정이 한싸이클로 방마다 5번씩 반복됩니다.", "낙뢰는 데미지의 5%만큼 줍니다.", "중첩해서 획득시 낙뢰가 용오름으로 변하고 획득할때마다 데미지가 5%씩 증가합니다."], "en": ["Gain flight and Spectral tears.", "After entering a room for 5 seconds, can shoot up to 5 lightning bolts to up to 5 enemies within 5 blocks for 5 seconds.", "This process repeats 5 times per room as a cycle.", "Lightning bolts deal 5% of the player's damage.", "When stacked, lightning bolts become spout and increase by 5% each time they are obtained."]}
     },
     SNAKE: {
         gfx: "resources/gfx/items/collectibles/snake.png",
