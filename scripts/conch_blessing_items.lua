@@ -591,6 +591,9 @@ Capricorn(염소자리)
 ↑ {{RangeSmall}}사거리 +1.5
 ↑ {{SpeedSmall}}이동속도 +0.1
 자 (쥐) Rat
+황금 동전 1개를 드랍합니다.
+현재 소지중인 동전의 갯수만큼 황금 동전으로 대체될 확률이 생깁니다.
+동전 획득시 1% 확률로 해당 방의 배열 아이템을 1개 소환합니다.
 
 Aquarius(물병자리)
 캐릭터가 지나간 자리에 파란 장판이 생깁니다.
@@ -856,8 +859,9 @@ local function loadAllItems()
 
         ConchBlessing._didGenerateConchDescriptions = true
         ConchBlessing.printDebug("Conch mode descriptions generated successfully!")
-        
-        ConchBlessing:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function()
+
+        local function registerEIDIcons()
+            if ConchBlessing._eidIconsAdded then return end
             if EID then
                 ConchBlessing.printDebug("Adding item icons to EID after game start...")
                 
@@ -867,11 +871,14 @@ local function loadAllItems()
                     ui = "gfx/ui/"
                 }
                 
+                -- Rep/Rep+ safe: use our minimal 1-layer ANM2 template and size via EID's width/height
                 local conchIconSprite = Sprite()
-                conchIconSprite:Load("gfx/005.350_trinket.anm2")
+                conchIconSprite:Load("gfx/ui/eid_icon_template_third.anm2", true)
+                ConchBlessing.printDebug("[EID Icon] Template(1/3) loaded (conch)")
                 conchIconSprite:ReplaceSpritesheet(0, ICON_PATHS.ui .. 'MagicConch.png', true)
-                conchIconSprite:GetLayer(0):SetSize(Vector.One * (1/3))
-                EID:addIcon("ConchMode", "Idle", 0, 16, 16, 6, 8, conchIconSprite)
+                ConchBlessing.printDebug("[EID Icon] Spritesheet replaced (conch)")
+                conchIconSprite:LoadGraphics()
+                EID:addIcon("ConchMode", "Idle", 0, 16, 16, 9, 5, conchIconSprite)
                 
                 for itemKey, itemData in pairs(ConchBlessing.ItemData) do
                     local iconName = "icon_" .. string.lower(itemKey)
@@ -887,15 +894,17 @@ local function loadAllItems()
                     
                     local success, itemIconSprite = pcall(function()
                         local sprite = Sprite()
-                        sprite:Load("gfx/005.350_trinket.anm2")
+                        sprite:Load("gfx/ui/eid_icon_template_half.anm2", true)
+                        ConchBlessing.printDebug("[EID Icon] Template(1/2) loaded for " .. itemKey)
                         sprite:ReplaceSpritesheet(0, iconPath, true)
-                        sprite:GetLayer(0):SetSize(Vector.One * (1/2))
+                        ConchBlessing.printDebug("[EID Icon] Spritesheet replaced for " .. itemKey .. ", path=" .. iconPath)
+                        sprite:LoadGraphics()
                         return sprite
                     end)
                     
                     if success and itemIconSprite then
                         ConchBlessing.printDebug("Attempting to add EID icon: " .. iconName .. " with path: " .. iconPath)
-                        EID:addIcon(iconName, "Idle", 0, 16, 16, 10, 9, itemIconSprite)
+                        EID:addIcon(iconName, "Idle", 0, 16, 16, 10, 5, itemIconSprite)
                         ConchBlessing.printDebug("Successfully added EID icon for " .. itemKey .. ": " .. iconName .. " -> " .. iconPath)
                     else
                         ConchBlessing.printDebug("Failed to create sprite for " .. itemKey .. " (path: " .. iconPath .. ")")
@@ -903,6 +912,7 @@ local function loadAllItems()
                 end
                 
                 ConchBlessing.printDebug("Item icons added to EID successfully!")
+                ConchBlessing._eidIconsAdded = true
                 
                 if EID and EID.icons then
                     ConchBlessing.printDebug("EID icons loaded. Available icons:")
@@ -914,6 +924,17 @@ local function loadAllItems()
                 end
             else
                 ConchBlessing.printDebug("EID not available during POST_GAME_STARTED")
+            end
+        end
+
+        ConchBlessing:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function()
+            registerEIDIcons()
+        end)
+
+        ConchBlessing:AddCallback(ModCallbacks.MC_POST_UPDATE, function()
+            if EID and not ConchBlessing._eidIconsAdded then
+                ConchBlessing.printDebug("EID detected late; registering icons now...")
+                registerEIDIcons()
             end
         end)
     else
