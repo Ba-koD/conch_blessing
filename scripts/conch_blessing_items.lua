@@ -84,6 +84,7 @@ end
 
 -- define ItemData table
 ConchBlessing.ItemData = {
+    -- Collectibles
     LIVE_EYE = {
         type = "passive",
         id = Isaac.GetItemIdByName("Live Eye"),
@@ -580,6 +581,49 @@ ConchBlessing.ItemData = {
             en = "Pig"
         },
     },
+
+    -- Trinkets
+    TIME_POWER = {
+        type = "trinket",
+        id = Isaac.GetTrinketIdByName("Time = Power"),
+        name = {
+            kr = "시간 = 힘",
+            en = "Time = Power"
+        },
+        description = {
+            kr = "시간은 힘이다",
+            en = "Time is power"
+        },
+        eid = {
+            kr = {
+                "소지 중 초당 {{Damage}}공격력이 0.006 증가합니다.",
+                "#적에게 피격 시 60초 동안 증가가 중지됩니다.",
+                "#장신구를 내려놓으면 증가량이 초기화됩니다."
+            },
+            en = {
+                "While held, gains +0.006 {{Damage}}Damage per second.",
+                "#On taking damage, gain is paused for 60 seconds.",
+                "#Dropping the trinket resets the bonus."
+            }
+        },
+        gfx = "time_power.png",
+        tags = "offensive",
+        cache = "damage",
+        hidden = false,
+        origin = TrinketType.TRINKET_CURVED_HORN,
+        flag = "positive",
+        script = "scripts/items/time_power_trinket",
+        callbacks = {
+            evaluateCache = "timepowertrinket.onEvaluateCache",
+            gameStarted = "timepowertrinket.onGameStarted",
+            update = "timepowertrinket.onUpdate",
+            entityTakeDmg = "timepowertrinket.onEntityTakeDamage",
+            onBeforeChange = "timepowertrinket.onBeforeChange",
+            onAfterChange = "timepowertrinket.onAfterChange"
+        },
+        synergies = {}
+    },
+    
 }
 
 --[[
@@ -776,26 +820,43 @@ local function loadAllItems()
                 ConchBlessing._builtSynergyMaps = true
             end
 
-            local function anyPlayerHasCollectible(id)
+            -- Helper: check if any player has a collectible or trinket with given ID
+            local function anyPlayerHas(id)
                 local game = Game()
                 local n = game:GetNumPlayers()
                 for i = 0, n - 1 do
                     local p = game:GetPlayer(i)
-                    if p and p:HasCollectible(id) then return true end
+                    if p then
+                        if p:HasCollectible(id) then return true end
+                        if p:HasTrinket(id) then return true end
+                    end
                 end
                 return false
+            end
+
+            -- Helper: determine if an ID corresponds to a trinket in config
+            local function isTrinketId(id)
+                local cfg = Isaac.GetItemConfig()
+                if not cfg then return false end
+                return cfg:GetTrinket(id) ~= nil
             end
 
             if not ConchBlessing._didRegisterUnifiedModifier then
                 EID:addDescriptionModifier(
                     "ConchBlessing_Unified",
                     function(descObj)
-                        return descObj.ObjType == 5 and descObj.ObjVariant == 100
+                        -- Support both Collectibles (variant 100) and Trinkets (variant 350)
+                        return descObj.ObjType == 5 and (descObj.ObjVariant == 100 or descObj.ObjVariant == 350)
                     end,
                     function(descObj)
                         local lang = resolveModLang()
                         -- Conch mode (origin) part
-                        local itemKeys = (ConchBlessing._originItemFlags or {})[descObj.ObjSubType]
+                        local subId = descObj.ObjSubType
+                        if descObj.ObjVariant == 350 and subId and subId >= 32768 then
+                            -- Golden trinket: strip golden flag to match origin/synergy maps
+                            subId = subId - 32768
+                        end
+                        local itemKeys = (ConchBlessing._originItemFlags or {})[subId]
                         local templates = ConchBlessing._conchModeTemplates or {}
                         if itemKeys and templates[lang] then
                             local cacheKey = tostring(descObj.ObjSubType) .. "|" .. lang
@@ -826,11 +887,11 @@ local function loadAllItems()
                         end
 
                         -- Synergy part
-                        local targets = ConchBlessing._synergyByTarget and ConchBlessing._synergyByTarget[descObj.ObjSubType]
+                        local targets = ConchBlessing._synergyByTarget and ConchBlessing._synergyByTarget[subId]
                         if targets then
                             for _, entry in ipairs(targets) do
                                 local d = ConchBlessing.ItemData[entry.key]
-                                if d and d.id and anyPlayerHasCollectible(d.id) then
+                                if d and d.id and anyPlayerHas(d.id) then
                                     local text = (type(entry.text) == "table" and (entry.text[lang] or entry.text.en)) or tostring(entry.text)
                                     local iconToken = "{{icon_" .. string.lower(entry.key) .. "}}"
                                     EID:appendToDescription(descObj, "#" .. iconToken .. " " .. text)
@@ -838,12 +899,17 @@ local function loadAllItems()
                             end
                         end
 
-                        local asMod = ConchBlessing._synergyByMod and ConchBlessing._synergyByMod[descObj.ObjSubType]
+                        local asMod = ConchBlessing._synergyByMod and ConchBlessing._synergyByMod[subId]
                         if asMod then
                             for _, entry in ipairs(asMod) do
-                                if anyPlayerHasCollectible(entry.target) then
+                                if anyPlayerHas(entry.target) then
                                     local text = (type(entry.text) == "table" and (entry.text[lang] or entry.text.en)) or tostring(entry.text)
-                                    local iconToken = "{{Collectible" .. tostring(entry.target) .. "}}"
+                                    local iconToken
+                                    if isTrinketId(entry.target) then
+                                        iconToken = "{{Trinket" .. tostring(entry.target) .. "}}"
+                                    else
+                                        iconToken = "{{Collectible" .. tostring(entry.target) .. "}}"
+                                    end
                                     EID:appendToDescription(descObj, "#" .. iconToken .. " " .. text)
                                 end
                             end
@@ -886,6 +952,8 @@ local function loadAllItems()
                     
                     if itemData.type == "active" or itemData.type == "passive" then
                         iconPath = ICON_PATHS.collectibles .. string.lower(itemKey) .. ".png"
+                    elseif itemData.type == "trinket" then
+                        iconPath = "gfx/items/trinkets/" .. string.lower(itemKey) .. ".png"
                     elseif itemData.type == "familiar" then
                         iconPath = ICON_PATHS.familiars .. string.lower(itemKey) .. ".png"
                     else
@@ -964,7 +1032,13 @@ local function applyNaturalSpawnSetting()
         if itemData.id and itemData.id ~= -1 then
             if not allow then
                 -- Remove from all pools (call once is enough; engine tracks per-pool)
-                pool:RemoveCollectible(itemData.id)
+                if itemData.type == "trinket" then
+                    ConchBlessing.printDebug("[Pool] Removing trinket from pools: id=" .. tostring(itemData.id))
+                    pool:RemoveTrinket(itemData.id)
+                else
+                    ConchBlessing.printDebug("[Pool] Removing collectible from pools: id=" .. tostring(itemData.id))
+                    pool:RemoveCollectible(itemData.id)
+                end
             end
         end
     end

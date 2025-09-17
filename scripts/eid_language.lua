@@ -25,6 +25,7 @@ local function getCurrentLang()
 end
 
 ConchBlessing.EID = {}
+ConchBlessing._eidRegistered = ConchBlessing._eidRegistered or { } -- [id] = true
 
 -- Add multilingual description to EID
 -- Usage: ConchBlessing.EID.addOptLangDescription(itemId, itemData)
@@ -86,16 +87,32 @@ ConchBlessing.EID.addOptLangDescription = function(itemId, itemData)
         else
             englishDesc = itemData.eid
         end
-        if englishName and englishDesc then
-            EID:addCollectible(itemId, englishDesc, englishName, "en_us")
+
+        local isTrinket = (itemData.type == "trinket")
+        if englishName and englishDesc and not (ConchBlessing._eidRegistered[itemId] and ConchBlessing._eidRegistered[itemId].en_us) then
+            if isTrinket then
+                EID:addTrinket(itemId, englishDesc, englishName, "en_us")
+            else
+                EID:addCollectible(itemId, englishDesc, englishName, "en_us")
+            end
+            ConchBlessing._eidRegistered[itemId] = ConchBlessing._eidRegistered[itemId] or {}
+            ConchBlessing._eidRegistered[itemId].en_us = true
         end
 
         -- Additionally register the currently resolved language if it isn't English
         if currentLang ~= "en" then
             local eidLangCode = toEIDLang(currentLang)
-            EID:addCollectible(itemId, eidDescription, itemName, eidLangCode)
+            if not (ConchBlessing._eidRegistered[itemId] and ConchBlessing._eidRegistered[itemId][eidLangCode]) then
+                if isTrinket then
+                    EID:addTrinket(itemId, eidDescription, itemName, eidLangCode)
+                else
+                    EID:addCollectible(itemId, eidDescription, itemName, eidLangCode)
+                end
+                ConchBlessing._eidRegistered[itemId] = ConchBlessing._eidRegistered[itemId] or {}
+                ConchBlessing._eidRegistered[itemId][eidLangCode] = true
+            end
         end
-        ConchBlessing.printDebug(string.format("EID registered: %s - %s", itemName, eidDescription))
+        ConchBlessing.printDebug(string.format("EID registered (%s): %s - %s", isTrinket and "trinket" or "collectible", itemName, eidDescription))
         
         -- Store in ConchBlessing.EID table for reference
         ConchBlessing.EID[itemId] = {
@@ -147,26 +164,24 @@ ConchBlessing:AddCallbackCustom(
         if not pickingUpItem then
             return
         end
-        if pickingUpItem.itemType == ItemType.ITEM_TRINKET then
-            return
-        end
 
-        ConchBlessing.printDebug("Picking up item: " .. tostring(pickingUpItem.itemType) .. ", " .. tostring(pickingUpItem.subType))
-
-        local collectibleType = pickingUpItem.subType
-
+        local subType = pickingUpItem.subType
+        local found = nil
         for _, itemData in pairs(ConchBlessing.ItemData) do
-            if itemData and itemData.id == collectibleType then
-                local currentLang = getCurrentLang()
-                local itemName = type(itemData.name) == "table" and (itemData.name[currentLang] or itemData.name["en"]) or itemData.name
-                local itemDescription = type(itemData.description) == "table" and (itemData.description[currentLang] or itemData.description["en"]) or itemData.description
-                if itemName and itemDescription then
-                    local hud = Game():GetHUD()
-                    if hud then
-                        hud:ShowItemText(itemName, itemDescription)
-                    end
-                end
+            if itemData and itemData.id == subType then
+                found = itemData
                 break
+            end
+        end
+        if not found then return end
+
+        local currentLang = getCurrentLang()
+        local itemName = type(found.name) == "table" and (found.name[currentLang] or found.name["en"]) or found.name
+        local itemDescription = type(found.description) == "table" and (found.description[currentLang] or found.description["en"]) or found.description
+        if itemName and itemDescription then
+            local hud = Game():GetHUD()
+            if hud then
+                hud:ShowItemText(itemName, itemDescription)
             end
         end
     end

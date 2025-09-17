@@ -249,9 +249,11 @@ function updatePageTexts(displayLang) {
     const allTypes = document.getElementById('allTypes');
     const passive = document.getElementById('passive');
     const active = document.getElementById('active');
+    const trinket = document.getElementById('trinket');
     if (allTypes) allTypes.textContent = getText('allTypes', displayLang);
     if (passive) passive.textContent = getText('passive', displayLang);
     if (active) active.textContent = getText('active', displayLang);
+    if (trinket) trinket.textContent = getText('trinket', displayLang);
     
     const allFlags = document.getElementById('allFlags');
     const positive = document.getElementById('positive');
@@ -391,9 +393,11 @@ function createItemCard(key, item) {
     
     const isWorkingNow = item.workingnowflag === true;
     
-    const qualityStars = !isWorkingNow ? '⭐'.repeat(item.quality || 3) : '';
+    const showQuality = !isWorkingNow && item.type !== 'trinket' && (typeof item.quality !== 'undefined');
+    const qualityStars = showQuality ? '⭐'.repeat(item.quality || 0) : '';
     
-    const poolText = !isWorkingNow ? formatPoolText(item.pools, displayLang) : '';
+    const showPool = !isWorkingNow && item.type !== 'trinket';
+    const poolText = showPool ? formatPoolText(item.pools, displayLang) : '';
     
     const tagsText = !isWorkingNow ? (item.tags || 'offensive') : '';
     
@@ -422,7 +426,7 @@ function createItemCard(key, item) {
             <div class="item-info">
                 <h3>${itemName}</h3>
                 ${!isWorkingNow ? `<span class="item-type ${item.type || 'passive'}">${(item.type || 'passive').toUpperCase()}</span>` : ''}
-                ${!isWorkingNow ? `<div class="quality-stars">${qualityStars}</div>` : ''}
+                ${showQuality ? `<div class="quality-stars">${qualityStars}</div>` : ''}
             </div>
         </div>
         
@@ -438,7 +442,7 @@ function createItemCard(key, item) {
         ${!isWorkingNow ? `
         <div class="item-stats">
             <div class="stats-group">
-                <span class="stat-tag">Pool: ${poolText}</span>
+                ${showPool ? `<span class="stat-tag">Pool: ${poolText}</span>` : ''}
                 <span class="stat-tag">Tags: ${tagsText}</span>
                 ${item.shopprice ? `<span class="stat-tag">Shop: ${item.shopprice}$</span>` : ''}
                 ${item.devilprice ? `<span class="stat-tag">Devil: ${item.devilprice}♥</span>` : ''}
@@ -527,10 +531,11 @@ function showItemModal(key, item) {
     const itemDescription = getLocalizedText(item, 'descriptions', displayLang) || '';
     
     const isWorkingNow = item.workingnowflag === true;
+    const showQualityModal = !isWorkingNow && item.type !== 'trinket' && (typeof item.quality !== 'undefined');
+    const qualityStars = showQualityModal ? '⭐'.repeat(item.quality || 0) + '☆'.repeat(Math.max(0, 4 - (item.quality || 0))) : '';
     
-    const qualityStars = !isWorkingNow ? '⭐'.repeat(item.quality || 3) : '';
-    
-    const poolText = !isWorkingNow ? formatPoolText(item.pools, displayLang) : '';
+    const showPoolModal = !isWorkingNow && item.type !== 'trinket';
+    const poolText = showPoolModal ? formatPoolText(item.pools, displayLang) : '';
     
     const tagsText = !isWorkingNow ? (item.tags || 'offensive') : '';
     
@@ -562,7 +567,7 @@ function showItemModal(key, item) {
                             ${displayLang === 'kr' && item.names && item.names.en ? `<span class="english-name">(${item.names.en})</span>` : ''}
                         </h2>
                         ${!isWorkingNow ? `<span class="modal-type">${(item.type || 'passive').toUpperCase()}</span>` : ''}
-                        ${!isWorkingNow ? `<div class="modal-quality-stars">${qualityStars}</div>` : ''}
+                        ${showQualityModal ? `<div class="modal-quality-stars">${qualityStars}</div>` : ''}
                     </div>
                 </div>
                 
@@ -585,7 +590,7 @@ function showItemModal(key, item) {
                 ${!isWorkingNow ? `
                 <div class="modal-stats">
                     <div class="stats-group">
-                        <span class="modal-stat-tag">Pool: ${poolText}</span>
+                        ${showPoolModal ? `<span class="modal-stat-tag">Pool: ${poolText}</span>` : ''}
                         <span class="modal-stat-tag">Tags: ${tagsText}</span>
                         ${item.shopprice ? `<span class="modal-stat-tag">Shop: ${item.shopprice}$</span>` : ''}
                         ${item.devilprice ? `<span class="modal-stat-tag">Devil: ${item.devilprice}♥</span>` : ''}
@@ -605,10 +610,12 @@ function showItemModal(key, item) {
                         ${Object.entries(item.synergies).map(([synergyKey, synergyData]) => {
                             const synergyName = formatOriginName(synergyKey);
                             const synergyDesc = synergyData[displayLang] || synergyData['en'] || getText('synergyNoDesc', displayLang);
+                            const synergyType = (item.synergy_types && item.synergy_types[synergyKey]) || 'collectible';
+                            const synergyGfxBase = synergyType === 'trinket' ? 'trinkets' : 'collectibles';
                             return `
                                 <div class="synergy-item">
                                     <div class="synergy-header">
-                                        <img src="resources/gfx/items/collectibles/${synergyKey.toLowerCase()}.png" 
+                                        <img src="resources/gfx/items/${synergyGfxBase}/${synergyKey.toLowerCase()}.png" 
                                              alt="${synergyName}" 
                                              class="synergy-icon"
                                              onerror="this.style.display='none';">

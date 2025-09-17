@@ -348,11 +348,17 @@ def parse_lua_file(file_path):
             item_info['soulhearts'] = int(soulhearts_match.group(1))
             print(f"  SoulHearts: {item_info['soulhearts']}")
         
-        # extract origin
-        origin_match = re.search(r'origin\s*=\s*CollectibleType\.COLLECTIBLE_(\w+)', item_data)
-        if origin_match:
-            item_info['origin'] = origin_match.group(1)
-            print(f"  Origin: {item_info['origin']}")
+        # extract origin (Collectible or Trinket)
+        origin_match_coll = re.search(r'origin\s*=\s*CollectibleType\.COLLECTIBLE_(\w+)', item_data)
+        origin_match_trinket = re.search(r'origin\s*=\s*TrinketType\.TRINKET_(\w+)', item_data)
+        if origin_match_trinket:
+            item_info['origin'] = origin_match_trinket.group(1)
+            item_info['originType'] = 'trinket'
+            print(f"  Origin (Trinket): {item_info['origin']}")
+        elif origin_match_coll:
+            item_info['origin'] = origin_match_coll.group(1)
+            item_info['originType'] = 'collectible'
+            print(f"  Origin (Collectible): {item_info['origin']}")
         
         # extract flag
         flag_match = re.search(r'flag\s*=\s*"([^"]+)"', item_data)
@@ -372,38 +378,60 @@ def parse_lua_file(file_path):
                 print(f"  Full synergies data: {synergies_data}")
                 
                 synergies = {}
-                # [CollectibleType.COLLECTIBLE_XXX] = { 형태의 시너지 찾기
-                synergy_pattern = r'\[CollectibleType\.COLLECTIBLE_(\w+)\]\s*=\s*{'
-                synergy_matches = re.finditer(synergy_pattern, synergies_data)
+                synergy_types = {}
+                # [CollectibleType.COLLECTIBLE_XXX] and [TrinketType.TRINKET_XXX] blocks
+                synergy_pattern_coll = r'\[CollectibleType\.COLLECTIBLE_(\w+)\]\s*=\s*{'
+                synergy_pattern_trinket = r'\[TrinketType\.TRINKET_(\w+)\]\s*=\s*{'
+                synergy_matches = list(re.finditer(synergy_pattern_coll, synergies_data))
+                synergy_matches_tr = list(re.finditer(synergy_pattern_trinket, synergies_data))
                 
-                print(f"    Synergy pattern: {synergy_pattern}")
+                print(f"    Synergy pattern (collectible): {synergy_pattern_coll}")
+                print(f"    Synergy pattern (trinket): {synergy_pattern_trinket}")
                 print(f"    Synergies data to search: {synergies_data}")
                 
                 for match in synergy_matches:
                     synergy_item = match.group(1)
-                    print(f"    Found synergy item: {synergy_item}")
-                    # 해당 시너지 블록의 시작과 끝 찾기
+                    print(f"    Found synergy collectible: {synergy_item}")
                     block_start = match.end() - 1
                     block_end = find_matching_brace(synergies_data, block_start)
-                    
                     if block_end != -1:
                         block_content = synergies_data[block_start+1:block_end]
                         print(f"    Block content: {block_content}")
-                        # 다국어 설명 추출
                         synergy_desc = {}
                         for lang_match in re.finditer(r'(\w+)\s*=\s*"([^"]+)"', block_content):
                             lang = lang_match.group(1)
                             text = lang_match.group(2)
                             synergy_desc[lang] = text
                             print(f"    Synergy {synergy_item} ({lang}): {text}")
-                        
                         synergies[synergy_item] = synergy_desc
+                        synergy_types[synergy_item] = 'collectible'
+                    else:
+                        print(f"    Failed to find block end for {synergy_item}")
+
+                for match in synergy_matches_tr:
+                    synergy_item = match.group(1)
+                    print(f"    Found synergy trinket: {synergy_item}")
+                    block_start = match.end() - 1
+                    block_end = find_matching_brace(synergies_data, block_start)
+                    if block_end != -1:
+                        block_content = synergies_data[block_start+1:block_end]
+                        print(f"    Block content: {block_content}")
+                        synergy_desc = {}
+                        for lang_match in re.finditer(r'(\w+)\s*=\s*"([^"]+)"', block_content):
+                            lang = lang_match.group(1)
+                            text = lang_match.group(2)
+                            synergy_desc[lang] = text
+                            print(f"    Synergy {synergy_item} ({lang}): {text}")
+                        synergies[synergy_item] = synergy_desc
+                        synergy_types[synergy_item] = 'trinket'
                     else:
                         print(f"    Failed to find block end for {synergy_item}")
                 
                 print(f"    Final synergies dict: {synergies}")
                 if synergies:
                     item_info['synergies'] = synergies
+                    if synergy_types:
+                        item_info['synergy_types'] = synergy_types
                     print(f"  Synergies: {list(synergies.keys())}")
                 else:
                     print(f"  No synergies extracted from data")
@@ -454,12 +482,21 @@ const items = {
         eids: {json.dumps(item_info['eids'], ensure_ascii=False)}"""
         else:
             # 일반 아이템은 모든 필드 출력
+            item_type = item_info.get('type', 'passive')
+            gfx_base = 'trinkets' if item_type == 'trinket' else 'collectibles'
+            # custom gfx filename support
+            gfx_name = item_info.get('gfx') or item_key.lower() + '.png'
+            # Safe-encode string scalars using JSON to avoid broken quotes
+            origin_js = json.dumps(item_info.get('origin', ''), ensure_ascii=False)
+            flag_js = json.dumps(item_info.get('flag', ''), ensure_ascii=False)
+            tags_js = json.dumps(item_info.get('tags', ''), ensure_ascii=False)
+            cache_js = json.dumps(item_info.get('cache', ''), ensure_ascii=False)
+
             js_content += f"""    {item_key}: {{
-        type: "{item_info.get('type', 'passive')}",
-        gfx: "resources/gfx/items/collectibles/{item_key.lower()}.png",
-        quality: {item_info.get('quality', 3)},
-        tags: "{item_info.get('tags', '')}",
-        cache: "{item_info.get('cache', '')}",
+        type: "{item_type}",
+        gfx: "resources/gfx/items/{gfx_base}/{gfx_name}",
+        tags: {tags_js},
+        cache: {cache_js},
         hidden: {str(item_info.get('hidden', False)).lower()},
         shopprice: {item_info.get('shopprice', 0)},
         devilprice: {item_info.get('devilprice', 0)},
@@ -470,9 +507,14 @@ const items = {
         maxhearts: {item_info.get('maxhearts', 0)},
         blackhearts: {item_info.get('blackhearts', 0)},
         soulhearts: {item_info.get('soulhearts', 0)},
-        origin: "{item_info.get('origin', '')}",
-        flag: "{item_info.get('flag', '')}",
-        pools: {json.dumps(item_info.get('pools', []))}"""
+        origin: {origin_js},
+        flag: {flag_js}"""
+
+            # add pools only for non-trinkets
+            if item_type != 'trinket':
+                # non-trinket: include quality and pools
+                js_content += f",\n        quality: {item_info.get('quality', 3)}"
+                js_content += f",\n        pools: {json.dumps(item_info.get('pools', []))}"
             
             # 일반 아이템에만 다국어 정보 추가
             if 'names' in item_info:
@@ -491,6 +533,9 @@ const items = {
             if 'synergies' in item_info:
                 js_content += f""",
         synergies: {json.dumps(item_info['synergies'], ensure_ascii=False)}"""
+                # 시너지 타입(collectible/trinket) 정보가 있으면 함께 출력
+                if 'synergy_types' in item_info:
+                    js_content += f",\n        synergy_types: {json.dumps(item_info['synergy_types'], ensure_ascii=False)}"
         
         js_content += """
     },

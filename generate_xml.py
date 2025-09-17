@@ -356,7 +356,9 @@ def create_items_xml(items, output_path):
         item_elem.set("id", str(item_id_counter))
         item_elem.set("name", item_info.get('name', ''))
         item_elem.set("gfx", f"{item_key.lower()}.png")
-        item_elem.set("quality", str(item_info.get('quality', 3)))
+        # quality: exclude for trinkets
+        if item_type != 'trinket' and 'quality' in item_info:
+            item_elem.set("quality", str(item_info.get('quality', 3)))
         item_elem.set("tags", item_info.get('tags', 'offensive'))
         
         # set additional attributes
@@ -408,8 +410,11 @@ def create_items_xml(items, output_path):
 
 def create_death_items_anm2(items, output_path):
     """create the death_items.anm2 file for death animation"""
-    # WorkingNow가 아닌 아이템만 필터링
-    filtered_items = {k: v for k, v in items.items() if not v.get('WorkingNow')}
+    # WorkingNow가 아니고 trinket이 아닌 아이템만 필터링 (death items에는 trinket 제외)
+    filtered_items = {
+        k: v for k, v in items.items()
+        if (not v.get('WorkingNow')) and (v.get('type') != 'trinket')
+    }
     
     # 한 줄에 20개씩 배치
     items_per_row = 20
@@ -607,8 +612,11 @@ def generate_death_items_png(items, output_path):
         print("PIL not available, skipping death_items.png generation.")
         return
 
-    # WorkingNow가 아닌 아이템만 필터링
-    filtered_items = {k: v for k, v in items.items() if not v.get('WorkingNow')}
+    # WorkingNow가 아니고 trinket이 아닌 아이템만 필터링 (death items에는 trinket 제외)
+    filtered_items = {
+        k: v for k, v in items.items()
+        if (not v.get('WorkingNow')) and (v.get('type') != 'trinket')
+    }
     
     # 현재 아이템 데이터의 해시 계산
     current_hash = calculate_items_hash(items)

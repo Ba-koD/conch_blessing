@@ -127,6 +127,8 @@ mod:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function(_, isContinued)
                 playerSave.injectableSteroids = nil
                 playerSave.powerTraining = nil
                 playerSave.dragon = nil
+                -- Reset Time = Power trinket run-scoped data on new run (R key)
+                playerSave.timePower = nil
                 SaveManager.Save()
                 Isaac.ConsoleOutput("[Core] Cleared run-scope saved multipliers for new run\n")
             end
@@ -144,6 +146,7 @@ ConchBlessing.printDebug = function(text)
     if ConchBlessing.Config.debugMode then
         local frame = (Game and Game():GetFrameCount()) or -1
         Isaac.DebugString("[ConchBlessing][DEBUG][F:" .. tostring(frame) .. "] " .. tostring(text))
+        Isaac.ConsoleOutput("[ConchBlessing][DEBUG][F:" .. tostring(frame) .. "] " .. tostring(text) .. "\n")
     end
 end
 

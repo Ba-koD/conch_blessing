@@ -5,7 +5,6 @@ const items = {
     LIVE_EYE: {
         type: "passive",
         gfx: "resources/gfx/items/collectibles/live_eye.png",
-        quality: 4,
         tags: "offensive",
         cache: "damage",
         hidden: false,
@@ -20,16 +19,17 @@ const items = {
         soulhearts: 0,
         origin: "DEAD_EYE",
         flag: "positive",
+        quality: 4,
         pools: ["ROOM_ANGEL", "ROOM_ULTRASECRET"],
         names: {"kr": "살아있는 눈", "en": "Live Eye"},
         descriptions: {"kr": "놓쳐도 괜찮아", "en": "Misses happen"},
         eids: {"kr": ["몬스터를 적중시킬때 마다 데미지 배수가 0.1씩 증가합니다.", "몬스터에 맞지 않으면 데미지 배수가 0.15씩 감소합니다.", "최대/최소 데미지 배수 (x3.0/x0.75)"], "en": ["Damage multiplier increases by 0.1 as you hit enemies.", "Damage multiplier decreases by 0.15 as you miss enemies.", "Damage multiplier is capped at 3.0 and cannot go below 0.75."]},
-        synergies: {"ROCK_BOTTOM": {"kr": "획득하는 즉시 데미지 배수가 최대치가 됩니다", "en": "When obtained, damage multiplier is set to the maximum value"}}
+        synergies: {"ROCK_BOTTOM": {"kr": "획득하는 즉시 데미지 배수가 최대치가 됩니다", "en": "When obtained, damage multiplier is set to the maximum value"}},
+        synergy_types: {"ROCK_BOTTOM": "collectible"}
     },
     VOID_DAGGER: {
         type: "passive",
         gfx: "resources/gfx/items/collectibles/void_dagger.png",
-        quality: 4,
         tags: "offensive devil",
         cache: "damage firedelay",
         hidden: false,
@@ -44,6 +44,7 @@ const items = {
         soulhearts: 0,
         origin: "ATHAME",
         flag: "neutral",
+        quality: 4,
         pools: ["ROOM_DEVIL", "ROOM_TREASURE"],
         names: {"kr": "공허의 단검", "en": "Void Dagger"},
         descriptions: {"kr": "공허가 열린다", "en": "The void opens"},
@@ -52,7 +53,6 @@ const items = {
     ETERNAL_FLAME: {
         type: "passive",
         gfx: "resources/gfx/items/collectibles/eternal_flame.png",
-        quality: 4,
         tags: "offensive angel",
         cache: "damage firedelay",
         hidden: false,
@@ -67,6 +67,7 @@ const items = {
         soulhearts: 0,
         origin: "BLACK_CANDLE",
         flag: "positive",
+        quality: 4,
         pools: ["ROOM_ANGEL", "ROOM_ULTRASECRET"],
         names: {"kr": "영원한 불꽃", "en": "Eternal Flame"},
         descriptions: {"kr": "정화의 불길", "en": "Baptize with fire"},
@@ -75,7 +76,6 @@ const items = {
     POWER_TRAINING: {
         type: "active",
         gfx: "resources/gfx/items/collectibles/power_training.png",
-        quality: 4,
         tags: "offensive",
         cache: "damage firedelay range luck",
         hidden: false,
@@ -90,6 +90,7 @@ const items = {
         soulhearts: 0,
         origin: "EXPERIMENTAL_TREATMENT",
         flag: "positive",
+        quality: 4,
         pools: ["ROOM_TREASURE", "ROOM_SHOP", "ROOM_ANGEL"],
         names: {"kr": "파워 트레이닝", "en": "Power Training"},
         descriptions: {"kr": "라잇웨잇 베이비!", "en": "Lightweight Baby!"},
@@ -98,7 +99,6 @@ const items = {
     ORAL_STEROIDS: {
         type: "passive",
         gfx: "resources/gfx/items/collectibles/oral_steroids.png",
-        quality: 2,
         tags: "offensive",
         cache: "damage firedelay range luck",
         hidden: false,
@@ -113,6 +113,7 @@ const items = {
         soulhearts: 0,
         origin: "EXPERIMENTAL_TREATMENT",
         flag: "neutral",
+        quality: 2,
         pools: ["ROOM_DEVIL", "ROOM_CURSE", "ROOM_BLACK_MARKET", "ROOM_SECRET"],
         names: {"kr": "경구형 스테로이드", "en": "Oral Steroids"},
         descriptions: {"kr": "주사는 무서워", "en": "Shots are scary"},
@@ -121,7 +122,6 @@ const items = {
     INJECTABLE_STEROIDS: {
         type: "active",
         gfx: "resources/gfx/items/collectibles/injectable_steroids.png",
-        quality: 3,
         tags: "offensive",
         cache: "damage firedelay range luck",
         hidden: false,
@@ -136,6 +136,7 @@ const items = {
         soulhearts: 0,
         origin: "EXPERIMENTAL_TREATMENT",
         flag: "negative",
+        quality: 3,
         pools: ["ROOM_DEVIL", "ROOM_CURSE", "ROOM_BLACK_MARKET", "ROOM_ULTRASECRET"],
         names: {"kr": "주사 스테로이드", "en": "Injectable Steroids"},
         descriptions: {"kr": "힘을 원해...", "en": "I need more power..."},
@@ -172,7 +173,6 @@ const items = {
     DRAGON: {
         type: "passive",
         gfx: "resources/gfx/items/collectibles/dragon.png",
-        quality: 4,
         tags: "offensive",
         cache: "flying tearflag",
         hidden: false,
@@ -187,6 +187,7 @@ const items = {
         soulhearts: 0,
         origin: "TAURUS",
         flag: "positive",
+        quality: 4,
         pools: ["ROOM_TREASURE", "ROOM_PLANETARIUM"],
         names: {"kr": "진", "en": "Dragon"},
         descriptions: {"kr": "날씨의 신", "en": "God of Weather"},
@@ -240,6 +241,27 @@ const items = {
         names: {"kr": "해", "en": "Pig"},
         descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
         eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
+    },
+    TIME_POWER: {
+        type: "trinket",
+        gfx: "resources/gfx/items/trinkets/time_power.png",
+        tags: "offensive",
+        cache: "damage",
+        hidden: false,
+        shopprice: 0,
+        devilprice: 0,
+        maxcharges: 0,
+        chargetype: "normal",
+        initcharge: 0,
+        hearts: 0,
+        maxhearts: 0,
+        blackhearts: 0,
+        soulhearts: 0,
+        origin: "CURVED_HORN",
+        flag: "positive",
+        names: {"kr": "시간 = 힘", "en": "Time = Power"},
+        descriptions: {"kr": "시간은 힘이다", "en": "Time is power"},
+        eids: {"kr": ["소지 중 초당 공격력이 0.006 증가합니다.", "적에게 피격 시 60초 동안 증가가 중지됩니다.", "장신구를 내려놓으면 증가량이 초기화됩니다."], "en": ["While held, gains +0.006 Damage per second.", "On taking damage, gain is paused for 60 seconds.", "Dropping the trinket resets the bonus."]}
     },
 };
 

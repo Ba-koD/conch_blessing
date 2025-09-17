@@ -75,6 +75,11 @@ local function _enqueueUpgradeJob(entityPickup, upgradeData, savedFields)
     -- Frames to wait; will be set dynamically from callbacks or itemData
     local beforeFrames = 0
     local afterFrames = 0
+    -- Determine target pickup variant by item type (collectible/trinket)
+    local targetVariant = PickupVariant.PICKUP_COLLECTIBLE
+    if type(itemData.type) == "string" and string.lower(itemData.type) == "trinket" then
+        targetVariant = PickupVariant.PICKUP_TRINKET
+    end
     table.insert(ConchBlessing._upgradeJobs, {
         pickup = entityPickup,
         pos = Vector(entityPickup.Position.X, entityPickup.Position.Y),
@@ -85,6 +90,7 @@ local function _enqueueUpgradeJob(entityPickup, upgradeData, savedFields)
         counter = 0,
         beforeFrames = beforeFrames,
         afterFrames = afterFrames,
+        targetVariant = targetVariant,
     })
 end
 
@@ -118,7 +124,13 @@ local function _processUpgradeJobs()
                 job.counter = job.counter - 1
                 if job.counter <= 0 then
                     -- Morph while preserving pedestal/shop fields
-                    pickup:Morph(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_COLLECTIBLE, job.upgradeId, true, true, true)
+                    local variantToUse = job.targetVariant or PickupVariant.PICKUP_COLLECTIBLE
+                    local morphId = job.upgradeId
+                    if variantToUse == PickupVariant.PICKUP_TRINKET and job.saved and job.saved.wasGoldenTrinket then
+                        morphId = morphId + 32768 -- preserve golden trinket flag
+                    end
+                    ConchBlessing.printDebug("[Upgrade] Morphing pickup to variant=" .. tostring(variantToUse) .. ", id=" .. tostring(morphId))
+                    pickup:Morph(EntityType.ENTITY_PICKUP, variantToUse, morphId, true, true, true)
                     local s = job.saved or {}
                     pickup.Price = s.price or pickup.Price
                     pickup.OptionsPickupIndex = s.options or pickup.OptionsPickupIndex
@@ -230,32 +242,42 @@ local function handleMagicConchResult(result)
     local upgradeableItems = {}
     
     for _, entity in ipairs(entities) do
-        -- check if it's an item pickup
-        if entity.Type == EntityType.ENTITY_PICKUP and entity.Variant == PickupVariant.PICKUP_COLLECTIBLE then
-            local collectibleId = entity.SubType
-            ConchBlessing.printDebug("Field item found: " .. tostring(collectibleId))
-            
-            -- find item in conversion map
-            local originMappings = ConchBlessing.ItemMaps[collectibleId]
+        -- check if it's a pickup (collectible or trinket)
+        if entity.Type == EntityType.ENTITY_PICKUP and (entity.Variant == PickupVariant.PICKUP_COLLECTIBLE or entity.Variant == PickupVariant.PICKUP_TRINKET) then
+            local rawId = entity.SubType
+            local isTrinketPickup = (entity.Variant == PickupVariant.PICKUP_TRINKET)
+            local baseId = rawId
+            local wasGoldenTrinket = false
+            if isTrinketPickup and rawId >= 32768 then
+                baseId = rawId - 32768
+                wasGoldenTrinket = true
+            end
+            local variantName = isTrinketPickup and "TRINKET" or "COLLECTIBLE"
+            ConchBlessing.printDebug("Field item found: variant=" .. variantName .. ", id=" .. tostring(rawId) .. ", baseId=" .. tostring(baseId))
+
+            -- find item in conversion map (works for both collectible and trinket origins)
+            local originMappings = ConchBlessing.ItemMaps[baseId]
             if originMappings then
-                ConchBlessing.printDebug("Convertible item found: " .. tostring(collectibleId))
-                
+                ConchBlessing.printDebug("Convertible item found: id=" .. tostring(baseId))
+
                 local availableFlags = {}
                 for flag, _ in pairs(originMappings) do
                     table.insert(availableFlags, flag)
                 end
                 ConchBlessing.printDebug("  Available flags: " .. table.concat(availableFlags, ", "))
                 ConchBlessing.printDebug("  Current result type: " .. result.type)
-                
+
                 local upgradeData = originMappings[result.type]
                 if upgradeData then
-                    ConchBlessing.printDebug("Flag matches! Item conversion: " .. tostring(collectibleId) .. " -> " .. tostring(upgradeData.upgradeId))
+                    ConchBlessing.printDebug("Flag matches! Item conversion: id=" .. tostring(baseId) .. " -> " .. tostring(upgradeData.upgradeId))
                     ConchBlessing.printDebug("  Flag type: " .. upgradeData.flag .. ", Result type: " .. result.type)
-                    
-                    -- 변환 가능한 아이템 정보를 수집
+
+                    -- Queue upgrade info
                     table.insert(upgradeableItems, {
                         entity = entity,
-                        upgradeData = upgradeData
+                        upgradeData = upgradeData,
+                        wasGoldenTrinket = wasGoldenTrinket,
+                        isTrinketPickup = isTrinketPickup,
                     })
                 else
                     ConchBlessing.printDebug("Flag does not match. No conversion.")
@@ -305,6 +327,7 @@ local function handleMagicConchResult(result)
                     touched = originalTouched,
                     shopId = originalShopItemId,
                     state = originalState,
+                    wasGoldenTrinket = itemInfo.wasGoldenTrinket,
                 })
             end
             
