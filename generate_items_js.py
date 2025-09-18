@@ -483,7 +483,13 @@ const items = {
         else:
             # 일반 아이템은 모든 필드 출력
             item_type = item_info.get('type', 'passive')
-            gfx_base = 'trinkets' if item_type == 'trinket' else 'collectibles'
+            # Use dedicated folder for familiars on the site
+            if item_type == 'trinket':
+                gfx_base = 'trinkets'
+            elif item_type == 'familiar':
+                gfx_base = 'familiars'
+            else:
+                gfx_base = 'collectibles'
             # custom gfx filename support
             gfx_name = item_info.get('gfx') or item_key.lower() + '.png'
             # Safe-encode string scalars using JSON to avoid broken quotes
@@ -510,7 +516,7 @@ const items = {
         origin: {origin_js},
         flag: {flag_js}"""
 
-            # add pools only for non-trinkets
+            # add pools/quality for collectibles-like items (including familiars)
             if item_type != 'trinket':
                 # non-trinket: include quality and pools
                 js_content += f",\n        quality: {item_info.get('quality', 3)}"

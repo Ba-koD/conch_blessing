@@ -350,13 +350,14 @@ def create_items_xml(items, output_path):
         item_type = item_info.get('type', 'passive')
         if not item_info.get('type') and item_info.get('maxcharges'):
             item_type = 'active'
-        
+
+        # write exact type as tag, including <familiar> support
         item_elem = ET.SubElement(root, item_type)
         
         item_elem.set("id", str(item_id_counter))
         item_elem.set("name", item_info.get('name', ''))
         item_elem.set("gfx", f"{item_key.lower()}.png")
-        # quality: exclude for trinkets
+        # quality: exclude for trinkets (collectibles-like types include: passive, active, familiar)
         if item_type != 'trinket' and 'quality' in item_info:
             item_elem.set("quality", str(item_info.get('quality', 3)))
         item_elem.set("tags", item_info.get('tags', 'offensive'))

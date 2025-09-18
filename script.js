@@ -250,10 +250,12 @@ function updatePageTexts(displayLang) {
     const passive = document.getElementById('passive');
     const active = document.getElementById('active');
     const trinket = document.getElementById('trinket');
+    const familiar = document.getElementById('familiar');
     if (allTypes) allTypes.textContent = getText('allTypes', displayLang);
     if (passive) passive.textContent = getText('passive', displayLang);
     if (active) active.textContent = getText('active', displayLang);
     if (trinket) trinket.textContent = getText('trinket', displayLang);
+    if (familiar) familiar.textContent = getText('familiar', displayLang);
     
     const allFlags = document.getElementById('allFlags');
     const positive = document.getElementById('positive');
