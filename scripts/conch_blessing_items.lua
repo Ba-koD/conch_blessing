@@ -125,7 +125,7 @@ ConchBlessing.ItemData = {
         soulhearts = 0,
         origin = CollectibleType.COLLECTIBLE_DEAD_EYE, -- original item information
         flag = "positive", -- match Magic Conch result type
-        script = "scripts/items/live_eye",
+        script = "scripts/items/collectibles/live_eye",
         -- optional functions/effects around morph
         -- onBeforeChange / upgradeEffectsBefore: run BEFORE morph
         -- onAfterChange / upgradeEffectsAfter: run AFTER morph
@@ -187,7 +187,7 @@ ConchBlessing.ItemData = {
         devilprice = 2,
         origin = CollectibleType.COLLECTIBLE_ATHAME,
         flag = "neutral",
-        script = "scripts/items/void_dagger",
+        script = "scripts/items/collectibles/void_dagger",
         callbacks = {
             tearCollision = "voiddagger.onTearCollision",
             update = "voiddagger.onUpdate",
@@ -232,7 +232,7 @@ ConchBlessing.ItemData = {
         devilprice = 2,
         origin = CollectibleType.COLLECTIBLE_BLACK_CANDLE,
         flag = "positive",
-        script = "scripts/items/eternal_flame",
+        script = "scripts/items/collectibles/eternal_flame",
         callbacks = {
             pickup = "eternalflame.onPickup",
             postPlayerUpdate = "eternalflame.onPlayerUpdate",
@@ -282,7 +282,7 @@ ConchBlessing.ItemData = {
         initcharge = 0,
         origin = CollectibleType.COLLECTIBLE_EXPERIMENTAL_TREATMENT,
         flag = "positive",
-        script = "scripts/items/power_training",
+        script = "scripts/items/collectibles/power_training",
         callbacks = {
             use = "powertraining.onUseItem",
             evaluateCache = "powertraining.onEvaluateCache",
@@ -327,7 +327,7 @@ ConchBlessing.ItemData = {
         devilprice = 1,
         origin = CollectibleType.COLLECTIBLE_EXPERIMENTAL_TREATMENT,
         flag = "neutral",
-        script = "scripts/items/oral_steroids",
+        script = "scripts/items/collectibles/oral_steroids",
         callbacks = {
             evaluateCache = "oralsteroids.onEvaluateCache",
             gameStarted = "oralsteroids.onGameStarted",
@@ -380,7 +380,7 @@ ConchBlessing.ItemData = {
         initcharge = 1,
         origin = CollectibleType.COLLECTIBLE_EXPERIMENTAL_TREATMENT,
         flag = "negative",
-        script = "scripts/items/injectable_steroids",
+        script = "scripts/items/collectibles/injectable_steroids",
         callbacks = {
             use = "injectablsteroids.onUseItem",
             evaluateCache = "injectablsteroids.onEvaluateCache",
@@ -480,7 +480,7 @@ ConchBlessing.ItemData = {
         devilprice = 2,
         origin = CollectibleType.COLLECTIBLE_TAURUS,
         flag = "positive",
-        script = "scripts/items/dragon",
+        script = "scripts/items/collectibles/dragon",
         callbacks = {
             evaluateCache = "dragon.onEvaluateCache",
             update = "dragon.onUpdate",
@@ -612,7 +612,7 @@ ConchBlessing.ItemData = {
         hidden = false,
         origin = TrinketType.TRINKET_CURVED_HORN,
         flag = "positive",
-        script = "scripts/items/time_power_trinket",
+        script = "scripts/items/trinkets/time_power",
         callbacks = {
             evaluateCache = "timepowertrinket.onEvaluateCache",
             gameStarted = "timepowertrinket.onGameStarted",
@@ -624,6 +624,7 @@ ConchBlessing.ItemData = {
         synergies = {}
     },
     
+    -- Familiars
 }
 
 --[[
@@ -745,18 +746,27 @@ local function loadAllItems()
             end
             
             local scriptPath = itemData.script
-            if not scriptPath then
-                ConchBlessing.printError("  Warning: " .. itemKey .. " has no script path!")
-            else
-                ConchBlessing.printDebug("  Loading script: " .. scriptPath)
-                local scriptSuccess, scriptErr = pcall(function()
-                    require(scriptPath)
-                end)
-                if scriptSuccess then
-                    ConchBlessing.printDebug("  Script loaded successfully: " .. scriptPath)
-                else
-                    ConchBlessing.printError("  Script load failed: " .. scriptPath .. " - " .. tostring(scriptErr))
+            if not scriptPath or scriptPath == "" then
+                -- Auto-resolve default script path when missing: infer by type and item key
+                local baseDir = "scripts/items/collectibles"
+                if itemData.type == "trinket" then
+                    baseDir = "scripts/items/trinkets"
+                elseif itemData.type == "familiar" then
+                    baseDir = "scripts/items/familiars"
                 end
+                local guessed = baseDir .. "/" .. string.lower(itemKey)
+                ConchBlessing.printDebug("  No script path; auto-resolving to: " .. guessed)
+                scriptPath = guessed
+            end
+
+            ConchBlessing.printDebug("  Loading script: " .. scriptPath)
+            local scriptSuccess, scriptErr = pcall(function()
+                require(scriptPath)
+            end)
+            if scriptSuccess then
+                ConchBlessing.printDebug("  Script loaded successfully: " .. scriptPath)
+            else
+                ConchBlessing.printError("  Script load failed: " .. scriptPath .. " - " .. tostring(scriptErr))
             end
             ConchBlessing.printDebug("  " .. itemKey .. " processed")
         end

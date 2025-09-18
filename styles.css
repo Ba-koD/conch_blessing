@@ -315,6 +315,10 @@ main {
     background: #dc2626;
 }
 
+.item-type.familiar {
+    background: #2563eb;
+}
+
 .quality-stars {
     margin-top: 5px;
     color: #fbbf24;
