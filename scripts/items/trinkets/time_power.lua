@@ -9,7 +9,7 @@ local SaveManager = ConchBlessing.SaveManager or require("scripts.lib.save_manag
 ConchBlessing.timepowertrinket.data = {
     increasePerSecond = 0.006, -- damage gained per second while held
     pauseSecondsOnHit = 60,    -- pause duration after taking damage
-    keepOnDrop = false,        -- keep bonus when dropped (convert to permanent)
+    keepOnDrop = true,        -- keep bonus when dropped (convert to permanent)
     framesPerSecond = 30       -- frame rate baseline for per-frame delta
 }
 
@@ -157,6 +157,10 @@ function ConchBlessing.timepowertrinket.onUpdate()
                 local fps = ConchBlessing.timepowertrinket.data.framesPerSecond or 30
                 if fps <= 0 then fps = 30 end
                 local mult = p:GetTrinketMultiplier(id) or 0
+                -- Mom's Box doubles trinket effect; add +1 stack when present
+                if mult > 0 and p:HasCollectible(CollectibleType.COLLECTIBLE_MOMS_BOX) then
+                    mult = mult + 1
+                end
                 if mult <= 0 then goto after_growth end
                 local perSecond = (ConchBlessing.timepowertrinket.data.increasePerSecond or 0) * mult
                 local delta = perSecond / fps -- per-frame with stacking
@@ -165,7 +169,7 @@ function ConchBlessing.timepowertrinket.onUpdate()
                 p:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
                 p:EvaluateItems()
                 if frame % fps == 0 then
-                    ConchBlessing.printDebug(string.format("[Time=Power] +%.6f/sec (x%d), damageBonus=%.6f", perSecond, mult, ps.damageBonus))
+                    ConchBlessing.printDebug(string.format("[Time=Power] +%.6f/sec (x%d), hasMomsBox=%s, damageBonus=%.6f", perSecond, mult, tostring(p:HasCollectible(CollectibleType.COLLECTIBLE_MOMS_BOX)), ps.damageBonus))
                 end
                 -- Periodically save to avoid excessive IO
                 if frame % 90 == 0 then -- every ~3 seconds

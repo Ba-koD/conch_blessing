@@ -538,9 +538,13 @@ def create_itempools_xml(items, output_path):
         'MINIBOSS': 'miniboss'
     }
     
-    # group items by pool
+    # group items by pool (exclude trinkets)
     pool_items = {}
+    debug_skipped_trinkets = 0
     for item_key, item_info in items.items():
+        if str(item_info.get('type', '')).lower() == 'trinket':
+            debug_skipped_trinkets += 1
+            continue
         pools = item_info.get('pools', ['ROOM_TREASURE'])
         
         for pool_entry in pools:
@@ -605,7 +609,7 @@ def create_itempools_xml(items, output_path):
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(xml_str)
     
-    print(f"itempools.xml created: {output_path}")
+    print(f"itempools.xml created: {output_path} (skipped trinkets: {debug_skipped_trinkets})")
 
 def generate_death_items_png(items, output_path):
     """Generate a single death_items.png by combining 16x16 images from the items directory."""

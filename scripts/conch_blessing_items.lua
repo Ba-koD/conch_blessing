@@ -597,13 +597,11 @@ ConchBlessing.ItemData = {
         eid = {
             kr = {
                 "소지 중 초당 {{Damage}}공격력이 0.006 증가합니다.",
-                "#적에게 피격 시 60초 동안 증가가 중지됩니다.",
-                "#장신구를 내려놓으면 증가량이 초기화됩니다."
+                "#적에게 피격 시 60초 동안 증가가 중지됩니다."
             },
             en = {
                 "While held, gains +0.006 {{Damage}}Damage per second.",
-                "#On taking damage, gain is paused for 60 seconds.",
-                "#Dropping the trinket resets the bonus."
+                "#On taking damage, gain is paused for 60 seconds."
             }
         },
         gfx = "time_power.png",
@@ -613,6 +611,25 @@ ConchBlessing.ItemData = {
         origin = TrinketType.TRINKET_CURVED_HORN,
         flag = "positive",
         script = "scripts/items/trinkets/time_power",
+        -- EID golden/mombox replacement config
+        -- specials supports multiple modes depending on value type:
+        --   1) Numeric base (multiply mode):
+        --      - Put a number in normal only (e.g., 0.006). EID auto applies x2 (golden), x3 (golden+Mom's Box)
+        --      Example:
+        --          specials = { normal = 0.006 }
+        --   2) String per-state (replace mode):
+        --      - Use strings for normal / moms_box / both to replace directly per state
+        --      Example:
+        --          specials = { normal = "0.006", moms_box = "0.012", both = "0.018" }
+        --   3) Array per-state (order replace):
+        --      - Use arrays to replace numbers IN ORDER of appearance in the text
+        --      - Moms Box / Both are highlighted gold automatically
+        --      Example (KR only):
+        --          specials = { kr = { normal = { "0.006", "60" }, moms_box = { "0.012", "30" }, both = { "0.018", "20" } } }
+        -- Language scoping:
+        --   - Top-level specials apply to all languages as default
+        --   - specials.<lang> (e.g., kr/en) overrides ONLY that language
+        specials = { normal = 0.006 },
         callbacks = {
             evaluateCache = "timepowertrinket.onEvaluateCache",
             gameStarted = "timepowertrinket.onGameStarted",

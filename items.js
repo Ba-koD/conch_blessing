@@ -261,7 +261,7 @@ const items = {
         flag: "positive",
         names: {"kr": "시간 = 힘", "en": "Time = Power"},
         descriptions: {"kr": "시간은 힘이다", "en": "Time is power"},
-        eids: {"kr": ["소지 중 초당 공격력이 0.006 증가합니다.", "적에게 피격 시 60초 동안 증가가 중지됩니다.", "장신구를 내려놓으면 증가량이 초기화됩니다."], "en": ["While held, gains +0.006 Damage per second.", "On taking damage, gain is paused for 60 seconds.", "Dropping the trinket resets the bonus."]}
+        eids: {"kr": ["소지 중 초당 공격력이 0.006 증가합니다.", "적에게 피격 시 60초 동안 증가가 중지됩니다."], "en": ["While held, gains +0.006 Damage per second.", "On taking damage, gain is paused for 60 seconds."]}
     },
 };
 
