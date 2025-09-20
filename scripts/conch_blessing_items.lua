@@ -950,9 +950,9 @@ local function loadAllItems()
 
             if not ConchBlessing._didRegisterUnifiedModifier then
                 EID:addDescriptionModifier(
-                    "ConchBlessing_Unified",
+                    "ConchBlessing_ByOriginType",
                     function(descObj)
-                        -- Support both Collectibles (variant 100) and Trinkets (variant 350)
+                        -- Support both Collectibles (100) and Trinkets (350)
                         return descObj.ObjType == 5 and (descObj.ObjVariant == 100 or descObj.ObjVariant == 350)
                     end,
                     function(descObj)
@@ -962,6 +962,12 @@ local function loadAllItems()
                         if descObj.ObjVariant == 350 and subId and subId >= 32768 then
                             -- Golden trinket: strip golden flag to match origin/synergy maps
                             subId = subId - 32768
+                        end
+                        -- Only attach when the origin type matches the pickup type being described
+                        local originIsTrinket = isTrinketId(subId)
+                        if (descObj.ObjVariant == 350 and not originIsTrinket)
+                            or (descObj.ObjVariant == 100 and originIsTrinket) then
+                            return descObj
                         end
                         local itemKeys = (ConchBlessing._originItemFlags or {})[subId]
                         local templates = ConchBlessing._conchModeTemplates or {}

@@ -24,8 +24,8 @@ local function getCurrentLang()
     return normalize((Options and Options.Language) or "en")
 end
 
-ConchBlessing.EID = {}
-ConchBlessing._eidRegistered = ConchBlessing._eidRegistered or { } -- [id] = true
+ConchBlessing.EID = ConchBlessing.EID or {}
+ConchBlessing._eidRegistered = ConchBlessing._eidRegistered or { } -- [type:id][lang] = true
 
 -- Add multilingual description to EID
 -- Usage: ConchBlessing.EID.addOptLangDescription(itemId, itemData)
@@ -89,33 +89,34 @@ ConchBlessing.EID.addOptLangDescription = function(itemId, itemData)
         end
 
         local isTrinket = (itemData.type == "trinket")
-        if englishName and englishDesc and not (ConchBlessing._eidRegistered[itemId] and ConchBlessing._eidRegistered[itemId].en_us) then
+        local regKey = (isTrinket and "T:" or "C:") .. tostring(itemId)
+        if englishName and englishDesc and not (ConchBlessing._eidRegistered[regKey] and ConchBlessing._eidRegistered[regKey].en_us) then
             if isTrinket then
                 EID:addTrinket(itemId, englishDesc, englishName, "en_us")
             else
                 EID:addCollectible(itemId, englishDesc, englishName, "en_us")
             end
-            ConchBlessing._eidRegistered[itemId] = ConchBlessing._eidRegistered[itemId] or {}
-            ConchBlessing._eidRegistered[itemId].en_us = true
+            ConchBlessing._eidRegistered[regKey] = ConchBlessing._eidRegistered[regKey] or {}
+            ConchBlessing._eidRegistered[regKey].en_us = true
         end
 
         -- Additionally register the currently resolved language if it isn't English
         if currentLang ~= "en" then
             local eidLangCode = toEIDLang(currentLang)
-            if not (ConchBlessing._eidRegistered[itemId] and ConchBlessing._eidRegistered[itemId][eidLangCode]) then
+            if not (ConchBlessing._eidRegistered[regKey] and ConchBlessing._eidRegistered[regKey][eidLangCode]) then
                 if isTrinket then
                     EID:addTrinket(itemId, eidDescription, itemName, eidLangCode)
                 else
                     EID:addCollectible(itemId, eidDescription, itemName, eidLangCode)
                 end
-                ConchBlessing._eidRegistered[itemId] = ConchBlessing._eidRegistered[itemId] or {}
-                ConchBlessing._eidRegistered[itemId][eidLangCode] = true
+                ConchBlessing._eidRegistered[regKey] = ConchBlessing._eidRegistered[regKey] or {}
+                ConchBlessing._eidRegistered[regKey][eidLangCode] = true
             end
         end
         ConchBlessing.printDebug(string.format("EID registered (%s): %s - %s", isTrinket and "trinket" or "collectible", itemName, eidDescription))
         
-        -- Store in ConchBlessing.EID table for reference
-        ConchBlessing.EID[itemId] = {
+        -- Store in ConchBlessing.EID table for reference with type-prefixed key to avoid collisions
+        ConchBlessing.EID[regKey] = {
             name = itemName,
             description = eidDescription
         }
@@ -167,6 +168,8 @@ ConchBlessing.EID.registerAllItems = function()
         local itemId = itemData.id
         if itemId and itemId ~= -1 then
             ConchBlessing.EID.addOptLangDescription(itemId, itemData)
+            -- Prevent cross-type bleed: if trinket id collides with collectible id, ensure we only register by type
+            -- addOptLangDescription now uses type-prefixed keys internally, so nothing else needed here
         else
             ConchBlessing.printDebug("Skipping " .. itemKey .. " - invalid item ID")
         end
@@ -265,12 +268,32 @@ ConchBlessing:AddCallbackCustom(
             return
         end
 
+        local variant = pickingUpItem.variant
         local subType = pickingUpItem.subType
+        local targetIsTrinket = (variant == PickupVariant.PICKUP_TRINKET)
+        if not (targetIsTrinket or variant == PickupVariant.PICKUP_COLLECTIBLE) then
+            return
+        end
+
+        -- Strip golden trinket flag for comparison
+        if targetIsTrinket and type(subType) == "number" and subType >= 32768 then
+            subType = subType - 32768
+        end
+
         local found = nil
         for _, itemData in pairs(ConchBlessing.ItemData) do
             if itemData and itemData.id == subType then
-                found = itemData
-                break
+                if targetIsTrinket then
+                    if itemData.type == "trinket" then
+                        found = itemData
+                        break
+                    end
+                else
+                    if itemData.type ~= "trinket" then
+                        found = itemData
+                        break
+                    end
+                end
             end
         end
         if not found then return end
