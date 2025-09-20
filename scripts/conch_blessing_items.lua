@@ -601,6 +601,19 @@ ConchBlessing.ItemData = {
             en = "Pig"
         },
     },
+    TIME_GOLD = {
+        WorkingNow = true,
+        type = "passive",
+        id = Isaac.GetItemIdByName("Time = Gold"),
+        name = {
+            kr = "시간 = 금",
+            en = "Time = Gold"
+        },
+        description = {
+            kr = "시간은 금이다",
+            en = "Time is gold"
+        },
+    },
 
     -- Trinkets
     TIME_POWER = {

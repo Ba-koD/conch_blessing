@@ -268,35 +268,35 @@ ConchBlessing:AddCallbackCustom(
             return
         end
 
-        local variant = pickingUpItem.variant
-        local subType = pickingUpItem.subType
-        local targetIsTrinket = (variant == PickupVariant.PICKUP_TRINKET)
-        if not (targetIsTrinket or variant == PickupVariant.PICKUP_COLLECTIBLE) then
-            return
+        -- Support both lowercase and engine field casing
+        local itemType = pickingUpItem.itemType or pickingUpItem.ItemType
+        local subType = pickingUpItem.subType or pickingUpItem.SubType
+        local targetIsTrinket = (itemType == ItemType.ITEM_TRINKET)
+        if itemType == nil then
+            -- Fallback to variant-based inference
+            local variant = pickingUpItem.variant or pickingUpItem.Variant
+            targetIsTrinket = (variant == PickupVariant.PICKUP_TRINKET)
         end
-
+        if type(subType) ~= "number" then return end
         -- Strip golden trinket flag for comparison
-        if targetIsTrinket and type(subType) == "number" and subType >= 32768 then
+        if targetIsTrinket and subType >= 32768 then
             subType = subType - 32768
         end
 
         local found = nil
         for _, itemData in pairs(ConchBlessing.ItemData) do
             if itemData and itemData.id == subType then
-                if targetIsTrinket then
-                    if itemData.type == "trinket" then
-                        found = itemData
-                        break
-                    end
-                else
-                    if itemData.type ~= "trinket" then
-                        found = itemData
-                        break
-                    end
+                local isDataTrinket = (itemData.type == "trinket")
+                if (targetIsTrinket and isDataTrinket) or ((not targetIsTrinket) and (not isDataTrinket)) then
+                    found = itemData
+                    break
                 end
             end
         end
-        if not found then return end
+        if not found then
+            ConchBlessing.printDebug("PRE_ITEM_PICKUP: no matching itemData for itemType=" .. tostring(itemType) .. ", subType=" .. tostring(subType))
+            return
+        end
 
         local currentLang = getCurrentLang()
         local itemName = type(found.name) == "table" and (found.name[currentLang] or found.name["en"]) or found.name
@@ -305,6 +305,8 @@ ConchBlessing:AddCallbackCustom(
             local hud = Game():GetHUD()
             if hud then
                 hud:ShowItemText(itemName, itemDescription)
+            else
+                ConchBlessing.printDebug("HUD not available for ShowItemText")
             end
         end
     end

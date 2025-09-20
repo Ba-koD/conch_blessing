@@ -242,6 +242,13 @@ const items = {
         descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
         eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
     },
+    TIME_GOLD: {
+        gfx: "resources/gfx/items/collectibles/time_gold.png",
+        workingnowflag: true,
+        names: {"kr": "시간 = 금", "en": "Time = Gold"},
+        descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
+        eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
+    },
     TIME_POWER: {
         type: "trinket",
         gfx: "resources/gfx/items/trinkets/time_power.png",

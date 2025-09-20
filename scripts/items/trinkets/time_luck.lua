@@ -2,6 +2,7 @@ ConchBlessing.timelucktrinket = {}
 
 local SaveManager = ConchBlessing.SaveManager or require("scripts.lib.save_manager")
 local DamageUtils = ConchBlessing.DamageUtils or require("scripts.lib.damage_utils")
+local TrinketUtils = ConchBlessing.TrinketUtils or require("scripts.lib.trinket_utils")
 
 -- Data container (persistable gameplay constants)
 ConchBlessing.timelucktrinket.data = {
@@ -149,20 +150,8 @@ function ConchBlessing.timelucktrinket.onUpdate()
 			if frame >= ps.pausedUntilFrame then
 				local fps = ConchBlessing.timelucktrinket.data.framesPerSecond or 30
 				if fps <= 0 then fps = 30 end
-				-- Compute effective stacks with golden and Mom's Box rules
-				local hasMomsBox = p:HasCollectible(CollectibleType.COLLECTIBLE_MOMS_BOX)
-				local momsBoxStack = hasMomsBox and 1 or 0
-				local rawMult = p:GetTrinketMultiplier(id) or 0
-				local goldenId = id and (id + 32768) or nil
-				local goldenRaw = 0
-				if goldenId then
-					goldenRaw = p:GetTrinketMultiplier(goldenId) or 0
-				end
-				local goldenStacks = goldenRaw - momsBoxStack
-				if goldenStacks < 0 then goldenStacks = 0 end
-				local goldenCount = math.floor(goldenStacks / 2)
-				local normalCount = rawMult - (2 * goldenCount) - momsBoxStack
-				if normalCount < 0 then normalCount = 0 end
+				-- Compute effective stacks with golden and Mom's Box rules (via util)
+				local normalCount, goldenCount, hasMomsBox = TrinketUtils.getTrinketCounts(p, id)
 				local mult = (normalCount * (hasMomsBox and 2 or 1)) + (goldenCount * (hasMomsBox and 3 or 2))
 				if mult <= 0 then goto after_growth end
 				local perSecond = (ConchBlessing.timelucktrinket.data.increasePerSecond or 0) * mult
@@ -176,7 +165,7 @@ function ConchBlessing.timelucktrinket.onUpdate()
 					local goldenUnit = (hasMomsBox and 3 or 2)
 					local contribNormal = normalCount * normalUnit
 					local contribGolden = goldenCount * goldenUnit
-					ConchBlessing.printDebug(string.format("[Time=Luck] counts normal=%d unit=%d ->%d, golden=%d unit=%d ->%d, baseRaw=%d goldenRaw=%d momsBoxStack=%d", normalCount, normalUnit, contribNormal, goldenCount, goldenUnit, contribGolden, rawMult, goldenRaw, momsBoxStack))
+					ConchBlessing.printDebug(string.format("[Time=Luck] counts normal=%d unit=%d ->%d, golden=%d unit=%d ->%d", normalCount, normalUnit, contribNormal, goldenCount, goldenUnit, contribGolden))
 				end
 				if frame % 90 == 0 then
 					saveToSave(p)
