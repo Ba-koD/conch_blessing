@@ -1,6 +1,7 @@
 ConchBlessing.timeteartrinket = {}
 
 local SaveManager = ConchBlessing.SaveManager or require("scripts.lib.save_manager")
+local DamageUtils = ConchBlessing.DamageUtils or require("scripts.lib.damage_utils")
 
 -- Data container (persistable gameplay constants)
 ConchBlessing.timeteartrinket.data = {
@@ -189,6 +190,10 @@ function ConchBlessing.timeteartrinket.onEntityTakeDamage(_, entity, amount, fla
 	local id = getTrinketId()
 	if not id then return end
 	if not player:HasTrinket(id) then return end
+	if DamageUtils.isSelfInflictedDamage(flags) then
+		ConchBlessing.printDebug(string.format("[Time=Tear] ignore pause by flags=%d", flags or -1))
+		return
+	end
 	local ps = getPlayerState(player)
 	local frame = Game():GetFrameCount()
 	ps.pausedUntilFrame = math.max(ps.pausedUntilFrame or 0, frame + ((ConchBlessing.timeteartrinket.data.pauseSecondsOnHit or 0) * 30))
