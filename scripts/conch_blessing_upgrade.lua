@@ -194,18 +194,20 @@ local function generateItemMaps()
         if itemData.origin and itemData.flag then
             ConchBlessing.printDebug("Upgrade item found: " .. itemKey .. " (origin: " .. tostring(itemData.origin) .. ", flag: " .. itemData.flag .. ")")
             
-            -- 같은 origin에 대해 flag별로 다른 아이템을 매핑
-            if not ConchBlessing.ItemMaps[itemData.origin] then
-                ConchBlessing.ItemMaps[itemData.origin] = {}
+            -- 같은 origin에 대해 flag별로 다른 아이템을 매핑 (type 구분 포함)
+            local originKeyPrefix = (itemData.type == "trinket") and "T:" or "C:"
+            local originKey = originKeyPrefix .. tostring(itemData.origin)
+            if not ConchBlessing.ItemMaps[originKey] then
+                ConchBlessing.ItemMaps[originKey] = {}
             end
             
-            ConchBlessing.ItemMaps[itemData.origin][itemData.flag] = {
+            ConchBlessing.ItemMaps[originKey][itemData.flag] = {
                 upgradeId = itemData.id,
                 flag = itemData.flag,
                 itemData = itemData -- reference to full item data
             }
             
-            ConchBlessing.printDebug("  Added to conversion map: " .. tostring(itemData.origin) .. "[" .. itemData.flag .. "] -> " .. tostring(itemData.id))
+            ConchBlessing.printDebug("  Added to conversion map: " .. originKey .. "[" .. itemData.flag .. "] -> " .. tostring(itemData.id))
         end
     end
     
@@ -255,10 +257,11 @@ local function handleMagicConchResult(result)
             local variantName = isTrinketPickup and "TRINKET" or "COLLECTIBLE"
             ConchBlessing.printDebug("Field item found: variant=" .. variantName .. ", id=" .. tostring(rawId) .. ", baseId=" .. tostring(baseId))
 
-            -- find item in conversion map (works for both collectible and trinket origins)
-            local originMappings = ConchBlessing.ItemMaps[baseId]
+            -- find item in conversion map by type + id (trinket/collectible 구분)
+            local originKey = (isTrinketPickup and "T:" or "C:") .. tostring(baseId)
+            local originMappings = ConchBlessing.ItemMaps[originKey]
             if originMappings then
-                ConchBlessing.printDebug("Convertible item found: id=" .. tostring(baseId))
+                ConchBlessing.printDebug("Convertible item found: originKey=" .. originKey)
 
                 local availableFlags = {}
                 for flag, _ in pairs(originMappings) do
