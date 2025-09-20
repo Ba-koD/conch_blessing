@@ -299,7 +299,7 @@ const items = {
         maxhearts: 0,
         blackhearts: 0,
         soulhearts: 0,
-        origin: "RABBITS_PAW",
+        origin: "PERFECTION",
         flag: "positive",
         names: {"kr": "시간 = 행운", "en": "Time = Luck"},
         descriptions: {"kr": "시간은 행운이다", "en": "Time is luck"},
