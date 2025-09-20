@@ -706,7 +706,7 @@ ConchBlessing.ItemData = {
         tags = "utility",
         cache = "luck",
         hidden = false,
-        origin = TrinketType.TRINKET_RABBITS_PAW,
+        origin = TrinketType.TRINKET_PERFECTION,
         flag = "positive",
         script = "scripts/items/trinkets/time_luck",
         specials = { normal = 0.01 },
