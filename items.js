@@ -263,6 +263,48 @@ const items = {
         descriptions: {"kr": "시간은 힘이다", "en": "Time is power"},
         eids: {"kr": ["소지 중 초당 공격력이 0.006 증가합니다.", "적에게 피격 시 60초 동안 증가가 중지됩니다."], "en": ["While held, gains +0.006 Damage per second.", "On taking damage, gain is paused for 60 seconds."]}
     },
+    TIME_TEAR: {
+        type: "trinket",
+        gfx: "resources/gfx/items/trinkets/time_tear.png",
+        tags: "offensive",
+        cache: "fireDelay",
+        hidden: false,
+        shopprice: 0,
+        devilprice: 0,
+        maxcharges: 0,
+        chargetype: "normal",
+        initcharge: 0,
+        hearts: 0,
+        maxhearts: 0,
+        blackhearts: 0,
+        soulhearts: 0,
+        origin: "CANCER",
+        flag: "positive",
+        names: {"kr": "시간 = 연사", "en": "Time = Tear"},
+        descriptions: {"kr": "시간은 연사다", "en": "Time is tears"},
+        eids: {"kr": ["소지 중 초당 고정연사가 0.0066 증가합니다.", "적에게 피격 시 60초 동안 증가가 중지됩니다."], "en": ["While held, gains +0.0066 SPS per second.", "On taking damage, gain is paused for 60 seconds."]}
+    },
+    TIME_LUCK: {
+        type: "trinket",
+        gfx: "resources/gfx/items/trinkets/time_luck.png",
+        tags: "utility",
+        cache: "luck",
+        hidden: false,
+        shopprice: 0,
+        devilprice: 0,
+        maxcharges: 0,
+        chargetype: "normal",
+        initcharge: 0,
+        hearts: 0,
+        maxhearts: 0,
+        blackhearts: 0,
+        soulhearts: 0,
+        origin: "RABBITS_PAW",
+        flag: "positive",
+        names: {"kr": "시간 = 행운", "en": "Time = Luck"},
+        descriptions: {"kr": "시간은 행운이다", "en": "Time is luck"},
+        eids: {"kr": ["소지 중 초당 운이 0.01 증가합니다.", "적에게 피격 시 60초 동안 증가가 중지됩니다."], "en": ["While held, gains +0.01 Luck per second.", "On taking damage, gain is paused for 60 seconds."]}
+    },
 };
 
 // Export for use in other modules

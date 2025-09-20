@@ -8,4 +8,6 @@
     <active id="5" name="Injectable Steroids" gfx="injectable_steroids.png" quality="3" tags="offensive" cache="damage firedelay range luck" shopprice="15" devilprice="2" maxcharges="1" chargetype="special" initcharge="1"/>
     <passive id="6" name="Dragon" gfx="dragon.png" quality="4" tags="offensive" cache="flying tearflag" shopprice="20" devilprice="2"/>
     <trinket id="7" name="Time = Power" gfx="time_power.png" tags="offensive" cache="damage"/>
+    <trinket id="8" name="Time = Tear" gfx="time_tear.png" tags="offensive" cache="fireDelay"/>
+    <trinket id="9" name="Time = Luck" gfx="time_luck.png" tags="utility" cache="luck"/>
 </items>

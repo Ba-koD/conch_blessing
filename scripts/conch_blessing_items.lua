@@ -68,6 +68,26 @@
 --     gameStarted: "function name" - called when game starts
 --   WorkingNow: true/false - item is working now
 
+-- Trinkets
+-- EID golden/mombox replacement config
+-- specials supports multiple modes depending on value type:
+--   1) Numeric base (multiply mode):
+--      - Put a number in normal only (e.g., 0.006). EID auto applies x2 (golden), x3 (golden+Mom's Box)
+--      Example:
+--          specials = { normal = 0.006 }
+--   2) String per-state (replace mode):
+--      - Use strings for normal / moms_box / both to replace directly per state
+--      Example:
+--          specials = { normal = "0.006", moms_box = "0.012", both = "0.018" }
+--   3) Array per-state (order replace):
+--      - Use arrays to replace numbers IN ORDER of appearance in the text
+--      - Moms Box / Both are highlighted gold automatically
+--      Example (KR only):
+--          specials = { kr = { normal = { "0.006", "60" }, moms_box = { "0.012", "30" }, both = { "0.018", "20" } } }
+-- Language scoping:
+--   - Top-level specials apply to all languages as default
+--   - specials.<lang> (e.g., kr/en) overrides ONLY that language
+
 -- Conch's Blessing - Items System
 -- Item information and callback management system
 
@@ -611,24 +631,6 @@ ConchBlessing.ItemData = {
         origin = TrinketType.TRINKET_CURVED_HORN,
         flag = "positive",
         script = "scripts/items/trinkets/time_power",
-        -- EID golden/mombox replacement config
-        -- specials supports multiple modes depending on value type:
-        --   1) Numeric base (multiply mode):
-        --      - Put a number in normal only (e.g., 0.006). EID auto applies x2 (golden), x3 (golden+Mom's Box)
-        --      Example:
-        --          specials = { normal = 0.006 }
-        --   2) String per-state (replace mode):
-        --      - Use strings for normal / moms_box / both to replace directly per state
-        --      Example:
-        --          specials = { normal = "0.006", moms_box = "0.012", both = "0.018" }
-        --   3) Array per-state (order replace):
-        --      - Use arrays to replace numbers IN ORDER of appearance in the text
-        --      - Moms Box / Both are highlighted gold automatically
-        --      Example (KR only):
-        --          specials = { kr = { normal = { "0.006", "60" }, moms_box = { "0.012", "30" }, both = { "0.018", "20" } } }
-        -- Language scoping:
-        --   - Top-level specials apply to all languages as default
-        --   - specials.<lang> (e.g., kr/en) overrides ONLY that language
         specials = { normal = 0.006 },
         callbacks = {
             evaluateCache = "timepowertrinket.onEvaluateCache",
@@ -637,6 +639,84 @@ ConchBlessing.ItemData = {
             entityTakeDmg = "timepowertrinket.onEntityTakeDamage",
             onBeforeChange = "timepowertrinket.onBeforeChange",
             onAfterChange = "timepowertrinket.onAfterChange"
+        },
+        synergies = {}
+    },
+    TIME_TEAR = {
+        type = "trinket",
+        id = Isaac.GetTrinketIdByName("Time = Tear"),
+        name = {
+            kr = "시간 = 연사",
+            en = "Time = Tear"
+        },
+        description = {
+            kr = "시간은 연사다",
+            en = "Time is tears"
+        },
+        eid = {
+            kr = {
+                "소지 중 초당 {{Tears}}고정연사가 0.0066 증가합니다.",
+                "#적에게 피격 시 60초 동안 증가가 중지됩니다."
+            },
+            en = {
+                "While held, gains +0.0066 {{Tears}}SPS per second.",
+                "#On taking damage, gain is paused for 60 seconds."
+            }
+        },
+        gfx = "time_template.png",
+        tags = "offensive",
+        cache = "fireDelay",
+        hidden = false,
+        origin = TrinketType.TRINKET_CANCER,
+        flag = "positive",
+        script = "scripts/items/trinkets/time_tear",
+        specials = { normal = 0.0066 },
+        callbacks = {
+            evaluateCache = "timeteartrinket.onEvaluateCache",
+            gameStarted = "timeteartrinket.onGameStarted",
+            update = "timeteartrinket.onUpdate",
+            entityTakeDmg = "timeteartrinket.onEntityTakeDamage",
+            onBeforeChange = "timeteartrinket.onBeforeChange",
+            onAfterChange = "timeteartrinket.onAfterChange"
+        },
+        synergies = {}
+    },
+    TIME_LUCK = {
+        type = "trinket",
+        id = Isaac.GetTrinketIdByName("Time = Luck"),
+        name = {
+            kr = "시간 = 행운",
+            en = "Time = Luck"
+        },
+        description = {
+            kr = "시간은 행운이다",
+            en = "Time is luck"
+        },
+        eid = {
+            kr = {
+                "소지 중 초당 {{Luck}}운이 0.01 증가합니다.",
+                "#적에게 피격 시 60초 동안 증가가 중지됩니다."
+            },
+            en = {
+                "While held, gains +0.01 {{Luck}}Luck per second.",
+                "#On taking damage, gain is paused for 60 seconds."
+            }
+        },
+        gfx = "time_template.png",
+        tags = "utility",
+        cache = "luck",
+        hidden = false,
+        origin = TrinketType.TRINKET_RABBITS_PAW,
+        flag = "positive",
+        script = "scripts/items/trinkets/time_luck",
+        specials = { normal = 0.01 },
+        callbacks = {
+            evaluateCache = "timelucktrinket.onEvaluateCache",
+            gameStarted = "timelucktrinket.onGameStarted",
+            update = "timelucktrinket.onUpdate",
+            entityTakeDmg = "timelucktrinket.onEntityTakeDamage",
+            onBeforeChange = "timelucktrinket.onBeforeChange",
+            onAfterChange = "timelucktrinket.onAfterChange"
         },
         synergies = {}
     },

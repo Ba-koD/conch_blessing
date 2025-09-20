@@ -1,6 +1,3 @@
--- Time = Power (Trinket) implementation
--- English comments only per user rule
-
 ConchBlessing.timepowertrinket = {}
 
 local SaveManager = ConchBlessing.SaveManager or require("scripts.lib.save_manager")
