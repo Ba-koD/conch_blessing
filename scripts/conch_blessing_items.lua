@@ -601,19 +601,6 @@ ConchBlessing.ItemData = {
             en = "Pig"
         },
     },
-    TIME_GOLD = {
-        WorkingNow = true,
-        type = "passive",
-        id = Isaac.GetItemIdByName("Time = Gold"),
-        name = {
-            kr = "시간 = 금",
-            en = "Time = Gold"
-        },
-        description = {
-            kr = "시간은 금이다",
-            en = "Time is gold"
-        },
-    },
 
     -- Trinkets
     TIME_POWER = {
@@ -735,6 +722,54 @@ ConchBlessing.ItemData = {
     },
     
     -- Familiars
+    TIME_MONEY = {
+        type = "familiar",
+        id = Isaac.GetItemIdByName("Time = Money"),
+        script = "scripts/items/familiars/time_money",
+        uniquefamiliar = true,
+        -- Entities2.xml generation config
+        -- anm2: optional override for ANM2 path under gfx/ (default: "time_money.anm2")
+        anm2 = "time_money.anm2",
+        entity = { collisiondamage = 0, collisionmass = 7, collisionradius = 8, friction = 1, numgridcollisionpoints = 6, shadowsize = 11, tags = "cansacrifice", customtags = "" },
+        gibs = { amount = 0, blood = 0, bone = 0, eye = 0, gut = 0, large = 0 },
+        name = {
+            kr = "시간 = 돈",
+            en = "Time = Money"
+        },
+        description = {
+            kr = "시간은 돈이다",
+            en = "Time is money"
+        },
+        tags = "baby",
+        eid = {
+            kr = {
+                "동전 5개를 드랍합니다.",
+                "#60초마다 현재 소지중인 동전의 5%만큼 동전을 드랍합니다.",
+                "#이 패밀리어가 드랍하는 동전은 5% 확률로 5원, 2% 확률로 황금 동전, 1% 확률로 10원으로 대체됩니다.",
+                "#행운에 따라 위 확률이 (1+0.1×{{Luck}}운)배로 4배까지 증가합니다.",
+                "#동전 소지 가능 개수가 999로 늘어납니다."
+            },
+            en = {
+                "Drop 5 coins every 60 seconds.",
+                "#Coins dropped by this familiar are replaced with nickel 5% of the time, golden coin 2% of the time, and dime 1% of the time.",
+                "#The probability of the above is increased by (1+0.1×{{Luck}}Luck) times up to 4 times.",
+                "#Money pickup limit increased to 999."
+            }
+        },
+        synergies = {
+            [CollectibleType.COLLECTIBLE_DEEP_POCKETS] = {
+                kr = "일반 동전이 5원으로 대체됩니다.",
+                en = "When obtained, damage multiplier is set to the maximum value"
+            },
+        },
+        callbacks = {
+            familiarInit = "timemoney.onFamiliarInit",
+            familiarUpdate = "timemoney.onFamiliarUpdate",
+            evaluateCache = "timemoney.onEvaluateCache",
+            gameStarted = "timemoney.onGameStarted",
+            postGetCollectible = "timemoney.onPostGetCollectible"
+        }
+    }
 }
 
 --[[
@@ -1071,6 +1106,8 @@ local function loadAllItems()
                 ConchBlessing.printDebug("[EID Icon] Spritesheet replaced (conch)")
                 conchIconSprite:LoadGraphics()
                 EID:addIcon("ConchMode", "Idle", 0, 16, 16, 9, 5, conchIconSprite)
+                -- Also register a dedicated mod-indicator icon key
+                EID:addIcon("ConchBlessing ModIcon", "Idle", 0, 16, 16, 9, 5, conchIconSprite)
                 
                 for itemKey, itemData in pairs(ConchBlessing.ItemData) do
                     local iconName = "icon_" .. string.lower(itemKey)
@@ -1105,6 +1142,20 @@ local function loadAllItems()
                     end
                 end
                 
+                -- Ensure EID mod indicator shows our mod name and icon (like Epiphany)
+                local prevCurrentMod = EID._currentMod
+                EID._currentMod = "Conch's Blessing"
+                EID.ModIndicator = EID.ModIndicator or {}
+                EID.ModIndicator["Conch's Blessing"] = EID.ModIndicator["Conch's Blessing"] or { Name = "Conch's Blessing", Icon = nil }
+                if EID.setModIndicatorName then
+                    EID:setModIndicatorName("Conch's Blessing")
+                end
+                if EID.setModIndicatorIcon then
+                    EID:setModIndicatorIcon("ConchBlessing ModIcon")
+                end
+                -- restore previous mod context to avoid affecting other mods
+                EID._currentMod = prevCurrentMod
+
                 ConchBlessing.printDebug("Item icons added to EID successfully!")
                 ConchBlessing._eidIconsAdded = true
                 

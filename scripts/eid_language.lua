@@ -163,6 +163,14 @@ ConchBlessing.EID.registerAllItems = function()
         end
     end
 
+    -- 1.5) Ensure EID mod context for proper mod name tagging on registrations
+    local prevCurrentMod = EID and EID._currentMod
+    if EID then
+        EID._currentMod = "Conch's Blessing"
+        EID.ModIndicator = EID.ModIndicator or {}
+        EID.ModIndicator["Conch's Blessing"] = EID.ModIndicator["Conch's Blessing"] or { Name = "Conch's Blessing", Icon = nil }
+    end
+
     -- 2) Register base names/descriptions in the resolved language
     for itemKey, itemData in pairs(ConchBlessing.ItemData) do
         local itemId = itemData.id
@@ -251,7 +259,29 @@ ConchBlessing.EID.registerAllItems = function()
         end
     end
 
+    -- Restore previous EID mod context
+    if EID then EID._currentMod = prevCurrentMod end
+
     ConchBlessing.printDebug("EID registration complete!")
+end
+
+-- Register a simple EID Mod Indicator for Conch's Blessing
+if EID then
+    -- Ensure proper mod context and ModIndicator entry (mirrors EID's own RegisterMod override pattern)
+    local prevCurrentMod = EID._currentMod
+    EID._currentMod = "Conch's Blessing"
+    EID.ModIndicator = EID.ModIndicator or {}
+    EID.ModIndicator["Conch's Blessing"] = EID.ModIndicator["Conch's Blessing"] or { Name = "Conch's Blessing", Icon = nil }
+
+    -- Set indicator name and icon
+    if EID.setModIndicatorName then EID:setModIndicatorName("Conch's Blessing") end
+    if EID.setModIndicatorIcon then
+        -- Prefer dedicated mod icon; fallback to ConchMode if needed
+        local ok = pcall(function() EID:setModIndicatorIcon("ConchBlessing ModIcon") end)
+        if not ok then pcall(function() EID:setModIndicatorIcon("ConchMode") end) end
+    end
+    -- restore previous mod context to not affect other mods
+    EID._currentMod = prevCurrentMod
 end
 
 -- Auto-register when mod loads
