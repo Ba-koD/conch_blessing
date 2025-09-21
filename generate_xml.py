@@ -330,11 +330,132 @@ def parse_lua_file(file_path):
             item_info['soulhearts'] = int(soulhearts_match.group(1))
             print(f"  SoulHearts: {item_info['soulhearts']}")
         
+        # extract custom ANM2 path (for familiars/entities)
+        anm2_match = re.search(r'anm2\s*=\s*"([^"]+)"', item_data)
+        if anm2_match:
+            item_info['anm2'] = anm2_match.group(1)
+            print(f"  ANM2: {item_info['anm2']}")
+
+        # extract entity block
+        entity_match = re.search(r'entity\s*=\s*{', item_data)
+        if entity_match:
+            ent_start = entity_match.end() - 1
+            ent_end = find_matching_brace(item_data, ent_start)
+            if ent_end != -1:
+                ent_data = item_data[ent_start+1:ent_end]
+                print(f"  Entity block found: {ent_data}")
+                entity_info = {}
+                # Map lower-case lua keys to XML attribute names
+                key_map = {
+                    'collisiondamage': 'collisionDamage',
+                    'collisionmass': 'collisionMass',
+                    'collisionradius': 'collisionRadius',
+                    'friction': 'friction',
+                    'numgridcollisionpoints': 'numGridCollisionPoints',
+                    'shadowsize': 'shadowSize',
+                    'tags': 'tags',
+                    'customtags': 'customtags',
+                    'anm2': 'anm2',
+                    'variant': 'variant'
+                }
+                for kv in re.finditer(r'(\w+)\s*=\s*("[^"]*"|[-+]?[\d.]+)', ent_data):
+                    k = kv.group(1).lower()
+                    v = kv.group(2)
+                    if v.startswith('"') and v.endswith('"'):
+                        v = v[1:-1]
+                    elif re.match(r'^-?[\d.]+$', v):
+                        # keep numeric as is (stringify later)
+                        pass
+                    mapped = key_map.get(k)
+                    if mapped:
+                        entity_info[mapped] = v
+                if entity_info:
+                    item_info['entity'] = entity_info
+                    print(f"  Parsed entity: {item_info['entity']}")
+
+        # extract gibs block
+        gibs_match = re.search(r'gibs\s*=\s*{', item_data)
+        if gibs_match:
+            gibs_start = gibs_match.end() - 1
+            gibs_end = find_matching_brace(item_data, gibs_start)
+            if gibs_end != -1:
+                gibs_data = item_data[gibs_start+1:gibs_end]
+                print(f"  Gibs block found: {gibs_data}")
+                gibs_info = {}
+                for kv in re.finditer(r'(amount|blood|bone|eye|gut|large)\s*=\s*(-?[\d.]+)', gibs_data, re.IGNORECASE):
+                    k = kv.group(1).lower()
+                    v = kv.group(2)
+                    gibs_info[k] = v
+                if gibs_info:
+                    item_info['gibs'] = gibs_info
+                    print(f"  Parsed gibs: {item_info['gibs']}")
+        
         if item_info:
             items[name] = item_info
             print(f"  added item: {name}")
     
     return items
+
+def create_entities2_xml(items, output_path):
+    """create the entities2.xml file for familiars based on ItemData"""
+    root = ET.Element("entities")
+    root.set("anm2root", "gfx/")
+    root.set("version", "5")
+
+    for item_key, item_info in items.items():
+        if str(item_info.get('type', '')).lower() != 'familiar':
+            continue
+
+        name = item_info.get('name', item_key)
+        entity_elem = ET.SubElement(root, "entity")
+        entity_elem.set("name", name)
+        # Isaac familiar entity type is 3
+        entity_elem.set("id", "3")
+
+        # Resolve anm2path from entity block, top-level anm2, or fallback
+        ent_meta = item_info.get('entity', {}) if isinstance(item_info.get('entity'), dict) else {}
+        anm2_val = ent_meta.get('anm2') or item_info.get('anm2') or f"{item_key.lower()}.anm2"
+        entity_elem.set("anm2path", str(anm2_val))
+
+        # Optional physical attributes
+        def set_if_present(src_key, xml_key=None):
+            if not xml_key:
+                xml_key = src_key
+            if src_key in ent_meta:
+                entity_elem.set(xml_key, str(ent_meta[src_key]))
+
+        set_if_present('collisionDamage')
+        set_if_present('collisionMass')
+        set_if_present('collisionRadius')
+        set_if_present('friction')
+        set_if_present('numGridCollisionPoints')
+        set_if_present('shadowSize')
+        set_if_present('variant')
+        set_if_present('tags')
+        # customtags often desired (can be empty string)
+        if 'customtags' in ent_meta:
+            entity_elem.set('customtags', str(ent_meta['customtags']))
+        else:
+            # default to empty for consistency
+            entity_elem.set('customtags', "")
+
+        # Gibs child
+        gibs_data = item_info.get('gibs', {}) if isinstance(item_info.get('gibs'), dict) else {}
+        defaults = {'amount': '0', 'blood': '0', 'bone': '0', 'eye': '0', 'gut': '0', 'large': '0'}
+        gibs_elem = ET.SubElement(entity_elem, "gibs")
+        for k, default_val in defaults.items():
+            gibs_elem.set(k, str(gibs_data.get(k, default_val)))
+
+    # save the XML file
+    xml_str = minidom.parseString(ET.tostring(root)).toprettyxml(indent="    ")
+
+    # create the content directory
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(xml_str)
+
+    print(f"entities2.xml created: {output_path}")
 
 def create_items_xml(items, output_path):
     """create the items.xml file (mattpack format)"""
@@ -360,11 +481,26 @@ def create_items_xml(items, output_path):
         # quality: exclude for trinkets (collectibles-like types include: passive, active, familiar)
         if item_type != 'trinket' and 'quality' in item_info:
             item_elem.set("quality", str(item_info.get('quality', 3)))
-        item_elem.set("tags", item_info.get('tags', 'offensive'))
+        # tags: remove entity-only tag 'cansacrifice' from items.xml
+        tags_raw = item_info.get('tags')
+        if tags_raw:
+            tag_tokens = [t for t in str(tags_raw).split() if t != 'cansacrifice']
+            if tag_tokens:
+                item_elem.set("tags", " ".join(tag_tokens))
         
         # set additional attributes
-        if item_info.get('cache'):
-            item_elem.set("cache", item_info['cache'])
+        # cache: ensure familiars include "familiar" in cache flags
+        cache_value = item_info.get('cache')
+        if item_type == 'familiar':
+            if cache_value:
+                # append 'familiar' if not already present as a token
+                tokens = set(str(cache_value).split())
+                if 'familiar' not in tokens:
+                    cache_value = str(cache_value) + ' familiars'
+            else:
+                cache_value = 'familiars'
+        if cache_value:
+            item_elem.set("cache", cache_value)
         
         if item_info.get('hidden'):
             item_elem.set("hidden", "true")
@@ -722,6 +858,7 @@ def main():
     lua_file = "scripts/conch_blessing_items.lua"
     items_xml_path = "content/items.xml"
     itempools_xml_path = "content/itempools.xml"
+    entities2_xml_path = "content/entities2.xml"
     death_items_anm2_path = "content/gfx/death_items.anm2"
     
     print("Conch's Blessing XML Generator started...")
@@ -741,6 +878,8 @@ def main():
     # create the XML files
     create_items_xml(items, items_xml_path)
     create_itempools_xml(items, itempools_xml_path)
+    # Create entities2.xml for familiars/entities
+    create_entities2_xml(items, entities2_xml_path)
     create_death_items_anm2(items, death_items_anm2_path)
     
     # Generate death_items.png from individual item images

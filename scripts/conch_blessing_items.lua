@@ -127,7 +127,9 @@ ConchBlessing.ItemData = {
         pool = {
             -- Use default values (weight=1.0, decrease_by=1, remove_on=0.1)
             RoomType.ROOM_ANGEL,
-            RoomType.ROOM_ULTRASECRET
+            RoomType.ROOM_SECRET,
+            RoomType.ROOM_SUPERSECRET,
+            RoomType.ROOM_BLUE,
             -- Use custom values
             -- { RoomType.ROOM_ARCADE, weight=1, decrease_by=1, remove_on=0.1 },
         },
@@ -337,13 +339,14 @@ ConchBlessing.ItemData = {
             RoomType.ROOM_DEVIL,
             RoomType.ROOM_CURSE,
             RoomType.ROOM_BLACK_MARKET,
-            RoomType.ROOM_SECRET
+            RoomType.ROOM_SECRET,
+            RoomType.ROOM_SUPERSECRET
         },
         quality = 2,
         tags = "offensive",
         cache = "damage firedelay range luck",
         hidden = false,
-        shopprice = 15,
+        shopprice = 20,
         devilprice = 1,
         origin = CollectibleType.COLLECTIBLE_EXPERIMENTAL_TREATMENT,
         flag = "neutral",
@@ -386,8 +389,7 @@ ConchBlessing.ItemData = {
         pool = {
             RoomType.ROOM_DEVIL,
             RoomType.ROOM_CURSE,
-            RoomType.ROOM_BLACK_MARKET,
-            RoomType.ROOM_ULTRASECRET
+            RoomType.ROOM_BLACK_MARKET
         },
         quality = 3,
         tags = "offensive",
@@ -630,6 +632,7 @@ ConchBlessing.ItemData = {
         hidden = false,
         origin = TrinketType.TRINKET_CURVED_HORN,
         flag = "positive",
+        shopprice=15,
         script = "scripts/items/trinkets/time_power",
         specials = { normal = 0.006 },
         callbacks = {
@@ -669,6 +672,7 @@ ConchBlessing.ItemData = {
         hidden = false,
         origin = TrinketType.TRINKET_CANCER,
         flag = "positive",
+        shopprice=15,
         script = "scripts/items/trinkets/time_tear",
         specials = { normal = 0.0066 },
         callbacks = {
@@ -708,6 +712,7 @@ ConchBlessing.ItemData = {
         hidden = false,
         origin = TrinketType.TRINKET_PERFECTION,
         flag = "positive",
+        shopprice=15,
         script = "scripts/items/trinkets/time_luck",
         specials = { normal = 0.01 },
         callbacks = {
@@ -723,15 +728,27 @@ ConchBlessing.ItemData = {
     
     -- Familiars
     TIME_MONEY = {
+        WorkingNow = true,
         type = "familiar",
         id = Isaac.GetItemIdByName("Time = Money"),
         script = "scripts/items/familiars/time_money",
         uniquefamiliar = true,
+        origin=CollectibleType.COLLECTIBLE_MONEY_POWER,
+        quality = 4,
+        tags="baby summonable offensive",
+        flag = "positive",
         -- Entities2.xml generation config
         -- anm2: optional override for ANM2 path under gfx/ (default: "time_money.anm2")
         anm2 = "time_money.anm2",
         entity = { collisiondamage = 0, collisionmass = 7, collisionradius = 8, friction = 1, numgridcollisionpoints = 6, shadowsize = 11, tags = "cansacrifice", customtags = "" },
         gibs = { amount = 0, blood = 0, bone = 0, eye = 0, gut = 0, large = 0 },
+        pool = {
+            RoomType.ROOM_DEVIL,
+            RoomType.ROOM_SHOP,
+            RoomType.ROOM_GREED_EXIT,
+            RoomType.ROOM_LIBRARY,
+            RoomType.ROOM_SECRET
+        },
         name = {
             kr = "시간 = 돈",
             en = "Time = Money"
@@ -740,19 +757,18 @@ ConchBlessing.ItemData = {
             kr = "시간은 돈이다",
             en = "Time is money"
         },
-        tags = "baby",
         eid = {
             kr = {
                 "동전 5개를 드랍합니다.",
                 "#60초마다 현재 소지중인 동전의 5%만큼 동전을 드랍합니다.",
                 "#이 패밀리어가 드랍하는 동전은 5% 확률로 5원, 2% 확률로 황금 동전, 1% 확률로 10원으로 대체됩니다.",
-                "#행운에 따라 위 확률이 (1+0.1×{{Luck}}운)배로 4배까지 증가합니다.",
+                "#행운에 따라 위 확률이 (1+0.1×운{{Luck}})배로 4배까지 증가합니다.",
                 "#동전 소지 가능 개수가 999로 늘어납니다."
             },
             en = {
                 "Drop 5 coins every 60 seconds.",
                 "#Coins dropped by this familiar are replaced with nickel 5% of the time, golden coin 2% of the time, and dime 1% of the time.",
-                "#The probability of the above is increased by (1+0.1×{{Luck}}Luck) times up to 4 times.",
+                "#The probability of the above is increased by (1+0.1×Luck{{Luck}}) times up to 4 times.",
                 "#Money pickup limit increased to 999."
             }
         },

@@ -347,10 +347,48 @@ def parse_lua_file(file_path):
         if soulhearts_match:
             item_info['soulhearts'] = int(soulhearts_match.group(1))
             print(f"  SoulHearts: {item_info['soulhearts']}")
+
+        # extract entity block (for docs)
+        entity_match = re.search(r'entity\s*=\s*{', item_data)
+        if entity_match:
+            ent_start = entity_match.end() - 1
+            ent_end = find_matching_brace(item_data, ent_start)
+            if ent_end != -1:
+                ent_data = item_data[ent_start+1:ent_end]
+                print(f"  Entity block found: {ent_data}")
+                entity_info = {}
+                for kv in re.finditer(r'(\w+)\s*=\s*("[^"]*"|[-+]?[\d.]+)', ent_data):
+                    k = kv.group(1)
+                    v = kv.group(2)
+                    if v.startswith('"') and v.endswith('"'):
+                        v = v[1:-1]
+                    entity_info[k] = v
+                if entity_info:
+                    item_info['entity'] = entity_info
+                    print(f"  Parsed entity: {item_info['entity']}")
+
+        # extract gibs block (for docs)
+        gibs_match = re.search(r'gibs\s*=\s*{', item_data)
+        if gibs_match:
+            gibs_start = gibs_match.end() - 1
+            gibs_end = find_matching_brace(item_data, gibs_start)
+            if gibs_end != -1:
+                gibs_data = item_data[gibs_start+1:gibs_end]
+                print(f"  Gibs block found: {gibs_data}")
+                gibs_info = {}
+                for kv in re.finditer(r'(amount|blood|bone|eye|gut|large)\s*=\s*(-?[\d.]+)', gibs_data, re.IGNORECASE):
+                    k = kv.group(1)
+                    v = kv.group(2)
+                    gibs_info[k] = v
+                if gibs_info:
+                    item_info['gibs'] = gibs_info
+                    print(f"  Parsed gibs: {item_info['gibs']}")
         
-        # extract origin (Collectible or Trinket)
+        # extract origin (Collectible, Trinket, Card, Pill)
         origin_match_coll = re.search(r'origin\s*=\s*CollectibleType\.COLLECTIBLE_(\w+)', item_data)
         origin_match_trinket = re.search(r'origin\s*=\s*TrinketType\.TRINKET_(\w+)', item_data)
+        origin_match_card = re.search(r'origin\s*=\s*Card\.CARD_(\w+)', item_data)
+        origin_match_pill = re.search(r'origin\s*=\s*PillEffect\.PILLEFFECT_(\w+)', item_data)
         if origin_match_trinket:
             item_info['origin'] = origin_match_trinket.group(1)
             item_info['originType'] = 'trinket'
@@ -359,6 +397,14 @@ def parse_lua_file(file_path):
             item_info['origin'] = origin_match_coll.group(1)
             item_info['originType'] = 'collectible'
             print(f"  Origin (Collectible): {item_info['origin']}")
+        elif origin_match_card:
+            item_info['origin'] = origin_match_card.group(1)
+            item_info['originType'] = 'card'
+            print(f"  Origin (Card): {item_info['origin']}")
+        elif origin_match_pill:
+            item_info['origin'] = origin_match_pill.group(1)
+            item_info['originType'] = 'pill'
+            print(f"  Origin (Pill): {item_info['origin']}")
         
         # extract flag
         flag_match = re.search(r'flag\s*=\s*"([^"]+)"', item_data)
@@ -493,7 +539,26 @@ const items = {
             # custom gfx filename support
             gfx_name = item_info.get('gfx') or item_key.lower() + '.png'
             # Safe-encode string scalars using JSON to avoid broken quotes
-            origin_js = json.dumps(item_info.get('origin', ''), ensure_ascii=False)
+            # Encode origin with type prefix for downstream ID resolution:
+            #   Collectible/Familiar => C:
+            #   Trinket => T:
+            #   Card => K:
+            #   Pill => P:
+            origin_val = item_info.get('origin', '')
+            if origin_val:
+                origin_type = item_info.get('originType')
+                if origin_type == 'trinket':
+                    prefix = 'T'
+                elif origin_type == 'card':
+                    prefix = 'K'
+                elif origin_type == 'pill':
+                    prefix = 'P'
+                else:
+                    prefix = 'C'
+                origin_encoded = f"{prefix}:{origin_val}"
+            else:
+                origin_encoded = ''
+            origin_js = json.dumps(origin_encoded, ensure_ascii=False)
             flag_js = json.dumps(item_info.get('flag', ''), ensure_ascii=False)
             tags_js = json.dumps(item_info.get('tags', ''), ensure_ascii=False)
             cache_js = json.dumps(item_info.get('cache', ''), ensure_ascii=False)
@@ -515,6 +580,13 @@ const items = {
         soulhearts: {item_info.get('soulhearts', 0)},
         origin: {origin_js},
         flag: {flag_js}"""
+
+            # entity/gibs for familiars
+            if item_type == 'familiar':
+                if 'entity' in item_info:
+                    js_content += f",\n        entity: {json.dumps(item_info['entity'], ensure_ascii=False)}"
+                if 'gibs' in item_info:
+                    js_content += f",\n        gibs: {json.dumps(item_info['gibs'], ensure_ascii=False)}"
 
             # add pools/quality for collectibles-like items (including familiars)
             if item_type != 'trinket':

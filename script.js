@@ -451,7 +451,7 @@ function createItemCard(key, item) {
                 ${item.maxcharges ? `<span class="stat-tag">Charges: ${item.maxcharges}</span>` : ''}
             </div>
             <div class="stats-group">
-                ${item.origin ? `<span class="stat-tag origin">Origin: ${formatOriginName(item.origin)}</span>` : ''}
+                ${item.origin ? `<span class="stat-tag origin">Origin: ${formatOriginNameWithId(item.origin)}</span>` : ''}
                 ${item.flag ? `<span class="stat-tag flag ${item.flag.toLowerCase()}">Flag: ${item.flag}</span>` : ''}
             </div>
         </div>
@@ -473,17 +473,35 @@ function formatPoolText(pools, lang) {
     }
     
     const poolMapping = {
-        'ROOM_ANGEL': { kr: '천사방', en: 'Angel Room' },
-        'ROOM_DEVIL': { kr: '악마방', en: 'Devil Room' },
-        'ROOM_TREASURE': { kr: '보물방', en: 'Treasure Room' },
+        'ROOM_DEFAULT': { kr: '기본방', en: 'Default Room' },
         'ROOM_SHOP': { kr: '상점', en: 'Shop' },
-        'ROOM_SECRET': { kr: '비밀방', en: 'Secret Room' },
-        'ROOM_ULTRASECRET': { kr: '초비밀방', en: 'Ultra Secret Room' },
-        'ROOM_CURSE': { kr: '저주방', en: 'Curse Room' },
-        'ROOM_BLACK_MARKET': { kr: '블랙마켓', en: 'Black Market' },
-        'ROOM_CHEST': { kr: '상자방', en: 'Chest Room' },
+        'ROOM_ERROR': { kr: '에러방', en: 'Error Room' },
+        'ROOM_TREASURE': { kr: '보물방', en: 'Treasure Room' },
         'ROOM_BOSS': { kr: '보스방', en: 'Boss Room' },
-        'ROOM_MINIBOSS': { kr: '미니보스방', en: 'Mini Boss Room' }
+        'ROOM_MINIBOSS': { kr: '미니보스방', en: 'Mini Boss Room' },
+        'ROOM_SECRET': { kr: '비밀방', en: 'Secret Room' },
+        'ROOM_SUPERSECRET': { kr: '1급 비밀방', en: 'Super Secret Room' },
+        'ROOM_ARCADE': { kr: '아케이드방', en: 'Arcade Room' },
+        'ROOM_CURSE': { kr: '저주방', en: 'Curse Room' },
+        'ROOM_CHALLENGE': { kr: '도전방', en: 'Challenge Room' },
+        'ROOM_LIBRARY': { kr: '책방', en: 'Library Room' },
+        'ROOM_SACRIFICE': { kr: '희생방', en: 'Sacrifice Room' },
+        'ROOM_DEVIL': { kr: '악마방', en: 'Devil Room' },
+        'ROOM_ANGEL': { kr: '천사방', en: 'Angel Room' },
+        'ROOM_DUNGEON': { kr: '사다리방', en: 'Crawl Space' },
+        'ROOM_BOSSRUSH': { kr: '보스 러쉬', en: 'Boss Rush' },
+        'ROOM_ISAACS': { kr: '침대방', en: 'Clean Bedroom' },
+        'ROOM_BARREN': { kr: '낡은침대방', en: 'Dirty Bedroom' },
+        'ROOM_CHEST': { kr: '상자방', en: 'Vault' },
+        'ROOM_DICE': { kr: '주사위방', en: 'Dice Room' },
+        'ROOM_BLACK_MARKET': { kr: '블랙마켓', en: 'Black Market' },
+        'ROOM_GREED_EXIT': { kr: '그리드 탈출방', en: 'Greed Exit Room' },
+        'ROOM_PLANETARIUM': { kr: '행성방', en: 'Planetarium' },
+        'ROOM_TELEPORTER': { kr: '텔레포터방', en: 'Teleporter Room' },
+        'ROOM_TELEPORTER_EXIT': { kr: '텔레포터 탈출방', en: 'Teleporter Exit Room' },
+        'ROOM_SECRET_EXIT': { kr: '비밀 탈출방', en: 'Secret Exit Room' },
+        'ROOM_BLUE': { kr: '블루 키방', en: 'Blue Key Room' },
+        'ROOM_ULTRASECRET': { kr: '레드비밀방', en: 'Ultra Secret Room' },
     };
     
     return pools.map(pool => {
@@ -501,11 +519,75 @@ function formatPoolText(pools, lang) {
 
 function formatOriginName(origin) {
     if (!origin) return '';
-    
-    return origin
+    // Support prefixed origins: "C:BLACK_CANDLE" or "T:CANCER"; fallback to raw name
+    const parts = String(origin).split(":");
+    let prefix = null;
+    let raw = origin;
+    if (parts.length === 2) {
+        prefix = parts[0];
+        raw = parts[1];
+    }
+    const name = raw
         .split('_')
         .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
         .join(' ');
+    return name;
+}
+
+// Pools to resolve IDs for prefixed origins (loaded from itemmap.js)
+// You can provide these in two ways:
+// 1) Object form: { ENUM_NAME: ID }
+// 2) Array form (ID-first): [ [ID, 'ENUM_NAME'], [ID, 'ENUM_NAME'], ... ]
+
+function buildLookupMap(pool) {
+    if (Array.isArray(pool)) {
+        const map = Object.create(null);
+        for (const entry of pool) {
+            if (Array.isArray(entry) && entry.length >= 2) {
+                const id = Number(entry[0]);
+                const name = String(entry[1]);
+                if (!Number.isNaN(id) && name) {
+                    map[name] = id;
+                }
+            }
+        }
+        return map;
+    }
+    return pool || {};
+}
+
+const COLLECTIBLE_ID_LOOKUP = buildLookupMap(window.COLLECTIBLE_ID_POOL || []);
+const TRINKET_ID_LOOKUP = buildLookupMap(window.TRINKET_ID_POOL || []);
+const PILL_ID_LOOKUP = buildLookupMap(window.PILL_ID_POOL || []);
+const CARD_ID_LOOKUP = buildLookupMap(window.CARD_ID_POOL || []);
+
+function formatOriginNameWithId(origin) {
+    if (!origin) return '';
+    const parts = String(origin).split(":");
+    let prefix = null;
+    let raw = origin;
+    if (parts.length === 2) {
+        prefix = parts[0];
+        raw = parts[1];
+    }
+    const display = formatOriginName(raw);
+    if (!prefix) return display;
+    const key = String(raw);
+    if (prefix === 'T') {
+        const id = TRINKET_ID_LOOKUP[key];
+        return id ? `${display} (t${id})` : display;
+    }
+    if (prefix === 'P') {
+        const id = PILL_ID_LOOKUP[key];
+        return id ? `${display} (p${id})` : display;
+    }
+    if (prefix === 'K') {
+        const id = CARD_ID_LOOKUP[key];
+        return id ? `${display} (k${id})` : display;
+    }
+    // Default to collectible/familiar (C)
+    const id = COLLECTIBLE_ID_LOOKUP[key];
+    return id ? `${display} (c${id})` : display;
 }
 
 function getFlagDescription(flag, lang) {
@@ -599,7 +681,7 @@ function showItemModal(key, item) {
                         ${item.maxcharges ? `<span class="modal-stat-tag">Charges: ${item.maxcharges}</span>` : ''}
                     </div>
                     <div class="stats-group">
-                        ${item.origin ? `<span class="modal-stat-tag origin">Origin: ${formatOriginName(item.origin)}</span>` : ''}
+                        ${item.origin ? `<span class="modal-stat-tag origin">Origin: ${formatOriginNameWithId(item.origin)}</span>` : ''}
                         ${item.flag ? `<span class="modal-stat-tag flag ${item.flag.toLowerCase()}">Flag: ${item.flag}</span>` : ''}
                     </div>
                 </div>
@@ -610,7 +692,7 @@ function showItemModal(key, item) {
                     <h3 data-kr="시너지" data-en="Synergies">시너지</h3>
                     <div class="synergy-list">
                         ${Object.entries(item.synergies).map(([synergyKey, synergyData]) => {
-                            const synergyName = formatOriginName(synergyKey);
+                            const synergyName = formatOriginNameWithId(synergyKey);
                             const synergyDesc = synergyData[displayLang] || synergyData['en'] || getText('synergyNoDesc', displayLang);
                             const synergyType = (item.synergy_types && item.synergy_types[synergyKey]) || 'collectible';
                             const synergyGfxBase = synergyType === 'trinket' ? 'trinkets' : 'collectibles';

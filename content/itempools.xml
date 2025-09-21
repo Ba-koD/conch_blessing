@@ -5,10 +5,17 @@
         <Item Name="Eternal Flame" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Power Training" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
+    <Pool Name="secret">
+        <Item Name="Live Eye" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Oral Steroids" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+    </Pool>
     <Pool Name="ultraSecret">
         <Item Name="Live Eye" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Eternal Flame" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
-        <Item Name="Injectable Steroids" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Oral Steroids" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+    </Pool>
+    <Pool Name="blue">
+        <Item Name="Live Eye" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
     <Pool Name="devil">
         <Item Name="Void Dagger" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
@@ -30,9 +37,6 @@
     <Pool Name="blackMarket">
         <Item Name="Oral Steroids" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Injectable Steroids" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
-    </Pool>
-    <Pool Name="secret">
-        <Item Name="Oral Steroids" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
     <Pool Name="planetarium">
         <Item Name="Dragon" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
