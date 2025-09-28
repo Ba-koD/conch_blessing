@@ -411,26 +411,25 @@ def create_entities2_xml(items, output_path):
         entity_elem.set("name", name)
         # Isaac familiar entity type is 3
         entity_elem.set("id", "3")
-
+        
         # Resolve anm2path from entity block, top-level anm2, or fallback
         ent_meta = item_info.get('entity', {}) if isinstance(item_info.get('entity'), dict) else {}
         anm2_val = ent_meta.get('anm2') or item_info.get('anm2') or f"{item_key.lower()}.anm2"
-        entity_elem.set("anm2path", str(anm2_val))
-
         # Optional physical attributes
         def set_if_present(src_key, xml_key=None):
             if not xml_key:
                 xml_key = src_key
             if src_key in ent_meta:
                 entity_elem.set(xml_key, str(ent_meta[src_key]))
-
+        
+        set_if_present('variant')
+        entity_elem.set("anm2path", str(anm2_val))
         set_if_present('collisionDamage')
         set_if_present('collisionMass')
         set_if_present('collisionRadius')
         set_if_present('friction')
         set_if_present('numGridCollisionPoints')
         set_if_present('shadowSize')
-        set_if_present('variant')
         set_if_present('tags')
         # customtags often desired (can be empty string)
         if 'customtags' in ent_meta:

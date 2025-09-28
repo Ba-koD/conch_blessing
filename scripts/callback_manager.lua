@@ -106,8 +106,8 @@ ConchBlessing.CallbackManager.callbackMapping = {
     useItem = { callback = ModCallbacks.MC_USE_ITEM, needsId = true },
     postPEffectUpdate = { callback = ModCallbacks.MC_POST_PEFFECT_UPDATE, needsId = false },
     useCard = { callback = ModCallbacks.MC_USE_CARD, needsId = false },
-    familiarUpdate = { callback = ModCallbacks.MC_FAMILIAR_UPDATE, needsId = false },
-    familiarInit = { callback = ModCallbacks.MC_FAMILIAR_INIT, needsId = false },
+    familiarUpdate = { callback = ModCallbacks.MC_FAMILIAR_UPDATE, needsId = false, needsVariant = true },
+    familiarInit = { callback = ModCallbacks.MC_FAMILIAR_INIT, needsId = false, needsVariant = true },
     evaluateCache = { callback = ModCallbacks.MC_EVALUATE_CACHE, needsId = false },
     postPlayerInit = { callback = ModCallbacks.MC_POST_PLAYER_INIT, needsId = false },
     usePill = { callback = ModCallbacks.MC_USE_PILL, needsId = false },
@@ -247,6 +247,17 @@ ConchBlessing.CallbackManager.registerItemCallbacks = function(itemKey, itemData
         if callbackInfo.needsId then
             ConchBlessing:AddCallback(callbackInfo.callback, func, itemId)
             ConchBlessing.printDebug("  " .. callbackKey .. " callback registered (ID: " .. itemId .. ")")
+        elseif callbackInfo.needsVariant then
+            -- Get variant from item's entity config
+            local variant = nil
+            if itemData.entity and itemData.entity.variant then
+                variant = itemData.entity.variant
+                ConchBlessing:AddCallback(callbackInfo.callback, func, variant)
+                ConchBlessing.printDebug("  " .. callbackKey .. " callback registered (Variant: " .. variant .. ")")
+            else
+                ConchBlessing:AddCallback(callbackInfo.callback, func)
+                ConchBlessing.printDebug("  " .. callbackKey .. " callback registered (no variant filter)")
+            end
         else
             ConchBlessing:AddCallback(callbackInfo.callback, func)
             ConchBlessing.printDebug("  " .. callbackKey .. " callback registered")

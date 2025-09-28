@@ -740,7 +740,7 @@ ConchBlessing.ItemData = {
         -- Entities2.xml generation config
         -- anm2: optional override for ANM2 path under gfx/ (default: "time_money.anm2")
         anm2 = "time_money.anm2",
-        entity = { collisiondamage = 0, collisionmass = 7, collisionradius = 8, friction = 1, numgridcollisionpoints = 6, shadowsize = 11, tags = "cansacrifice", customtags = "" },
+        entity = { variant = 777, collisiondamage = 0, collisionmass = 3, collisionradius = 5, friction = 1, numgridcollisionpoints = 6, shadowsize = 13, tags = "cansacrifice", customtags = "" },
         gibs = { amount = 0, blood = 0, bone = 0, eye = 0, gut = 0, large = 0 },
         pool = {
             RoomType.ROOM_DEVIL,
@@ -766,7 +766,8 @@ ConchBlessing.ItemData = {
                 "#동전 소지 가능 개수가 999로 늘어납니다."
             },
             en = {
-                "Drop 5 coins every 60 seconds.",
+                "Drops 5 coins on pickup.",
+                "#Every 60 seconds, drops coins equal to 5% of current money (minimum 1).",
                 "#Coins dropped by this familiar are replaced with nickel 5% of the time, golden coin 2% of the time, and dime 1% of the time.",
                 "#The probability of the above is increased by (1+0.1×Luck{{Luck}}) times up to 4 times.",
                 "#Money pickup limit increased to 999."
@@ -775,7 +776,7 @@ ConchBlessing.ItemData = {
         synergies = {
             [CollectibleType.COLLECTIBLE_DEEP_POCKETS] = {
                 kr = "일반 동전이 5원으로 대체됩니다.",
-                en = "When obtained, damage multiplier is set to the maximum value"
+                en = "Normal coins are replaced with nickels."
             },
         },
         callbacks = {
@@ -783,7 +784,8 @@ ConchBlessing.ItemData = {
             familiarUpdate = "timemoney.onFamiliarUpdate",
             evaluateCache = "timemoney.onEvaluateCache",
             gameStarted = "timemoney.onGameStarted",
-            postGetCollectible = "timemoney.onPostGetCollectible"
+            postGetCollectible = "timemoney.onPostGetCollectible",
+            postPlayerUpdate = "timemoney.onPlayerUpdate"
         }
     }
 }
