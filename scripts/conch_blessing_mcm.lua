@@ -77,26 +77,6 @@ function ConchBlessing_MCM.Setup(mod)
         Info = {"Select the output language.", "(Default: Auto uses game language)"},
     })
 
-    -- Natural spawn toggle
-    ModConfigMenu.AddSetting(category, "General", {
-        Type = ModConfigMenu.OptionType.BOOLEAN,
-        CurrentSetting = function()
-            return mod.Config.naturalSpawn and true or false
-        end,
-        Display = function()
-            return "Natural Spawn: " .. (mod.Config.naturalSpawn and "ON" or "OFF")
-        end,
-        OnChange = function(b)
-            mod.Config.naturalSpawn = (b == true)
-            ConchBlessing_MCM.saveConfigToSaveManager(mod)
-        end,
-        Info = {
-            "Allow items to appear naturally in pools.",
-            "OFF: remove from pools (default)",
-            "ON: allow natural spawns",
-        }
-    })
-
     -- Debug mode toggle
     ModConfigMenu.AddSetting(category, "General", {
         Type = ModConfigMenu.OptionType.BOOLEAN,
@@ -115,6 +95,63 @@ function ConchBlessing_MCM.Setup(mod)
             "ON: show debug messages",
             "OFF: hide debug messages (default)",
         }
+    })
+
+    -- Reset to Default (General)
+    ModConfigMenu.AddSetting(category, "General", {
+        Type = ModConfigMenu.OptionType.BOOLEAN,
+        CurrentSetting = function()
+            return false
+        end,
+        Display = function()
+            return "Reset to Default"
+        end,
+        OnChange = function(b)
+            if b == true then
+                ConchBlessing_Config.Reset(mod)
+                ConchBlessing_MCM.saveConfigToSaveManager(mod)
+                if mod.EID and type(mod.EID.registerAllItems) == "function" then
+                    mod.EID.registerAllItems()
+                end
+            end
+        end,
+        Info = {
+            "Reset all settings to their default values.",
+            "This applies immediately.",
+        }
+    })
+    
+    -- Spawn - Collectibles
+    ModConfigMenu.AddText(category, "Spawn", "--- Spawn Settings ---")
+    ModConfigMenu.AddSetting(category, "Spawn", {
+        Type = ModConfigMenu.OptionType.BOOLEAN,
+        CurrentSetting = function()
+            return mod.Config.spawnCollectibles and true or false
+        end,
+        Display = function()
+            return "Collectibles: " .. (mod.Config.spawnCollectibles and "ON" or "OFF")
+        end,
+        OnChange = function(b)
+            mod.Config.spawnCollectibles = (b == true)
+            ConchBlessing_MCM.saveConfigToSaveManager(mod)
+        end,
+        Info = { "Allow mod collectibles to spawn naturally.", "Default: OFF" }
+    })
+
+    -- Spawn - Trinkets
+    ModConfigMenu.AddSetting(category, "Spawn", {
+        Type = ModConfigMenu.OptionType.BOOLEAN,
+        CurrentSetting = function()
+            return mod.Config.spawnTrinkets and true or false
+        end,
+        Display = function()
+            return "Trinkets: " .. (mod.Config.spawnTrinkets and "ON" or "OFF")
+        end,
+        OnChange = function(b)
+            mod.Config.spawnTrinkets = (b == true)
+            ConchBlessing_MCM.saveConfigToSaveManager(mod)
+        end,
+        Info = { "Allow mod trinkets to spawn naturally.", "Default: OFF" }
     })
 end
 

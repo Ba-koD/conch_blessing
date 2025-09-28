@@ -306,11 +306,29 @@ const items = {
         eids: {"kr": ["소지 중 초당 운이 0.01 증가합니다.", "적에게 피격 시 60초 동안 증가가 중지됩니다."], "en": ["While held, gains +0.01 Luck per second.", "On taking damage, gain is paused for 60 seconds."]}
     },
     TIME_MONEY: {
+        type: "familiar",
         gfx: "resources/gfx/items/collectibles/time_money.png",
-        workingnowflag: true,
+        tags: "baby summonable offensive",
+        cache: "",
+        hidden: false,
+        shopprice: 0,
+        devilprice: 0,
+        maxcharges: 0,
+        chargetype: "normal",
+        initcharge: 0,
+        hearts: 0,
+        maxhearts: 0,
+        blackhearts: 0,
+        soulhearts: 0,
+        origin: "C:MONEY_EQUALS_POWER",
+        flag: "positive",
+        entity: {"variant": "777", "collisiondamage": "0", "collisionmass": "3", "collisionradius": "5", "friction": "1", "numgridcollisionpoints": "6", "shadowsize": "13", "tags": "cansacrifice", "customtags": ""},
+        gibs: {"amount": "0", "blood": "0", "bone": "0", "eye": "0", "gut": "0", "large": "0"},
+        quality: 4,
+        pools: ["ROOM_DEVIL", "ROOM_SHOP", "ROOM_GREED_EXIT", "ROOM_SECRET"],
         names: {"kr": "시간 = 돈", "en": "Time = Money"},
-        descriptions: {"kr": "작업중인 아이템입니다", "en": "Work in progress item"},
-        eids: {"kr": ["작업중인 아이템입니다"], "en": ["Work in progress item"]}
+        descriptions: {"kr": "시간은 돈이다", "en": "Time is money"},
+        eids: {"kr": ["동전 5개를 드랍합니다.", "60초마다 현재 소지중인 동전의 5% 개수만큼 동전을 드랍합니다. (최소 1개)", "이 패밀리어가 드랍하는 동전은 5% 확률로 5원, 2% 확률로 황금 동전, 2% 확률로 행운 동전, 1% 확률로 10원으로 대체됩니다.", "행운에 따라 위 확률이 (1+0.1×운)배로 4배까지 증가합니다.", "피격시 드랍되는 동전의 갯수가 1개 감소합니다."], "en": ["Drops 5 coins on pickup.", "Every 60 seconds, drops coins equal to 5% of current money (minimum 1).", "Coins dropped by this familiar are replaced with nickel 5% of the time, golden coin 2% of the time, lucky coin 2% of the time, and dime 1% of the time.", "The probability of the above is increased by (1+0.1×Luck) times up to 4 times.", "When taking damage, the number of coins dropped is reduced by 1."]}
     },
 };
 

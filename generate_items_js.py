@@ -529,11 +529,9 @@ const items = {
         else:
             # 일반 아이템은 모든 필드 출력
             item_type = item_info.get('type', 'passive')
-            # Use dedicated folder for familiars on the site
+            # Path rule: use collectibles path for familiars as well
             if item_type == 'trinket':
                 gfx_base = 'trinkets'
-            elif item_type == 'familiar':
-                gfx_base = 'familiars'
             else:
                 gfx_base = 'collectibles'
             # custom gfx filename support

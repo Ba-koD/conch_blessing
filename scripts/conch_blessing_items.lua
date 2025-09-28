@@ -728,12 +728,12 @@ ConchBlessing.ItemData = {
     
     -- Familiars
     TIME_MONEY = {
-        WorkingNow = true,
+        WorkingNow = false,
         type = "familiar",
         id = Isaac.GetItemIdByName("Time = Money"),
         script = "scripts/items/familiars/time_money",
         uniquefamiliar = true,
-        origin=CollectibleType.COLLECTIBLE_MONEY_POWER,
+        origin=CollectibleType.COLLECTIBLE_MONEY_EQUALS_POWER,
         quality = 4,
         tags="baby summonable offensive",
         flag = "positive",
@@ -746,7 +746,6 @@ ConchBlessing.ItemData = {
             RoomType.ROOM_DEVIL,
             RoomType.ROOM_SHOP,
             RoomType.ROOM_GREED_EXIT,
-            RoomType.ROOM_LIBRARY,
             RoomType.ROOM_SECRET
         },
         name = {
@@ -760,32 +759,32 @@ ConchBlessing.ItemData = {
         eid = {
             kr = {
                 "동전 5개를 드랍합니다.",
-                "#60초마다 현재 소지중인 동전의 5%만큼 동전을 드랍합니다.",
-                "#이 패밀리어가 드랍하는 동전은 5% 확률로 5원, 2% 확률로 황금 동전, 1% 확률로 10원으로 대체됩니다.",
+                "#60초마다 현재 소지중인 동전의 5% 개수만큼 동전을 드랍합니다. (최소 1개)",
+                "#이 패밀리어가 드랍하는 동전은 5% 확률로 5원, 2% 확률로 황금 동전, 2% 확률로 행운 동전, 1% 확률로 10원으로 대체됩니다.",
                 "#행운에 따라 위 확률이 (1+0.1×운{{Luck}})배로 4배까지 증가합니다.",
-                "#동전 소지 가능 개수가 999로 늘어납니다."
+                "#피격시 드랍되는 동전의 갯수가 1개 감소합니다."
             },
             en = {
                 "Drops 5 coins on pickup.",
                 "#Every 60 seconds, drops coins equal to 5% of current money (minimum 1).",
-                "#Coins dropped by this familiar are replaced with nickel 5% of the time, golden coin 2% of the time, and dime 1% of the time.",
+                "#Coins dropped by this familiar are replaced with nickel 5% of the time, golden coin 2% of the time, lucky coin 2% of the time, and dime 1% of the time.",
                 "#The probability of the above is increased by (1+0.1×Luck{{Luck}}) times up to 4 times.",
-                "#Money pickup limit increased to 999."
+                "#When taking damage, the number of coins dropped is reduced by 1."
             }
         },
-        synergies = {
-            [CollectibleType.COLLECTIBLE_DEEP_POCKETS] = {
-                kr = "일반 동전이 5원으로 대체됩니다.",
-                en = "Normal coins are replaced with nickels."
-            },
+        bff = {
+            kr = "동전 드랍 비율이 10%로 증가합니다.",
+            en = "Drop rate increases to 10%."
         },
         callbacks = {
             familiarInit = "timemoney.onFamiliarInit",
             familiarUpdate = "timemoney.onFamiliarUpdate",
+            postFamiliarRender = "timemoney.onFamiliarRender",
             evaluateCache = "timemoney.onEvaluateCache",
             gameStarted = "timemoney.onGameStarted",
             postGetCollectible = "timemoney.onPostGetCollectible",
-            postPlayerUpdate = "timemoney.onPlayerUpdate"
+            postPlayerUpdate = "timemoney.onPlayerUpdate",
+            entityTakeDmg = "timemoney.onEntityTakeDamage"
         }
     }
 }
@@ -1094,11 +1093,61 @@ local function loadAllItems()
                             end
                         end
 
+                        -- Conditional BFFS line: show only when the player has BFFS and this item defines bff text
+                        if ConchBlessing.ItemData then
+                            for _, data in pairs(ConchBlessing.ItemData) do
+                                if data and data.id == subId and data.bff and anyPlayerHas(CollectibleType.COLLECTIBLE_BFFS) then
+                                    local bffText = (type(data.bff) == "table" and (data.bff[lang] or data.bff.en)) or nil
+                                    if type(bffText) == "string" and #bffText > 0 then
+                                        EID:appendToDescription(descObj, "#{{Collectible247}} " .. bffText)
+                                    end
+                                    break
+                                end
+                            end
+                        end
+
                         return descObj
                     end
                 )
                 ConchBlessing._didRegisterUnifiedModifier = true
                 ConchBlessing.printDebug("Unified EID description modifier registered")
+
+                -- Fallback: force-show Conch mode line for specific origins if mapping fails
+                local function resolveModLang()
+                    local normalize = (ConchBlessing and ConchBlessing.Config and ConchBlessing.NormalizeLanguage)
+                        or (require("scripts.conch_blessing_config").NormalizeLanguage)
+                    local cfg = ConchBlessing and ConchBlessing.Config and ConchBlessing.Config.language
+                    local base = cfg or "Auto"
+                    if base == "Auto" or base == "auto" then
+                        local eidLang = (EID and EID.Config and EID.Config.Language) or (EID and EID.UserConfig and EID.UserConfig.Language)
+                        if eidLang and eidLang ~= "auto" then
+                            base = eidLang
+                        else
+                            base = (Options and Options.Language) or "en"
+                        end
+                    end
+                    return normalize(base)
+                end
+
+                EID:addDescriptionModifier(
+                    "ConchBlessing_OriginForced",
+                    function(descObj)
+                        return descObj.ObjType == 5 and descObj.ObjVariant == 100 and descObj.ObjSubType == CollectibleType.COLLECTIBLE_MONEY_EQUALS_POWER
+                    end,
+                    function(descObj)
+                        local lang = resolveModLang()
+                        local d = ConchBlessing.ItemData and ConchBlessing.ItemData.TIME_MONEY
+                        local templates = ConchBlessing._conchModeTemplates or {}
+                        if d and templates[lang] and templates[lang].positive then
+                            local name = (type(d.name) == "table" and (d.name[lang] or d.name.en)) or d.name or "Time = Money"
+                            local line = templates[lang].positive
+                            local iconNameDyn = "icon_time_money"
+                            line = string.gsub(line, "{{item_name}}", "{{" .. iconNameDyn .. "}}(" .. name .. ")")
+                            EID:appendToDescription(descObj, "#{{ConchMode}} " .. line)
+                        end
+                        return descObj
+                    end
+                )
             end
         end
 
@@ -1136,7 +1185,7 @@ local function loadAllItems()
                     elseif itemData.type == "trinket" then
                         iconPath = "gfx/items/trinkets/" .. string.lower(itemKey) .. ".png"
                     elseif itemData.type == "familiar" then
-                        iconPath = ICON_PATHS.familiars .. string.lower(itemKey) .. ".png"
+                        iconPath = ICON_PATHS.collectibles .. string.lower(itemKey) .. ".png"
                     else
                         iconPath = ICON_PATHS.collectibles .. string.lower(itemKey) .. ".png"
                     end
@@ -1222,12 +1271,18 @@ ConchBlessing.printDebug("Item pools are handled in the XML file (content/itempo
 local function applyNaturalSpawnSetting()
     local pool = Game():GetItemPool()
     if not pool then return end
-    local allow = ConchBlessing.Config and ConchBlessing.Config.naturalSpawn
+    local cfg = ConchBlessing.Config or {}
+    local allowGlobal = cfg.naturalSpawn
+    local allowCollectibles = (cfg.spawnCollectibles == true)
+    local allowTrinkets = (cfg.spawnTrinkets == true)
     for _, itemData in pairs(ConchBlessing.ItemData) do
         if itemData.id and itemData.id ~= -1 then
-            if not allow then
+            local isTrinket = (itemData.type == "trinket")
+            local allowType = isTrinket and allowTrinkets or allowCollectibles
+            -- legacy global toggle still grants allow if ON
+            if not (allowGlobal or allowType) then
                 -- Remove from all pools (call once is enough; engine tracks per-pool)
-                if itemData.type == "trinket" then
+                if isTrinket then
                     ConchBlessing.printDebug("[Pool] Removing trinket from pools: id=" .. tostring(itemData.id))
                     pool:RemoveTrinket(itemData.id)
                 else

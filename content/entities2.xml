@@ -1,2 +1,6 @@
 <?xml version="1.0" ?>
-<entities anm2root="gfx/" version="5"/>
+<entities anm2root="gfx/" version="5">
+    <entity name="Time = Money" id="3" variant="777" anm2path="time_money.anm2" collisionDamage="0" collisionMass="3" collisionRadius="5" friction="1" numGridCollisionPoints="6" shadowSize="13" tags="cansacrifice" customtags="">
+        <gibs amount="0" blood="0" bone="0" eye="0" gut="0" large="0"/>
+    </entity>
+</entities>

@@ -1,549 +1,352 @@
-local ConchBlessing = ConchBlessing
-local SaveManager = require("scripts.lib.save_manager")
-
--- Time = Money Familiar
 ConchBlessing.timemoney = {}
 
--- Robust resolver for item ID (handles early -1 cases)
-local function getTimeMoneyItemId()
-    local data = ConchBlessing.ItemData and ConchBlessing.ItemData.TIME_MONEY
-    if not data then return -1 end
-    if data.id and data.id ~= -1 then return data.id end
-    local id = Isaac.GetItemIdByName("Time = Money")
-    if id and id > 0 then
-        data.id = id
-        ConchBlessing.printDebug("[Time=Money] Resolved item ID late: " .. tostring(id))
-        return id
-    end
-    return -1
-end
+local SaveManager = ConchBlessing.SaveManager or require("scripts.lib.save_manager")
+local DamageUtils = ConchBlessing.DamageUtils or require("scripts.lib.damage_utils")
 
-
--- Tunables
-ConchBlessing.timemoney.data = {
-	initialDropCount = 5,                 -- initial coins on pickup
-	dropIntervalFrames = 60 * 30,         -- 60 seconds at 30 fps (업데이트: 1800프레임 = 60초)
-	percentOfHeldCoins = 0.05,           -- 5% of current coins (최소 1개 보장)
-	maxCoinCap = 999,                    -- pickup limit increase target
-	minDropCount = 1,                    -- minimum coins per drop (EID 설명과 일치)
-	-- base replacement chances (luck 기반 확률 증가)
-	nickelChance = 0.05,                 -- 5% base chance for nickel
-	goldenChance = 0.02,                -- 2% base chance for golden coin  
-	dimeChance = 0.01,                  -- 1% base chance for dime
-	luckScale = 0.1,                    -- multiplier per luck: (1 + luckScale * Luck)
-	luckScaleMaxMult = 4.0,             -- cap total multiplier up to 4x
-	
-	spawnAnimDuration = 4,              -- frames for spawn animation (Spawn 애니메이션 프레임 수)
+local CS = CoinSubType or {
+	NULL = 0,
+	PENNY = 1,
+	NICKEL = 2,
+	DIME = 3,
+	DOUBLE_PACK = 4,
+	LUCKY_PENNY = 5,
+	STICKY_NICKEL = 6,
+	GOLDEN = 7
 }
 
-local function getPlayerSave(player)
+local function C(key, default)
+	local t = CS
+	local v = (type(t) == "table") and t[key] or nil
+	return type(v) == "number" and v or default
+end
+
+ConchBlessing.timemoney.data = {
+	framesPerSecond = 30,          -- baseline fps used by other items
+	dropIntervalSeconds = 60,      -- drop coins every N seconds
+	percentPerInterval = 0.05,     -- percent of current money per interval (min 1)
+	initialDropCount = 5,          -- coins dropped on pickup (once per gain)
+	probNickel = 0.05,             -- base replacement chance for nickel
+	probGolden = 0.02,             -- base replacement chance for golden coin
+	probLucky = 0.02,              -- base replacement chance for lucky penny
+	probDime = 0.01,               -- base replacement chance for dime
+	luckMultiplierPerPoint = 0.1,  -- each Luck increases chances by this multiplier factor
+	luckMultiplierCap = 4.0,       -- cap for total multiplier
+	followLagFactor = 0.95         -- follower trail factor (0.9~0.98)
+}
+
+local function getKey(player)
+	return tostring(player:GetPlayerType())
+end
+
+local function ensureState()
+	ConchBlessing.timemoney.state = ConchBlessing.timemoney.state or { perPlayer = {} }
+	return ConchBlessing.timemoney.state
+end
+
+local function getPlayerState(player)
+	local s = ensureState()
+	local key = getKey(player)
+	s.perPlayer[key] = s.perPlayer[key] or {
+		lastDropFrame = 0,
+		lastItemCount = 0,
+        pendingPenalty = 0,
+	}
+	return s.perPlayer[key]
+end
+
+local function getItemId()
+	return ConchBlessing.ItemData.TIME_MONEY and ConchBlessing.ItemData.TIME_MONEY.id
+end
+
+local function getFamiliarVariant()
+	local data = ConchBlessing.ItemData.TIME_MONEY
+	return data and data.entity and data.entity.variant or nil
+end
+
+local function loadFromSave(player)
 	local save = SaveManager.GetRunSave(player)
+	if not save then return end
 	save.timeMoney = save.timeMoney or {}
-	return save.timeMoney
+	local key = getKey(player)
+	local ps = getPlayerState(player)
+	local rec = save.timeMoney[key]
+	if rec then
+		ps.lastDropFrame = tonumber(rec.lastDropFrame) or 0
+		ps.lastItemCount = tonumber(rec.lastItemCount) or 0
+		local d = rec.data
+		if d then
+			if type(d.framesPerSecond) == 'number' then ConchBlessing.timemoney.data.framesPerSecond = d.framesPerSecond end
+			if type(d.dropIntervalSeconds) == 'number' then ConchBlessing.timemoney.data.dropIntervalSeconds = d.dropIntervalSeconds end
+			if type(d.percentPerInterval) == 'number' then ConchBlessing.timemoney.data.percentPerInterval = d.percentPerInterval end
+			if type(d.initialDropCount) == 'number' then ConchBlessing.timemoney.data.initialDropCount = d.initialDropCount end
+			if type(d.probNickel) == 'number' then ConchBlessing.timemoney.data.probNickel = d.probNickel end
+			if type(d.probGolden) == 'number' then ConchBlessing.timemoney.data.probGolden = d.probGolden end
+			if type(d.probDime) == 'number' then ConchBlessing.timemoney.data.probDime = d.probDime end
+			if type(d.luckMultiplierPerPoint) == 'number' then ConchBlessing.timemoney.data.luckMultiplierPerPoint = d.luckMultiplierPerPoint end
+			if type(d.luckMultiplierCap) == 'number' then ConchBlessing.timemoney.data.luckMultiplierCap = d.luckMultiplierCap end
+		end
+	end
 end
 
--- Attach familiar to nearest player if Player is missing
-local function ensureFamiliarHasPlayer(familiar)
-    if familiar.Player then return familiar.Player end
-    local game = Game()
-    local num = game:GetNumPlayers()
-    local bestPlayer = nil
-    local bestDistSq = math.huge
-    for i = 0, num - 1 do
-        local p = Isaac.GetPlayer(i)
-        if p then
-            local d = (p.Position - familiar.Position):LengthSquared()
-            if d < bestDistSq then
-                bestDistSq = d
-                bestPlayer = p
+local function saveToSave(player)
+	local save = SaveManager.GetRunSave(player)
+	if not save then return end
+	save.timeMoney = save.timeMoney or {}
+	local key = getKey(player)
+	local ps = getPlayerState(player)
+	save.timeMoney[key] = save.timeMoney[key] or {}
+	local rec = save.timeMoney[key]
+	rec.lastDropFrame = ps.lastDropFrame
+	rec.lastItemCount = ps.lastItemCount
+	rec.data = {
+		framesPerSecond = ConchBlessing.timemoney.data.framesPerSecond,
+		dropIntervalSeconds = ConchBlessing.timemoney.data.dropIntervalSeconds,
+		percentPerInterval = ConchBlessing.timemoney.data.percentPerInterval,
+		initialDropCount = ConchBlessing.timemoney.data.initialDropCount,
+		probNickel = ConchBlessing.timemoney.data.probNickel,
+		probGolden = ConchBlessing.timemoney.data.probGolden,
+		probDime = ConchBlessing.timemoney.data.probDime,
+		probLucky = ConchBlessing.timemoney.data.probLucky,
+		luckMultiplierPerPoint = ConchBlessing.timemoney.data.luckMultiplierPerPoint,
+		luckMultiplierCap = ConchBlessing.timemoney.data.luckMultiplierCap
+	}
+	SaveManager.Save()
+end
+
+-- Utility: resolve coin subtype with weighted replacement odds and synergy
+local function chooseCoinSubtype(player, rng)
+	-- base: penny
+	local subtype = C("PENNY", 1)
+	local luck = player.Luck or 0
+	local mult = 1 + (ConchBlessing.timemoney.data.luckMultiplierPerPoint or 0) * luck
+	local cap = ConchBlessing.timemoney.data.luckMultiplierCap or 1
+	if mult < 1 then mult = 1 end
+	if mult > cap then mult = cap end
+	-- roll order: dime -> golden -> nickel
+	local dimeP = (ConchBlessing.timemoney.data.probDime or 0) * mult
+	local goldP = (ConchBlessing.timemoney.data.probGolden or 0) * mult
+	local nickelP = (ConchBlessing.timemoney.data.probNickel or 0) * mult
+	local luckyP = (ConchBlessing.timemoney.data.probLucky or 0) * mult
+	if rng:RandomFloat() < dimeP then
+		subtype = C("DIME", 3)
+	elseif rng:RandomFloat() < goldP then
+		subtype = C("GOLDEN", 7)
+	elseif rng:RandomFloat() < nickelP then
+		subtype = C("NICKEL", 2)
+	elseif rng:RandomFloat() < luckyP then
+		subtype = C("LUCKY_PENNY", 5)
+	end
+	return subtype
+end
+
+-- Utility: spawn a single coin near an entity
+local function spawnCoinNear(anchor, player, rng)
+	local pos = anchor.Position
+	local angle = rng:RandomFloat() * 360
+	local radius = 10 + rng:RandomFloat() * 30
+	local offset = Vector(radius, 0):Rotated(angle)
+	-- Basic float down: give initial upward velocity then gravity pulls down naturally
+	local vel = Vector(0, -3):Rotated(rng:RandomFloat() * 30 - 15)
+	local sub = chooseCoinSubtype(player, rng)
+	-- Guard nil subtype to avoid Spawn error
+    if type(sub) ~= "number" then sub = C("PENNY", 1) end
+	local pickup = Isaac.Spawn(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_COIN, sub, pos + offset, vel, anchor)
+    -- Play spawn effect with a standard poof, then swap to our Spawn animation if possible
+    pcall(function()
+        local e = Isaac.Spawn(EntityType.ENTITY_EFFECT, EffectVariant.POOF_2, 0, pos + offset, Vector.Zero, anchor)
+        if e and e:ToEffect() then
+            local eff = e:ToEffect()
+            eff.Timeout = 10
+            local spr = eff:GetSprite()
+            if spr then
+                spr:Load("gfx/time_money.anm2", true)
+                spr:Play("Spawn", true)
+            end
+        end
+    end)
+	return pickup
+end
+
+-- Play time_money familiar Spawn animation (first instance)
+local function playFamiliarSpawnAnim(player)
+    local variant = getFamiliarVariant()
+    if not variant then return end
+    local list = Isaac.FindByType(EntityType.ENTITY_FAMILIAR, variant)
+    if list and #list > 0 then
+        local fam = list[1]:ToFamiliar()
+        if fam then
+            local spr = fam:GetSprite()
+            if spr then
+                pcall(function()
+                    spr:Play("Spawn", true)
+                end)
             end
         end
     end
-    if bestPlayer then
-        familiar.Player = bestPlayer
-        familiar:AddToFollowers()
-        familiar.IsFollower = true
-        ConchBlessing.printDebug("[Time=Money] Attached familiar to nearest player (fallback)")
-    end
-    return familiar.Player
 end
 
--- Find our familiar instance for a specific player (avoids duplicates)
-local function findOurFamiliarForPlayer(player)
-    local variant = ConchBlessing.timemoney.getVariant()
-    if not (variant and variant > 0) then return nil end
-    local found = nil
-    for _, ent in ipairs(Isaac.FindByType(EntityType.ENTITY_FAMILIAR, variant, -1, false, false)) do
-        local fam = ent:ToFamiliar()
-        if fam and fam.Player and GetPtrHash(fam.Player) == GetPtrHash(player) then
-            found = fam
-            break
-        end
-    end
-    return found
-end
-
--- English comments required by user; keep debug values dynamic
-local function getLuckMultiplier(luck)
-	local data = ConchBlessing.timemoney.data
-	local mult = 1 + data.luckScale * (luck or 0)
-	if mult > data.luckScaleMaxMult then
-		mult = data.luckScaleMaxMult
+-- Initial drop when item is newly gained
+local function tryInitialDrop(player, diffCount)
+	local id = getItemId()
+	if not id then return end
+	if diffCount <= 0 then return end
+	local rng = player:GetCollectibleRNG(id)
+    local count = ConchBlessing.timemoney.data.initialDropCount or 0
+	playFamiliarSpawnAnim(player)
+	for _ = 1, count do
+		spawnCoinNear(player, player, rng)
 	end
-	return mult
+	ConchBlessing.printDebug(string.format("[Time=Money] initial drop executed, count=%d, diff=%d", count, diffCount))
 end
 
-local function chooseCoinType(rng, player)
-	-- Returns pickup variant id and subtype
-	local data = ConchBlessing.timemoney.data
-	local mult = getLuckMultiplier(player and player.Luck or 0)
-	local r = rng:RandomFloat()
-	-- scale chances by multiplier
-	local nickel = data.nickelChance * mult
-	local golden = data.goldenChance * mult
-	local dime = data.dimeChance * mult
-	-- normalize cumulative selection
-	if r < dime then
-		return PickupVariant.PICKUP_COIN, CoinSubType.COIN_DIME
-	elseif r < dime + golden then
-		return PickupVariant.PICKUP_COIN, CoinSubType.COIN_GOLDEN
-	elseif r < dime + golden + nickel then
-		return PickupVariant.PICKUP_COIN, CoinSubType.COIN_NICKEL
-	else
-		-- normal coin; synergy converts later if needed
-		return PickupVariant.PICKUP_COIN, CoinSubType.COIN_PENNY
-	end
-end
-
-local function dropCoinsNear(familiar, count, player, isInitial)
-	if count <= 0 then return end
-	local rng = player and player:GetCollectibleRNG(ConchBlessing.ItemData.TIME_MONEY.id) or RNG()
-	local hasDeepPockets = player and player:HasCollectible(CollectibleType.COLLECTIBLE_DEEP_POCKETS)
-
-    local sprite = familiar:GetSprite()
-    if sprite and sprite:HasAnimation("Spawn") then
-        sprite:Play("Spawn", true)
-        ConchBlessing.printDebug("[Time=Money] Playing Spawn animation")
-    elseif sprite and sprite:HasAnimation("IdleDown") then
-        -- briefly poke IdleDown to show activity if Spawn not available
-        sprite:Play("IdleDown", true)
-        ConchBlessing.printDebug("[Time=Money] Fallback: playing IdleDown animation")
-    end
-    
-    -- Play coin spawn sound for feedback
-    if not isInitial then  -- 초기 드롭은 소음 방지를 위해 소리 제외
-        Isaac.GetSoundManager():Play(SoundEffect.SOUND_COINPICKUP, 0.7, 2, false, 1.2)
-    end
-
-	for i = 1, count do
-		local variant, subtype = chooseCoinType(rng, player)
-		-- Deep Pockets synergy: normal coins become nickels
-		if hasDeepPockets and variant == PickupVariant.PICKUP_COIN and subtype == CoinSubType.COIN_PENNY then
-			subtype = CoinSubType.COIN_NICKEL
-		end
-		local offset = Vector.FromAngle(rng:RandomInt(0, 359)):Resized(10 + rng:RandomInt(0, 15))
-		local pos = familiar.Position + offset
-		Isaac.Spawn(EntityType.ENTITY_PICKUP, variant, subtype, pos, Vector.Zero, familiar)
-	end
-
-	-- Enhanced debug output with detailed coin information
-	local debugMsg = "[Time=Money] Dropped " .. tostring(count) .. " coins"
-	if isInitial then
-		debugMsg = debugMsg .. " (initial drop)"
-	else
-		debugMsg = debugMsg .. " (60-second timer)"
-	end
-	ConchBlessing.printDebug(debugMsg .. " - spawn complete")
-end
-
--- Ensure coin cap is effectively raised by preventing our spawns from being skipped due to soft caps
-local function clampPlayerCoins(player)
-	local data = ConchBlessing.timemoney.data
-	if player and player:GetNumCoins() > data.maxCoinCap then
-		player:AddCoins(data.maxCoinCap - player:GetNumCoins())
-	end
-end
-
--- On game start: initialize per-player state
-ConchBlessing.timemoney.onGameStarted = function()
+-- Periodic drop based on current money
+local function tryPeriodicDrop(player)
 	local game = Game()
-	for i = 0, game:GetNumPlayers() - 1 do
-		local player = Isaac.GetPlayer(i)
-		local save = getPlayerSave(player)
-		-- initialize timers when item present
-        local tmId = getTimeMoneyItemId()
-        if player:HasCollectible(tmId) then
-			save.nextDropFrame = save.nextDropFrame or (game:GetFrameCount() + ConchBlessing.timemoney.data.dropIntervalFrames)
-			save.didInitial = save.didInitial or false
-            ConchBlessing.printDebug("[Time=Money] Initialized for player " .. tostring(i) .. ", nextDropFrame=" .. tostring(save.nextDropFrame))
-            -- Ensure familiar spawn on load/new run if item already owned
-            player:AddCacheFlags(CacheFlag.CACHE_FAMILIARS)
-            player:EvaluateItems()
-            local count = player:GetCollectibleNum(tmId)
-            local itemConfig = Isaac.GetItemConfig() and Isaac.GetItemConfig():GetCollectible(tmId)
-            local variant = ConchBlessing.timemoney.getVariant()
-            if variant and variant > 0 then
-                player:CheckFamiliar(variant, count, player:GetCollectibleRNG(tmId), itemConfig, 0)
-                ConchBlessing.printDebug("[Time=Money] Forced CheckFamiliar on game start (variant=" .. tostring(variant) .. ", count=" .. tostring(count) .. ")")
-            else
-                ConchBlessing.printDebug("[Time=Money] Variant unresolved on game start; will retry via callbacks")
-            end
+	local frame = game:GetFrameCount()
+	local ps = getPlayerState(player)
+	local fps = ConchBlessing.timemoney.data.framesPerSecond or 30
+	if fps <= 0 then fps = 30 end
+	local intervalFrames = math.floor((ConchBlessing.timemoney.data.dropIntervalSeconds or 0) * fps)
+	if intervalFrames <= 0 then return end
+	if frame - (ps.lastDropFrame or 0) < intervalFrames then return end
+	local coins = player:GetNumCoins()
+	local pct = ConchBlessing.timemoney.data.percentPerInterval or 0
+    local effectivePct = pct
+    -- BFFS!: change base percent from 5% -> 10%
+    if player:HasCollectible(CollectibleType.COLLECTIBLE_BFFS) then
+        effectivePct = 0.10
+    end
+    local toDrop = math.floor(coins * effectivePct)
+    -- apply pending damage penalties (from onEntityTakeDamage)
+    toDrop = toDrop - (ps.pendingPenalty or 0)
+	if toDrop < 1 then toDrop = 1 end
+	local rng = player:GetCollectibleRNG(getItemId() or 0)
+	playFamiliarSpawnAnim(player)
+	for _ = 1, toDrop do
+		spawnCoinNear(player, player, rng)
+	end
+	ps.lastDropFrame = frame
+    ps.pendingPenalty = 0 -- reset after a drop cycle
+	saveToSave(player)
+	ConchBlessing.printDebug(string.format("[Time=Money] periodic drop executed, toDrop=%d, coins=%d", toDrop, coins))
+end
+
+-- Callbacks
+function ConchBlessing.timemoney.onFamiliarInit(_, familiar)
+	-- Ensure follower behavior
+	local fam = familiar:ToFamiliar()
+	if fam then
+		-- Register into follower chain so multiple familiars line up instead of overlapping
+		fam:AddToFollowers()
+		fam:FollowParent()
+		-- Play default floating animation from ANM2
+		local spr = fam:GetSprite()
+		if spr then
+			pcall(function()
+				spr:Play("FloatDown", true)
+			end)
 		end
 	end
 end
 
--- On pickup: force CACHE_FAMILIARS so the familiar spawns immediately
-ConchBlessing.timemoney.onPostGetCollectible = function(_, collectibleID, _, player)
-    if not player then return end
-    local id = getTimeMoneyItemId()
-    ConchBlessing.printDebug("[Time=Money] PostGet: got=" .. tostring(collectibleID) .. " ours=" .. tostring(id))
-    if collectibleID ~= id then
-        -- Fallback: compare by item name if ID not resolved yet
-        local cfg = Isaac.GetItemConfig() and Isaac.GetItemConfig():GetCollectible(collectibleID)
-        if not (cfg and cfg.Name == "Time = Money") then
-            return
-        end
-        ConchBlessing.printDebug("[Time=Money] PostGetCollectible matched by name fallback")
-    end
-    ConchBlessing.printDebug("[Time=Money] onPostGetCollectible: forcing CACHE_FAMILIARS")
-    player:AddCacheFlags(CacheFlag.CACHE_FAMILIARS)
-    player:EvaluateItems()
-    local variant = ConchBlessing.timemoney.getVariant()
-    ConchBlessing.printDebug("[Time=Money] PostGet: variant=" .. tostring(variant))
-    local effects = player:GetEffects()
-    local count = player:GetCollectibleNum(id) + (effects and effects:GetCollectibleEffectNum(id) or 0)
-    local itemConfig = Isaac.GetItemConfig() and Isaac.GetItemConfig():GetCollectible(id)
-    if variant and variant > 0 then
-        player:CheckFamiliar(variant, count, player:GetCollectibleRNG(id), itemConfig, 0)
-        ConchBlessing.printDebug("[Time=Money] onPostGetCollectible: CheckFamiliar applied (variant=" .. tostring(variant) .. ", count=" .. tostring(count) .. ")")
-    end
-end
-
-ConchBlessing.timemoney.onFamiliarUpdate = function(familiar)
-    -- Guard: run only for our familiar variant
-    local variant = ConchBlessing.timemoney.getVariant()
-    if not (variant and variant > 0) or familiar.Variant ~= variant then return end
-    local player = familiar.Player or ensureFamiliarHasPlayer(familiar)
-    if not player then return end
-
-    -- Follow parent like standard familiars
-    familiar:FollowParent()
-
-    local sprite = familiar:GetSprite()
-    if sprite then
-        -- When Spawn animation finishes, transition to floating animation
-        if sprite:IsFinished("Spawn") then
-            if sprite:HasAnimation("FloatDown") then
-                sprite:Play("FloatDown", true)
-                ConchBlessing.printDebug("[Time=Money] Spawn -> FloatDown transition")
-            elseif sprite:HasAnimation("IdleDown") then
-                sprite:Play("IdleDown", true)
-            end
-        -- When IdleDown finishes, start floating loop
-        elseif sprite:IsFinished("IdleDown") then
-            if sprite:HasAnimation("FloatDown") then
-                sprite:Play("FloatDown", true)
-            end
-        -- If no animation is playing, default to floating
-        elseif not sprite:IsPlaying() then
-            if sprite:HasAnimation("FloatDown") then
-                sprite:Play("FloatDown", true)
-            elseif sprite:HasAnimation("IdleDown") then
-                sprite:Play("IdleDown", true)
-            end
-        end
-    end
-
-	local save = getPlayerSave(player)
-	local frame = Game():GetFrameCount()
-	
-	-- Debug: show remaining time until next drop (helpful for development)
-	if save.nextDropFrame and frame < save.nextDropFrame then
-		local remainingFrames = save.nextDropFrame - frame
-		local remainingSeconds = math.floor(remainingFrames / 30)
-		if frame % 90 == 0 then  -- Every 3 seconds, show timer status (avoid spam)
-			ConchBlessing.printDebug("[Time=Money] Timer status: " .. tostring(remainingSeconds) .. " seconds until next drop")
+function ConchBlessing.timemoney.onFamiliarUpdate(_, familiar)
+	-- Keep following parent smoothly
+	local fam = familiar:ToFamiliar()
+	if fam then
+		fam:FollowParent()
+		-- Small trailing distance by blending toward parent's previous position
+		local parent = fam.Player
+		if parent then
+			local lag = ConchBlessing.timemoney.data.followLagFactor or 0.95
+			local target = parent.Position
+			fam.Position = fam.Position * lag + target * (1 - lag)
+		end
+		local spr = fam:GetSprite()
+		if spr and (spr:IsFinished("Spawn") or spr:IsFinished("IdleDown")) then
+			pcall(function()
+				spr:Play("FloatDown", true)
+			end)
 		end
 	end
-
-    if save._initDropScheduled or not save.didInitial then
-		local data = ConchBlessing.timemoney.data
-		local initial = data.initialDropCount
-		ConchBlessing.printDebug("[Time=Money] Performing initial drop: " .. tostring(initial) .. " coins")
-		dropCoinsNear(familiar, initial, player, true)
-        save.didInitial = true
-        save._initDropScheduled = nil
-        save.nextDropFrame = save.nextDropFrame or (frame + data.dropIntervalFrames)
-        local nextInSeconds = math.floor(data.dropIntervalFrames / 30)
-        ConchBlessing.printDebug("[Time=Money] Initial drop complete; 60-second timer started (next drop in " .. tostring(nextInSeconds) .. " seconds)")
-	end
-
-	-- periodic drop every 60 seconds (EID: "60초마다 현재 소지중인 동전의 5%만큼 동전을 드랍")
-	if save.nextDropFrame and frame >= save.nextDropFrame then
-		local data = ConchBlessing.timemoney.data
-		local held = player:GetNumCoins()
-		local toDrop = math.max(math.floor(held * data.percentOfHeldCoins), data.minDropCount)
-		
-		-- Enhanced debug info matching EID description 
-		local timeLeft = math.floor((save.nextDropFrame - frame) / 30) -- seconds remaining
-		ConchBlessing.printDebug("[Time=Money] 60-second timer triggered! held=" .. tostring(held) .. " coins, 5% = " .. tostring(toDrop) .. " coins to drop")
-		
-		clampPlayerCoins(player)
-		dropCoinsNear(familiar, toDrop, player, false)
-		save.nextDropFrame = frame + data.dropIntervalFrames
-        ConchBlessing.printDebug("[Time=Money] Timer reset: next drop in 60 seconds (frame " .. tostring(save.nextDropFrame) .. ")")
-        
-        -- Add visual feedback for successful timer trigger
-        local room = Game():GetRoom()
-        if room then
-            local pos = familiar.Position + Vector(0, -10)
-            -- Brief visual effect to indicate timer activation
-            Isaac.Spawn(EntityType.ENTITY_EFFECT, EffectVariant.POOF01, 0, pos, Vector.Zero, familiar)
-        end
-	end
 end
 
--- Detect pickups reliably even if MC_POST_GET_COLLECTIBLE is not fired by engine/mods
-ConchBlessing.timemoney.onPlayerUpdate = function(_, player)
-    -- Guard: ensure we received a valid EntityPlayer from the engine
-    if not player or type(player) ~= "userdata" or (player.ToPlayer and not player:ToPlayer()) then
+-- Render next-drop preview above the familiar
+function ConchBlessing.timemoney.onFamiliarRender(_, familiar, offset)
+    local fam = familiar:ToFamiliar()
+    if not fam then return end
+    local player = fam.Player
+    if not player then return end
+    local ps = getPlayerState(player)
+    local coins = player:GetNumCoins()
+    local pct = ConchBlessing.timemoney.data.percentPerInterval or 0
+    local effectivePct = player:HasCollectible(CollectibleType.COLLECTIBLE_BFFS) and 0.10 or pct
+    local preview = math.floor(coins * effectivePct) - (ps.pendingPenalty or 0)
+    if preview < 1 then preview = 1 end
+    -- Draw exactly at familiar position (slightly above)
+    local pos = Isaac.WorldToScreen(fam.Position)
+    Isaac.RenderText(tostring(preview), pos.X - 3, pos.Y - 28, 1, 1, 0.5, 0.9)
+end
+
+-- On damage: increment pending penalty unless excluded by time-trinket rules
+function ConchBlessing.timemoney.onEntityTakeDamage(_, entity, amount, flags, source, countdown)
+    local player = entity:ToPlayer()
+    if not player then return end
+    local id = getItemId()
+    if not id or player:GetCollectibleNum(id) <= 0 then return end
+    if DamageUtils and DamageUtils.isSelfInflictedDamage and DamageUtils.isSelfInflictedDamage(flags) then
         return
     end
-    local save = getPlayerSave(player)
-    local frame = Game():GetFrameCount()
-    local tmId = getTimeMoneyItemId()
-    if tmId == -1 then return end
-    local current = player:GetCollectibleNum(tmId)
-    if save._lastCount ~= current then
-        ConchBlessing.printDebug("[Time=Money] onPlayerUpdate: count changed " .. tostring(save._lastCount) .. " -> " .. tostring(current))
-        save._lastCount = current
-        -- Force familiar evaluation
-        player:AddCacheFlags(CacheFlag.CACHE_FAMILIARS)
-        player:EvaluateItems()
-        local itemConfig = Isaac.GetItemConfig() and Isaac.GetItemConfig():GetCollectible(tmId)
-        local effects = player:GetEffects()
-        local target = current + (effects and effects:GetCollectibleEffectNum(tmId) or 0)
-        local variant = ConchBlessing.timemoney.getVariant()
-        if variant and variant > 0 then
-            player:CheckFamiliar(variant, target, player:GetCollectibleRNG(tmId), itemConfig, 0)
-            ConchBlessing.printDebug("[Time=Money] onPlayerUpdate: CheckFamiliar applied (variant=" .. tostring(variant) .. ", count=" .. tostring(target) .. ")")
-            -- Defer manual spawn check to next frame to give the engine time to create the familiar
-            save._deferredSpawnFrame = frame + 1
-        end
-    end
-
-    -- Safety: if player owns the item but familiar missing, try to spawn it once
-    if current > 0 then
-        local fam = findOurFamiliarForPlayer(player)
-        if not fam then
-            -- Only run manual spawn after the deferred frame (engine may create on next tick)
-            if save._deferredSpawnFrame and frame >= save._deferredSpawnFrame and not save._manualSpawnDone then
-                local after = findOurFamiliarForPlayer(player)
-                if not after then
-                    local variant = ConchBlessing.timemoney.getVariant()
-                    if variant and variant > 0 then
-                        local spawned = Isaac.Spawn(EntityType.ENTITY_FAMILIAR, variant, 0, player.Position, Vector.Zero, player):ToFamiliar()
-                        if spawned then
-                            spawned.Player = player
-                            spawned:AddToFollowers()
-                            spawned.IsFollower = true
-                            ConchBlessing.printDebug("[Time=Money] Manual familiar spawn executed (variant=" .. tostring(variant) .. ")")
-                            local s = spawned:GetSprite()
-                            if s and s:HasAnimation("Spawn") then
-                                s:Play("Spawn", true)
-                            end
-                        end
-                    end
-                end
-                save._manualSpawnDone = true
-            end
-        end
-    end
+    local ps = getPlayerState(player)
+    ps.pendingPenalty = (ps.pendingPenalty or 0) + 1
+    saveToSave(player)
 end
 
--- Tie item count to familiar count
-ConchBlessing.timemoney.onEvaluateCache = function(player, cacheFlag)
+function ConchBlessing.timemoney.onEvaluateCache(_, player, cacheFlag)
 	if cacheFlag ~= CacheFlag.CACHE_FAMILIARS then return end
-    local tmId = getTimeMoneyItemId()
-    local effects = player:GetEffects()
-    local count = player:GetCollectibleNum(tmId) + (effects and effects:GetCollectibleEffectNum(tmId) or 0)
-    local itemConfig = Isaac.GetItemConfig() and Isaac.GetItemConfig():GetCollectible(tmId)
-    local variant = ConchBlessing.timemoney.getVariant()
-    ConchBlessing.printDebug("[Time=Money] EvalCache: variant=" .. tostring(variant) .. " count=" .. tostring(count))
-    if variant and variant > 0 then
-        -- Use tutorial-style stable RNG seeding for CheckFamiliar
-        local baseRng = player:GetCollectibleRNG(tmId)
-        baseRng:Next()
-        local seededRng = RNG()
-        seededRng:SetSeed(baseRng:GetSeed(), 32)
-        player:CheckFamiliar(variant, count, seededRng, itemConfig, 0)
-        ConchBlessing.printDebug("[Time=Money] EvalCache: CheckFamiliar called with stable RNG")
-    else
-        player:AddCacheFlags(CacheFlag.CACHE_FAMILIARS)
-        player:EvaluateItems()
-    end
+	local id = getItemId()
+	local var = getFamiliarVariant()
+	if not id or not var then return end
+	local count = player:GetCollectibleNum(id)
+	if count and count > 0 then
+		local rng = player:GetCollectibleRNG(id)
+		player:CheckFamiliar(var, count, rng)
+	end
 end
 
--- Dynamic variant getter with caching
-function ConchBlessing.timemoney.getVariant()
-    if ConchBlessing.timemoney._cachedVariant and ConchBlessing.timemoney._cachedVariant > 0 then
-        return ConchBlessing.timemoney._cachedVariant
-    end
-
-    local byName = Isaac.GetEntityVariantByName and Isaac.GetEntityVariantByName("Time = Money")
-    if byName and byName > 0 then
-        ConchBlessing.timemoney._cachedVariant = byName
-        return byName
-    end
-
-    if ConchBlessing.ItemData and ConchBlessing.ItemData.TIME_MONEY and ConchBlessing.ItemData.TIME_MONEY.entity then
-        local configured = ConchBlessing.ItemData.TIME_MONEY.entity.variant
-        if configured and configured > 0 then
-            ConchBlessing.timemoney._cachedVariant = configured
-            return configured
-        end
-    end
-
-    return 0
+function ConchBlessing.timemoney.onGameStarted(_, isContinued)
+	local game = Game()
+	local num = game:GetNumPlayers()
+	for i = 0, num - 1 do
+		local p = game:GetPlayer(i)
+		if isContinued then
+			loadFromSave(p)
+		else
+			local ps = getPlayerState(p)
+			ps.lastDropFrame = 0
+			ps.lastItemCount = p:GetCollectibleNum(getItemId() or 0)
+			saveToSave(p)
+		end
+	end
 end
 
--- Enhanced familiar initialization
-ConchBlessing.timemoney.onFamiliarInit = function(familiar)
-    -- Guard: run only for our familiar variant
-    local variant = ConchBlessing.timemoney.getVariant()
-    if not (variant and variant > 0) or familiar.Variant ~= variant then return end
-    
-    -- Add to followers like standard familiars
-    familiar:AddToFollowers()
-    familiar.IsFollower = true
-    familiar:FollowParent() -- ensure immediate following in the first frame
-    
-    local sprite = familiar:GetSprite()
-    if sprite then
-        if sprite:HasAnimation("Spawn") then
-            sprite:Play("Spawn", true)
-            ConchBlessing.printDebug("[Time=Money] Playing Spawn animation on init")
-        elseif sprite:HasAnimation("IdleDown") then
-            sprite:Play("IdleDown", true)
-            ConchBlessing.printDebug("[Time=Money] Fallback: playing IdleDown on init")
-        elseif sprite:HasAnimation("FloatDown") then
-            sprite:Play("FloatDown", true)
-            ConchBlessing.printDebug("[Time=Money] Fallback: playing FloatDown on init")
-        end
-    end
-    
-    -- Schedule initial drop on the next update tick
-    local player = ensureFamiliarHasPlayer(familiar)
-    if player then
-        local save = getPlayerSave(player)
-        save._initDropScheduled = true
-        ConchBlessing.printDebug("[Time=Money] Initial drop scheduled for next update")
-    end
-    
-    ConchBlessing.printDebug("[Time=Money] Familiar initialized successfully for player " .. tostring(familiar.Player and familiar.Player.InitSeed))
-end
 
--- Debug helper functions for testing (only use in development)
-ConchBlessing.timemoney.forceTimerTrigger = function()
-    ConchBlessing.printDebug("[Time=Money] DEBUG: Force triggering timer for all Time=Money familiars")
-    local variant = ConchBlessing.timemoney.getVariant()
-    if not (variant and variant > 0) then return end
-    for _, ent in ipairs(Isaac.FindByType(EntityType.ENTITY_FAMILIAR, variant, -1, false, false)) do
-        local familiar = ent:ToFamiliar()
-        if familiar and familiar.Player then
-            local save = getPlayerSave(familiar.Player)
-            save.nextDropFrame = Game():GetFrameCount() - 1  -- Trigger next update
-            ConchBlessing.printDebug("[Time=Money] DEBUG: Forced timer trigger for familiar")
-        end
-    end
-end
 
-ConchBlessing.timemoney.debugInfo = function()
-    ConchBlessing.printDebug("[Time=Money] DEBUG: Current familiar status:")
-    local variant = ConchBlessing.timemoney.getVariant()
-    if not (variant and variant > 0) then
-        ConchBlessing.printDebug("[Time=Money] DEBUG: Variant unresolved")
-        return
-    end
-    local count = 0
-    for _, ent in ipairs(Isaac.FindByType(EntityType.ENTITY_FAMILIAR, variant, -1, false, false)) do
-            local familiar = ent:ToFamiliar()
-            if familiar and familiar.Player then
-                count = count + 1
-                local save = getPlayerSave(familiar.Player)
-                local frame = Game():GetFrameCount()
-                local remaining = save.nextDropFrame and save.nextDropFrame - frame or "N/A"
-                ConchBlessing.printDebug("[Time=Money] DEBUG: Familiar #" .. tostring(count) .. " - Frames until drop: " .. tostring(remaining))
-            end
-    end
-    if count == 0 then
-        ConchBlessing.printDebug("[Time=Money] DEBUG: No familiars found")
-    end
-end
-
--- Test and debug functions
-ConchBlessing.timemoney.testCallbacks = function()
-    ConchBlessing.printDebug("[Time=Money] TEST: Testing callback system")
-    local variant = ConchBlessing.timemoney.getVariant()
-    ConchBlessing.printDebug("[Time=Money] TEST: Current variant = " .. tostring(variant))
-    
-    if not ConchBlessing.timemoney.onFamiliarInit then
-        ConchBlessing.printError("[Time=Money] TEST: onFamiliarInit function is missing!")
-    else
-        ConchBlessing.printDebug("[Time=Money] TEST: onFamiliarInit function exists")
-    end
-    
-    if not ConchBlessing.timemoney.onFamiliarUpdate then
-        ConchBlessing.printError("[Time=Money] TEST: onFamiliarUpdate function is missing!")
-    else
-        ConchBlessing.printDebug("[Time=Money] TEST: onFamiliarUpdate function exists")
-    end
-    
-    ConchBlessing.printDebug("[Time=Money] TEST: Callback test complete")
-end
-
--- Force check all players for Time=Money and ensure familiars exist
-ConchBlessing.timemoney.forceCheckAllPlayers = function()
-    ConchBlessing.printDebug("[Time=Money] Force checking all players for missing familiars")
-    local game = Game()
-    local tmId = getTimeMoneyItemId()
-    if tmId == -1 then 
-        ConchBlessing.printDebug("[Time=Money] Item ID not resolved, skipping force check")
-        return 
-    end
-    
-    for i = 0, game:GetNumPlayers() - 1 do
-        local player = Isaac.GetPlayer(i)
-        if player:HasCollectible(tmId) then
-            ConchBlessing.printDebug("[Time=Money] Player " .. tostring(i) .. " has item, checking familiar")
-            local familiar = findOurFamiliarForPlayer(player)
-            if not familiar then
-                ConchBlessing.printDebug("[Time=Money] Missing familiar for player " .. tostring(i) .. ", forcing spawn")
-                player:AddCacheFlags(CacheFlag.CACHE_FAMILIARS)
-                player:EvaluateItems()
-                
-                -- Double-check and manual spawn if needed
-                local stillMissing = findOurFamiliarForPlayer(player)
-                if not stillMissing then
-                    local variant = ConchBlessing.timemoney.getVariant()
-                    if variant and variant > 0 then
-                        ConchBlessing.printDebug("[Time=Money] Manual spawning familiar for player " .. tostring(i))
-                        local spawned = Isaac.Spawn(EntityType.ENTITY_FAMILIAR, variant, 0, player.Position, Vector.Zero, player):ToFamiliar()
-                        if spawned then
-                            spawned.Player = player
-                            spawned:AddToFollowers()
-                            spawned.IsFollower = true
-                            local sprite = spawned:GetSprite()
-                            if sprite and sprite:HasAnimation("Spawn") then
-                                sprite:Play("Spawn", true)
-                            end
-                            ConchBlessing.printDebug("[Time=Money] Manual spawn successful")
-                        end
-                    end
-                end
-            else
-                ConchBlessing.printDebug("[Time=Money] Player " .. tostring(i) .. " already has familiar")
-            end
-        end
-    end
+function ConchBlessing.timemoney.onPlayerUpdate(_)
+	local game = Game()
+	local num = game:GetNumPlayers()
+	local id = getItemId()
+	if not id then return end
+	for i = 0, num - 1 do
+		local p = game:GetPlayer(i)
+		local ps = getPlayerState(p)
+		local curCount = p:GetCollectibleNum(id)
+		if curCount > (ps.lastItemCount or 0) then
+			tryInitialDrop(p, curCount - (ps.lastItemCount or 0))
+			ps.lastItemCount = curCount
+			saveToSave(p)
+		end
+		if curCount > 0 then
+			tryPeriodicDrop(p)
+		end
+	end
 end
