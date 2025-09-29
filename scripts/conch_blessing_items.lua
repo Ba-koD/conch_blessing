@@ -725,7 +725,40 @@ ConchBlessing.ItemData = {
         },
         synergies = {}
     },
-    
+    F_MINUS = {
+        WorkingNow=true,
+        type = "trinket",
+        id = Isaac.GetTrinketIdByName("F -"),
+        name = {
+            kr = "F -",
+            en = "F -"
+        },
+        description = {
+            kr = "정답만 피하는 것도 행운이야",
+            en = "Just avoiding the right answer is luck too."
+        },
+        eid = {
+            kr = {
+                ""
+            },
+            en = {
+                ""
+            }
+        },
+        gfx = "f_minus.png",
+        tags = "offensive",
+        cache = "luck",
+        hidden = false,
+        origin = TrinketType.TRINKET_PERFECTION,
+        flag = "negative",
+        shopprice=15,
+        script = "scripts/items/trinkets/f_minus",
+        specials = {  },
+        callbacks = {
+        },
+        synergies = {}
+    },
+
     -- Familiars
     TIME_MONEY = {
         type = "familiar",
@@ -894,6 +927,7 @@ local function loadAllItems()
     end
     
     local originItemFlags = {}
+    local originIdIsTrinket = {}
     
     -- Load item scripts and build origin mapping
     if not ConchBlessing._didLoadItemScripts then
@@ -907,6 +941,12 @@ local function loadAllItems()
                     originItemFlags[originID] = {}
                 end
                 table.insert(originItemFlags[originID], itemKey)
+                -- Track origin type disambiguation to avoid ID collisions between collectibles and trinkets
+                if itemData.type == "trinket" then
+                    originIdIsTrinket[originID] = true
+                elseif originIdIsTrinket[originID] == nil then
+                    originIdIsTrinket[originID] = false
+                end
                 ConchBlessing.printDebug("  Auto-mapped " .. itemKey .. " (flag: " .. itemData.flag .. ") to origin: " .. originID)
             end
             
@@ -975,6 +1015,7 @@ local function loadAllItems()
             end
 
             ConchBlessing._originItemFlags = originItemFlags
+            ConchBlessing._originIdIsTrinket = originIdIsTrinket
             ConchBlessing._conchModeTemplates = conchModeDescriptions
             ConchBlessing._conchDescCache = ConchBlessing._conchDescCache or {}
 
@@ -1032,7 +1073,10 @@ local function loadAllItems()
                             subId = subId - 32768
                         end
                         -- Only attach when the origin type matches the pickup type being described
-                        local originIsTrinket = isTrinketId(subId)
+                        local originIsTrinket = (ConchBlessing._originIdIsTrinket and ConchBlessing._originIdIsTrinket[subId])
+                        if originIsTrinket == nil then
+                            originIsTrinket = isTrinketId(subId)
+                        end
                         if (descObj.ObjVariant == 350 and not originIsTrinket)
                             or (descObj.ObjVariant == 100 and originIsTrinket) then
                             return descObj
