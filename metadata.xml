@@ -7,7 +7,7 @@
 
 아이작에 &quot;소라고동의 축복&quot; 업그레이드 시스템을 추가합니다. 기존 아이템을 세련된 연출과 함께 변환하고, 언어/스폰/타이밍을 세밀하게 커스터마이징할 수 있습니다.
 
-아이템 설명 가이드 : https://ba-kod.github.io/conch_blessing/
+아이템 설명 가이드 : https://tboi.rnen.kr
 
 주요 기능:
 - 아이템 업그레이드 연출: Before → Morph → After로 자연스럽게 연결
@@ -25,7 +25,7 @@ RGON 추천
 
 Conch’s Blessing
 
-Item Description Guide: https://ba-kod.github.io/conch_blessing/
+Item Description Guide: https://tboi.rnen.kr
 
 Adds a polished &quot;Conch’s Blessing&quot; upgrade system. Transform items with bespoke visuals, language-aware HUD/EID, and flexible spawn/timing controls.
 
@@ -40,7 +40,7 @@ Inspiration: Style inspired by &quot;Lazy MattPack [RGON]&quot; by Mr. Headcrab 
 Required Mod: Magic Conch (Steam Workshop: https://steamcommunity.com/sharedfiles/filedetails/?id=3540206030)
 
 RGON Recommended</description>
-    <version>1.0.23</version>
+    <version>1.0.25</version>
     <visibility>Public</visibility>
     <tag id="Lua"/>
     <tag id="Items"/>

@@ -45,7 +45,17 @@ Template.positive.onAfterChange = function(upgradePos, pickup, itemData, soundId
     
     -- single Holy Light strike at the pedestal to finalize (안전한 enum 처리)
     local crackTheSkyVariant = EffectVariant.CRACK_THE_SKY or 0
-    Isaac.Spawn(EntityType.ENTITY_EFFECT, crackTheSkyVariant, 0, upgradePos, Vector.Zero, nil)
+    -- Spawn owned effect so damage is attributed to player and can be tuned
+    local player = Game():GetNearestPlayer(upgradePos)
+    local eff = Isaac.Spawn(EntityType.ENTITY_EFFECT, crackTheSkyVariant, 0, upgradePos, Vector.Zero, player)
+    local efx = eff and eff:ToEffect() or nil
+    if efx then
+        -- Remove damage by making it a cosmetic only if supported; otherwise set harmless flags
+        pcall(function()
+            efx:SetDamageSource(EntityRef(player))
+            efx.CollisionDamage = 0
+        end)
+    end
     
     -- fade back from white to normal over 2 seconds (60 ticks)
     local upgradeAnim = {

@@ -367,8 +367,6 @@ function ConchBlessing.timemoney.onGameStarted(_, isContinued)
 	end
 end
 
-
-
 function ConchBlessing.timemoney.onPlayerUpdate(_)
 	local game = Game()
 	local num = game:GetNumPlayers()
