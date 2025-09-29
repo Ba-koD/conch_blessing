@@ -45,6 +45,115 @@ local function _resolveFunction(path)
     return current
 end
 
+-- Normalize origin declaration (number | string | table) to numeric id and trinket/collectible type
+local function _resolveOriginAny(originDecl, fallbackItemType)
+    local explicitType = nil
+    local resolvedId = nil
+
+    -- Accept simple number id directly
+    if type(originDecl) == "number" then
+        resolvedId = originDecl
+    elseif type(originDecl) == "string" then
+        -- Try by name; prefer collectible first, then trinket
+        local ok1, idCol = pcall(function()
+            return Isaac.GetItemIdByName and Isaac.GetItemIdByName(originDecl) or nil
+        end)
+        if ok1 and type(idCol) == "number" and idCol > 0 then
+            resolvedId = idCol
+            explicitType = "collectible"
+        else
+            local ok2, idTr = pcall(function()
+                return Isaac.GetTrinketIdByName and Isaac.GetTrinketIdByName(originDecl) or nil
+            end)
+            if ok2 and type(idTr) == "number" and idTr > 0 then
+                resolvedId = idTr
+                explicitType = "trinket"
+            end
+        end
+    elseif type(originDecl) == "table" then
+        explicitType = originDecl.type
+        resolvedId = originDecl.id
+        if not resolvedId then
+            if originDecl.collectible then
+                explicitType = explicitType or "collectible"
+                local okC, idC = pcall(function()
+                    return Isaac.GetItemIdByName and Isaac.GetItemIdByName(originDecl.collectible) or nil
+                end)
+                if okC and type(idC) == "number" and idC > 0 then
+                    resolvedId = idC
+                end
+            elseif originDecl.trinket then
+                explicitType = explicitType or "trinket"
+                local okT, idT = pcall(function()
+                    return Isaac.GetTrinketIdByName and Isaac.GetTrinketIdByName(originDecl.trinket) or nil
+                end)
+                if okT and type(idT) == "number" and idT > 0 then
+                    resolvedId = idT
+                end
+            elseif originDecl.name then
+                if explicitType == "trinket" then
+                    local okTN, idTN = pcall(function()
+                        return Isaac.GetTrinketIdByName and Isaac.GetTrinketIdByName(originDecl.name) or nil
+                    end)
+                    if okTN and type(idTN) == "number" and idTN > 0 then
+                        resolvedId = idTN
+                    end
+                elseif explicitType == "collectible" then
+                    local okCN, idCN = pcall(function()
+                        return Isaac.GetItemIdByName and Isaac.GetItemIdByName(originDecl.name) or nil
+                    end)
+                    if okCN and type(idCN) == "number" and idCN > 0 then
+                        resolvedId = idCN
+                    end
+                else
+                    -- No explicit type: try collectible then trinket
+                    local okCN, idCN = pcall(function()
+                        return Isaac.GetItemIdByName and Isaac.GetItemIdByName(originDecl.name) or nil
+                    end)
+                    if okCN and type(idCN) == "number" and idCN > 0 then
+                        resolvedId = idCN
+                        explicitType = "collectible"
+                    else
+                        local okTN, idTN = pcall(function()
+                            return Isaac.GetTrinketIdByName and Isaac.GetTrinketIdByName(originDecl.name) or nil
+                        end)
+                        if okTN and type(idTN) == "number" and idTN > 0 then
+                            resolvedId = idTN
+                            explicitType = "trinket"
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- Decide trinket vs collectible
+    local isTrinket = nil
+    if type(explicitType) == "string" then
+        local t = string.lower(explicitType)
+        if t == "trinket" then isTrinket = true end
+        if t == "collectible" then isTrinket = false end
+    end
+    if isTrinket == nil and type(fallbackItemType) == "string" then
+        local t = string.lower(fallbackItemType)
+        if t == "trinket" then isTrinket = true end
+        if t == "collectible" then isTrinket = false end
+    end
+    if isTrinket == nil and resolvedId then
+        local cfg = Isaac and Isaac.GetItemConfig and Isaac.GetItemConfig()
+        if cfg then
+            if cfg:GetTrinket(resolvedId) then
+                isTrinket = true
+            elseif cfg:GetCollectible(resolvedId) then
+                isTrinket = false
+            end
+        end
+    end
+
+    ConchBlessing.printDebug("_resolveOriginAny: origin=" .. tostring(originDecl) .. ", id=" .. tostring(resolvedId) .. ", isTrinket=" .. tostring(isTrinket))
+    return resolvedId, isTrinket
+end
+
 local function _spawnEffects(list, pos)
     if not list then return end
     for _, eff in ipairs(list) do
@@ -192,11 +301,17 @@ local function generateItemMaps()
     
     for itemKey, itemData in pairs(ConchBlessing.ItemData) do
         if itemData.origin and itemData.flag then
-            ConchBlessing.printDebug("Upgrade item found: " .. itemKey .. " (origin: " .. tostring(itemData.origin) .. ", flag: " .. itemData.flag .. ")")
-            
-            -- 같은 origin에 대해 flag별로 다른 아이템을 매핑 (type 구분 포함)
-            local originKeyPrefix = (itemData.type == "trinket") and "T:" or "C:"
-            local originKey = originKeyPrefix .. tostring(itemData.origin)
+            -- Resolve origin declaration to numeric id and type
+            local originId, originIsTrinket = _resolveOriginAny(itemData.origin, itemData.type)
+            if not originId then
+                ConchBlessing.printError("Upgrade item has unresolved origin: " .. tostring(itemKey) .. " (origin= " .. tostring(itemData.origin) .. ")")
+            else
+                ConchBlessing.printDebug("Upgrade item found: " .. itemKey .. " (resolved originId=" .. tostring(originId) .. ", isTrinket=" .. tostring(originIsTrinket) .. ", flag=" .. tostring(itemData.flag) .. ")")
+            end
+            if not originId then goto continue_origin end
+            -- Map by resolved type and id
+            local originKeyPrefix = (originIsTrinket == true) and "T:" or "C:"
+            local originKey = originKeyPrefix .. tostring(originId)
             if not ConchBlessing.ItemMaps[originKey] then
                 ConchBlessing.ItemMaps[originKey] = {}
             end
@@ -208,6 +323,7 @@ local function generateItemMaps()
             }
             
             ConchBlessing.printDebug("  Added to conversion map: " .. originKey .. "[" .. itemData.flag .. "] -> " .. tostring(itemData.id))
+            ::continue_origin::
         end
     end
     

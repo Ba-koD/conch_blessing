@@ -666,7 +666,7 @@ ConchBlessing.ItemData = {
                 "#On taking damage, gain is paused for 60 seconds."
             }
         },
-        gfx = "time_template.png",
+        gfx = "time_tear.png",
         tags = "offensive",
         cache = "fireDelay",
         hidden = false,
@@ -706,7 +706,7 @@ ConchBlessing.ItemData = {
                 "#On taking damage, gain is paused for 60 seconds."
             }
         },
-        gfx = "time_template.png",
+        gfx = "time_luck.png",
         tags = "utility",
         cache = "luck",
         hidden = false,
@@ -726,7 +726,7 @@ ConchBlessing.ItemData = {
         synergies = {}
     },
     F_MINUS = {
-        WorkingNow=true,
+        WorkingNow=false,
         type = "trinket",
         id = Isaac.GetTrinketIdByName("F -"),
         name = {
@@ -739,10 +739,12 @@ ConchBlessing.ItemData = {
         },
         eid = {
             kr = {
-                ""
+                "행운이 5 증가합니다.",
+                "#피격 당하지 않은 채로 다음 층으로 이동 시, C -로 진화합니다."
             },
             en = {
-                ""
+                "Luck increases by 5.",
+                "#When moving to the next floor without taking damage, evolves into C -."
             }
         },
         gfx = "f_minus.png",
@@ -753,7 +755,122 @@ ConchBlessing.ItemData = {
         flag = "negative",
         shopprice=15,
         script = "scripts/items/trinkets/f_minus",
-        specials = {  },
+        specials = { normal = 5 },
+        callbacks = {
+        },
+        synergies = {}
+    },
+    C_MINUS = {
+        WorkingNow=false,
+        type = "trinket",
+        id = Isaac.GetTrinketIdByName("C -"),
+        name = {
+            kr = "C -",
+            en = "C -"
+        },
+        description = {
+            kr = "그럴 수 있어. 이런 날도 있는 거지 뭐.",
+            en = "BETTER LUCK NEXT TIME!"
+        },
+        eid = {
+            kr = {
+                "행운이 4 증가합니다.",
+                "#{{Tears}}고정연사가 2.0 증가합니다.",
+                "#피격 당하지 않은 채로 다음 층으로 이동 시, B -로 진화합니다."
+            },
+            en = {
+                "Luck increases by 4.",
+                "#{{Tears}}Fixed SPS increases by 2.0.",
+                "#When moving to the next floor without taking damage, evolves into B -."
+            }
+        },
+        gfx = "c_minus.png",
+        tags = "offensive",
+        cache = "tears",
+        origin = { name = "F -", type = "trinket" },
+        flag = "positive",
+        hidden = true,
+        shopprice=15,
+        script = "scripts/items/trinkets/c_minus",
+        specials = { normal = {4, 2.0} },
+        callbacks = {
+        },
+        synergies = {}
+    },
+    B_MINUS = {
+        WorkingNow=false,
+        type = "trinket",
+        id = Isaac.GetTrinketIdByName("B -"),
+        name = {
+            kr = "B -",
+            en = "B -"
+        },
+        description = {
+            kr = "시작이 반이다",
+            en = "Well begun is half done."
+        },
+        eid = {
+            kr = {
+                "행운이 3 증가합니다.",
+                "#{{Tears}}고정 연사가 3.0 증가합니다.",
+                "#{{Damage}}공격력이 3.0 증가합니다.",
+                "#피격 당하지 않은 채로 다음 층으로 이동 시, A -로 진화합니다."
+            },
+            en = {
+                "Luck increases by 3.",
+                "#{{Tears}}Fixed SPS increases by 3.0.",
+                "#{{Damage}}Damage increases by 3.0.",
+                "#When moving to the next floor without taking damage, evolves into A -."
+            }
+        },
+        gfx = "b_minus.png",
+        tags = "offensive",
+        cache = "luck damage",
+        origin = { name = "C -", type = "trinket" },
+        flag = "positive",
+        hidden = true,
+        shopprice=15,
+        script = "scripts/items/trinkets/b_minus",
+        specials = { normal = {3, 3.0} },
+        callbacks = {
+        },
+        synergies = {}
+    },
+    A_MINUS = {
+        WorkingNow=false,
+        type = "trinket",
+        id = Isaac.GetTrinketIdByName("A -"),
+        name = {
+            kr = "A -",
+            en = "A -"
+        },
+        description = {
+            kr = "좋은 시도였어. 아이작",
+            en = "Nice try, did he?"
+        },
+        eid = {
+            kr = {
+                "행운이 2 증가합니다.",
+                "#{{Tears}}고정 연사가 4.0 증가합니다.",
+                "#{{Damage}}공격력이 4배가 됩니다.",
+                "#{{Luck}}행운이 4배가 됩니다.",
+            },
+            en = {
+                "Luck increases by 2.",
+                "#{{Tears}}Fixed SPS increases by 4.0.",
+                "#{{Damage}}Damage increases by 4x.",
+                "#{{Luck}}Luck increases by 4x.",
+            }
+        },
+        gfx = "a_minus.png",
+        tags = "offensive",
+        cache = "luck damage",
+        origin = { name = "B -", type = "trinket" },
+        flag = "positive",
+        hidden = true,
+        shopprice=15,
+        script = "scripts/items/trinkets/a_minus",
+        specials = { normal = {2, 4.0} },
         callbacks = {
         },
         synergies = {}
@@ -926,28 +1043,65 @@ local function loadAllItems()
         ConchBlessing.printDebug("External systems already loaded; skipping.")
     end
     
-    local originItemFlags = {}
-    local originIdIsTrinket = {}
+	local originItemFlags = {}
+	local originIdIsTrinket = {}
+
+	-- Normalize origin declaration to an ID and optional explicit type
+	local function resolveOriginAny(origin)
+		-- Supports:
+		-- 1) number (collectible/trinket id)
+		-- 2) { id = number, type = "collectible"|"trinket" }
+		-- 3) { name = string, type = "collectible"|"trinket" }
+		-- 4) { collectible = string } or { trinket = string }
+		if type(origin) == "number" then
+			return origin, nil
+		end
+		if type(origin) == "table" then
+			local explicitType = origin.type
+			local id = origin.id
+			if not id then
+				if origin.name and explicitType == "trinket" then
+					id = Isaac.GetTrinketIdByName(origin.name)
+				elseif origin.name and explicitType == "collectible" then
+					id = Isaac.GetItemIdByName(origin.name)
+				elseif origin.trinket then
+					id = Isaac.GetTrinketIdByName(origin.trinket)
+					explicitType = explicitType or "trinket"
+				elseif origin.collectible then
+					id = Isaac.GetItemIdByName(origin.collectible)
+					explicitType = explicitType or "collectible"
+				end
+			end
+			local isTrink = (explicitType == "trinket") and true or ((explicitType == "collectible") and false or nil)
+			return id or -1, isTrink
+		end
+		return nil, nil
+	end
     
     -- Load item scripts and build origin mapping
     if not ConchBlessing._didLoadItemScripts then
         for itemKey, itemData in pairs(ConchBlessing.ItemData) do
             ConchBlessing.printDebug("Processing: " .. itemKey)
             
-            -- Build origin mapping for conch mode descriptions
-            if itemData.origin and itemData.flag then
-                local originID = itemData.origin
+			-- Build origin mapping for conch mode descriptions
+			if itemData.origin and itemData.flag then
+				local originID, originIsTrinkExp = resolveOriginAny(itemData.origin)
+				if originID == nil then
+					originID = itemData.origin
+				end
                 if not originItemFlags[originID] then
                     originItemFlags[originID] = {}
                 end
                 table.insert(originItemFlags[originID], itemKey)
-                -- Track origin type disambiguation to avoid ID collisions between collectibles and trinkets
-                if itemData.type == "trinket" then
-                    originIdIsTrinket[originID] = true
-                elseif originIdIsTrinket[originID] == nil then
-                    originIdIsTrinket[originID] = false
-                end
-                ConchBlessing.printDebug("  Auto-mapped " .. itemKey .. " (flag: " .. itemData.flag .. ") to origin: " .. originID)
+				-- Track origin type disambiguation to avoid ID collisions between collectibles and trinkets
+				if originIsTrinkExp ~= nil then
+					originIdIsTrinket[originID] = originIsTrinkExp
+				elseif originIdIsTrinket[originID] == nil then
+					-- Fallback to runtime check if not explicitly specified
+					local cfg = Isaac.GetItemConfig()
+					originIdIsTrinket[originID] = (cfg and cfg:GetTrinket(originID) ~= nil) or false
+				end
+				ConchBlessing.printDebug("  Auto-mapped " .. itemKey .. " (flag: " .. itemData.flag .. ") to origin: " .. tostring(originID))
             end
             
             local scriptPath = itemData.script

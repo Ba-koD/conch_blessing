@@ -151,8 +151,16 @@ def parse_lua_file(file_path):
     
     print(f"found item matches: {len(item_matches)}")
     
+    nested_keys_to_skip = set([
+        'origin', 'eid', 'name', 'description', 'callbacks', 'gibs', 'entity',
+        'synergies', 'bff', 'pool', 'tags', 'gfx', 'specials'
+    ])
+
     for match in item_matches:
         name = match.group(1)
+        if name in nested_keys_to_skip:
+            print(f"  skipping nested table: {name}")
+            continue
         print(f"processing item: {name}")
         
         # find the item block start and end
@@ -216,6 +224,12 @@ def parse_lua_file(file_path):
         if type_match:
             item_info['type'] = type_match.group(1)
             print(f"  Type: {item_info['type']}")
+
+        # extract gfx (optional override for items.xml path relative to gfxroot)
+        gfx_match = re.search(r'gfx\s*=\s*"([^"]+)"', item_data)
+        if gfx_match:
+            item_info['gfx'] = gfx_match.group(1)
+            print(f"  GFX: {item_info['gfx']}")
         
         # extract pool (array form)
         pool_match = re.search(r'pool\s*=\s*{', item_data)
@@ -476,7 +490,18 @@ def create_items_xml(items, output_path):
         
         item_elem.set("id", str(item_id_counter))
         item_elem.set("name", item_info.get('name', ''))
-        item_elem.set("gfx", f"{item_key.lower()}.png")
+        # determine gfx: filename only (engine expects items.xml gfx to be just "name.png")
+        # if lua provided a path like "trinkets/b_minus.png", strip to basename
+        default_gfx = f"{item_key.lower()}.png"
+        gfx_val = str(item_info.get('gfx', default_gfx))
+        gfx_val = gfx_val.replace("\\", "/")
+        try:
+            import os
+            gfx_val = os.path.basename(gfx_val)
+        except Exception:
+            if "/" in gfx_val:
+                gfx_val = gfx_val.split("/")[-1]
+        item_elem.set("gfx", gfx_val)
         # quality: exclude for trinkets (collectibles-like types include: passive, active, familiar)
         if item_type != 'trinket' and 'quality' in item_info:
             item_elem.set("quality", str(item_info.get('quality', 3)))
