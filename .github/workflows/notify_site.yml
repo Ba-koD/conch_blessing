@@ -1,4 +1,4 @@
-name: Notify site repo on master pushes
+name: Notify cb_site on master pushes
 
 on:
   push:
@@ -10,7 +10,8 @@ jobs:
     steps:
       - name: Dispatch to cb_site
         run: |
-          curl -X POST \
+          set -e
+          curl -i -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{ secrets.SITE_REPO_TOKEN }}" \
             https://api.github.com/repos/ba-kod/cb_site/dispatches \

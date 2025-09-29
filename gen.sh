@@ -1,1 +1,1 @@
-python3 generate_xml.py & python3 generate_items_js.py & python3 build_id_pools.py
+python3 generate_xml.py
