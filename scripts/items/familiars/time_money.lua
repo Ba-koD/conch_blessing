@@ -31,7 +31,12 @@ ConchBlessing.timemoney.data = {
 	probDime = 0.01,               -- base replacement chance for dime
 	luckMultiplierPerPoint = 0.1,  -- each Luck increases chances by this multiplier factor
 	luckMultiplierCap = 4.0,       -- cap for total multiplier
-	followLagFactor = 0.95         -- follower trail factor (0.9~0.98)
+	followLagFactor = 0.95,        -- follower trail factor (0.9~0.98)
+	-- Keep some distance from the player (pixels)
+	followMinDistancePixels = 24,
+	-- Render offsets for preview text (screen space delta)
+	renderOffsetX = -3,
+	renderOffsetY = -35,
 }
 
 local function getKey(player)
@@ -250,16 +255,28 @@ function ConchBlessing.timemoney.onFamiliarInit(_, familiar)
 end
 
 function ConchBlessing.timemoney.onFamiliarUpdate(_, familiar)
-	-- Keep following parent smoothly
+	-- Only process our familiar variant and keep following parent smoothly
+	local targetVariant = getFamiliarVariant()
+	if not targetVariant or familiar.Variant ~= targetVariant then return end
 	local fam = familiar:ToFamiliar()
 	if fam then
 		fam:FollowParent()
-		-- Small trailing distance by blending toward parent's previous position
+		-- Maintain a small trailing distance with configurable lag and min distance
 		local parent = fam.Player
 		if parent then
 			local lag = ConchBlessing.timemoney.data.followLagFactor or 0.95
+			local minDist = ConchBlessing.timemoney.data.followMinDistancePixels or 0
 			local target = parent.Position
-			fam.Position = fam.Position * lag + target * (1 - lag)
+			local current = fam.Position
+			-- Compute follow target using min distance and optional side offset; let TBOI chain handle smoothing
+			local delta = current - target
+			local dist = delta:Length()
+			local dir = dist > 0 and (delta / dist) or Vector(1, 0)
+			local side = ConchBlessing.timemoney.data.followSideOffsetPixels or 0
+			local perp = side ~= 0 and Vector(-dir.Y, dir.X):Resized(side) or Vector.Zero
+			local minVec = (minDist > 0) and (dir * minDist) or Vector.Zero
+			local followTarget = target + minVec + perp
+			fam:FollowPosition(followTarget)
 		end
 		local spr = fam:GetSprite()
 		if spr and (spr:IsFinished("Spawn") or spr:IsFinished("IdleDown")) then
@@ -272,19 +289,40 @@ end
 
 -- Render next-drop preview above the familiar
 function ConchBlessing.timemoney.onFamiliarRender(_, familiar, offset)
-    local fam = familiar:ToFamiliar()
-    if not fam then return end
-    local player = fam.Player
-    if not player then return end
+	-- Only render for our own familiar variant
+	local targetVariant = getFamiliarVariant()
+	if not targetVariant then return end
+	if familiar.Variant ~= targetVariant then
+		-- Debug (prints once per run when debugMode is on): non-target familiar render skipped
+		local st = ensureState()
+		if ConchBlessing and ConchBlessing.Config and ConchBlessing.Config.debugMode and not st.loggedNonTargetVariantSeen then
+			ConchBlessing.printDebug(string.format("[Time=Money] skipping render for variant=%s (target=%s)", tostring(familiar.Variant), tostring(targetVariant)))
+			st.loggedNonTargetVariantSeen = true
+		end
+		return
+	end
+
+	local fam = familiar:ToFamiliar()
+	if not fam then return end
+	local player = fam.Player
+	if not player then return end
     local ps = getPlayerState(player)
     local coins = player:GetNumCoins()
     local pct = ConchBlessing.timemoney.data.percentPerInterval or 0
     local effectivePct = player:HasCollectible(CollectibleType.COLLECTIBLE_BFFS) and 0.10 or pct
     local preview = math.floor(coins * effectivePct) - (ps.pendingPenalty or 0)
     if preview < 1 then preview = 1 end
-    -- Draw exactly at familiar position (slightly above)
-    local pos = Isaac.WorldToScreen(fam.Position)
-    Isaac.RenderText(tostring(preview), pos.X - 3, pos.Y - 28, 1, 1, 0.5, 0.9)
+	-- Draw at familiar position with configurable offset (no hard-coded numbers in logic)
+	local pos = Isaac.WorldToScreen(fam.Position)
+	local dx = ConchBlessing.timemoney.data.renderOffsetX or 0
+	local dy = ConchBlessing.timemoney.data.renderOffsetY or 0
+	Isaac.RenderText(tostring(preview), pos.X + dx, pos.Y + dy, 1, 1, 0.5, 0.9)
+	-- Debug (once per run): log current offsets
+	local st = ensureState()
+	if ConchBlessing and ConchBlessing.Config and ConchBlessing.Config.debugMode and not st.loggedRenderOffsetOnce then
+		ConchBlessing.printDebug(string.format("[Time=Money] render offset dx=%s dy=%s", tostring(dx), tostring(dy)))
+		st.loggedRenderOffsetOnce = true
+	end
 end
 
 -- On damage: increment pending penalty unless excluded by time-trinket rules

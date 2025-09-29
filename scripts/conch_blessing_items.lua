@@ -728,26 +728,15 @@ ConchBlessing.ItemData = {
     
     -- Familiars
     TIME_MONEY = {
-        WorkingNow = false,
         type = "familiar",
         id = Isaac.GetItemIdByName("Time = Money"),
         script = "scripts/items/familiars/time_money",
         uniquefamiliar = true,
-        origin=CollectibleType.COLLECTIBLE_MONEY_EQUALS_POWER,
-        quality = 4,
-        tags="baby summonable offensive",
-        flag = "positive",
         -- Entities2.xml generation config
         -- anm2: optional override for ANM2 path under gfx/ (default: "time_money.anm2")
         anm2 = "time_money.anm2",
         entity = { variant = 777, collisiondamage = 0, collisionmass = 3, collisionradius = 5, friction = 1, numgridcollisionpoints = 6, shadowsize = 13, tags = "cansacrifice", customtags = "" },
         gibs = { amount = 0, blood = 0, bone = 0, eye = 0, gut = 0, large = 0 },
-        pool = {
-            RoomType.ROOM_DEVIL,
-            RoomType.ROOM_SHOP,
-            RoomType.ROOM_GREED_EXIT,
-            RoomType.ROOM_SECRET
-        },
         name = {
             kr = "시간 = 돈",
             en = "Time = Money"
@@ -772,9 +761,23 @@ ConchBlessing.ItemData = {
                 "#When taking damage, the number of coins dropped is reduced by 1."
             }
         },
-        bff = {
-            kr = "동전 드랍 비율이 10%로 증가합니다.",
-            en = "Drop rate increases to 10%."
+        pool = {
+            RoomType.ROOM_DEVIL,
+            RoomType.ROOM_SHOP,
+            RoomType.ROOM_GREED_EXIT,
+            RoomType.ROOM_SECRET
+        },
+        quality = 4,
+        tags="baby summonable offensive",
+        shopprice = 30,
+        devilprice = 2,
+        origin = CollectibleType.COLLECTIBLE_SACK_OF_PENNIES,
+        flag = "positive",
+        synergies = {
+            [CollectibleType.COLLECTIBLE_BFFS] = {
+                kr = "동전 드랍 비율이 10%로 증가합니다.",
+                en = "Drop rate increases to 10%."
+            }
         },
         callbacks = {
             familiarInit = "timemoney.onFamiliarInit",
@@ -1092,59 +1095,6 @@ local function loadAllItems()
                                 end
                             end
                         end
-
-                        -- Conditional BFFS line: show only when the player has BFFS and this item defines bff text
-                        if ConchBlessing.ItemData then
-                            for _, data in pairs(ConchBlessing.ItemData) do
-                                if data and data.id == subId and data.bff and anyPlayerHas(CollectibleType.COLLECTIBLE_BFFS) then
-                                    local bffText = (type(data.bff) == "table" and (data.bff[lang] or data.bff.en)) or nil
-                                    if type(bffText) == "string" and #bffText > 0 then
-                                        EID:appendToDescription(descObj, "#{{Collectible247}} " .. bffText)
-                                    end
-                                    break
-                                end
-                            end
-                        end
-
-                        return descObj
-                    end
-                )
-                ConchBlessing._didRegisterUnifiedModifier = true
-                ConchBlessing.printDebug("Unified EID description modifier registered")
-
-                -- Fallback: force-show Conch mode line for specific origins if mapping fails
-                local function resolveModLang()
-                    local normalize = (ConchBlessing and ConchBlessing.Config and ConchBlessing.NormalizeLanguage)
-                        or (require("scripts.conch_blessing_config").NormalizeLanguage)
-                    local cfg = ConchBlessing and ConchBlessing.Config and ConchBlessing.Config.language
-                    local base = cfg or "Auto"
-                    if base == "Auto" or base == "auto" then
-                        local eidLang = (EID and EID.Config and EID.Config.Language) or (EID and EID.UserConfig and EID.UserConfig.Language)
-                        if eidLang and eidLang ~= "auto" then
-                            base = eidLang
-                        else
-                            base = (Options and Options.Language) or "en"
-                        end
-                    end
-                    return normalize(base)
-                end
-
-                EID:addDescriptionModifier(
-                    "ConchBlessing_OriginForced",
-                    function(descObj)
-                        return descObj.ObjType == 5 and descObj.ObjVariant == 100 and descObj.ObjSubType == CollectibleType.COLLECTIBLE_MONEY_EQUALS_POWER
-                    end,
-                    function(descObj)
-                        local lang = resolveModLang()
-                        local d = ConchBlessing.ItemData and ConchBlessing.ItemData.TIME_MONEY
-                        local templates = ConchBlessing._conchModeTemplates or {}
-                        if d and templates[lang] and templates[lang].positive then
-                            local name = (type(d.name) == "table" and (d.name[lang] or d.name.en)) or d.name or "Time = Money"
-                            local line = templates[lang].positive
-                            local iconNameDyn = "icon_time_money"
-                            line = string.gsub(line, "{{item_name}}", "{{" .. iconNameDyn .. "}}(" .. name .. ")")
-                            EID:appendToDescription(descObj, "#{{ConchMode}} " .. line)
-                        end
                         return descObj
                     end
                 )
@@ -1161,7 +1111,6 @@ local function loadAllItems()
                 
                 local ICON_PATHS = {
                     collectibles = "gfx/items/collectibles/",
-                    familiars = "gfx/items/familiars/",
                     ui = "gfx/ui/"
                 }
                 
