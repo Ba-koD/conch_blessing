@@ -1220,6 +1220,71 @@ local function loadAllItems()
                     end,
                     function(descObj)
                         local lang = resolveModLang()
+                        -- 0) Dynamic specials scaling for our items (EID text):
+                        --    If this is our item and it has specials, multiply matching numbers by scale
+                        --    Scale rules (trinket): Golden +1x, Mom's Box +1x; both => x3. Only exact specials values are scaled.
+                        do
+                            local rawSub = descObj.ObjSubType or -1
+                            local isTrinketPickup = (descObj.ObjVariant == 350)
+                            local baseId = rawSub
+                            local goldenPickup = false
+                            if isTrinketPickup and rawSub >= 32768 then
+                                baseId = rawSub - 32768
+                                goldenPickup = true
+                            end
+                            -- Build reverse id->key map once
+                            if not ConchBlessing._idToItemKey then
+                                ConchBlessing._idToItemKey = {}
+                                for key, data in pairs(ConchBlessing.ItemData or {}) do
+                                    if type(data.id) == "number" and data.id > 0 then
+                                        ConchBlessing._idToItemKey[data.id] = key
+                                    end
+                                end
+                            end
+                            local itemKey = ConchBlessing._idToItemKey[baseId]
+                            local itemData = itemKey and ConchBlessing.ItemData[itemKey] or nil
+                            if itemData and itemData.specials and descObj.Description then
+                                -- Determine scale only for trinkets
+                                local scale = 1
+                                if isTrinketPickup then
+                                    if goldenPickup then scale = scale + 1 end
+                                    if anyPlayerHas(CollectibleType.COLLECTIBLE_MOMS_BOX) then scale = scale + 1 end
+                                end
+                                if scale > 1 then
+                                    -- Flatten specials list from { normal = X or {..} }
+                                    local values = {}
+                                    local function pushVal(v)
+                                        if type(v) == "number" then table.insert(values, v) end
+                                    end
+                                    if type(itemData.specials.normal) == "table" then
+                                        for _, v in ipairs(itemData.specials.normal) do pushVal(v) end
+                                    else
+                                        pushVal(itemData.specials.normal)
+                                    end
+                                    -- Replace exact tokens in Description
+                                    local text = descObj.Description
+                                    -- Only replace decimal tokens (e.g., 4.0), never plain integers (e.g., 4)
+                                    for _, v in ipairs(values) do
+                                        local sDec = string.format("%.1f", v)
+                                        local patDec = "%f[%d]" .. sDec:gsub('%.', '%%.') .. "%f[^%d]"
+                                        if text:find(patDec) then
+                                            local rep = string.format("%.1f", v * scale)
+                                            rep = "{{ColorYellow}}" .. rep .. "{{CR}}"
+                                            text = text:gsub(patDec, rep)
+                                        else
+                                            local sInt = tostring(math.floor(v + 0.0))
+                                            local patInt = "%f[%d]" .. sInt .. "%f[^%d]"
+                                            -- Only replace integer tokens when decimal form is not present
+                                            text = text:gsub(patInt, function(match)
+                                                local repInt = tostring(math.floor(v * scale + 0.0))
+                                                return "{{ColorYellow}}" .. repInt .. "{{CR}}"
+                                            end)
+                                        end
+                                    end
+                                    descObj.Description = text
+                                end
+                            end
+                        end
                         -- Conch mode (origin) part
                         local subId = descObj.ObjSubType
                         if descObj.ObjVariant == 350 and subId and subId >= 32768 then
@@ -1449,3 +1514,6 @@ end)
 ConchBlessing:AddCallback(ModCallbacks.MC_POST_NEW_LEVEL, function()
     applyNaturalSpawnSetting()
 end)
+
+-- Ensure minus chain evolution logic is loaded
+pcall(function() require("scripts.items.trinkets.minus_chain") end)
