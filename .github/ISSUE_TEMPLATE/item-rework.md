@@ -1,15 +1,14 @@
 ---
 name: Item Rework
 about: Item Rework - only for Admin
-title: "[REWORK]"
+title: "[REWORK] "
 labels: Rework
 assignees: Ba-koD
 
 ---
 
-<img src="https://github.com/Ba-koD/conch_blessing/blob/main/resources/{{png경로}}?raw=true">아이템 이름
+<img src="https://github.com/Ba-koD/conch_blessing/blob/main/{{png경로복사}}?raw=true">아이템 이름 ![REWORK](https://img.shields.io/badge/Status-REWORK-purple)
 --------------------------------------------------
-- Status: ![REWORK](https://img.shields.io/badge/Status-REWORK-purple)
 - Type: Passive | Active | Familiar | Trinket
 - Origin Item: <바닐라 아이템>
 - Origin Effect:

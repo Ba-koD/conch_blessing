@@ -1,7 +1,7 @@
 ---
 name: Feature Suggestion
 about: Suggest an idea for this project
-title: "[REQUEST]"
+title: "[REQUEST] "
 labels: Suggestion
 assignees: Ba-koD
 
