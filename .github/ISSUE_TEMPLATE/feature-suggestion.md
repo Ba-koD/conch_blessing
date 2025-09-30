@@ -3,7 +3,7 @@ name: Feature Suggestion
 about: Suggest an idea for this project
 title: "[REQUEST]"
 labels: Suggestion
-assignees: ''
+assignees: Ba-koD
 
 ---
 
