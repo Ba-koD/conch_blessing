@@ -2,7 +2,7 @@ name: Notify cb_site on master pushes
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
 
 jobs:
   dispatch:

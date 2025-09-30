@@ -1,15 +1,14 @@
 ---
 name: Item Make
 about: Item Make - only for Admin
-title: "[FEATURE]"
+title: "[FEATURE] "
 labels: Feature
 assignees: Ba-koD
 
 ---
 
-<img src="https://github.com/Ba-koD/conch_blessing/blob/main/resources/{{png경로}}?raw=true">아이템 이름
+<img src="https://github.com/Ba-koD/conch_blessing/blob/main/{{png경로복사}}?raw=true">아이템 이름 TBD | WIP | DONE
 --------------------------------------------------
-- Status: TBD | WIP | DONE
 - Type: Passive | Active | Familiar | Trinket
 - Origin Item: <바닐라 아이템>
 - Origin Effect:
@@ -17,7 +16,6 @@ assignees: Ba-koD
 - 변환 아이템 효과 설명:
   - <핵심 효과/수치/트리거>
 - 기획 의도: <기획 의도>
-
 
 ![TBD](https://img.shields.io/badge/Status-TBD-lightgrey) : 미정. 기획/메모 상태
 ![WIP](https://img.shields.io/badge/Status-WIP-orange) : 작업 진행 중
