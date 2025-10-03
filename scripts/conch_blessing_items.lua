@@ -875,6 +875,43 @@ ConchBlessing.ItemData = {
         },
         synergies = {}
     },
+    ATROPOS = {
+        type = "trinket",
+        id = Isaac.GetTrinketIdByName("Atropos"),
+        name = {
+            kr = "아트로포스",
+            en = "Atropos"
+        },
+        description = {
+            kr = "끊어진 운명",
+            en = "Broken Destiny"
+        },
+        eid = {
+            kr = {
+                "모든 선택지 아이템을 획득할 수 있게 합니다.",
+            },
+            en = {
+                "Allows picking all optioned items"
+            }
+        },
+        gfx = "atropos.png",
+        tags = "utility",
+        hidden = false,
+        flag = "positive",
+        origin = TrinketType.TRINKET_SAFETY_SCISSORS,
+        shopprice = 15,
+        script = "scripts/items/trinkets/atropos",
+        callbacks = {
+            postUpdate = "atropos.onPostUpdate",
+            postNewRoom = "atropos.onPostNewRoom"
+        },
+        synergies = {
+            [CollectibleType.COLLECTIBLE_DEATH_CERTIFICATE] = {
+                kr = "사망 증명서 방에서 바보 카드를 드랍합니다.",
+                en = "Drops a Fool card in Death Certificate rooms."
+            }
+        }
+    },
 
     -- Familiars
     TIME_MONEY = {
