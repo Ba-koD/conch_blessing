@@ -111,7 +111,27 @@ ConchBlessing.EID.addOptLangDescription = function(itemId, itemData)
                 end
                 ConchBlessing._eidRegistered[regKey] = ConchBlessing._eidRegistered[regKey] or {}
                 ConchBlessing._eidRegistered[regKey][eidLangCode] = true
+                ConchBlessing.printDebug("[EID] Registered current mod language mapping: " .. tostring(eidLangCode))
             end
+        end
+
+        -- Mirror into EID's current display language, so descriptions follow our MCM setting without forcing EID language
+        local eidDisplayLang = (EID and ((EID.Config and EID.Config.Language) or EID.DefaultLanguageCode)) or nil
+        if eidDisplayLang then
+            local targetLang = tostring(eidDisplayLang)
+            local already = ConchBlessing._eidRegistered[regKey] and ConchBlessing._eidRegistered[regKey][targetLang]
+            if not already then
+                if isTrinket then
+                    EID:addTrinket(itemId, eidDescription, itemName, targetLang)
+                else
+                    EID:addCollectible(itemId, eidDescription, itemName, targetLang)
+                end
+                ConchBlessing._eidRegistered[regKey] = ConchBlessing._eidRegistered[regKey] or {}
+                ConchBlessing._eidRegistered[regKey][targetLang] = true
+                ConchBlessing.printDebug("[EID] Mirrored mapping into EID display language: " .. targetLang)
+            end
+        else
+            ConchBlessing.printDebug("[EID] No EID display language detected for mirroring")
         end
         ConchBlessing.printDebug(string.format("EID registered (%s): %s - %s", isTrinket and "trinket" or "collectible", itemName, eidDescription))
         
@@ -140,7 +160,7 @@ end
 ConchBlessing.EID.registerAllItems = function()
     ConchBlessing.printDebug("Registering all items with EID...")
 
-    -- 1) Sync EID language to our config language and refresh font to avoid garbled characters
+    -- 1) Do NOT force EID language. Instead, only try to load a suitable font for current language
     local function toEIDLang(code)
         local map = { en = "en_us", kr = "ko_kr", ja = "ja_jp", zh = "zh_cn" }
         return map[code] or "en_us"
@@ -149,17 +169,57 @@ ConchBlessing.EID.registerAllItems = function()
     local eidLang = toEIDLang(short)
     if EID then
         EID.Config = EID.Config or {}
-        if EID.Config.Language ~= eidLang then
-            EID.Config.Language = eidLang
-            if type(EID.fixDefinedFont) == "function" then
-                EID:fixDefinedFont(true)
+        -- Debug: show current EID language (not forcing changes)
+        ConchBlessing.printDebug("[EID] Current EID.Config.Language = " .. tostring(EID.Config.Language))
+
+        -- Try to load font from External Item Descriptions' font folder if exists
+        -- NOTE: Do not hardcode exact font type; respect EID.Config.FontType if available
+        local fontType = EID.Config["FontType"]
+        local externalFontBase = "C:/Program Files (x86)/Steam/steamapps/common/The Binding of Isaac Rebirth/mods/external item descriptions_836319872/resources/font/"
+        local function tryLoadFont(path)
+            if type(EID.loadFont) == "function" then
+                local ok, err = pcall(function()
+                    EID:loadFont(path)
+                end)
+                if ok then
+                    ConchBlessing.printDebug("[EID] Loaded font: " .. tostring(path))
+                    return true
+                else
+                    ConchBlessing.printDebug("[EID] Failed to load font: " .. tostring(path) .. ", error=" .. tostring(err))
+                end
             end
-            if type(EID.loadFont) == "function" and EID.modPath and EID.Config["FontType"] then
-                EID:loadFont(EID.modPath .. "resources/font/eid_" .. EID.Config["FontType"] .. ".fnt")
+            return false
+        end
+
+        -- Candidate font paths in order (language-aware first, then generic by FontType, then EID default path)
+        local candidates = {}
+        -- language-specific families commonly used by EID (these filenames may vary by user setup; we attempt reasonable variants)
+        table.insert(candidates, externalFontBase .. "eid_" .. tostring(fontType or "") .. ".fnt")
+        table.insert(candidates, externalFontBase .. "eid_default.fnt")
+        -- fallback to EID's own mod fonts if present
+        if EID.modPath then
+            if fontType then
+                table.insert(candidates, EID.modPath .. "resources/font/eid_" .. tostring(fontType) .. ".fnt")
             end
-            EID.MCM_OptionChanged = true
-            EID.ForceRefreshCache = true
-            ConchBlessing.printDebug("Synced EID language to " .. tostring(eidLang))
+            table.insert(candidates, EID.modPath .. "resources/font/eid_default.fnt")
+        end
+
+        local loaded = false
+        for _, p in ipairs(candidates) do
+            if p and p ~= externalFontBase .. "eid_.fnt" then
+                if tryLoadFont(p) then
+                    loaded = true
+                    break
+                end
+            end
+        end
+
+        -- Signal EID to refresh without changing its language
+        EID.MCM_OptionChanged = true
+        EID.ForceRefreshCache = true
+        ConchBlessing.printDebug("[EID] Font refresh requested; language preserved: " .. tostring(EID.Config.Language))
+        if not loaded then
+            ConchBlessing.printDebug("[EID] No candidate font loaded; EID will keep current font settings")
         end
     end
 
