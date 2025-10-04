@@ -1,0 +1,487 @@
+ConchBlessing.chronus = {}
+
+-- Data: configurable constants and runtime state
+ConchBlessing.chronus.data = {
+    -- Damage per absorbed familiar (addition, not multiplier)
+    damagePerFamiliar = 0.2,
+    -- Absorb all familiars regardless of blacklist
+    absorbAll = true,
+    -- Twisted Pair config
+    twistedPairAngle = 45,
+    twistedPairMaxPairs = nil, -- nil = no cap; set to a number to limit pairs
+    twistedPairOffsetPixels = 2.0,
+    laserEyeYOffset = -6,
+    -- Blacklist: familiars NOT to absorb/remove (by CollectibleType)
+    blacklist = {
+        [CollectibleType.COLLECTIBLE_ONE_UP] = true,
+        [CollectibleType.COLLECTIBLE_ISAACS_HEART] = true,
+        [CollectibleType.COLLECTIBLE_DEAD_CAT] = true,
+        [CollectibleType.COLLECTIBLE_KEY_PIECE_1] = true,
+        [CollectibleType.COLLECTIBLE_KEY_PIECE_2] = true,
+        [CollectibleType.COLLECTIBLE_KNIFE_PIECE_1] = true,
+        [CollectibleType.COLLECTIBLE_KNIFE_PIECE_2] = true,
+    },
+    -- Whitelist or per-familiar ability mapping. Define behavior per familiar id.
+    -- key = familiar collectible id, value = function(player, countAbsorbed, delta)
+    abilities = {
+        -- Example: Brother Bobby -> Tears addition (-1 FDelay equivalent)
+        [CollectibleType.COLLECTIBLE_BROTHER_BOBBY] = function(player, total, delta)
+            -- English comment: apply small tears speedup per absorbed copy
+            ConchBlessing.stats.unifiedMultipliers:SetItemAddition(player, Isaac.GetItemIdByName("Chronus"), "Tears", 0.1 * delta, "Chronus: Brother Bobby")
+        end,
+        -- Example: Sister Maggy -> Damage addition
+        [CollectibleType.COLLECTIBLE_SISTER_MAGGY] = function(player, total, delta)
+            ConchBlessing.stats.unifiedMultipliers:SetItemAddition(player, Isaac.GetItemIdByName("Chronus"), "Damage", 0.5 * delta, "Chronus: Sister Maggy")
+        end,
+    },
+    -- Runtime: track absorbed counts per familiar id per player via SaveManager
+}
+
+local CHRONUS_ID = Isaac.GetItemIdByName("Chronus")
+
+-- English comment: unified function to get player's current shooting direction (keyboard first, then analog)
+local function getShootDir(player)
+    local d = player:GetShootingInput()
+    if d and d:Length() > 0 then return d:Normalized() end
+    d = player:GetAimDirection()
+    if d and d:Length() > 0 then return d:Normalized() end
+    return Vector(1, 0)
+end
+
+-- English comment: whether the player is actively shooting now
+local function isShootingNow(player)
+    local d = player:GetShootingInput()
+    return d and d:Length() > 0
+end
+
+-- English comment: get or create run-scope save for this item and player
+local function getRunSave(player)
+    local SaveManager = ConchBlessing.SaveManager
+    local save = SaveManager and SaveManager.GetRunSave and SaveManager.GetRunSave(player) or nil
+    if save then
+        save.chronus = save.chronus or { absorbed = {}, totalAbsorbed = 0 }
+        return save.chronus
+    end
+    return { absorbed = {}, totalAbsorbed = 0 }
+end
+
+-- English comment: count familiar-type collectibles currently owned (by config)
+local function getFamiliarCounts(player)
+    local cfg = Isaac.GetItemConfig()
+    local counts = {}
+    -- Iterate all collectibles, filter by familiar type
+    for id = 1, cfg:GetCollectibles().Size - 1 do
+        local item = cfg:GetCollectible(id)
+        if item and item.Type == ItemType.ITEM_FAMILIAR then
+            local num = player:GetCollectibleNum(id, true)
+            if num and num > 0 then
+                counts[id] = num
+            end
+        end
+    end
+    return counts
+end
+
+-- English comment: apply absorption for a delta count of a specific familiar id
+local function absorbFamiliar(player, famId, delta)
+    if delta <= 0 then return end
+    local save = getRunSave(player)
+    local data = ConchBlessing.chronus.data
+
+    -- If not absorbing all and blacklisted: mark but do NOT apply effects or remove
+    if not data.absorbAll and data.blacklist[famId] then
+        save.absorbed[famId] = (save.absorbed[famId] or 0) + delta
+        ConchBlessing.printDebug(string.format("[Chronus] Skipped blacklisted familiar id=%d delta=%d", famId, delta))
+        return
+    end
+
+    -- Compute how many we can actually remove (robust if counters diverged)
+    local ownedNow = player:GetCollectibleNum(famId, true)
+    local toRemove = math.min(delta, ownedNow)
+    if toRemove <= 0 then return end
+
+    -- Increase absorbed count and total by actual removed
+    save.absorbed[famId] = (save.absorbed[famId] or 0) + toRemove
+    save.totalAbsorbed = (save.totalAbsorbed or 0) + toRemove
+
+    -- Remove collectibles for absorbed familiars
+    for i = 1, toRemove do
+        player:RemoveCollectible(famId)
+    end
+
+    -- Apply base damage addition per familiar absorbed
+    local addDamage = data.damagePerFamiliar * toRemove
+    ConchBlessing.stats.unifiedMultipliers:SetItemAddition(player, CHRONUS_ID, "Damage", addDamage, "Chronus: Base per familiar")
+
+    -- Run per-familiar ability if defined
+    local ability = data.abilities[famId]
+    if type(ability) == "function" then
+        local total = save.absorbed[famId]
+        ability(player, total, toRemove)
+    end
+
+    -- Queue cache for main combat stats
+    ConchBlessing.stats.unifiedMultipliers:QueueCacheUpdate(player, "Damage")
+    ConchBlessing.stats.unifiedMultipliers:QueueCacheUpdate(player, "Tears")
+    ConchBlessing.stats.unifiedMultipliers:QueueCacheUpdate(player, "Speed")
+    ConchBlessing.stats.unifiedMultipliers:QueueCacheUpdate(player, "Range")
+    ConchBlessing.stats.unifiedMultipliers:QueueCacheUpdate(player, "Luck")
+    ConchBlessing.stats.unifiedMultipliers:QueueCacheUpdate(player, "ShotSpeed")
+
+    ConchBlessing.printDebug(string.format("[Chronus] Absorbed familiar id=%d delta=%d (+%.2f dmg)", famId, delta, addDamage))
+end
+
+-- English comment: detect newly acquired familiars and absorb them
+local function detectAndAbsorb(player)
+    local current = getFamiliarCounts(player)
+    -- Absorb ALL owned copies immediately (robust against mismatched counters)
+    for famId, owned in pairs(current) do
+        local cfg = Isaac.GetItemConfig():GetCollectible(famId)
+        if cfg and cfg.Type == ItemType.ITEM_FAMILIAR and owned > 0 then
+            absorbFamiliar(player, famId, owned)
+        end
+    end
+end
+
+-- English comment: absorb on new collectible acquisition immediately (covers post-room rewards and devil/angel deals)
+ConchBlessing.chronus.onPostGetCollectible = function(_, collectible, pool, decrease, seed)
+    local player = Isaac.GetPlayer(0)
+    if not player or not player:HasCollectible(CHRONUS_ID) then return end
+    if not collectible then return end
+    -- If the collectible is a familiar, absorb instantly
+    local cfg = Isaac.GetItemConfig():GetCollectible(collectible)
+    if cfg and cfg.Type == ItemType.ITEM_FAMILIAR then
+        local owned = player:GetCollectibleNum(collectible, true)
+        if owned and owned > 0 then
+            absorbFamiliar(player, collectible, owned)
+        end
+    end
+end
+
+ConchBlessing.chronus.onPickup = function(_, player, collectibleType, rng)
+    if collectibleType ~= CHRONUS_ID then return end
+    ConchBlessing.printDebug("Chronus picked up")
+    -- Immediate sweep on pickup
+    detectAndAbsorb(player)
+end
+
+ConchBlessing.chronus.onPlayerUpdate = function(_)
+    local numPlayers = Game():GetNumPlayers()
+    for i = 0, numPlayers - 1 do
+        local player = Isaac.GetPlayer(i)
+        if player and player:HasCollectible(CHRONUS_ID) then
+            -- Edge detection for shooting input (once per press)
+            local pdata = player:GetData()
+            local shooting = isShootingNow(player)
+            pdata.__chronusPrevShooting = pdata.__chronusPrevShooting or false
+            if shooting and not pdata.__chronusPrevShooting then
+                pdata.__chronusShootEdge = true
+            else
+                pdata.__chronusShootEdge = false
+            end
+            pdata.__chronusPrevShooting = shooting
+            -- English comment: lightweight periodic scan (every 15 frames)
+            pdata.chronusNextScan = pdata.chronusNextScan or 0
+            if Game():GetFrameCount() >= pdata.chronusNextScan then
+                pdata.chronusNextScan = Game():GetFrameCount() + 15
+                detectAndAbsorb(player)
+            end
+        end
+    end
+end
+
+ConchBlessing.chronus.onEvaluateCache = function(_, player, cacheFlag)
+    -- English comment: unifiedMultipliers already hooks cache; nothing to do here specifically.
+    -- Kept for future per-flag logic if needed.
+end
+
+ConchBlessing.chronus.onGameStarted = function(_)
+    ConchBlessing.printDebug("Chronus data initialized (run scope)")
+end
+
+-- English comment: Twisted Pair - add two extra tears at ±45 degrees from current firing direction
+ConchBlessing.chronus.onFireTear = function(_, tear)
+    local parent = tear.Parent
+    if not (parent and parent:ToPlayer()) then return end
+    local player = parent:ToPlayer()
+    if not (player and player:HasCollectible(CHRONUS_ID)) then return end
+
+    -- Prevent recursive duplication & per-tear gating (one clone per original)
+    local tdata = tear:GetData()
+    if tdata and (tdata.__chronusCloned or tdata.__chronusHandled) then return end
+    tdata.__chronusHandled = true
+
+    -- Check if Twisted Pair was absorbed
+    local save = getRunSave(player)
+    local absorbedCount = (save and save.absorbed and save.absorbed[CollectibleType.COLLECTIBLE_TWISTED_PAIR]) or 0
+    if absorbedCount <= 0 then return end
+
+    -- Base velocity and scale copied from original tear
+    local baseVel = tear.Velocity
+    if baseVel:Length() <= 0.001 then
+        -- Fallback to player aim for stationary tears
+        local aim = player:GetAimDirection()
+        if aim:Length() <= 0 then aim = player:GetShootingInput() or Vector(1,0) end
+        baseVel = aim:Resized(tear.FallingSpeed ~= 0 and math.abs(tear.FallingSpeed) or 10)
+    end
+
+    -- Reentrancy guard: set after early exits are passed
+    local pdata = player:GetData()
+    if pdata.__chronusCloning then return end
+    pdata.__chronusCloning = true
+
+    local pos = player.Position
+    local speed = baseVel:Length()
+    local dir = getShootDir(player)
+
+    -- Spawn stacking pairs parallel to main direction from offset positions
+    local maxPairs = ConchBlessing.chronus.data.twistedPairMaxPairs
+    local pairsToSpawn = (type(maxPairs) == "number") and math.min(absorbedCount, maxPairs) or absorbedCount
+    local offset = ConchBlessing.chronus.data.twistedPairOffsetPixels or 2.0
+    local perp = Vector(-dir.Y, dir.X)
+    if perp:Length() > 0 then perp = perp:Normalized() end
+    for i = 1, pairsToSpawn do
+        local p1 = pos + perp * offset
+        local p2 = pos - perp * offset
+        local clone1 = player:FireTear(p1, dir * speed, false, true, false, player, 1)
+        if clone1 then
+            local cd = clone1:GetData()
+            cd.__chronusCloned = true
+            clone1.Scale = tear.Scale
+            -- Force damage to player's current damage to avoid over-scaling
+            clone1.CollisionDamage = player.Damage
+            clone1.FallingAcceleration = tear.FallingAcceleration
+            clone1.FallingSpeed = tear.FallingSpeed
+            clone1.TearFlags = tear.TearFlags
+            clone1.Color = tear.Color
+        end
+        local clone2 = player:FireTear(p2, dir * speed, false, true, false, player, 1)
+        if clone2 then
+            local cd = clone2:GetData()
+            cd.__chronusCloned = true
+            clone2.Scale = tear.Scale
+            clone2.CollisionDamage = player.Damage
+            clone2.FallingAcceleration = tear.FallingAcceleration
+            clone2.FallingSpeed = tear.FallingSpeed
+            clone2.TearFlags = tear.TearFlags
+            clone2.Color = tear.Color
+        end
+    end
+
+    pdata.__chronusCloning = false
+    ConchBlessing.printDebug(string.format("[Chronus] Twisted Pair clone spawned x%d at parallel offset", pairsToSpawn * 2))
+end
+
+-- English comment: Support brimstone-like beams and technology lasers
+ConchBlessing.chronus.onLaserInit = function(_, laser)
+    local parent = laser.SpawnerEntity or laser.Parent
+    if not parent then return end
+    local player = parent:ToPlayer()
+    if not (player and player:HasCollectible(CHRONUS_ID)) then return end
+
+    -- Skip if this is a cloned laser
+    local ldata = laser:GetData()
+    if ldata and ldata.__chronusCloned then return end
+
+    local save = getRunSave(player)
+    local absorbedCount = (save and save.absorbed and save.absorbed[CollectibleType.COLLECTIBLE_TWISTED_PAIR]) or 0
+    if absorbedCount <= 0 then return end
+
+    -- Per-laser gating: handle each original laser only once
+    if ldata.__chronusHandled then return end
+    ldata.__chronusHandled = true
+
+    -- Reentrancy and per-frame guard to avoid recursion/spam
+    local pdata = player:GetData()
+    local frame = Game():GetFrameCount()
+    if pdata.__chronusLaserCloningFrame == frame then return end
+    if pdata.__chronusLaserCloning then return end
+    pdata.__chronusLaserCloning = true
+    pdata.__chronusLaserCloningFrame = frame
+
+    -- Determine base direction using laser endpoint to be robust across variants
+    local dir = getShootDir(player)
+    local angleDeg = dir:GetAngleDegrees()
+    local perp = Vector(-dir.Y, dir.X)
+    if perp:Length() > 0 then perp = perp:Normalized() end
+    local offset = ConchBlessing.chronus.data.twistedPairOffsetPixels or 2.0
+    local eyeY = ConchBlessing.chronus.data.laserEyeYOffset or -12
+
+    -- Decide offset axis: Tech lasers -> world up/down; others -> perpendicular to aim
+    local isBrim = player:HasWeaponType(WeaponType.WEAPON_BRIMSTONE)
+    local isTechX = player:HasWeaponType(WeaponType.TECH_X)
+    local isTech = (player:HasWeaponType(WeaponType.WEAPON_LASER) and not isBrim and not isTechX)
+    if isTechX then
+        -- English comment: Tech X detected; will spawn free-flying clones (not anchored)
+        ConchBlessing.printDebug("[Chronus] Tech X detected - using free-flying ring clone behavior")
+    end
+    local up = Vector(0, -1)
+    local down = Vector(0, 1)
+
+    local function spawnLaserAt(pos, meta)
+        if isTech then
+            local tech = player:FireTechLaser(pos, LaserOffset.LASER_TECH1_OFFSET, dir, false, false, player, 1)
+            if tech then
+                local td = tech:GetData()
+                td.__chronusCloned = true
+                td.__chronusType = "tech"
+                td.__chronusOffsetWorld = meta and meta.offsetWorld or Vector.Zero
+                tech.CollisionDamage = player.Damage
+                tech.Color = laser.Color
+                tech.DepthOffset = -10
+            end
+            return
+        end
+        -- Use original variant (works for brimstone/generic lasers/Tech X rings)
+        local variant = (laser.Variant ~= nil) and laser.Variant or 2
+        local timeout = (laser.Timeout ~= nil) and laser.Timeout or 10
+        local l = EntityLaser.ShootAngle(variant, pos, angleDeg, timeout, Vector.Zero, player)
+        if l then
+            local ld = l:GetData()
+            ld.__chronusCloned = true
+            ld.__chronusType = (isBrim and "brim") or (isTechX and "techx") or "perp"
+            ld.__chronusPerpSide = meta and meta.perpSide or 0
+            ld.__chronusOffsetMag = meta and meta.offsetMag or 0
+            ld.__chronusEyeY = eyeY
+            l.CollisionDamage = player.Damage
+            if laser.Timeout ~= nil then l.Timeout = laser.Timeout end
+            l.Color = laser.Color
+            if laser.MaxDistance ~= nil then l.MaxDistance = laser.MaxDistance end
+            l.DepthOffset = -10
+        end
+    end
+
+    local maxPairs = ConchBlessing.chronus.data.twistedPairMaxPairs
+    local pairsToSpawn = 1 -- Tech/Brimstone: one extra pair per press for clarity
+    local origin = player.Position + Vector(0, eyeY)
+    if isTech then
+        spawnLaserAt(origin + up * offset, { offsetWorld = up * offset })
+        spawnLaserAt(origin + down * offset, { offsetWorld = down * offset })
+    elseif isBrim then
+        -- Gate to once per brim shot using player's expire frame
+        local brimTimeout = laser.Timeout or 15
+        local fc = Game():GetFrameCount()
+        local pdata = player:GetData()
+        if pdata.__chronusBrimExpireFrame and fc < pdata.__chronusBrimExpireFrame then
+            -- already spawned for this shot
+        else
+            pdata.__chronusBrimExpireFrame = fc + brimTimeout
+            spawnLaserAt(origin + perp * offset, { perpSide = 1, offsetMag = offset })
+            spawnLaserAt(origin - perp * offset, { perpSide = -1, offsetMag = offset })
+        end
+    else
+        spawnLaserAt(origin + perp * offset, { perpSide = 1, offsetMag = offset })
+        spawnLaserAt(origin - perp * offset, { perpSide = -1, offsetMag = offset })
+    end
+
+    pdata.__chronusLaserCloning = false
+end
+
+-- English comment: Stop cloned lasers when player stops shooting (or after short timeout)
+ConchBlessing.chronus.onLaserUpdate = function(_, laser)
+    local data = laser:GetData()
+    if not (data and data.__chronusCloned) then return end
+    local parent = laser.SpawnerEntity or laser.Parent
+    local player = parent and parent:ToPlayer() or nil
+    if not player then return end
+
+    -- If player released shooting, kill the cloned laser immediately (except Tech X clones)
+    if data.__chronusType ~= "techx" then
+        if not isShootingNow(player) then
+            laser.Timeout = 1
+            laser:Update()
+            return
+        end
+    end
+
+    -- Safety: cap lifetime to original Timeout (if missing, cap to small number)
+    if type(laser.Timeout) ~= 'number' or laser.Timeout <= 0 then
+        laser.Timeout = 5
+    end
+
+    -- Follow player position with maintained offset for tech beams; Tech X clones fly freely
+    if data.__chronusType == "techx" then
+        -- English comment: Do not anchor Tech X clones; allow natural outward travel
+        return
+    elseif data.__chronusType == "tech" then
+        local eyeY = ConchBlessing.chronus.data.laserEyeYOffset or -12
+        local desired = player.Position + (data.__chronusOffsetWorld or Vector.Zero) + Vector(0, eyeY)
+        laser.Position = desired
+    elseif data.__chronusType == "brim" or data.__chronusType == "perp" then
+        -- Recompute perp offset relative to aim to keep it near tear position
+        local dir = getShootDir(player)
+        local perp = Vector(-dir.Y, dir.X)
+        if perp:Length() > 0 then perp = perp:Normalized() end
+        local mag = tonumber(data.__chronusOffsetMag) or 0
+        local side = tonumber(data.__chronusPerpSide) or 0
+        local eyeY = ConchBlessing.chronus.data.laserEyeYOffset or -12
+        local base = player.Position + Vector(0, eyeY)
+        laser.Position = base + perp * (mag * side)
+    end
+end
+
+-- English comment: Support knives (Mom's Knife etc.) by cloning at offset
+ConchBlessing.chronus.onKnifeInit = function(_, knife)
+    local parent = knife.SpawnerEntity or knife.Parent
+    if not parent then return end
+    local player = parent:ToPlayer()
+    if not (player and player:HasCollectible(CHRONUS_ID)) then return end
+
+    -- Skip if this is a cloned knife; per-knife gating (one clone per original)
+    local kdata = knife:GetData()
+    if kdata and (kdata.__chronusCloned or kdata.__chronusHandled) then return end
+    kdata.__chronusHandled = true
+
+    -- Only when player is actively shooting (swinging)
+    if not isShootingNow(player) then return end
+
+    local save = getRunSave(player)
+    local absorbedCount = (save and save.absorbed and save.absorbed[CollectibleType.COLLECTIBLE_TWISTED_PAIR]) or 0
+    if absorbedCount <= 0 then return end
+
+    -- Reentrancy and per-frame guard to avoid spam
+    local pdata = player:GetData()
+    local frame = Game():GetFrameCount()
+    if pdata.__chronusKnifeCloningFrame == frame then return end
+    if pdata.__chronusKnifeCloning then return end
+    pdata.__chronusKnifeCloning = true
+    pdata.__chronusKnifeCloningFrame = frame
+
+    local vel = knife.Velocity or Vector(0,0)
+    local dir = getShootDir(player)
+    local perp = Vector(-dir.Y, dir.X)
+    if perp:Length() > 0 then perp = perp:Normalized() end
+    local offset = ConchBlessing.chronus.data.twistedPairOffsetPixels or 2.0
+
+    local function spawnKnifeAt(pos)
+        -- Reuse the same knife variant by firing a new knife and aligning position/velocity
+        local k = player:FireKnife(knife, false, 1, false)
+        if k then
+            local kd = k:GetData()
+            kd.__chronusCloned = true
+            k.Position = pos
+            k.Velocity = dir * 10
+            k.Scale = knife.Scale
+            -- Force damage to player's current damage to avoid over-scaling
+            k.CollisionDamage = player.Damage
+            k:GetSprite().Color = knife:GetSprite().Color
+        end
+    end
+
+    local maxPairs = ConchBlessing.chronus.data.twistedPairMaxPairs
+    local pairsToSpawn = (type(maxPairs) == "number") and math.min(absorbedCount, maxPairs) or absorbedCount
+    local origin = player.Position
+    for i = 1, pairsToSpawn do
+        spawnKnifeAt(origin + perp * offset)
+        spawnKnifeAt(origin - perp * offset)
+    end
+
+    pdata.__chronusKnifeCloning = false
+end
+
+-- English comment: update guard for knives (prevent repeated spawns)
+ConchBlessing.chronus.onKnifeUpdate = function(_, knife)
+    local data = knife:GetData()
+    if data.__chronusCloned then return end
+end
+

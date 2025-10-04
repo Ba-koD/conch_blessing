@@ -603,6 +603,60 @@ ConchBlessing.ItemData = {
             en = "Pig"
         },
     },
+    CHRONUS = {
+		type = "passive",
+		id = Isaac.GetItemIdByName("Chronus"),
+		name = {
+			kr = "크로노노스",
+			en = "Chronus"
+		},
+		description = {
+			kr = "자식을 삼키다",
+			en = "Devours its offspring"
+		},
+		eid = {
+			kr = {
+				"패밀리어 아이템을 흡수하여 제거합니다.",
+				"#흡수한 패밀리어마다 {{Damage}}데미지가 2.0 증가하고, 지정된 패밀리어는 고유한 효과를 부여합니다.",
+				"#일부 패밀리어는 제외 목록에 따라 흡수되지 않습니다."
+			},
+			en = {
+				"Absorbs and removes familiar-type collectibles.",
+				"#Each absorbed familiar increases {{Damage}}Damage by 2.0 and may grant a custom effect.",
+				"#Some familiars are excluded by a blacklist."
+			}
+		},
+		gfx = "chronus.png",
+		pool = {
+			RoomType.ROOM_ANGEL,
+			RoomType.ROOM_DEVIL,
+			RoomType.ROOM_TREASURE
+		},
+		quality = 4,
+		tags = "offensive",
+		cache = "damage firedelay speed range luck shotspeed",
+		flag = "negative",
+        origin = CollectibleType.COLLECTIBLE_BFFS,
+		script = "scripts/items/collectibles/chronus",
+		callbacks = {
+			pickup = "chronus.onPickup",
+			postPlayerUpdate = "chronus.onPlayerUpdate",
+			evaluateCache = "chronus.onEvaluateCache",
+			gameStarted = "chronus.onGameStarted",
+			fireTear = "chronus.onFireTear",
+			postTearInit = "chronus.onTearInit",
+			postGetCollectible = "chronus.onPostGetCollectible",
+			postLaserInit = "chronus.onLaserInit",
+			postLaserUpdate = "chronus.onLaserUpdate",
+			postKnifeInit = "chronus.onKnifeInit",
+			postKnifeUpdate = "chronus.onKnifeUpdate"
+		},
+		synergies = {
+            [CollectibleType.COLLECTIBLE_TWISTED_PAIR] = {
+                kr = "75% 데미지의 공격을 2개 추가합니다.",
+                en = "Adds 2 additional 75% damage attacks."
+        }}
+	},
 
     -- Trinkets
     TIME_POWER = {
