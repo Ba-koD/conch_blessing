@@ -14,7 +14,7 @@
     <trinket id="11" name="F -" gfx="f_minus.png" tags="offensive" cache="luck" shopprice="15"/>
     <trinket id="12" name="C -" gfx="c_minus.png" tags="offensive" cache="tears" hidden="true" shopprice="15"/>
     <trinket id="13" name="B -" gfx="b_minus.png" tags="offensive" cache="luck damage" hidden="true" shopprice="15"/>
-    <trinket id="14" name="A -" gfx="a_minus.png" tags="offensive" cache="luck damage" hidden="true" shopprice="15"/>
+    <trinket id="14" name="A -" gfx="a_minus.png" tags="offensive" cache="luck damage tears" hidden="true" shopprice="15"/>
     <trinket id="15" name="Atropos" gfx="atropos.png" tags="utility" shopprice="15"/>
     <familiar id="16" name="Time = Money" gfx="time_money.png" quality="4" cache="familiars" shopprice="30" devilprice="2"/>
 </items>
