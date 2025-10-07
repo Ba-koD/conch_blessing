@@ -292,8 +292,9 @@ function ConchBlessing.stats.unifiedMultipliers:RecalculateStatMultiplier(player
     local playerID = player:GetPlayerType()
     if not self[playerID] then return end
     
-    local totalMultiplierApply = 1.0   -- product of per-item (base + cumulative delta)
-    local totalMultiplierDisplay = 1.0 -- same as apply, also used for HUD display
+    local totalMultiplierApply = 1.0   -- product of pure multipliers only
+    local totalAdditionApply = 0.0     -- sum of flat additions (to be applied additively)
+    local totalMultiplierDisplay = 1.0 -- display multiplier including additions equivalently
     local lastItemCurrentVal = 1.0   -- May be multiplier or addition delta
     local lastItemID = nil
     local lastDescription = ""
@@ -313,7 +314,7 @@ function ConchBlessing.stats.unifiedMultipliers:RecalculateStatMultiplier(player
         end
     end
 
-    -- Aggregate per item: itemTotal = baseMultiplier + cumulativeDelta (default base=1, delta=0)
+    -- Aggregate per item
     for itemID, _ in pairs(touched) do
         local baseM, baseSeq, baseDesc = 1.0, 0, ""
         if self[playerID].itemMultipliers[itemID] and self[playerID].itemMultipliers[itemID][statType] then
@@ -329,9 +330,9 @@ function ConchBlessing.stats.unifiedMultipliers:RecalculateStatMultiplier(player
             addLastDelta = ad.lastDelta or 0
             addDesc = ad.description or ""
         end
-        local itemTotal = baseM + addCum
-        totalMultiplierApply = totalMultiplierApply * itemTotal
-        totalMultiplierDisplay = totalMultiplierDisplay * itemTotal
+        -- Apply-only: multiply pure multipliers; accumulate additions separately
+        totalMultiplierApply = totalMultiplierApply * baseM
+        totalAdditionApply = totalAdditionApply + addCum
 
         -- Track latest change by sequence
         if addSeq >= baseSeq and addSeq > lastSequence then
@@ -340,26 +341,31 @@ function ConchBlessing.stats.unifiedMultipliers:RecalculateStatMultiplier(player
             lastDescription = addDesc
             lastSequence = addSeq
             lastType = "addition"
-            ConchBlessing.printDebug(string.format("  Item %s: base=%.2f, addCum=%+0.2f (last %+0.2f) => itemTotal=%.2f", tostring(itemID), baseM, addCum, addLastDelta, itemTotal))
+            ConchBlessing.printDebug(string.format("  Item %s: base=%.2f, addCum=%+0.2f (last %+0.2f)", tostring(itemID), baseM, addCum, addLastDelta))
         elseif baseSeq > lastSequence then
             lastItemCurrentVal = baseM
             lastItemID = itemID
             lastDescription = baseDesc
             lastSequence = baseSeq
             lastType = "multiplier"
-            ConchBlessing.printDebug(string.format("  Item %s: base=%.2f, addCum=%+0.2f => itemTotal=%.2f", tostring(itemID), baseM, addCum, itemTotal))
+            ConchBlessing.printDebug(string.format("  Item %s: base=%.2f, addCum=%+0.2f", tostring(itemID), baseM, addCum))
         end
     end
     
-    -- Store the calculated total
+    -- Compute display multiplier: pure mult * equivalent-from-additions
+    local eqMultTotal = _toEquivalentMultiplierFromAddition(player, statType, totalAdditionApply)
+    totalMultiplierDisplay = totalMultiplierApply * (eqMultTotal or 1.0)
+
+    -- Store the calculated totals
     if not self[playerID].statMultipliers then
         self[playerID].statMultipliers = {}
     end
     
     self[playerID].statMultipliers[statType] = {
         current = lastItemCurrentVal,    -- Last item's individual value (multiplier or addition)
-        total = totalMultiplierDisplay,  -- Display total multiplier (includes additions as eq. mult)
+        total = totalMultiplierApply,    -- Display only pure multipliers as multiplier
         totalApply = totalMultiplierApply, -- Apply-only total multiplier (pure multipliers)
+        totalAdditions = totalAdditionApply, -- Flat additions to apply on cache
         lastItemID = lastItemID,         -- Last item that modified this stat
         description = lastDescription,   -- Description of the last item
         sequence = lastSequence,         -- Sequence number of the last item
@@ -640,7 +646,10 @@ local function RenderMultiplierStat(statType, currentValue, totalMult, currentTy
     else
         currentText = string.format("x%.2f", currentValue)
     end
-    local totalValue = string.format("/x%.2f", totalMult)
+    local totalValue = nil
+    if currentType ~= "addition" then
+        totalValue = string.format("/x%.2f", totalMult)
+    end
     
     pos = pos + (Options.HUDOffset * Vector(20, 12))
     pos = pos + Game().ScreenShakeOffset
@@ -665,17 +674,16 @@ local function RenderMultiplierStat(statType, currentValue, totalMult, currentTy
         end
     end
     
-    -- Total multiplier color (누적된 총 배수) - 파란색 계열로 구분
+    -- Total multiplier color (누적된 총 배수) - 파란색 계열로 구분 (가산일 때는 미표시)
     local totalColor
-    if totalMult > 1.0 then
-        -- Blue for total multipliers above 1.0x
-        totalColor = KColor(100/255, 150/255, 255/255, alpha)
-    elseif totalMult == 1.0 then
-        -- Light blue for exactly 1.0x
-        totalColor = KColor(150/255, 200/255, 255/255, alpha)
-    else
-        -- Dark blue for total multipliers below 1.0x
-        totalColor = KColor(50/255, 100/255, 200/255, alpha)
+    if totalValue ~= nil then
+        if totalMult > 1.0 then
+            totalColor = KColor(100/255, 150/255, 255/255, alpha)
+        elseif totalMult == 1.0 then
+            totalColor = KColor(150/255, 200/255, 255/255, alpha)
+        else
+            totalColor = KColor(50/255, 100/255, 200/255, alpha)
+        end
     end
     
     -- Render current multiplier first
@@ -688,20 +696,22 @@ local function RenderMultiplierStat(statType, currentValue, totalMult, currentTy
         true                 -- center text
     )
     
-    -- Calculate position for total multiplier (current text width + small gap)
-    local currentTextWidth = StatsFont:GetStringWidth(currentText)
-    local gap = 2  -- Small gap between current and total
-    local totalX = pos.X + currentTextWidth + gap
-    
-    -- Render total multiplier
-    StatsFont:DrawString(
-        totalValue,          -- total multiplier text
-        totalX,              -- X position (after current)
-        pos.Y,               -- Y position (same as current)
-        totalColor,          -- total multiplier color
-        0,                   -- alignment (0 = left)
-        true                 -- center text
-    )
+    if totalValue ~= nil then
+        -- Calculate position for total multiplier (current text width + small gap)
+        local currentTextWidth = StatsFont:GetStringWidth(currentText)
+        local gap = 2  -- Small gap between current and total
+        local totalX = pos.X + currentTextWidth + gap
+
+        -- Render total multiplier
+        StatsFont:DrawString(
+            totalValue,          -- total multiplier text
+            totalX,              -- X position (after current)
+            pos.Y,               -- Y position (same as current)
+            totalColor,          -- total multiplier color
+            0,                   -- alignment (0 = left)
+            true                 -- center text
+        )
+    end
 end
 
 -- Render multiplier display for a player
@@ -1519,7 +1529,12 @@ do
         if statType == "Tears" then
             ConchBlessing.stats.tears.applyMultiplier(player, total, 0.1, false)
         elseif statType == "Damage" then
+            -- Apply pure multiplier first, then flat additions
             ConchBlessing.stats.damage.applyMultiplier(player, total, 0.1, false)
+            local add = self[playerID] and self[playerID].statMultipliers and self[playerID].statMultipliers[statType] and (self[playerID].statMultipliers[statType].totalAdditions or 0) or 0
+            if add ~= 0 then
+                ConchBlessing.stats.damage.applyAddition(player, add, 0)
+            end
         elseif statType == "Range" then
             ConchBlessing.stats.range.applyMultiplier(player, total, 0.1, false)
         elseif statType == "Luck" then

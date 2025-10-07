@@ -603,6 +603,60 @@ ConchBlessing.ItemData = {
             en = "Pig"
         },
     },
+    CHRONUS = {
+		type = "passive",
+		id = Isaac.GetItemIdByName("Chronus"),
+		name = {
+			kr = "크로노노스",
+			en = "Chronus"
+		},
+		description = {
+			kr = "자식을 삼키다",
+			en = "Devours its offspring"
+		},
+		eid = {
+			kr = {
+				"패밀리어 아이템을 흡수하여 제거합니다.",
+				"#흡수한 패밀리어마다 {{Damage}}데미지가 2.0 증가하고, 지정된 패밀리어는 고유한 효과를 부여합니다.",
+				"#일부 패밀리어는 제외 목록에 따라 흡수되지 않습니다."
+			},
+			en = {
+				"Absorbs and removes familiar-type collectibles.",
+				"#Each absorbed familiar increases {{Damage}}Damage by 2.0 and may grant a custom effect.",
+				"#Some familiars are excluded by a blacklist."
+			}
+		},
+		gfx = "chronus.png",
+		pool = {
+			RoomType.ROOM_ANGEL,
+			RoomType.ROOM_DEVIL,
+			RoomType.ROOM_TREASURE
+		},
+		quality = 4,
+		tags = "offensive",
+		cache = "damage firedelay speed range luck shotspeed",
+		flag = "negative",
+        origin = CollectibleType.COLLECTIBLE_BFFS,
+		script = "scripts/items/collectibles/chronus",
+		callbacks = {
+			pickup = "chronus.onPickup",
+			postPlayerUpdate = "chronus.onPlayerUpdate",
+			evaluateCache = "chronus.onEvaluateCache",
+			gameStarted = "chronus.onGameStarted",
+			fireTear = "chronus.onFireTear",
+			postTearInit = "chronus.onTearInit",
+			postGetCollectible = "chronus.onPostGetCollectible",
+			postLaserInit = "chronus.onLaserInit",
+			postLaserUpdate = "chronus.onLaserUpdate",
+			postKnifeInit = "chronus.onKnifeInit",
+			postKnifeUpdate = "chronus.onKnifeUpdate"
+		},
+		synergies = {
+            [CollectibleType.COLLECTIBLE_TWISTED_PAIR] = {
+                kr = "75% 데미지의 공격을 2개 추가합니다.",
+                en = "Adds 2 additional 75% damage attacks."
+        }}
+	},
 
     -- Trinkets
     TIME_POWER = {
@@ -852,19 +906,19 @@ ConchBlessing.ItemData = {
             kr = {
                 "행운이 2 증가합니다.",
                 "#{{Tears}}고정 연사가 4.0 증가합니다.",
-                "#{{Damage}}공격력이 4배가 됩니다.",
-                "#{{Luck}}행운이 4배가 됩니다.",
+                "#4배수가 공격력, 행운, 연사에 나눠서 적용됩니다.",
+                "#0.8배이상으로 나눠서 적용됩니다.",
             },
             en = {
                 "Luck increases by 2.",
                 "#{{Tears}}Fixed SPS increases by 4.0.",
-                "#{{Damage}}Damage increases by 4x.",
-                "#{{Luck}}Luck increases by 4x.",
+                "#4x multipliers are distributed to Damage, Luck, and SPS.",
+                "#Multipliers are at least 0.8x.",
             }
         },
         gfx = "a_minus.png",
         tags = "offensive",
-        cache = "luck damage",
+        cache = "luck damage tears",
         origin = { name = "B -", type = "trinket" },
         flag = "positive",
         hidden = true,
@@ -872,6 +926,7 @@ ConchBlessing.ItemData = {
         script = "scripts/items/trinkets/a_minus",
         specials = { normal = {2, 4.0} },
         callbacks = {
+            postPEffectUpdate = "aminus.onPostPEffectUpdate",
         },
         synergies = {}
     },
