@@ -607,7 +607,7 @@ ConchBlessing.ItemData = {
 		type = "passive",
 		id = Isaac.GetItemIdByName("Chronus"),
 		name = {
-			kr = "크로노노스",
+			kr = "크로노스",
 			en = "Chronus"
 		},
 		description = {
