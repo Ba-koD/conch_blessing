@@ -906,19 +906,19 @@ ConchBlessing.ItemData = {
             kr = {
                 "행운이 2 증가합니다.",
                 "#{{Tears}}고정 연사가 4.0 증가합니다.",
-                "#{{Damage}}공격력이 4배가 됩니다.",
-                "#{{Luck}}행운이 4배가 됩니다.",
+                "#4배수가 공격력, 행운, 연사에 나눠서 적용됩니다.",
+                "#0.8배이상으로 나눠서 적용됩니다.",
             },
             en = {
                 "Luck increases by 2.",
                 "#{{Tears}}Fixed SPS increases by 4.0.",
-                "#{{Damage}}Damage increases by 4x.",
-                "#{{Luck}}Luck increases by 4x.",
+                "#4x multipliers are distributed to Damage, Luck, and SPS.",
+                "#Multipliers are at least 0.8x.",
             }
         },
         gfx = "a_minus.png",
         tags = "offensive",
-        cache = "luck damage",
+        cache = "luck damage tears",
         origin = { name = "B -", type = "trinket" },
         flag = "positive",
         hidden = true,
@@ -926,6 +926,7 @@ ConchBlessing.ItemData = {
         script = "scripts/items/trinkets/a_minus",
         specials = { normal = {2, 4.0} },
         callbacks = {
+            postPEffectUpdate = "aminus.onPostPEffectUpdate",
         },
         synergies = {}
     },
