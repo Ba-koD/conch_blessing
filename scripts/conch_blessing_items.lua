@@ -651,7 +651,12 @@ ConchBlessing.ItemData = {
             [CollectibleType.COLLECTIBLE_TWISTED_PAIR] = {
                 kr = "75% 데미지의 공격을 2개 추가합니다.",
                 en = "Adds 2 additional 75% damage attacks."
-        }}
+            },
+            [CollectibleType.COLLECTIBLE_SUCCUBUS] = {
+                kr = "내 주변으로 오라가 고정됩니다.",
+                en = "Attracts an aura around the player."
+            }
+        }
 	},
 
     -- Trinkets
