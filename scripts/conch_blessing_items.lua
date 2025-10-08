@@ -618,6 +618,7 @@ ConchBlessing.ItemData = {
 			kr = {
 				"패밀리어 아이템을 흡수하여 제거합니다.",
 				"#흡수한 패밀리어마다 {{Damage}}데미지가 2.0 증가하고, 지정된 패밀리어는 고유한 효과를 부여합니다.",
+                "#아이템이 사라질때까지 지속됩니다.(사라지면 패밀리어가 돌아옵니다.)",
 				"#일부 패밀리어는 제외 목록에 따라 흡수되지 않습니다."
 			},
 			en = {
@@ -641,15 +642,10 @@ ConchBlessing.ItemData = {
 		callbacks = {
 			pickup = "chronus.onPickup",
 			postPlayerUpdate = "chronus.onPlayerUpdate",
+            update = "chronus.onPostUpdate",
 			evaluateCache = "chronus.onEvaluateCache",
 			gameStarted = "chronus.onGameStarted",
-			fireTear = "chronus.onFireTear",
-			postTearInit = "chronus.onTearInit",
-			postGetCollectible = "chronus.onPostGetCollectible",
-			postLaserInit = "chronus.onLaserInit",
-			postLaserUpdate = "chronus.onLaserUpdate",
-			postKnifeInit = "chronus.onKnifeInit",
-			postKnifeUpdate = "chronus.onKnifeUpdate"
+            familiarUpdate = "chronus.onFamiliarUpdate"
 		},
 		synergies = {
             [CollectibleType.COLLECTIBLE_TWISTED_PAIR] = {
