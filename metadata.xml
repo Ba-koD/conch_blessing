@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <metadata>
-    <name>Conch's Blessing</name>
+    <name>Conch's Blessing(소라고둥의 축복)</name>
     <directory>conch_blessing</directory>
     <id>3545334858</id>
-    <description>🐚 소라고동의 축복 (Conch’s Blessing)
+    <description>🐚 소라고둥의 축복 (Conch’s Blessing)
 
-아이작에 &quot;소라고동의 축복&quot; 업그레이드 시스템을 추가합니다. 기존 아이템을 세련된 연출과 함께 변환하고, 언어/스폰/타이밍을 세밀하게 커스터마이징할 수 있습니다.
+아이작에 &amp;quot;소라고둥의 축복&amp;quot; 업그레이드 시스템을 추가합니다. 기존 아이템을 세련된 연출과 함께 변환하고, 언어/스폰/타이밍을 세밀하게 커스터마이징할 수 있습니다.
 
 아이템 설명 가이드 : https://tboi.rnen.kr
 
@@ -27,7 +27,7 @@ Conch’s Blessing
 
 Item Description Guide: https://tboi.rnen.kr
 
-Adds a polished &quot;Conch’s Blessing&quot; upgrade system. Transform items with bespoke visuals, language-aware HUD/EID, and flexible spawn/timing controls.
+Adds a polished &amp;quot;Conch’s Blessing&amp;quot; upgrade system. Transform items with bespoke visuals, language-aware HUD/EID, and flexible spawn/timing controls.
 
 Key Features:
 - Upgrade Sequence: Before → Morph → After
@@ -35,12 +35,12 @@ Key Features:
 - Natural Spawn Toggle: Enable/disable mod item spawns via MCM (default OFF)
 - Compatible with Mod Config Menu
 
-Inspiration: Style inspired by &quot;Lazy MattPack [RGON]&quot; by Mr. Headcrab (Steam Workshop: https://steamcommunity.com/sharedfiles/filedetails/?id=3408993906)
+Inspiration: Style inspired by &amp;quot;Lazy MattPack [RGON]&amp;quot; by Mr. Headcrab (Steam Workshop: https://steamcommunity.com/sharedfiles/filedetails/?id=3408993906)
 
 Required Mod: Magic Conch (Steam Workshop: https://steamcommunity.com/sharedfiles/filedetails/?id=3540206030)
 
 RGON Recommended</description>
-    <version>1.0.26</version>
+    <version>1.0.28</version>
     <visibility>Public</visibility>
     <tag id="Lua"/>
     <tag id="Items"/>
