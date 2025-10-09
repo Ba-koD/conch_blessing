@@ -151,33 +151,19 @@ ConchBlessing.injectablsteroids.onUseItem = function(player, collectibleID, useF
     
     -- Update unified multiplier system with the new multipliers
     local uniqueKey = INJECTABLE_STEROIDS_ID .. "_" .. newIndex
-    if newIndex == 1 then
-        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
-            player, INJECTABLE_STEROIDS_ID, "Tears", newMultipliers.tears, "Injectable Steroids #" .. newIndex
-        )
-        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
-            player, INJECTABLE_STEROIDS_ID, "Damage", newMultipliers.damage, "Injectable Steroids #" .. newIndex
-        )
-        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
-            player, INJECTABLE_STEROIDS_ID, "Range", newMultipliers.range, "Injectable Steroids #" .. newIndex
-        )
-        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
-            player, INJECTABLE_STEROIDS_ID, "Luck", newMultipliers.luck, "Injectable Steroids #" .. newIndex
-        )
-    else
-        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(
-            player, INJECTABLE_STEROIDS_ID, "Tears", newMultipliers.tears, "Injectable Steroids #" .. newIndex
-        )
-        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(
-            player, INJECTABLE_STEROIDS_ID, "Damage", newMultipliers.damage, "Injectable Steroids #" .. newIndex
-        )
-        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(
-            player, INJECTABLE_STEROIDS_ID, "Range", newMultipliers.range, "Injectable Steroids #" .. newIndex
-        )
-        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(
-            player, INJECTABLE_STEROIDS_ID, "Luck", newMultipliers.luck, "Injectable Steroids #" .. newIndex
-        )
-    end
+    -- Always treat as additive multiplier stacking
+    ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(
+        player, INJECTABLE_STEROIDS_ID, "Tears", newMultipliers.tears, "Injectable Steroids #" .. newIndex
+    )
+    ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(
+        player, INJECTABLE_STEROIDS_ID, "Damage", newMultipliers.damage, "Injectable Steroids #" .. newIndex
+    )
+    ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(
+        player, INJECTABLE_STEROIDS_ID, "Range", newMultipliers.range, "Injectable Steroids #" .. newIndex
+    )
+    ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(
+        player, INJECTABLE_STEROIDS_ID, "Luck", newMultipliers.luck, "Injectable Steroids #" .. newIndex
+    )
     
     -- Save unified multipliers to SaveManager
     ConchBlessing.stats.unifiedMultipliers:SaveToSaveManager(player)
@@ -355,89 +341,22 @@ ConchBlessing.injectablsteroids.onGameStarted = function(_)
         ConchBlessing.printDebug("Player found, attempting to restore stats from SaveManager...")
         
         local playerSave = SaveManager.GetRunSave(player)
-        if playerSave and playerSave.injectableSteroids then
-            local useCount = #playerSave.injectableSteroids
-            ConchBlessing.printDebug("Found saved data with use count: " .. tostring(useCount))
-            
-            if useCount > 0 then
-                local totalSpeed = 1.0
-                local totalTears = 1.0
-                local totalDamage = 1.0
-                local totalRange = 1.0
-                local totalLuck = 1.0
-                
-                for i = 1, useCount do
-                    local multipliers = playerSave.injectableSteroids[i]
-                    if multipliers then
-                        totalSpeed = totalSpeed * multipliers.speed
-                        totalTears = totalTears * multipliers.tears
-                        totalDamage = totalDamage * multipliers.damage
-                        totalRange = totalRange * multipliers.range
-                        totalLuck = totalLuck * multipliers.luck
-                    end
-                end
-                
-                totalSpeed = math.max(ConchBlessing.injectablsteroids.data.minMultiplier, totalSpeed)
-                totalTears = math.max(ConchBlessing.injectablsteroids.data.minMultiplier, totalTears)
-                totalDamage = math.max(ConchBlessing.injectablsteroids.data.minMultiplier, totalDamage)
-                totalRange = math.max(ConchBlessing.injectablsteroids.data.minMultiplier, totalRange)
-                totalLuck = math.max(ConchBlessing.injectablsteroids.data.minMultiplier, totalLuck)
-                
-                local speedDecrease = ConchBlessing.injectablsteroids.data.speedDecrease * useCount
-                ConchBlessing.printDebug(string.format("Calculated final multipliers: Speed=-%.2f Tears=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx", 
-                    speedDecrease, totalTears, totalDamage, totalRange, totalLuck))
-                
-                local speedDecrease = ConchBlessing.injectablsteroids.data.speedDecrease * useCount
-                ConchBlessing.stats.speed.applyAddition(player, -speedDecrease, ConchBlessing.injectablsteroids.data.minMultiplier)
-                
-                ConchBlessing.stats.range.applyMultiplier(player, totalRange, ConchBlessing.injectablsteroids.data.minMultiplier, true)
-                ConchBlessing.stats.luck.applyMultiplier(player, totalLuck, ConchBlessing.injectablsteroids.data.minMultiplier, true)
-                
-                ConchBlessing.stats.damage.applyMultiplier(player, totalDamage, ConchBlessing.injectablsteroids.data.minMultiplier, true)
-                ConchBlessing.stats.tears.applyMultiplier(player, totalTears, ConchBlessing.injectablsteroids.data.minMultiplier, true)
-                
-                -- Load unified multipliers from SaveManager
-                ConchBlessing.stats.unifiedMultipliers:LoadFromSaveManager(player)
-                
-                -- Update unified multiplier system from saved data: first multiplier, rest additive on same item ID
-                for i = 1, useCount do
-                    local multipliers = playerSave.injectableSteroids[i]
-                    if i == 1 then
-                        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
-                            player, INJECTABLE_STEROIDS_ID, "Tears", multipliers.tears, "Injectable Steroids #1"
-                        )
-                        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
-                            player, INJECTABLE_STEROIDS_ID, "Damage", multipliers.damage, "Injectable Steroids #1"
-                        )
-                        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
-                            player, INJECTABLE_STEROIDS_ID, "Range", multipliers.range, "Injectable Steroids #1"
-                        )
-                        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(
-                            player, INJECTABLE_STEROIDS_ID, "Luck", multipliers.luck, "Injectable Steroids #1"
-                        )
-                    else
-                        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(
-                            player, INJECTABLE_STEROIDS_ID, "Tears", multipliers.tears, "Injectable Steroids #" .. i
-                        )
-                        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(
-                            player, INJECTABLE_STEROIDS_ID, "Damage", multipliers.damage, "Injectable Steroids #" .. i
-                        )
-                        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(
-                            player, INJECTABLE_STEROIDS_ID, "Range", multipliers.range, "Injectable Steroids #" .. i
-                        )
-                        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(
-                            player, INJECTABLE_STEROIDS_ID, "Luck", multipliers.luck, "Injectable Steroids #" .. i
-                        )
-                    end
-                end
-                
-                -- Save unified multipliers to SaveManager
-                ConchBlessing.stats.unifiedMultipliers:SaveToSaveManager(player)
-                
-                ConchBlessing.printDebug("All stats (including damage and tears) restored successfully on game start!")
-            else
-                ConchBlessing.printDebug("No saved data found, starting with base stats")
+        local haveArrays = playerSave and playerSave.injectableSteroids
+        local haveUnified = playerSave and playerSave.unifiedMultipliers
+        if haveUnified then
+            ConchBlessing.stats.unifiedMultipliers:LoadFromSaveManager(player)
+            ConchBlessing.printDebug("Injectable Steroids: Unified multipliers loaded from SaveManager")
+        elseif haveArrays and #haveArrays > 0 then
+            -- Reconstruct unified from arrays (first-time migration) with additive-mult stacking
+            for i = 1, #haveArrays do
+                local m = haveArrays[i]
+                ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, INJECTABLE_STEROIDS_ID, "Tears", m.tears or 1.0, "Injectable Steroids #" .. i)
+                ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, INJECTABLE_STEROIDS_ID, "Damage", m.damage or 1.0, "Injectable Steroids #" .. i)
+                ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, INJECTABLE_STEROIDS_ID, "Range", m.range or 1.0, "Injectable Steroids #" .. i)
+                ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, INJECTABLE_STEROIDS_ID, "Luck", m.luck or 1.0, "Injectable Steroids #" .. i)
             end
+            ConchBlessing.stats.unifiedMultipliers:SaveToSaveManager(player)
+            ConchBlessing.printDebug("Injectable Steroids: Unified multipliers reconstructed from arrays and saved")
         else
             ConchBlessing.printDebug("No SaveManager data found")
         end
@@ -500,5 +419,38 @@ ConchBlessing.injectablsteroids.onUpdate = function(_)
             
             player:SetColor(baseColor, 0, 0, false, false)
         end
+    end
+end
+
+-- Register PRE_DATA_SAVE sanitizer for this item's run data only
+do
+    local sm = SaveManager
+    local mod = ConchBlessing and ConchBlessing.originalMod
+    if sm and mod and mod.__SAVEMANAGER_UNIQUE_KEY and sm.SaveCallbacks then
+        local callbackKey = mod.__SAVEMANAGER_UNIQUE_KEY .. sm.SaveCallbacks.PRE_DATA_SAVE
+        mod:AddCallback(callbackKey, function(saveData)
+            if saveData and saveData.game and saveData.game.run then
+                for _, playerRun in pairs(saveData.game.run) do
+                    local arr = playerRun and playerRun.injectableSteroids
+                    if type(arr) == "table" then
+                        -- Compact sparse array entries
+                        local compacted = {}
+                        local count = 0
+                        for i = 1, #arr do
+                            local v = arr[i]
+                            if v ~= nil then
+                                count = count + 1
+                                compacted[count] = v
+                            end
+                        end
+                        playerRun.injectableSteroids = compacted
+                    end
+                end
+            end
+            if ConchBlessing and ConchBlessing.Config and ConchBlessing.Config.debugMode then
+                ConchBlessing.printDebug("[InjectableSteroids] PRE_DATA_SAVE sanitized injectableSteroids array")
+            end
+            return saveData
+        end)
     end
 end

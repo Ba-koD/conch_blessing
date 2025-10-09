@@ -906,14 +906,16 @@ ConchBlessing.ItemData = {
         eid = {
             kr = {
                 "행운이 2 증가합니다.",
-                "#{{Tears}}고정 연사가 4.0 증가합니다.",
-                "#4배수가 공격력, 행운, 연사에 나눠서 적용됩니다.",
+                "#{{Tears}}고정연사가 4.0 증가합니다.",
+                "#{{Damage}}공격력이 4.0 증가합니다.",
+                "#4배수가 공격력, 행운, 연사에 나눠서 적용됩니다. (중첩X)",
                 "#0.8배이상으로 나눠서 적용됩니다.",
             },
             en = {
                 "Luck increases by 2.",
                 "#{{Tears}}Fixed SPS increases by 4.0.",
-                "#4x multipliers are distributed to Damage, Luck, and SPS.",
+                "#{{Damage}}Damage increases by 4.0.",
+                "#4x multipliers are distributed to Damage, Luck, and SPS. (No stacking)",
                 "#Multipliers are at least 0.8x.",
             }
         },
@@ -928,6 +930,7 @@ ConchBlessing.ItemData = {
         specials = { normal = {2, 4.0} },
         callbacks = {
             postPEffectUpdate = "aminus.onPostPEffectUpdate",
+            evaluateCache = "aminus.onEvaluateCache",
         },
         synergies = {}
     },

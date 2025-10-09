@@ -231,8 +231,9 @@ function ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player
     entry.cumulative = (entry.cumulative or 0) + delta
     entry.description = description or entry.description or "Unknown"
     entry.sequence = currentSequence
-    entry.lastType = "addition"
+    entry.lastType = "addition" -- stored as addition container, but flagged as additive-multiplier
     entry.eqMult = multiplierValue
+    entry.isAdditiveMultiplier = true
     self[playerID].itemAdditions[itemID][statType] = entry
 
     ConchBlessing.printDebug(string.format("  Stored Additive Mult: Item %s %s = x%.2f (Delta %+0.2f, Seq %d)", 
@@ -294,7 +295,8 @@ function ConchBlessing.stats.unifiedMultipliers:RecalculateStatMultiplier(player
     
     local totalMultiplierApply = 1.0   -- product of pure multipliers only
     local totalAdditionApply = 0.0     -- sum of flat additions (to be applied additively)
-    local totalMultiplierDisplay = 1.0 -- display multiplier including additions equivalently
+    local totalAdditiveDeltaSum = 0.0 -- sum of additive-mult deltas (e.g., +0.25, -0.20)
+    local totalMultiplierDisplay = 1.0 -- display multiplier including additive mults and additions equivalently
     local lastItemCurrentVal = 1.0   -- May be multiplier or addition delta
     local lastItemID = nil
     local lastDescription = ""
@@ -323,11 +325,22 @@ function ConchBlessing.stats.unifiedMultipliers:RecalculateStatMultiplier(player
             baseDesc = self[playerID].itemMultipliers[itemID][statType].description or ""
         end
         local addCum, addSeq, addLastDelta, addDesc = 0, 0, 0, ""
+        local addIsAddMul = false
         if self[playerID].itemAdditions and self[playerID].itemAdditions[itemID] and self[playerID].itemAdditions[itemID][statType] then
             local ad = self[playerID].itemAdditions[itemID][statType]
-            addCum = ad.cumulative or 0
+            addIsAddMul = ad.isAdditiveMultiplier == true
+            -- Separate additive-multiplier vs pure addition
+            if addIsAddMul and (type(ad.cumulative) == "number" or type(ad.lastDelta) == "number") then
+                -- Treat as delta to multiplier: accumulate sum of deltas
+                local cumDelta = ad.cumulative or 0
+                totalAdditiveDeltaSum = totalAdditiveDeltaSum + cumDelta
+                addCum = 0
+                addLastDelta = ad.lastDelta or 0
+            else
+                addCum = ad.cumulative or 0
+                addLastDelta = ad.lastDelta or 0
+            end
             addSeq = ad.sequence or 0
-            addLastDelta = ad.lastDelta or 0
             addDesc = ad.description or ""
         end
         -- Apply-only: multiply pure multipliers; accumulate additions separately
@@ -340,7 +353,7 @@ function ConchBlessing.stats.unifiedMultipliers:RecalculateStatMultiplier(player
             lastItemID = itemID
             lastDescription = addDesc
             lastSequence = addSeq
-            lastType = "addition"
+            lastType = addIsAddMul and "add_mult" or "addition"
             ConchBlessing.printDebug(string.format("  Item %s: base=%.2f, addCum=%+0.2f (last %+0.2f)", tostring(itemID), baseM, addCum, addLastDelta))
         elseif baseSeq > lastSequence then
             lastItemCurrentVal = baseM
@@ -352,9 +365,10 @@ function ConchBlessing.stats.unifiedMultipliers:RecalculateStatMultiplier(player
         end
     end
     
-    -- Compute display multiplier: pure mult * equivalent-from-additions
-    local eqMultTotal = _toEquivalentMultiplierFromAddition(player, statType, totalAdditionApply)
-    totalMultiplierDisplay = totalMultiplierApply * (eqMultTotal or 1.0)
+    -- Compute display multiplier: base * (1 + additive-delta-sum) * equivalent-from-plain-additions
+    local eqMultFromAdditions = _toEquivalentMultiplierFromAddition(player, statType, totalAdditionApply)
+    local computedTotalApply = totalMultiplierApply * (1.0 + totalAdditiveDeltaSum)
+    totalMultiplierDisplay = computedTotalApply * (eqMultFromAdditions or 1.0)
 
     -- Store the calculated totals
     if not self[playerID].statMultipliers then
@@ -363,9 +377,9 @@ function ConchBlessing.stats.unifiedMultipliers:RecalculateStatMultiplier(player
     
     self[playerID].statMultipliers[statType] = {
         current = lastItemCurrentVal,    -- Last item's individual value (multiplier or addition)
-        total = totalMultiplierApply,    -- Display only pure multipliers as multiplier
-        totalApply = totalMultiplierApply, -- Apply-only total multiplier (pure multipliers)
-        totalAdditions = totalAdditionApply, -- Flat additions to apply on cache
+        total = totalMultiplierDisplay,  -- Display full multiplier including additive-mult deltas and additions eq.
+        totalApply = computedTotalApply, -- Apply pure multipliers combined with additive-mult deltas
+        totalAdditions = totalAdditionApply, -- Flat additions to apply on cache separately
         lastItemID = lastItemID,         -- Last item that modified this stat
         description = lastDescription,   -- Description of the last item
         sequence = lastSequence,         -- Sequence number of the last item
@@ -374,10 +388,10 @@ function ConchBlessing.stats.unifiedMultipliers:RecalculateStatMultiplier(player
     
     if lastType == "addition" then
         ConchBlessing.printDebug(string.format("Unified Multipliers: %s recalculated - Current: %+0.2f (from %s, seq: %d), Total: %.2fx (display), Apply: %.2fx", 
-            statType, lastItemCurrentVal, tostring(lastItemID), lastSequence, totalMultiplierDisplay, totalMultiplierApply))
+            statType, lastItemCurrentVal, tostring(lastItemID), lastSequence, totalMultiplierDisplay, computedTotalApply))
     else
         ConchBlessing.printDebug(string.format("Unified Multipliers: %s recalculated - Current: %.2fx (from %s, seq: %d), Total: %.2fx (display), Apply: %.2fx", 
-            statType, lastItemCurrentVal, tostring(lastItemID), lastSequence, totalMultiplierDisplay, totalMultiplierApply))
+            statType, lastItemCurrentVal, tostring(lastItemID), lastSequence, totalMultiplierDisplay, computedTotalApply))
     end
     
     -- Update the multiplier display system
@@ -468,7 +482,9 @@ function ConchBlessing.stats.unifiedMultipliers:SaveToSaveManager(player)
                         cumulative = data.cumulative,
                         description = data.description,
                         sequence = data.sequence,
-                        lastType = data.lastType
+                        lastType = data.lastType,
+                        isAdditiveMultiplier = data.isAdditiveMultiplier,
+                        eqMult = data.eqMult
                     }
                 end
             end
@@ -521,6 +537,8 @@ function ConchBlessing.stats.unifiedMultipliers:LoadFromSaveManager(player)
         for statType, _ in pairs(self[playerID].statMultipliers) do
             self:RecalculateStatMultiplier(player, statType)
         end
+            -- mark just-loaded for one-frame forced cache
+            self._justLoaded = true
     end
 end
 
@@ -593,15 +611,29 @@ function ConchBlessing.stats.multiplierDisplay:UpdateFromUnifiedSystem(player, s
     self:InitPlayer(player)
     local playerID = player:GetPlayerType()
     
+    -- Do not display plain additions at all (requested: hide simple +/- stat changes)
+    if currentType == "addition" then
+        return
+    end
+
     -- Store the updated multiplier data
     if not self.playerData[playerID].unifiedData then
         self.playerData[playerID].unifiedData = {}
     end
     
+    -- Normalize display:
+    --  - multiplier: show xV
+    --  - add_mult: show +/-delta (multiplierValue-1) for current, store total for /xTotal
+    --  - addition: still display as +N but UI later avoids total text
+    local storeType = currentType or "multiplier"
+    local storeCurrent = currentValue
+    if storeType == "add_mult" then
+        storeCurrent = currentValue -- already a delta (lastDelta)
+    end
     self.playerData[playerID].unifiedData[statType] = {
-        current = currentValue,
+        current = storeCurrent,
         total = totalMult,
-        currentType = currentType or "multiplier",
+        currentType = storeType,
         timestamp = Game():GetFrameCount()
     }
     
@@ -641,7 +673,7 @@ local function RenderMultiplierStat(statType, currentValue, totalMult, currentTy
     --  - multiplier: x1.20
     --  - addition: +1.20
     local currentText
-    if currentType == "addition" then
+    if currentType == "addition" or currentType == "add_mult" then
         currentText = string.format("%+0.2f", currentValue)
     else
         currentText = string.format("x%.2f", currentValue)
@@ -656,7 +688,7 @@ local function RenderMultiplierStat(statType, currentValue, totalMult, currentTy
     
     -- Current value color (green for positive, red for negative, white for neutral)
     local currentColor
-    if currentType == "addition" then
+    if currentType == "addition" or currentType == "add_mult" then
         if currentValue > 0 then
             currentColor = KColor(0/255, 255/255, 0/255, alpha)
         elseif currentValue < 0 then
@@ -1554,6 +1586,22 @@ do
         end
     end)
 
+    -- Auto-load unified multipliers for all players on game start/continue, and queue cache updates
+    ConchBlessing.originalMod:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function(_, isContinued)
+        local numPlayers = Game():GetNumPlayers()
+        for i = 0, numPlayers - 1 do
+            local player = Isaac.GetPlayer(i)
+            if player then
+                -- Load from SaveManager if present; this will internally recalc and queue cache updates
+                ConchBlessing.stats.unifiedMultipliers:LoadFromSaveManager(player)
+                -- Force immediate cache application so stats/HUD reflect saved multipliers right away
+                player:AddCacheFlags(CacheFlag.CACHE_ALL)
+                player:EvaluateItems()
+            end
+        end
+        ConchBlessing.printDebug("[Unified] Loaded multipliers for all players on POST_GAME_STARTED")
+    end)
+
     -- Map stat to cache flag (shared)
     local STAT_TO_CACHE_FLAG = {
         Damage = CacheFlag.CACHE_DAMAGE,
@@ -1596,12 +1644,18 @@ do
                     if combined ~= 0 then
                         player:AddCacheFlags(combined)
                         player:EvaluateItems()
+                        -- ensure HUD reflects immediately after initial load
+                        if um._justLoaded then
+                            player:AddCacheFlags(CacheFlag.CACHE_ALL)
+                            player:EvaluateItems()
+                        end
                         um[playerID].pendingCache = {}
                     end
                 end
             end
         end
         um._hasPending = false
+        um._justLoaded = false
     end)
 end
 

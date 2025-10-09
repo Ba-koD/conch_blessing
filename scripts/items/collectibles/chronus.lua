@@ -163,7 +163,13 @@ function ConchBlessing.chronus._detectAndAbsorb(player)
     -- Apply accumulated damage addition ONCE to avoid per-frame duplicate suppression in unifiedMultipliers
     if changed and totalAddDamage ~= 0 then
         dbg(string.format("Batch applying damage addition: +%.2f", totalAddDamage))
-        ConchBlessing.stats.unifiedMultipliers:SetItemAddition(player, CHRONUS_ID, "Damage", totalAddDamage, "Chronus: absorbed familiars (batched)")
+        -- Apply as plain stat addition without using unified display system, and avoid HUD display
+        ConchBlessing.stats.damage.applyAddition(player, totalAddDamage, 0)
+        player:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
+        player:EvaluateItems()
+        -- Persist global chronus state immediately
+        local sm = ConchBlessing.SaveManager
+        if sm and sm.Save then sm.Save() end
     end
 
     return changed
@@ -368,7 +374,17 @@ ConchBlessing.chronus.onPlayerUpdate = function(_)
 end
 
 ConchBlessing.chronus.onPostUpdate = function()
-    -- no-op: kept for potential future use
+    if ConchBlessing.chronus._pendingOnce and ConchBlessing.chronus._pendingAddDamage then
+        local player = Isaac.GetPlayer(0)
+        if player then
+            ConchBlessing.stats.damage.applyAddition(player, ConchBlessing.chronus._pendingAddDamage, 0)
+            player:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
+            player:EvaluateItems()
+            dbg(string.format("Applied pending Chronus damage: +%.2f", ConchBlessing.chronus._pendingAddDamage))
+        end
+        ConchBlessing.chronus._pendingAddDamage = nil
+        ConchBlessing.chronus._pendingOnce = nil
+    end
 end
 
 ConchBlessing.chronus.onEvaluateCache = function(_, player, cacheFlag)
@@ -382,6 +398,15 @@ ConchBlessing.chronus.onGameStarted = function(_)
     local rs = getRunSave(player)
     if rs then
         dbg(string.format("Loaded: total=%d, kinds=%d", tonumber(rs.totalAbsorbed or 0), rs.absorbed and (function(t) local c=0 for _ in pairs(t) do c=c+1 end return c end)(rs.absorbed) or 0))
+        -- Queue reapply to the next tick to avoid early resets
+        local totalAbs = tonumber(rs.totalAbsorbed or 0) or 0
+        local per = tonumber(ConchBlessing.chronus.data.damagePerFamiliar or 0) or 0
+        local add = totalAbs * per
+        if add ~= 0 then
+            ConchBlessing.chronus._pendingAddDamage = add
+            ConchBlessing.chronus._pendingOnce = true
+            dbg(string.format("Queue Chronus damage on next tick: +%.2f (pairs=%d)", add, totalAbs))
+        end
     end
 end
 

@@ -130,17 +130,11 @@ ConchBlessing.powertraining.onUseItem = function(player, collectibleID, useFlags
     
     -- Update unified multipliers (current = last rolled, total = unified product)
     local uniqueKey = POWER_TRAINING_ID .. "_" .. newIndex
-    if newIndex == 1 then
-        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, POWER_TRAINING_ID, "Tears", newMultipliers.tears, "Power Training #" .. newIndex)
-        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, POWER_TRAINING_ID, "Damage", newMultipliers.damage, "Power Training #" .. newIndex)
-        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, POWER_TRAINING_ID, "Range", newMultipliers.range, "Power Training #" .. newIndex)
-        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, POWER_TRAINING_ID, "Luck", newMultipliers.luck, "Power Training #" .. newIndex)
-    else
-        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Tears", newMultipliers.tears, "Power Training #" .. newIndex)
-        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Damage", newMultipliers.damage, "Power Training #" .. newIndex)
-        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Range", newMultipliers.range, "Power Training #" .. newIndex)
-        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Luck", newMultipliers.luck, "Power Training #" .. newIndex)
-    end
+    -- Always treat as additive multiplier stacking
+    ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Tears", newMultipliers.tears, "Power Training #" .. newIndex)
+    ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Damage", newMultipliers.damage, "Power Training #" .. newIndex)
+    ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Range", newMultipliers.range, "Power Training #" .. newIndex)
+    ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Luck", newMultipliers.luck, "Power Training #" .. newIndex)
     
     SFXManager():Play(SoundEffect.SOUND_BATTERYCHARGE, 1.0, 0, false, 1.0, 0)
     
@@ -299,60 +293,22 @@ ConchBlessing.powertraining.onGameStarted = function(_)
     local player = Isaac.GetPlayer(0)
     if player then
         ConchBlessing.printDebug("Player found, attempting to restore stats from SaveManager...")
-        
         local playerSave = SaveManager.GetRunSave(player)
-        if playerSave and playerSave.powerTraining then
-            local useCount = #playerSave.powerTraining
-            ConchBlessing.printDebug("Found saved data with use count: " .. tostring(useCount))
-            
-            if useCount > 0 then
-                local totalSpeed = 1.0
-                local totalTears = 1.0
-                local totalDamage = 1.0
-                local totalRange = 1.0
-                local totalLuck = 1.0
-                
-                for i = 1, useCount do
-                    local multipliers = playerSave.powerTraining[i]
-                    if multipliers then
-                        totalSpeed = totalSpeed * (multipliers.speed or 1.0)
-                        totalTears = totalTears * (multipliers.tears or 1.0)
-                        totalDamage = totalDamage * (multipliers.damage or 1.0)
-                        totalRange = totalRange * (multipliers.range or 1.0)
-                        totalLuck = totalLuck * (multipliers.luck or 1.0)
-                    end
-                end
-                
-                totalSpeed = math.max(ConchBlessing.powertraining.data.minMultiplier, totalSpeed)
-                totalTears = math.max(ConchBlessing.powertraining.data.minMultiplier, totalTears)
-                totalDamage = math.max(ConchBlessing.powertraining.data.minMultiplier, totalDamage)
-                totalRange = math.max(ConchBlessing.powertraining.data.minMultiplier, totalRange)
-                totalLuck = math.max(ConchBlessing.powertraining.data.minMultiplier, totalLuck)
-                
-                local speedDecrease = ConchBlessing.powertraining.data.speedDecrease * useCount
-                ConchBlessing.printDebug(string.format("Calculated final multipliers: Speed=-%.2f Tears=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx", 
-                    speedDecrease, totalTears, totalDamage, totalRange, totalLuck))
-                
-                ConchBlessing.stats.speed.applyAddition(player, -speedDecrease, ConchBlessing.powertraining.data.minMultiplier)
-                
-                -- Update unified system from saved data: first entry multiplier, rest additive
-                for i = 1, useCount do
-                    local multipliers = playerSave.powerTraining[i]
-                    if i == 1 then
-                        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, POWER_TRAINING_ID, "Tears", multipliers.tears or 1.0, "Power Training #1")
-                        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, POWER_TRAINING_ID, "Damage", multipliers.damage or 1.0, "Power Training #1")
-                        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, POWER_TRAINING_ID, "Range", multipliers.range or 1.0, "Power Training #1")
-                        ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, POWER_TRAINING_ID, "Luck", multipliers.luck or 1.0, "Power Training #1")
-                    else
-                        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Tears", multipliers.tears or 1.0, "Power Training #" .. i)
-                        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Damage", multipliers.damage or 1.0, "Power Training #" .. i)
-                        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Range", multipliers.range or 1.0, "Power Training #" .. i)
-                        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Luck", multipliers.luck or 1.0, "Power Training #" .. i)
-                    end
-                end
-            else
-                ConchBlessing.printDebug("No saved data found, starting with base stats")
+        local haveArrays = playerSave and playerSave.powerTraining
+        local haveUnified = playerSave and playerSave.unifiedMultipliers
+        if haveUnified then
+            ConchBlessing.stats.unifiedMultipliers:LoadFromSaveManager(player)
+            ConchBlessing.printDebug("Power Training: Unified multipliers loaded from SaveManager")
+        elseif haveArrays and #haveArrays > 0 then
+            for i = 1, #haveArrays do
+                local m = haveArrays[i]
+                ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Tears", m.tears or 1.0, "Power Training #" .. i)
+                ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Damage", m.damage or 1.0, "Power Training #" .. i)
+                ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Range", m.range or 1.0, "Power Training #" .. i)
+                ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Luck", m.luck or 1.0, "Power Training #" .. i)
             end
+            ConchBlessing.stats.unifiedMultipliers:SaveToSaveManager(player)
+            ConchBlessing.printDebug("Power Training: Unified multipliers reconstructed from arrays and saved")
         else
             ConchBlessing.printDebug("No SaveManager data found")
         end
@@ -376,3 +332,36 @@ end
 ConchBlessing.powertraining.onUpdate = function(_)
     ConchBlessing.template.onUpdate(ConchBlessing.powertraining.data)
 end 
+
+-- Register PRE_DATA_SAVE sanitizer for this item's run data only
+do
+    local sm = SaveManager
+    local mod = ConchBlessing and ConchBlessing.originalMod
+    if sm and mod and mod.__SAVEMANAGER_UNIQUE_KEY and sm.SaveCallbacks then
+        local callbackKey = mod.__SAVEMANAGER_UNIQUE_KEY .. sm.SaveCallbacks.PRE_DATA_SAVE
+        mod:AddCallback(callbackKey, function(saveData)
+            if saveData and saveData.game and saveData.game.run then
+                for _, playerRun in pairs(saveData.game.run) do
+                    local arr = playerRun and playerRun.powerTraining
+                    if type(arr) == "table" then
+                        -- Compact sparse array entries
+                        local compacted = {}
+                        local count = 0
+                        for i = 1, #arr do
+                            local v = arr[i]
+                            if v ~= nil then
+                                count = count + 1
+                                compacted[count] = v
+                            end
+                        end
+                        playerRun.powerTraining = compacted
+                    end
+                end
+            end
+            if ConchBlessing and ConchBlessing.Config and ConchBlessing.Config.debugMode then
+                ConchBlessing.printDebug("[PowerTraining] PRE_DATA_SAVE sanitized powerTraining array")
+            end
+            return saveData
+        end)
+    end
+end
