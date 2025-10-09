@@ -160,13 +160,20 @@ function ConchBlessing.chronus._detectAndAbsorb(player)
         end
     end
 
-    -- Apply accumulated damage addition ONCE to avoid per-frame duplicate suppression in unifiedMultipliers
+    -- Apply accumulated damage addition via unified system (addition type is hidden from HUD by stats.lua)
     if changed and totalAddDamage ~= 0 then
-        dbg(string.format("Batch applying damage addition: +%.2f", totalAddDamage))
-        -- Apply as plain stat addition without using unified display system, and avoid HUD display
-        ConchBlessing.stats.damage.applyAddition(player, totalAddDamage, 0)
-        player:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
-        player:EvaluateItems()
+        dbg(string.format("Batch applying damage addition (unified): +%.2f", totalAddDamage))
+        local um = ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers
+        if um and um.SetItemAddition then
+            um:SetItemAddition(player, CHRONUS_ID, "Damage", totalAddDamage, "Chronus: absorbed familiars (batched)")
+            um:QueueCacheUpdate(player, "Damage")
+            if um.SaveToSaveManager then um:SaveToSaveManager(player) end
+        else
+            -- Fallback
+            ConchBlessing.stats.damage.applyAddition(player, totalAddDamage, 0)
+            player:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
+            player:EvaluateItems()
+        end
         -- Persist global chronus state immediately
         local sm = ConchBlessing.SaveManager
         if sm and sm.Save then sm.Save() end
@@ -373,19 +380,7 @@ ConchBlessing.chronus.onPlayerUpdate = function(_)
     end
 end
 
-ConchBlessing.chronus.onPostUpdate = function()
-    if ConchBlessing.chronus._pendingOnce and ConchBlessing.chronus._pendingAddDamage then
-        local player = Isaac.GetPlayer(0)
-        if player then
-            ConchBlessing.stats.damage.applyAddition(player, ConchBlessing.chronus._pendingAddDamage, 0)
-            player:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
-            player:EvaluateItems()
-            dbg(string.format("Applied pending Chronus damage: +%.2f", ConchBlessing.chronus._pendingAddDamage))
-        end
-        ConchBlessing.chronus._pendingAddDamage = nil
-        ConchBlessing.chronus._pendingOnce = nil
-    end
-end
+ConchBlessing.chronus.onPostUpdate = function() end
 
 ConchBlessing.chronus.onEvaluateCache = function(_, player, cacheFlag)
     if not player or cacheFlag ~= CacheFlag.CACHE_DAMAGE then return end
@@ -398,14 +393,21 @@ ConchBlessing.chronus.onGameStarted = function(_)
     local rs = getRunSave(player)
     if rs then
         dbg(string.format("Loaded: total=%d, kinds=%d", tonumber(rs.totalAbsorbed or 0), rs.absorbed and (function(t) local c=0 for _ in pairs(t) do c=c+1 end return c end)(rs.absorbed) or 0))
-        -- Queue reapply to the next tick to avoid early resets
+        -- Reapply as unified addition so cache evaluation keeps it
         local totalAbs = tonumber(rs.totalAbsorbed or 0) or 0
         local per = tonumber(ConchBlessing.chronus.data.damagePerFamiliar or 0) or 0
         local add = totalAbs * per
         if add ~= 0 then
-            ConchBlessing.chronus._pendingAddDamage = add
-            ConchBlessing.chronus._pendingOnce = true
-            dbg(string.format("Queue Chronus damage on next tick: +%.2f (pairs=%d)", add, totalAbs))
+            local um = ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers
+            if um and um.SetItemAddition then
+                um:SetItemAddition(player, CHRONUS_ID, "Damage", add, "Chronus: reload merge")
+                um:QueueCacheUpdate(player, "Damage")
+                if um.SaveToSaveManager then um:SaveToSaveManager(player) end
+            else
+                ConchBlessing.stats.damage.applyAddition(player, add, 0)
+                player:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
+                player:EvaluateItems()
+            end
         end
     end
 end

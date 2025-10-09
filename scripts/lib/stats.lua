@@ -382,10 +382,10 @@ function ConchBlessing.stats.unifiedMultipliers:RecalculateStatMultiplier(player
         end
     end
     
-    -- Compute display multiplier: product of per-item effective multipliers, then apply equivalent-from-plain-additions
-    local eqMultFromAdditions = _toEquivalentMultiplierFromAddition(player, statType, totalAdditionApply)
+    -- Compute display multiplier: product of per-item effective multipliers ONLY (exclude plain additions from display)
+    -- Plain additions are applied to stats but do NOT affect displayed total multiplier
     local computedTotalApply = totalMultiplierApply
-    totalMultiplierDisplay = computedTotalApply * (eqMultFromAdditions or 1.0)
+    totalMultiplierDisplay = computedTotalApply
 
     -- Store the calculated totals
     if not self[playerID].statMultipliers then
