@@ -1,4 +1,4 @@
-local ConchBlessing = ConchBlessing
+local hiddenItemManager = require("scripts.lib.hidden_item_manager")
 
 ConchBlessing.chronus = ConchBlessing.chronus or {}
 
@@ -21,33 +21,39 @@ ConchBlessing.chronus.data = ConchBlessing.chronus.data or {
         [CollectibleType.COLLECTIBLE_KNIFE_PIECE_1] = true,
         [CollectibleType.COLLECTIBLE_KNIFE_PIECE_2] = true,
     },
-    absorbActions = {},
+    absorbActions = {
+        [CollectibleType.COLLECTIBLE_TWISTED_PAIR] = function(player, total, delta)
+            ConchBlessing.printDebug(string.format("[Chronus] Twisted Pair absorbed: total=%d, delta=%d", tonumber(total) or 0, tonumber(delta) or 0))
+            ConchBlessing.chronus._ensureIncubusPairs(player)
+            ConchBlessing.chronus._updateIncubusAnchors(player)
+        end,
+        [CollectibleType.COLLECTIBLE_SUCCUBUS] = function(player, total, delta)
+            ConchBlessing.printDebug(string.format("[Chronus] Succubus absorbed: total=%d, delta=%d", tonumber(total) or 0, tonumber(delta) or 0))
+            ConchBlessing.chronus._ensureSuccubusStack(player)
+            ConchBlessing.chronus._updateSuccubusAnchors(player)
+        end,
+    },
 }
 
 local CHRONUS_ID = Isaac.GetItemIdByName("Chronus")
 
--- Debug helper (English-only comments). No hardcoded constants are printed directly; all from data.
 local function dbg(msg)
     if ConchBlessing.Config and ConchBlessing.Config.debugMode then
         ConchBlessing.printDebug("[Chronus] " .. tostring(msg))
     end
 end
 
--- Save helpers (per player run-scope)
 local function getRunSave(player)
     local sm = ConchBlessing.SaveManager
     if not sm then return nil end
-    -- Prefer GLOBAL run save to survive revives (e.g., 1UP) that may reindex player entities
     local globalSave = sm.GetRunSave(nil)
     if not globalSave then return nil end
     globalSave.chronus = globalSave.chronus or { absorbed = {}, totalAbsorbed = 0 }
 
-    -- Migrate legacy per-player data (if any) into global once
     if player then
         local per = sm.GetRunSave(player)
         if per and per.chronus and (per.chronus.absorbed or per.chronus.totalAbsorbed) then
             dbg("Migrating per-player chronus data to global store")
-            -- Merge absorbed counts
             local g = globalSave.chronus
             g.absorbed = g.absorbed or {}
             for cid, entry in pairs(per.chronus.absorbed or {}) do
@@ -58,7 +64,6 @@ local function getRunSave(player)
                 end
             end
             g.totalAbsorbed = (g.totalAbsorbed or 0) + (per.chronus.totalAbsorbed or 0)
-            -- Clear per-player to avoid double counting
             per.chronus = nil
             sm.Save()
         end
@@ -84,7 +89,6 @@ local function ownsAnyBlacklisted(player)
     return false
 end
 
--- Public API for other scripts to extend
 function ConchBlessing.chronus.registerAbsorbAction(familiarCollectibleId, fn)
     if type(familiarCollectibleId) ~= "number" then return end
     if type(fn) ~= "function" then return end
@@ -96,7 +100,6 @@ function ConchBlessing.chronus.addToBlacklist(familiarCollectibleId)
     ConchBlessing.chronus.data.blacklist[familiarCollectibleId] = true
 end
 
--- Internal: count familiar-type collectibles the player owns
 local function countOwnedFamiliarCollectibles(player)
     local counts = {}
     local cfg = Isaac.GetItemConfig()
@@ -111,7 +114,6 @@ local function countOwnedFamiliarCollectibles(player)
     return counts
 end
 
--- Internal: get absorbed count for a specific familiar id
 function ConchBlessing.chronus._getAbsorbedCount(player, famId)
     local rs = getRunSave(player)
     if not rs then return 0 end
@@ -119,7 +121,6 @@ function ConchBlessing.chronus._getAbsorbedCount(player, famId)
     return (sub and sub.count) or 0
 end
 
--- Absorb engine: scan, compute deltas, run actions, morph removal via negative add/remove
 function ConchBlessing.chronus._detectAndAbsorb(player)
     if not player then return false end
     if isSuspended(player) then return false end
@@ -137,7 +138,6 @@ function ConchBlessing.chronus._detectAndAbsorb(player)
         if not bl[famId] and ownedNow > 0 then
             local prev = ConchBlessing.chronus._getAbsorbedCount(player, famId)
             local removed = 0
-            -- Always absorb all currently owned copies so repeated spawns are consumed as well
             for _ = 1, ownedNow do
                 if player:HasCollectible(famId, true) then
                     player:RemoveCollectible(famId)
@@ -148,10 +148,8 @@ function ConchBlessing.chronus._detectAndAbsorb(player)
                 rs.absorbed[famId] = { count = prev + removed }
                 rs.totalAbsorbed = (rs.totalAbsorbed or 0) + removed
                 changed = true
-                -- Accumulate base damage addition once per scan to avoid same-frame suppression
                 totalAddDamage = totalAddDamage + ((ConchBlessing.chronus.data.damagePerFamiliar or 0) * removed)
 
-                -- Then run custom absorb action if present
                 local fn = actions[famId]
                 if type(fn) == "function" then
                     pcall(fn, player, prev + removed, removed)
@@ -160,7 +158,6 @@ function ConchBlessing.chronus._detectAndAbsorb(player)
         end
     end
 
-    -- Apply accumulated damage addition via unified system (addition type is hidden from HUD by stats.lua)
     if changed and totalAddDamage ~= 0 then
         dbg(string.format("Batch applying damage addition (unified): +%.2f", totalAddDamage))
         local um = ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers
@@ -169,12 +166,10 @@ function ConchBlessing.chronus._detectAndAbsorb(player)
             um:QueueCacheUpdate(player, "Damage")
             if um.SaveToSaveManager then um:SaveToSaveManager(player) end
         else
-            -- Fallback
             ConchBlessing.stats.damage.applyAddition(player, totalAddDamage, 0)
             player:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
             player:EvaluateItems()
         end
-        -- Persist global chronus state immediately
         local sm = ConchBlessing.SaveManager
         if sm and sm.Save then sm.Save() end
     end
@@ -182,7 +177,6 @@ function ConchBlessing.chronus._detectAndAbsorb(player)
     return changed
 end
 
--- Finalize: queue cache updates for Damage so unified system applies additions
 function ConchBlessing.chronus._finalizeAbsorb(player)
     if not player then return end
     local um = ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers
@@ -194,7 +188,6 @@ function ConchBlessing.chronus._finalizeAbsorb(player)
     end
 end
 
--- Twisted Pair: spawn and anchor two invisible Incubi per absorbed pair
 local function spawnInvisibleIncubus(player, pairIndex, side)
     local ent = Isaac.Spawn(EntityType.ENTITY_FAMILIAR, FamiliarVariant.INCUBUS, 0, player.Position, Vector.Zero, player)
     local fam = ent and ent:ToFamiliar() or nil
@@ -219,7 +212,6 @@ function ConchBlessing.chronus._ensureIncubusPairs(player)
     local pdata = player:GetData()
     pdata.__chronusIncubi = pdata.__chronusIncubi or {}
 
-    -- keep only still-valid ones
     local kept = {}
     for _, f in ipairs(pdata.__chronusIncubi) do
         if f and f:Exists() and f:ToFamiliar() then
@@ -236,7 +228,6 @@ function ConchBlessing.chronus._ensureIncubusPairs(player)
         if not fam then break end
         table.insert(pdata.__chronusIncubi, fam)
     end
-    -- Allow unlimited stacking: do not remove excess if target decreases; keep helpers persistent
 end
 
 function ConchBlessing.chronus._updateIncubusAnchors(player)
@@ -266,7 +257,6 @@ function ConchBlessing.chronus._updateIncubusAnchors(player)
     end
 end
 
--- Succubus: spawn invisible succubi that follow player, keep aura logic intact
 local function spawnInvisibleSuccubus(player)
     local ent = Isaac.Spawn(EntityType.ENTITY_FAMILIAR, FamiliarVariant.SUCCUBUS, 0, player.Position, Vector.Zero, player)
     local fam = ent and ent:ToFamiliar() or nil
@@ -277,7 +267,6 @@ local function spawnInvisibleSuccubus(player)
     pcall(function() spr:ReplaceSpritesheet(0, path) end)
     pcall(function() spr:LoadGraphics() end)
     fam.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
-    -- Disable native movement/knockback and collisions to remove AI influence
     fam:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
     fam.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
     fam.GridCollisionClass = GridCollisionClass.COLLISION_NONE
@@ -307,7 +296,6 @@ function ConchBlessing.chronus._ensureSuccubusStack(player)
         if not fam then break end
         table.insert(pdata.__chronusSuccubi, fam)
     end
-    -- Allow unlimited stacking: do not remove excess if target decreases; keep helpers persistent
 end
 
 function ConchBlessing.chronus._updateSuccubusAnchors(player)
@@ -324,20 +312,6 @@ function ConchBlessing.chronus._updateSuccubusAnchors(player)
     end
 end
 
--- Register default absorb actions
-ConchBlessing.chronus.data.absorbActions[CollectibleType.COLLECTIBLE_TWISTED_PAIR] = function(player, total, delta)
-    dbg(string.format("Twisted Pair absorbed: total=%d, delta=%d", tonumber(total) or 0, tonumber(delta) or 0))
-    ConchBlessing.chronus._ensureIncubusPairs(player)
-    ConchBlessing.chronus._updateIncubusAnchors(player)
-end
-
-ConchBlessing.chronus.data.absorbActions[CollectibleType.COLLECTIBLE_SUCCUBUS] = function(player, total, delta)
-    dbg(string.format("Succubus absorbed: total=%d, delta=%d", tonumber(total) or 0, tonumber(delta) or 0))
-    ConchBlessing.chronus._ensureSuccubusStack(player)
-    ConchBlessing.chronus._updateSuccubusAnchors(player)
-end
-
--- Callbacks (registered via callback manager): keep signatures consistent with ItemData
 ConchBlessing.chronus.onPickup = function(_, player, collectibleType)
     if collectibleType ~= CHRONUS_ID then return end
     dbg("Picked up - initial sweep")
@@ -367,13 +341,11 @@ ConchBlessing.chronus.onPlayerUpdate = function(_)
                     end
                 end
 
-                -- Always maintain anchors
                 ConchBlessing.chronus._ensureIncubusPairs(player)
                 ConchBlessing.chronus._updateIncubusAnchors(player)
                 ConchBlessing.chronus._ensureSuccubusStack(player)
                 ConchBlessing.chronus._updateSuccubusAnchors(player)
             else
-                -- Chronus lost: revert all stored effects and restore familiars
                 ConchBlessing.chronus._revertAll(player)
             end
         end
@@ -384,7 +356,6 @@ ConchBlessing.chronus.onPostUpdate = function() end
 
 ConchBlessing.chronus.onEvaluateCache = function(_, player, cacheFlag)
     if not player or cacheFlag ~= CacheFlag.CACHE_DAMAGE then return end
-    -- unifiedMultipliers system will apply additions queued; nothing to do directly here
 end
 
 ConchBlessing.chronus.onGameStarted = function(_)
@@ -393,7 +364,6 @@ ConchBlessing.chronus.onGameStarted = function(_)
     local rs = getRunSave(player)
     if rs then
         dbg(string.format("Loaded: total=%d, kinds=%d", tonumber(rs.totalAbsorbed or 0), rs.absorbed and (function(t) local c=0 for _ in pairs(t) do c=c+1 end return c end)(rs.absorbed) or 0))
-        -- Reapply as unified addition so cache evaluation keeps it
         local totalAbs = tonumber(rs.totalAbsorbed or 0) or 0
         local per = tonumber(ConchBlessing.chronus.data.damagePerFamiliar or 0) or 0
         local add = totalAbs * per
@@ -412,12 +382,10 @@ ConchBlessing.chronus.onGameStarted = function(_)
     end
 end
 
--- Revert all absorbed effects and restore the original familiar collectibles when Chronus is removed
 function ConchBlessing.chronus._revertAll(player)
     local rs = getRunSave(player)
     if not rs or not rs.absorbed then return false end
     local hadAny = false
-    -- Remove anchored helpers first (Incubus/Succubus)
     do
         local pdata = player and player:GetData() or {}
         if pdata.__chronusIncubi then
@@ -433,7 +401,6 @@ function ConchBlessing.chronus._revertAll(player)
             pdata.__chronusSuccubi = nil
         end
     end
-    -- Restore absorbed familiars back to inventory
     for famId, entry in pairs(rs.absorbed) do
         local count = (entry and entry.count) or 0
         if count > 0 then
@@ -443,7 +410,6 @@ function ConchBlessing.chronus._revertAll(player)
             end
         end
     end
-    -- Remove damage additions applied by Chronus
     if hadAny then
         local um = ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers
         if um and um.RemoveItemAddition then
@@ -453,7 +419,6 @@ function ConchBlessing.chronus._revertAll(player)
             player:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
             player:EvaluateItems()
         end
-        -- Clear saved absorbed records
         rs.absorbed = {}
         rs.totalAbsorbed = 0
         dbg("Reverted all Chronus effects and restored familiars")
@@ -463,12 +428,10 @@ function ConchBlessing.chronus._revertAll(player)
 end
 
 ConchBlessing.chronus.onFamiliarUpdate = function(_, fam)
-    -- Maintain succubus aura while keeping sprite invisible
     local f = fam and fam:ToFamiliar() or nil
     if not f or f.Variant ~= FamiliarVariant.SUCCUBUS then return end
     local fd = f:GetData() or {}
     if not fd.__chronusSuccubus then return end
-    -- One-time sprite hide (keep aura visible)
     if not fd.__chronusSuccubusSpr then
         local spr = f:GetSprite()
         local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
@@ -476,7 +439,6 @@ ConchBlessing.chronus.onFamiliarUpdate = function(_, fam)
         pcall(function() spr:LoadGraphics() end)
         fd.__chronusSuccubusSpr = true
     end
-    -- Continuously override AI by locking to player and disabling physics knockback
     f:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
     f.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
     f.GridCollisionClass = GridCollisionClass.COLLISION_NONE
@@ -487,5 +449,3 @@ ConchBlessing.chronus.onFamiliarUpdate = function(_, fam)
         f.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
     end
 end
-
-
