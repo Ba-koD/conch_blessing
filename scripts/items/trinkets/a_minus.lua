@@ -114,15 +114,17 @@ local function updatePlayerMultipliers(player)
                 s.Tears or 1.0, s.Damage or 1.0, s.Luck or 1.0))
         end
 
-        -- Apply as first-use multipliers (xV) then allow future changes as additive-mult style deltas
-        local um = ConchBlessing.stats.unifiedMultipliers
-        local s = pstate.split
-        if s.Tears then um:SetItemMultiplier(player, TID, "Tears", s.Tears, "A- Split (Tears)") end
-        if s.Damage then um:SetItemMultiplier(player, TID, "Damage", s.Damage, "A- Split (Damage)") end
-        if s.Luck then um:SetItemMultiplier(player, TID, "Luck", s.Luck, "A- Split (Luck)") end
-        -- If moms box/golden increase trinket count, ensure multipliers persist; additions scale via evaluateCache
-        -- Persist unified multipliers so they are applied on load
-        um:SaveToSaveManager(player)
+        -- Apply as first-use multipliers (xV) only once per run unless split changes
+        if not pstate.applied then
+            local um = ConchBlessing.stats.unifiedMultipliers
+            local s = pstate.split
+            if s.Tears then um:SetItemMultiplier(player, TID, "Tears", s.Tears, "A- Split (Tears)") end
+            if s.Damage then um:SetItemMultiplier(player, TID, "Damage", s.Damage, "A- Split (Damage)") end
+            if s.Luck then um:SetItemMultiplier(player, TID, "Luck", s.Luck, "A- Split (Luck)") end
+            -- Persist unified multipliers so they are applied on load
+            um:SaveToSaveManager(player)
+            pstate.applied = true
+        end
 	else
 		-- Remove multipliers when trinket effect is not present
 		local um = ConchBlessing.stats.unifiedMultipliers
@@ -130,6 +132,7 @@ local function updatePlayerMultipliers(player)
 		um:RemoveItemMultiplier(player, TID, "Damage")
 		um:RemoveItemMultiplier(player, TID, "Luck")
 		pstate.split = nil
+		pstate.applied = nil
 	end
 end
 

@@ -234,6 +234,10 @@ function ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player
     entry.lastType = "addition" -- stored as addition container, but flagged as additive-multiplier
     entry.eqMult = multiplierValue
     entry.isAdditiveMultiplier = true
+    -- Mark first-use frame for "x" display exactly once per item+stat
+    if entry.firstAddMultFrame == nil then
+        entry.firstAddMultFrame = currentFrame
+    end
     self[playerID].itemAdditions[itemID][statType] = entry
 
     ConchBlessing.printDebug(string.format("  Stored Additive Mult: Item %s %s = x%.2f (Delta %+0.2f, Seq %d)", 
@@ -293,10 +297,9 @@ function ConchBlessing.stats.unifiedMultipliers:RecalculateStatMultiplier(player
     local playerID = player:GetPlayerType()
     if not self[playerID] then return end
     
-    local totalMultiplierApply = 1.0   -- product of pure multipliers only
+    local totalMultiplierApply = 1.0   -- product of per-item effective multipliers
     local totalAdditionApply = 0.0     -- sum of flat additions (to be applied additively)
-    local totalAdditiveDeltaSum = 0.0 -- sum of additive-mult deltas (e.g., +0.25, -0.20)
-    local totalMultiplierDisplay = 1.0 -- display multiplier including additive mults and additions equivalently
+    local totalMultiplierDisplay = 1.0 -- display multiplier including additions equivalently
     local lastItemCurrentVal = 1.0   -- May be multiplier or addition delta
     local lastItemID = nil
     local lastDescription = ""
@@ -326,15 +329,13 @@ function ConchBlessing.stats.unifiedMultipliers:RecalculateStatMultiplier(player
         end
         local addCum, addSeq, addLastDelta, addDesc = 0, 0, 0, ""
         local addIsAddMul = false
+        local addMulDelta = 0.0 -- additive-multiplier delta for THIS item only
         if self[playerID].itemAdditions and self[playerID].itemAdditions[itemID] and self[playerID].itemAdditions[itemID][statType] then
             local ad = self[playerID].itemAdditions[itemID][statType]
             addIsAddMul = ad.isAdditiveMultiplier == true
-            -- Separate additive-multiplier vs pure addition
-            if addIsAddMul and (type(ad.cumulative) == "number" or type(ad.lastDelta) == "number") then
-                -- Treat as delta to multiplier: accumulate sum of deltas
-                local cumDelta = ad.cumulative or 0
-                totalAdditiveDeltaSum = totalAdditiveDeltaSum + cumDelta
-                addCum = 0
+            -- Separate additive-multiplier (affects this item's effective multiplier) vs pure addition (flat stat add)
+            if addIsAddMul then
+                addMulDelta = ad.cumulative or 0
                 addLastDelta = ad.lastDelta or 0
             else
                 addCum = ad.cumulative or 0
@@ -343,31 +344,47 @@ function ConchBlessing.stats.unifiedMultipliers:RecalculateStatMultiplier(player
             addSeq = ad.sequence or 0
             addDesc = ad.description or ""
         end
-        -- Apply-only: multiply pure multipliers; accumulate additions separately
-        totalMultiplierApply = totalMultiplierApply * baseM
+        -- Per-item effective multiplier: baseM + additive-mult delta
+        local effectiveM = (baseM or 1.0) + (addMulDelta or 0.0)
+        if effectiveM <= 0 then effectiveM = 0 end
+        totalMultiplierApply = totalMultiplierApply * effectiveM
         totalAdditionApply = totalAdditionApply + addCum
 
         -- Track latest change by sequence
         if addSeq >= baseSeq and addSeq > lastSequence then
-            lastItemCurrentVal = addLastDelta
+            -- Prefer additive-multiplier display when additive change is latest
+            if addIsAddMul then
+                local ad = self[playerID].itemAdditions[itemID][statType]
+                local isFirstFrame = ad and ad.firstAddMultFrame == Game():GetFrameCount()
+                if isFirstFrame then
+                    -- First-use: show as x(1+delta)
+                    lastItemCurrentVal = 1.0 + (addLastDelta or 0)
+                    lastType = "multiplier"
+                else
+                    lastItemCurrentVal = addLastDelta
+                    lastType = "add_mult"
+                end
+            else
+                lastItemCurrentVal = addLastDelta
+                lastType = "addition"
+            end
             lastItemID = itemID
             lastDescription = addDesc
             lastSequence = addSeq
-            lastType = addIsAddMul and "add_mult" or "addition"
-            ConchBlessing.printDebug(string.format("  Item %s: base=%.2f, addCum=%+0.2f (last %+0.2f)", tostring(itemID), baseM, addCum, addLastDelta))
+            ConchBlessing.printDebug(string.format("  Item %s: base=%.2f, addMulDelta=%+0.2f, eff=%.2f, addCum=%+0.2f (last %+0.2f)", tostring(itemID), baseM, addMulDelta, effectiveM, addCum, addLastDelta))
         elseif baseSeq > lastSequence then
             lastItemCurrentVal = baseM
             lastItemID = itemID
             lastDescription = baseDesc
             lastSequence = baseSeq
             lastType = "multiplier"
-            ConchBlessing.printDebug(string.format("  Item %s: base=%.2f, addCum=%+0.2f", tostring(itemID), baseM, addCum))
+            ConchBlessing.printDebug(string.format("  Item %s: base=%.2f, addMulDelta=%+0.2f, eff=%.2f, addCum=%+0.2f", tostring(itemID), baseM, addMulDelta, effectiveM, addCum))
         end
     end
     
-    -- Compute display multiplier: base * (1 + additive-delta-sum) * equivalent-from-plain-additions
+    -- Compute display multiplier: product of per-item effective multipliers, then apply equivalent-from-plain-additions
     local eqMultFromAdditions = _toEquivalentMultiplierFromAddition(player, statType, totalAdditionApply)
-    local computedTotalApply = totalMultiplierApply * (1.0 + totalAdditiveDeltaSum)
+    local computedTotalApply = totalMultiplierApply
     totalMultiplierDisplay = computedTotalApply * (eqMultFromAdditions or 1.0)
 
     -- Store the calculated totals
@@ -378,7 +395,7 @@ function ConchBlessing.stats.unifiedMultipliers:RecalculateStatMultiplier(player
     self[playerID].statMultipliers[statType] = {
         current = lastItemCurrentVal,    -- Last item's individual value (multiplier or addition)
         total = totalMultiplierDisplay,  -- Display full multiplier including additive-mult deltas and additions eq.
-        totalApply = computedTotalApply, -- Apply pure multipliers combined with additive-mult deltas
+        totalApply = computedTotalApply, -- Apply product of per-item effective multipliers
         totalAdditions = totalAdditionApply, -- Flat additions to apply on cache separately
         lastItemID = lastItemID,         -- Last item that modified this stat
         description = lastDescription,   -- Description of the last item
@@ -628,7 +645,13 @@ function ConchBlessing.stats.multiplierDisplay:UpdateFromUnifiedSystem(player, s
     local storeType = currentType or "multiplier"
     local storeCurrent = currentValue
     if storeType == "add_mult" then
-        storeCurrent = currentValue -- already a delta (lastDelta)
+        -- Always convert to delta (mult-1) if a multiplier sneaked in
+        -- If currentValue already is a delta (e.g., +0.20 or -0.05), leave as is
+        if currentValue > 1.0 or currentValue < -0.99 then
+            storeCurrent = currentValue - 1.0
+        else
+            storeCurrent = currentValue
+        end
     end
     self.playerData[playerID].unifiedData[statType] = {
         current = storeCurrent,
@@ -673,7 +696,10 @@ local function RenderMultiplierStat(statType, currentValue, totalMult, currentTy
     --  - multiplier: x1.20
     --  - addition: +1.20
     local currentText
-    if currentType == "addition" or currentType == "add_mult" then
+    if currentType == "addition" then
+        return -- plain additions are hidden entirely
+    elseif currentType == "add_mult" then
+        -- Always show delta for additive multipliers (e.g., 0.96 -> -0.04)
         currentText = string.format("%+0.2f", currentValue)
     else
         currentText = string.format("x%.2f", currentValue)
