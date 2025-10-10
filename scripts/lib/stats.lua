@@ -1292,12 +1292,7 @@ function ConchBlessing.stats.tears.calculateMaxFireDelay(baseFireDelay, multipli
     -- calculate SPS: SPS = 30 / (MaxFireDelay + 1)
     local baseSPS = 30 / (baseFireDelay + 1)
     local targetSPS = baseSPS * multiplier
-    local newMaxFireDelay = math.max(0, (30 / targetSPS) - 1)
-    
-    -- apply minimum fire delay limit
-    if minFireDelay then
-        newMaxFireDelay = math.max(minFireDelay, newMaxFireDelay)
-    end
+    local newMaxFireDelay = (30 / targetSPS) - 1
     
     return newMaxFireDelay
 end
@@ -1307,8 +1302,14 @@ function ConchBlessing.stats.tears.applyMultiplier(player, multiplier, minFireDe
     if not player then return end
     
     local baseFireDelay = player.MaxFireDelay
-    local newFireDelay = ConchBlessing.stats.tears.calculateMaxFireDelay(baseFireDelay, multiplier, minFireDelay)
-    
+    local baseSPS = 30 / (baseFireDelay + 1)
+    local newFireDelay = ConchBlessing.stats.tears.calculateMaxFireDelay(baseFireDelay, multiplier, nil)
+    local newSPS = 30 / (newFireDelay + 1)
+
+    -- Debug: show SPS multiplier application details
+    ConchBlessing.printDebug(string.format("[Tears] Multiplier apply: baseFD=%.4f baseSPS=%.4f mult=%.4f -> newFD=%.4f newSPS=%.4f",
+        baseFireDelay, baseSPS, multiplier, newFireDelay, newSPS))
+
     player.MaxFireDelay = newFireDelay
     
     return newFireDelay
@@ -1321,12 +1322,12 @@ function ConchBlessing.stats.tears.applyAddition(player, addition, minFireDelay)
     local baseFireDelay = player.MaxFireDelay
     local baseSPS = 30 / (baseFireDelay + 1)
     local targetSPS = baseSPS + addition
-    local newMaxFireDelay = math.max(0, (30 / targetSPS) - 1)
+    local newMaxFireDelay = (30 / targetSPS) - 1
+    local newSPS = 30 / (newMaxFireDelay + 1)
     
-    -- apply minimum fire delay limit
-    if minFireDelay then
-        newMaxFireDelay = math.max(minFireDelay, newMaxFireDelay)
-    end
+    -- Debug: show SPS addition application details
+    ConchBlessing.printDebug(string.format("[Tears] Addition apply: baseFD=%.4f baseSPS=%.4f addSPS=%+.4f -> newFD=%.4f newSPS=%.4f",
+        baseFireDelay, baseSPS, addition, newMaxFireDelay, newSPS))
     
     player.MaxFireDelay = newMaxFireDelay
 
@@ -1345,8 +1346,8 @@ function ConchBlessing.stats.unified.applyMultiplierToAll(player, multiplier, mi
     -- damage
     ConchBlessing.stats.damage.applyMultiplier(player, multiplier, minStats.damage * 0.4, showDisplay)
     
-    -- fire delay (based on SPS)
-    ConchBlessing.stats.tears.applyMultiplier(player, multiplier, minStats.tears * 0.4, showDisplay)
+    -- fire delay (based on SPS) - allow bypassing default min cap
+    ConchBlessing.stats.tears.applyMultiplier(player, multiplier, nil, showDisplay)
     
     -- speed
     ConchBlessing.stats.speed.applyMultiplier(player, multiplier, minStats.speed * 0.4, showDisplay)
@@ -1372,8 +1373,8 @@ function ConchBlessing.stats.unified.applyAdditionToAll(player, addition, minSta
     -- damage
     ConchBlessing.stats.damage.applyAddition(player, addition, minStats.damage * 0.4)
     
-    -- fire delay (based on SPS)
-    ConchBlessing.stats.tears.applyAddition(player, addition, minStats.tears * 0.4)
+    -- fire delay (based on SPS) - allow bypassing default min cap
+    ConchBlessing.stats.tears.applyAddition(player, addition, nil)
     
     -- speed
     ConchBlessing.stats.speed.applyAddition(player, addition, minStats.speed * 0.4)
@@ -1484,7 +1485,7 @@ function ConchBlessing.stats.unifiedMultipliers:ApplyStatMultiplier(player, stat
     
     -- Apply the multiplier based on stat type
     if statType == "Tears" then
-        ConchBlessing.stats.tears.applyMultiplier(player, totalMultiplier, 0.1, false)
+        ConchBlessing.stats.tears.applyMultiplier(player, totalMultiplier, nil, false)
     elseif statType == "Damage" then
         ConchBlessing.stats.damage.applyMultiplier(player, totalMultiplier, 0.1, false)
     elseif statType == "Range" then
@@ -1522,7 +1523,7 @@ function ConchBlessing.stats.unifiedMultipliers:ApplyStatMultiplier(player, stat
         if statType == "Tears" then
             local baseSPS = 30 / (originalValues.Tears + 1)
             local targetSPS = baseSPS * totalMultiplier
-            local newFireDelay = math.max(0, (30 / targetSPS) - 1)
+            local newFireDelay = (30 / targetSPS) - 1
             player.MaxFireDelay = newFireDelay
             ConchBlessing.printDebug(string.format("Direct update: MaxFireDelay %.2f -> %.2f", originalValues.Tears, newFireDelay))
         elseif statType == "Damage" then
@@ -1585,7 +1586,12 @@ do
         ConchBlessing.printDebug(string.format("[Unified] Evaluating %s cache: applying pure total %.2fx", statType, total))
 
         if statType == "Tears" then
-            ConchBlessing.stats.tears.applyMultiplier(player, total, 0.1, false)
+            ConchBlessing.stats.tears.applyMultiplier(player, total, nil, false)
+            local add = self[playerID] and self[playerID].statMultipliers and self[playerID].statMultipliers[statType] and (self[playerID].statMultipliers[statType].totalAdditions or 0) or 0
+            if add ~= 0 then
+                ConchBlessing.stats.tears.applyAddition(player, add, nil)
+                ConchBlessing.printDebug(string.format("[Unified] Applied Tears SPS addition at cache: %+0.4f", add))
+            end
         elseif statType == "Damage" then
             -- Apply pure multiplier first, then flat additions
             ConchBlessing.stats.damage.applyMultiplier(player, total, 0.1, false)
