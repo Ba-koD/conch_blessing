@@ -658,6 +658,64 @@ ConchBlessing.ItemData = {
             }
         }
 	},
+    APPRAISAL_CERTIFICATE = {
+        type = "active",
+        id = Isaac.GetItemIdByName("Appraisal Certificate"),
+        name = {
+            kr = "감정 평가서",
+            en = "Appraisal Certificate",
+        },
+        description = {
+            kr = "이거 장물 아니죠?",
+            en = "Is this a loot?",
+        },
+        eid = {
+            kr = {
+                "{{Coin}} 30원을 소비하여 현재 장신구를 흡수하고 모든 장신구 방(사망증서 공간)으로 이동합니다.",
+                "#하나를 선택하면 즉시 흡수하고 원래 방으로 돌아옵니다.",
+                "#{{Warning}} 사망 증명서 공간을 공유합니다.",
+            },
+            en = {
+                "Consumes {{Coin}} 30 to absorb the current trinket and move to all trinket rooms (Death Certificate space).",
+                "#When one is selected, it is immediately absorbed and returns to the original room.",
+                "#{{Warning}} Shares Death Certificate space.",
+            },
+        },
+        pool = {
+            RoomType.ROOM_TREASURE,
+            RoomType.ROOM_SHOP,
+        },
+        quality = 3,
+        tags = "offensive",
+        cache = "",
+        hidden = false,
+        shopprice = 20,
+        devilprice = 2,
+        maxcharges = 0,
+        chargetype = "normal",
+        gfx = "appraisal_certificate.png",
+        initcharge = 0,
+        origin = CollectibleType.COLLECTIBLE_DEATH_CERTIFICATE,
+        flag = "neutral",
+        script = "scripts/items/collectibles/appraisal_certificate",
+        callbacks = {
+            use = "appraisal.onUseItem",
+            postPickupInit = "appraisal.onPostPickupInit",
+            prePickupCollision = "appraisal.onPrePickupCollision",
+            postNewRoom = "appraisal.onPostNewRoom",
+            update = "appraisal.onUpdate",
+        },
+        onBeforeChange = "appraisal.onBeforeChange",
+        onAfterChange = "appraisal.onAfterChange",
+        synergies = {
+            [{ type = "trinket", name = "Atropos" }] = {
+                kr = {"감정서 시작 방에서 바보 카드를 드랍합니다.",
+                        "장신구를 흡수하지 않습니다."},
+                en = {"Drops a Fool card in the AC start room.",
+                        "#Trinkets are not smelted."}
+            }
+        },
+    },
 
     -- Trinkets
     TIME_POWER = {
@@ -1273,13 +1331,36 @@ local function loadAllItems()
             if not ConchBlessing._builtSynergyMaps then
                 ConchBlessing._synergyByTarget = {}
                 ConchBlessing._synergyByMod = {}
-                for key, data in pairs(ConchBlessing.ItemData) do
+				-- Resolve helper: allow targets specified by { type = "trinket"|"active"|"passive", name = "..." }
+				local function resolveTargetId(targetKey)
+					if type(targetKey) == "number" then
+						return targetKey
+					end
+					if type(targetKey) == "table" then
+						local t = targetKey.type or targetKey.kind
+						local n = targetKey.name
+						if type(n) ~= "string" or type(t) ~= "string" then return nil end
+						t = string.lower(t)
+						if t == "trinket" then
+							return Isaac.GetTrinketIdByName(n)
+						else
+							-- treat active/passive/collectible the same for ID resolution
+							return Isaac.GetItemIdByName(n)
+						end
+					end
+					return nil
+				end
+
+				for key, data in pairs(ConchBlessing.ItemData) do
                     if data and data.synergies and data.id and data.id ~= -1 then
-                        for targetId, text in pairs(data.synergies) do
-                            ConchBlessing._synergyByTarget[targetId] = ConchBlessing._synergyByTarget[targetId] or {}
-                            table.insert(ConchBlessing._synergyByTarget[targetId], { key = key, text = text })
-                            ConchBlessing._synergyByMod[data.id] = ConchBlessing._synergyByMod[data.id] or {}
-                            table.insert(ConchBlessing._synergyByMod[data.id], { target = targetId, text = text })
+						for targetKey, text in pairs(data.synergies) do
+							local targetId = resolveTargetId(targetKey)
+							if type(targetId) == "number" and targetId > 0 then
+								ConchBlessing._synergyByTarget[targetId] = ConchBlessing._synergyByTarget[targetId] or {}
+								table.insert(ConchBlessing._synergyByTarget[targetId], { key = key, text = text })
+								ConchBlessing._synergyByMod[data.id] = ConchBlessing._synergyByMod[data.id] or {}
+								table.insert(ConchBlessing._synergyByMod[data.id], { target = targetId, text = text })
+							end
                         end
                     end
                 end
@@ -1287,7 +1368,8 @@ local function loadAllItems()
             end
 
             -- Helper: check if any player has a collectible or trinket with given ID
-            local function anyPlayerHas(id)
+			local function anyPlayerHas(id)
+				if type(id) ~= "number" then return false end
                 local game = Game()
                 local n = game:GetNumPlayers()
                 for i = 0, n - 1 do
@@ -1432,9 +1514,23 @@ local function loadAllItems()
                             for _, entry in ipairs(targets) do
                                 local d = ConchBlessing.ItemData[entry.key]
                                 if d and d.id and anyPlayerHas(d.id) then
-                                    local text = (type(entry.text) == "table" and (entry.text[lang] or entry.text.en)) or tostring(entry.text)
+                                    local t = (type(entry.text) == "table" and (entry.text[lang] or entry.text.en)) or entry.text
                                     local iconToken = "{{icon_" .. string.lower(entry.key) .. "}}"
-                                    EID:appendToDescription(descObj, "#" .. iconToken .. " " .. text)
+                                    local function normLine(s)
+                                        s = tostring(s or "")
+                                        -- strip leading # to avoid double newlines
+                                        return (s:gsub("^#+", ""))
+                                    end
+                                    local msg
+                                    if type(t) == "table" then
+                                        msg = ""
+                                        for i = 1, #t do
+                                            msg = msg .. "#" .. iconToken .. " " .. normLine(t[i])
+                                        end
+                                    else
+                                        msg = "#" .. iconToken .. " " .. normLine(t)
+                                    end
+                                    EID:appendToDescription(descObj, msg)
                                 end
                             end
                         end
@@ -1443,14 +1539,27 @@ local function loadAllItems()
                         if asMod then
                             for _, entry in ipairs(asMod) do
                                 if anyPlayerHas(entry.target) then
-                                    local text = (type(entry.text) == "table" and (entry.text[lang] or entry.text.en)) or tostring(entry.text)
+                                    local t = (type(entry.text) == "table" and (entry.text[lang] or entry.text.en)) or entry.text
                                     local iconToken
                                     if isTrinketId(entry.target) then
                                         iconToken = "{{Trinket" .. tostring(entry.target) .. "}}"
                                     else
                                         iconToken = "{{Collectible" .. tostring(entry.target) .. "}}"
                                     end
-                                    EID:appendToDescription(descObj, "#" .. iconToken .. " " .. text)
+                                    local function normLine(s)
+                                        s = tostring(s or "")
+                                        return (s:gsub("^#+", ""))
+                                    end
+                                    local msg
+                                    if type(t) == "table" then
+                                        msg = ""
+                                        for i = 1, #t do
+                                            msg = msg .. "#" .. iconToken .. " " .. normLine(t[i])
+                                        end
+                                    else
+                                        msg = "#" .. iconToken .. " " .. normLine(t)
+                                    end
+                                    EID:appendToDescription(descObj, msg)
                                 end
                             end
                         end
