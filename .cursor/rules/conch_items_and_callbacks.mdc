@@ -1,0 +1,62 @@
+---
+name: Conch’s Blessing — Items & Callbacks
+---
+
+## Items system and callbacks
+
+- `scripts/conch_blessing_items.lua`
+  - `ConchBlessing.ItemData`: item/trinket/familiar metadata, pool/quality/tags/EID/script path/callbacks
+  - Callback keys (e.g., `pickup`, `evaluateCache`) are wired by `CallbackManager`
+
+- `scripts/callback_manager.lua`
+  - Central mapping and registration utility
+```88:101:scripts/callback_manager.lua
+ConchBlessing.CallbackManager.callbackMapping = {
+    -- Item-specific callbacks (require item ID)
+    pickup = { callback = ModCallbacks.MC_POST_PICKUP_INIT, needsId = true },
+    use = { callback = ModCallbacks.MC_USE_ITEM, needsId = true },
+    
+    -- Global callbacks (no item ID needed)
+    tearInit = { callback = ModCallbacks.MC_POST_TEAR_INIT, needsId = false },
+    tearUpdate = { callback = ModCallbacks.MC_POST_TEAR_UPDATE, needsId = false },
+    fireTear = { callback = ModCallbacks.MC_POST_FIRE_TEAR, needsId = false },
+    tearCollision = { callback = ModCallbacks.MC_PRE_TEAR_COLLISION, needsId = false },
+    tearRemoved = { callback = ModCallbacks.MC_POST_ENTITY_REMOVE, needsId = false },
+    gameStarted = { callback = ModCallbacks.MC_POST_GAME_STARTED, needsId = false },
+    update = { callback = ModCallbacks.MC_POST_UPDATE, needsId = false },
+```
+
+## Item implementation pattern
+
+1) Content/Resources
+- Place sprites/anm2 under `resources/gfx/**`
+- Add to `content/items.xml`; update `content/itempools.xml` if needed
+
+2) ItemData declaration
+- Add entry in `scripts/conch_blessing_items.lua` → `ConchBlessing.ItemData`
+  - `id`, `name`, `description`, `eid`, `pool`, `quality`, `tags`, `origin`, `flag`, `script`, `callbacks`, `synergies`
+  - Declare `cache` if stats are affected
+
+3) Script module
+- Create `scripts/items/collectibles/<your_item>.lua`
+  - Implement callbacks (English comments)
+  - Apply stats via unified API
+  - Use `scripts/template.lua` for upgrade pre/post visuals as needed
+
+4) Callback wiring
+- Fill `ItemData.callbacks`; registration is handled by `CallbackManager`
+
+5) Testing
+- Enable MCM Debug; verify console logs for flow/cache/multipliers
+- Start a new run to validate initialization
+
+---
+
+## How these rules affect edits
+
+- New items must follow ItemData → script module → callbacks wiring
+- Stat changes go through the unified API only; avoid raw overwrites
+- Cache/save/language/EID/template changes must honor each subsystem rules
+- Debug code uses common log functions, no magic numbers, with context
+- If a request conflicts with rules, follow the request, note the conflict, propose alternatives
+

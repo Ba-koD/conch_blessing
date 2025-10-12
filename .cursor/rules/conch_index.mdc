@@ -1,0 +1,15 @@
+---
+alwaysApply: true
+name: Conch’s Blessing — Cursor Rules Index
+---
+
+## Conch’s Blessing — Cursor Rules Index
+
+Use these split rule documents for focused guidance. This index is always applied.
+
+- Architecture & File Map: `conch_architecture_filemap.mdc`
+- Items & Callbacks: `conch_items_and_callbacks.mdc`
+- Stats, Cache & Templates: `conch_stats_cache_templates.mdc`
+- Config, MCM & Save: `conch_config_mcm_save.mdc`
+- Dev Policies & Change Management: `conch_dev_policies_change_mgmt.mdc`
+

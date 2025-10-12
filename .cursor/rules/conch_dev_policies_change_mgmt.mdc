@@ -1,0 +1,69 @@
+---
+name: Conch’s Blessing — Dev Policies & Change Management
+---
+
+## When to consult these rules
+- New item/trinket/familiar planning and implementation
+- Editing item logic, stats/cache, or callbacks
+- Save/load behavior, MCM settings, language/EID updates
+- Adding sprites/animations/anm2/resources or XML changes
+- Debugging/performance investigations
+- Release prep (version/metadata/spawn toggles/save integrity)
+
+---
+
+## Development principles (Consistency-first)
+
+- Code changes
+  - Preserve existing structure/pattern; extend via `scripts/items/...` modules
+  - Declare in `ConchBlessing.ItemData`, implement in `script`, wire via `CallbackManager`
+  - Minimize cache invalidations; call `AddCacheFlags` + `EvaluateItems` only when needed
+
+- Callbacks
+  - Prefer `ItemData.callbacks` + `CallbackManager` instead of scattered `AddCallback`
+  - Use specific events over `MC_POST_UPDATE` when possible
+
+- Stats and cache
+  - Use unified multipliers API only; avoid raw overwrites and keep sequence policy intact
+
+- Save data
+  - Separate run-scope vs file-scope; never store Entity/userdata
+
+- RNG
+  - Use player/item-based RNG seeds (InitSeed/CollectibleRNG) for determinism
+
+- Performance
+  - Avoid per-frame scans; update only on state changes
+
+- Localization and EID
+  - Resolve with `GetCurrentLanguage`; re-register EID on language change; KR/EN texts
+
+---
+
+## Debug policy
+
+- Toggle: MCM → Debug Mode
+- Functions: `ConchBlessing.printDebug`, `ConchBlessing.printError`, `ConchBlessing.print`
+- Values: derive from settings/tables/computed results; avoid hardcoded magic in debug
+- Scope: include frame/player/item/cache context
+
+---
+
+## Change management
+
+- Priority: Code quality > speed; document rationale when uncertain
+- Triggers: API/library updates, perf issues, localization/display policy updates
+- Impact: ItemData schema ↔ `CallbackManager`/EID/stats/templates
+- Cache policy changes affect all item cache callbacks and displays
+- Update this document alongside rule changes; specify timing and scope
+
+---
+
+## External references
+
+- Binding of Isaac Lua modding (overview): `https://moddingofisaac.com`
+- EID docs: `https://github.com/wofsauge/External-Item-Descriptions`
+- Mod Config Menu / Dead Sea Scrolls Menu: `https://github.com/Meowlala/DeadSeaScrollsMenu`
+- Isaac Save Manager: `https://github.com/catinsurance/IsaacSaveManager/`
+- isaacscript-common: `https://github.com/IsaacScript/isaacscript-common`
+

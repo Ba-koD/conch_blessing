@@ -1,0 +1,48 @@
+---
+name: Conch’s Blessing — Stats, Cache & Templates
+---
+
+## Stats system
+
+- `scripts/lib/stats.lua`: unified multiplier/addition system, cache handling, display
+```68:76:scripts/lib/stats.lua
+function ConchBlessing.stats.unifiedMultipliers:SetItemMultiplier(player, itemID, statType, multiplier, description)
+    if not player or not itemID or not statType or not multiplier then
+        ConchBlessing.printError("SetItemMultiplier: Invalid parameters")
+        return
+    end
+    
+    self:InitPlayer(player)
+```
+
+```300:306:scripts/lib/stats.lua
+local totalMultiplierApply = 1.0   -- product of per-item effective multipliers
+local totalAdditionApply = 0.0     -- sum of flat additions (to be applied additively)
+local totalMultiplierDisplay = 1.0 -- display multiplier including additions equivalently
+local lastItemCurrentVal = 1.0   -- May be multiplier or addition delta
+local lastItemID = nil
+local lastDescription = ""
+```
+
+### Development principles for stats/cache
+- Use `ConchBlessing.stats.unifiedMultipliers` exclusively for stat changes
+- Respect tears SPS/MaxFireDelay conversion; avoid direct raw overwrites
+- Minimize cache invalidations; call `AddCacheFlags` + `EvaluateItems` only when needed
+- Do not alter last-change sequence/display policy; provide descriptions instead
+
+## Template usage (upgrade visuals)
+- Use `Template.*.onBeforeChange` for pre morph, `onAfterChange` for post morph
+- Cosmetic effects should not deal damage; set harmless flags where available
+
+### Template reference
+```10:18:scripts/template.lua
+Template.positive.onBeforeChange = function(upgradePos, pickup, itemData, soundId)
+    -- Debug: print function call
+    if ConchBlessing and ConchBlessing.printDebug then
+        ConchBlessing.printDebug("Template.positive.onBeforeChange called")
+    end
+    
+    -- fade the pedestal item to bright white over 2 seconds (60 ticks)
+    local upgradeAnim = {
+```
+

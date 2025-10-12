@@ -1,0 +1,119 @@
+---
+name: Conch’s Blessing — Config, MCM & Save
+---
+
+## Config and MCM
+
+- `scripts/conch_blessing_config.lua`: language selection, debug flags, spawn toggles; load/save/reset via mod data
+```20:35:scripts/conch_blessing_config.lua
+function ConchBlessing_Config.GetCurrentLanguage(mod)
+    local normalize = ConchBlessing_Config.NormalizeLanguage
+    ...
+    local cfgLang = mod and mod.Config and mod.Config.language
+    if type(cfgLang) == "string" and cfgLang ~= "Auto" and cfgLang ~= "auto" then
+        local c = normalize(cfgLang)
+        return isSupported(c) and c or "en"
+    end
+```
+
+- `scripts/conch_blessing_mcm.lua`: MCM UI; saves to SaveManager settings; triggers EID re-register on language change
+```6:18:scripts/conch_blessing_mcm.lua
+function ConchBlessing_MCM.Setup(mod)
+    if not ModConfigMenu then
+        return
+    end
+    local ConchBlessing_Config = require("scripts.conch_blessing_config")
+    local category = "Conch's Blessing v" .. tostring(mod.Config.Version or "")
+    -- Recreate category to reflect any text changes
+    ModConfigMenu.RemoveCategory(category)
+    ModConfigMenu.AddSpace(category, "General")
+    ModConfigMenu.AddText(category, "General", "--- Conch's Blessing Options ---")
+```
+
+### MCM language toggle
+```46:59:scripts/conch_blessing_mcm.lua
+            if idx == 0 then
+                local code = ConchBlessing_Config.GetCurrentLanguage(mod)
+                local name = code
+                for _, l in ipairs(ConchBlessing_Config.LANGUAGE_MAP) do
+                    if l.code == code then
+                        name = l.name or code
+                        break
+                    end
+                end
+                return "Language: Auto(" .. tostring(name) .. ")"
+            else
+                local langObj = ConchBlessing_Config.LANGUAGE_MAP[idx]
+                return "Language: " .. tostring(langObj.name or langObj.code)
+            end
+```
+
+### MCM save/load to SaveManager
+```158:205:scripts/conch_blessing_mcm.lua
+function ConchBlessing_MCM.saveConfigToSaveManager(mod)
+    Isaac.ConsoleOutput("[MCM] saveConfigToSaveManager started\n")
+    if not mod.SaveManager then return false end
+    if not mod.SaveManager.IsLoaded() then return false end
+    local settingsSave = mod.SaveManager.GetSettingsSave()
+    if not settingsSave then return false end
+    if not settingsSave.config then settingsSave.config = {} end
+    for k, v in pairs(mod.Config) do
+        if k ~= "Version" then
+            settingsSave.config[k] = v
+        end
+    end
+    mod.SaveManager.Save()
+    return true
+end
+```
+
+## Save policy
+
+- Persistent settings: `SaveManager.GetSettingsSave().config`; MCM save/load helpers
+- Run reset: `MC_POST_GAME_STARTED` resets display, unified multipliers, run data
+- Pre-save sanitation: use core `PRE_DATA_SAVE` handler for transient cleanup
+
+### SaveManager lifecycle (core)
+```22:38:scripts/conch_blessing_core.lua
+-- Initialize SaveManager with the original mod reference
+Isaac.ConsoleOutput("[Core] SaveManager.Init() called\n")
+SaveManager.Init(mod)
+Isaac.ConsoleOutput("[Core] SaveManager.Init() completed\n")
+-- Register SaveManager PRE_DATA_SAVE callback to clean EntityEffect objects
+Isaac.ConsoleOutput("[Core] Registering SaveManager PRE_DATA_SAVE callback\n")
+local callbackKey = mod.__SAVEMANAGER_UNIQUE_KEY .. SaveManager.SaveCallbacks.PRE_DATA_SAVE
+mod:AddCallback(callbackKey, function(saveData)
+    if ConchBlessing.dragon and ConchBlessing.dragon.onPreDataSave then
+        return ConchBlessing.dragon.onPreDataSave(saveData)
+    end
+    return saveData
+end)
+```
+
+### Run-start reset (core)
+```64:94:scripts/conch_blessing_core.lua
+    if ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers then
+        local um = ConchBlessing.stats.unifiedMultipliers
+        local numPlayers = Game():GetNumPlayers()
+        for i = 0, numPlayers - 1 do
+            local player = Isaac.GetPlayer(i)
+            if player then um:ResetPlayer(player) end
+        end
+        um._hasPending = false
+        for i = 0, (Game():GetNumPlayers() - 1) do
+            local player = Isaac.GetPlayer(i)
+            if player then
+                local pid = player:GetPlayerType()
+                if um[pid] then um[pid].pendingCache = {} end
+            end
+        end
+        for i = 0, numPlayers - 1 do
+            local player = Isaac.GetPlayer(i)
+            if player then
+                player:AddCacheFlags(CacheFlag.CACHE_ALL)
+                player:EvaluateItems()
+            end
+        end
+    end
+```
+
