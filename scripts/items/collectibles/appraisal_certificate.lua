@@ -35,6 +35,7 @@ M.state = M.state or {
     pendingReturnToRoom = false,
     lastReturnAttemptFrame = 0,
     returnReadyAtFrame = nil,
+	allowedPickupHash = nil,
 }
 
 local function buildTrinketIterator()
@@ -118,32 +119,30 @@ local function anyoneHasAtropos()
 end
 
 local function mapCollectibleToTrinket(collectibleId)
+    -- Map 5.100.ID -> 5.350.ID by the same ID if that trinket exists. Otherwise, remove.
     if type(collectibleId) ~= "number" or collectibleId <= 0 then return nil end
-    if M.state.cidToTid[collectibleId] then return M.state.cidToTid[collectibleId] end
-    if not M.state.trinketList then
-        M.state.trinketList = _buildTrinketList()
-    end
-    local maxTrinkets = #(M.state.trinketList)
-    if maxTrinkets <= 0 then return nil end
+    if M.state.cidToTid[collectibleId] ~= nil then return M.state.cidToTid[collectibleId] end
 
-    while M.state.nextTrinketIndex <= maxTrinkets and M.state.usedTid[M.state.trinketList[M.state.nextTrinketIndex]] do
-        M.state.nextTrinketIndex = M.state.nextTrinketIndex + 1
-    end
-    if M.state.nextTrinketIndex > maxTrinkets then
+    local cfg = Isaac.GetItemConfig()
+    if not cfg then return nil end
+
+    local ok, tr = pcall(function()
+        return cfg:GetTrinket(collectibleId)
+    end)
+
+    if ok and tr then
+        M.state.cidToTid[collectibleId] = collectibleId
         if M.config and M.config.debug then
-            ConchBlessing.print(string.format("[Appraisal] Exhausted trinkets at %d; will remove further collectibles", maxTrinkets))
+            ConchBlessing.print(string.format("[Appraisal] Direct map C:%d -> T:%d", collectibleId, collectibleId))
         end
-        return nil
+        return collectibleId
     end
 
-    local mapped = M.state.trinketList[M.state.nextTrinketIndex]
-    M.state.nextTrinketIndex = M.state.nextTrinketIndex + 1
-    M.state.cidToTid[collectibleId] = mapped
-    M.state.usedTid[mapped] = true
     if M.config and M.config.debug then
-        ConchBlessing.print(string.format("[Appraisal] Sequential map C:%d -> T:%d (idx=%d)", collectibleId, mapped, M.state.nextTrinketIndex - 1))
+        ConchBlessing.print(string.format("[Appraisal] No matching trinket for C:%d; will remove", collectibleId))
     end
-    return mapped
+    M.state.cidToTid[collectibleId] = nil
+    return nil
 end
 
 -- Process a single collectible pickup in DC dimension: replace to trinket or remove
@@ -260,12 +259,20 @@ function M.onPrePickupCollision(_, pickup, collider, low)
 
     local trinketId = pickup.SubType
     if trinketId and trinketId > 0 then
+		-- Allow only the first trinket entity; block others until queue finishes
+		local ph = GetPtrHash(pickup)
+		if M.config and M.config.debug then
+			ConchBlessing.print(string.format("[Appraisal] PreCollision ph=%s, allowed=%s, block=%s", tostring(ph), tostring(M.state.allowedPickupHash), tostring(M.state.blockFurtherPickups)))
+		end
+		if M.state.allowedPickupHash == nil then
+			M.state.allowedPickupHash = ph
+		elseif M.state.allowedPickupHash ~= ph then
+			return true
+		end
         if anyoneHasAtropos() then
             return
         end
-        if M.state.blockFurtherPickups then
-            return true
-        end
+		-- Do not block the allowed pickup itself; only others are blocked above
         M.state.pendingTrinketId = trinketId
         M.state.queuedCheckStartedAt = Game():GetFrameCount()
         M.state.pendingPlayerSeed = player.InitSeed
@@ -323,6 +330,7 @@ function M.onPostNewRoom()
             M.state.pendingTrinketId = nil
             M.state.pendingPlayerSeed = nil
             M.state.blockFurtherPickups = false
+            M.state.allowedPickupHash = nil
         end
     end
     if M.state.pendingReturnToRoom and M.state.prevRoomIndex ~= nil then
@@ -474,6 +482,7 @@ function M.onUpdate()
     M.state.pendingPlayerSeed = nil
     M.state.blockFurtherPickups = false
     M.state.pendingReturnToRoom = false
+    M.state.allowedPickupHash = nil
 end
 
 return M
