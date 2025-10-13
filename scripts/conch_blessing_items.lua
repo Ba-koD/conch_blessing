@@ -716,6 +716,43 @@ ConchBlessing.ItemData = {
             }
         },
     },
+    MONEY_TEAR = {
+        type = "passive",
+        id = Isaac.GetItemIdByName("Money = Tear"),
+        name = {
+            kr = "돈 = 연사",
+            en = "Money = Tear"
+        },
+        description = {
+            kr = "돈은 연사다",
+            en = "Money is tears"
+        },
+        eid = {
+            kr = {
+                "소지하고 있는 동전당 고정연사가 0.066 증가합니다."
+            },
+            en = {
+                "While held, gains +0.066 {{Tears}}SPS per coin."
+            }
+        },
+        pool = {
+            RoomType.ROOM_TREASURE,
+            RoomType.ROOM_SHOP,
+            RoomType.ROOM_ANGEL,
+        },
+        gfx = "money_tear.png",
+        tags = "offensive",
+        cache = "tears",
+        quality = 4,
+        origin = CollectibleType.COLLECTIBLE_MONEY_EQUALS_POWER,
+        flag = "positive",
+        shopprice = 20,
+        script = "scripts/items/collectibles/money_tear",
+        callbacks = {
+            gameStarted = "moneytear.onGameStarted",
+            update = "moneytear.onUpdate"
+        }
+    },
 
     -- Trinkets
     TIME_POWER = {
