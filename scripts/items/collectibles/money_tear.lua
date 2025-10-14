@@ -23,7 +23,8 @@ local function getPlayerState(player)
     local s = ensureState()
     local key = getPlayerKey(player)
     s.perPlayer[key] = s.perPlayer[key] or {
-        lastCoins = nil
+        lastCoins = nil,
+        lastCount = nil
     }
     return s.perPlayer[key]
 end
@@ -37,6 +38,7 @@ local function saveToSave(player)
     save.moneyTear[key] = save.moneyTear[key] or {}
     local rec = save.moneyTear[key]
     rec.lastCoins = ps.lastCoins
+    rec.lastCount = ps.lastCount
     SaveManager.Save()
 end
 
@@ -49,6 +51,7 @@ local function loadFromSave(player)
     if rec then
         local ps = getPlayerState(player)
         ps.lastCoins = tonumber(rec.lastCoins) or nil
+        ps.lastCount = tonumber(rec.lastCount) or nil
     end
 end
 
@@ -62,19 +65,26 @@ local function applyForPlayer(player)
     local count = player:GetCollectibleNum(id)
     if count and count > 0 then
         local coins = player:GetNumCoins()
-        if ps.lastCoins == nil or ps.lastCoins ~= coins then
-            local per = ConchBlessing.moneytear.data.spsPerCoin or 0
-            local addSps = per * coins
+        if ps.lastCoins == nil or ps.lastCoins ~= coins or ps.lastCount == nil or ps.lastCount ~= count then
+            local basePer = ConchBlessing.moneytear.data.spsPerCoin or 0
+            local effectivePer = basePer * count
+            local addSps = effectivePer * coins
             um:RemoveItemAddition(player, id, "Tears")
             um:SetItemAddition(player, id, "Tears", addSps, "Money = Tear")
             ps.lastCoins = coins
-            ConchBlessing.printDebug(string.format("[Money=Tear] coins=%d, per=%.4f, addSps=%+.4f", coins, per, addSps))
+            ps.lastCount = count
+            ConchBlessing.printDebug(string.format(
+                "[Money=Tear] coins=%d, items=%d, basePer=%.4f, effPer=%.4f, addSps=%+.4f",
+                coins, count, basePer, effectivePer, addSps
+            ))
             saveToSave(player)
         end
     else
         um:RemoveItemAddition(player, id, "Tears")
-        if ps.lastCoins ~= nil then
+        if ps.lastCoins ~= nil or ps.lastCount ~= nil then
             ps.lastCoins = nil
+            ps.lastCount = nil
+            ConchBlessing.printDebug("[Money=Tear] effect removed: no items owned")
             saveToSave(player)
         end
     end
@@ -83,6 +93,7 @@ end
 function ConchBlessing.moneytear.onGameStarted(_, isContinued)
     local game = Game()
     local num = game:GetNumPlayers()
+    local id = getItemId()
     for i = 0, num - 1 do
         local p = game:GetPlayer(i)
         if isContinued then
@@ -90,6 +101,7 @@ function ConchBlessing.moneytear.onGameStarted(_, isContinued)
         else
             local ps = getPlayerState(p)
             ps.lastCoins = p:GetNumCoins()
+            ps.lastCount = (id and p:GetCollectibleNum(id)) or nil
             saveToSave(p)
         end
         applyForPlayer(p)
