@@ -145,7 +145,7 @@ ConchBlessing.ItemData = {
         maxhearts = 0,
         blackhearts = 0,
         soulhearts = 0,
-        origin = CollectibleType.COLLECTIBLE_DEAD_EYE, -- original item information
+        origin = { id = CollectibleType.COLLECTIBLE_DEAD_EYE, type = "collectible" }, -- original item information
         flag = "positive", -- match Magic Conch result type
         script = "scripts/items/collectibles/live_eye",
         -- optional functions/effects around morph
@@ -164,7 +164,7 @@ ConchBlessing.ItemData = {
             update = "liveeye.onUpdate"
         },
         synergies = {
-            [CollectibleType.COLLECTIBLE_ROCK_BOTTOM] = {
+            [{ id = CollectibleType.COLLECTIBLE_ROCK_BOTTOM, type = "collectible" }] = {
                 kr = "획득하는 즉시 데미지 배수가 최대치가 됩니다",
                 en = "When obtained, damage multiplier is set to the maximum value"
             },
@@ -207,7 +207,7 @@ ConchBlessing.ItemData = {
         hidden = false,
         shopprice = 20,
         devilprice = 2,
-        origin = CollectibleType.COLLECTIBLE_ATHAME,
+        origin = { id = CollectibleType.COLLECTIBLE_ATHAME, type = "collectible" },
         flag = "neutral",
         script = "scripts/items/collectibles/void_dagger",
         callbacks = {
@@ -252,7 +252,7 @@ ConchBlessing.ItemData = {
         hidden = false,
         shopprice = 20,
         devilprice = 2,
-        origin = CollectibleType.COLLECTIBLE_BLACK_CANDLE,
+        origin = { id = CollectibleType.COLLECTIBLE_BLACK_CANDLE, type = "collectible" },
         flag = "positive",
         script = "scripts/items/collectibles/eternal_flame",
         callbacks = {
@@ -302,7 +302,7 @@ ConchBlessing.ItemData = {
         maxcharges = 12,
         chargetype = "normal",
         initcharge = 0,
-        origin = CollectibleType.COLLECTIBLE_EXPERIMENTAL_TREATMENT,
+        origin = { id = CollectibleType.COLLECTIBLE_EXPERIMENTAL_TREATMENT, type = "collectible" },
         flag = "positive",
         script = "scripts/items/collectibles/power_training",
         callbacks = {
@@ -348,7 +348,7 @@ ConchBlessing.ItemData = {
         hidden = false,
         shopprice = 20,
         devilprice = 1,
-        origin = CollectibleType.COLLECTIBLE_EXPERIMENTAL_TREATMENT,
+        origin = { id = CollectibleType.COLLECTIBLE_EXPERIMENTAL_TREATMENT, type = "collectible" },
         flag = "neutral",
         script = "scripts/items/collectibles/oral_steroids",
         callbacks = {
@@ -400,7 +400,7 @@ ConchBlessing.ItemData = {
         maxcharges = 1,
         chargetype = "special",
         initcharge = 1,
-        origin = CollectibleType.COLLECTIBLE_EXPERIMENTAL_TREATMENT,
+        origin = { id = CollectibleType.COLLECTIBLE_EXPERIMENTAL_TREATMENT, type = "collectible" },
         flag = "negative",
         script = "scripts/items/collectibles/injectable_steroids",
         callbacks = {
@@ -500,7 +500,7 @@ ConchBlessing.ItemData = {
         hidden = false,
         shopprice = 20,
         devilprice = 2,
-        origin = CollectibleType.COLLECTIBLE_TAURUS,
+        origin = { id = CollectibleType.COLLECTIBLE_TAURUS, type = "collectible" },
         flag = "positive",
         script = "scripts/items/collectibles/dragon",
         callbacks = {
@@ -637,7 +637,7 @@ ConchBlessing.ItemData = {
 		tags = "offensive",
 		cache = "damage firedelay speed range luck shotspeed",
 		flag = "negative",
-        origin = CollectibleType.COLLECTIBLE_BFFS,
+        origin = { id = CollectibleType.COLLECTIBLE_BFFS, type = "collectible" },
 		script = "scripts/items/collectibles/chronus",
 		callbacks = {
 			pickup = "chronus.onPickup",
@@ -648,11 +648,11 @@ ConchBlessing.ItemData = {
             familiarUpdate = "chronus.onFamiliarUpdate"
 		},
 		synergies = {
-            [CollectibleType.COLLECTIBLE_TWISTED_PAIR] = {
+            [{ id = CollectibleType.COLLECTIBLE_TWISTED_PAIR, type = "collectible" }] = {
                 kr = "75% 데미지의 공격을 2개 추가합니다.",
                 en = "Adds 2 additional 75% damage attacks."
             },
-            [CollectibleType.COLLECTIBLE_SUCCUBUS] = {
+            [{ id = CollectibleType.COLLECTIBLE_SUCCUBUS, type = "collectible" }] = {
                 kr = "내 주변으로 오라가 고정됩니다.",
                 en = "Attracts an aura around the player."
             }
@@ -695,7 +695,7 @@ ConchBlessing.ItemData = {
         chargetype = "normal",
         gfx = "appraisal_certificate.png",
         initcharge = 0,
-        origin = CollectibleType.COLLECTIBLE_DEATH_CERTIFICATE,
+        origin = { id = CollectibleType.COLLECTIBLE_DEATH_CERTIFICATE, type = "collectible" },
         flag = "neutral",
         script = "scripts/items/collectibles/appraisal_certificate",
         callbacks = {
@@ -744,7 +744,7 @@ ConchBlessing.ItemData = {
         tags = "offensive",
         cache = "tears",
         quality = 4,
-        origin = CollectibleType.COLLECTIBLE_MONEY_EQUALS_POWER,
+		origin = { id = CollectibleType.COLLECTIBLE_MONEY_EQUALS_POWER, type = "collectible" },
         flag = "positive",
         shopprice = 20,
         script = "scripts/items/collectibles/money_tear",
@@ -780,7 +780,7 @@ ConchBlessing.ItemData = {
         tags = "offensive",
         cache = "damage",
         hidden = false,
-        origin = TrinketType.TRINKET_CURVED_HORN,
+        origin = { id = TrinketType.TRINKET_CURVED_HORN, type = "trinket" },
         flag = "positive",
         shopprice=15,
         script = "scripts/items/trinkets/time_power",
@@ -820,7 +820,7 @@ ConchBlessing.ItemData = {
         tags = "offensive",
         cache = "fireDelay",
         hidden = false,
-        origin = TrinketType.TRINKET_CANCER,
+        origin = { id = TrinketType.TRINKET_CANCER, type = "trinket" },
         flag = "positive",
         shopprice=15,
         script = "scripts/items/trinkets/time_tear",
@@ -860,7 +860,7 @@ ConchBlessing.ItemData = {
         tags = "utility",
         cache = "luck",
         hidden = false,
-        origin = TrinketType.TRINKET_PERFECTION,
+        origin = { id = TrinketType.TRINKET_PERFECTION, type = "trinket" },
         flag = "positive",
         shopprice=15,
         script = "scripts/items/trinkets/time_luck",
@@ -901,7 +901,7 @@ ConchBlessing.ItemData = {
         tags = "offensive",
         cache = "luck",
         hidden = false,
-        origin = TrinketType.TRINKET_PERFECTION,
+        origin = { id = TrinketType.TRINKET_PERFECTION, type = "trinket" },
         flag = "negative",
         shopprice=15,
         script = "scripts/items/trinkets/f_minus",
@@ -937,7 +937,7 @@ ConchBlessing.ItemData = {
         gfx = "c_minus.png",
         tags = "offensive",
         cache = "tears",
-        origin = { name = "F -", type = "trinket" },
+        origin = { id = TrinketType.TRINKET_PERFECTION, type = "trinket" },
         flag = "positive",
         hidden = true,
         shopprice=15,
@@ -976,7 +976,7 @@ ConchBlessing.ItemData = {
         gfx = "b_minus.png",
         tags = "offensive",
         cache = "luck damage",
-        origin = { name = "C -", type = "trinket" },
+        origin = { id = TrinketType.TRINKET_PERFECTION, type = "trinket" },
         flag = "positive",
         hidden = true,
         shopprice=15,
@@ -1017,7 +1017,7 @@ ConchBlessing.ItemData = {
         gfx = "a_minus.png",
         tags = "offensive",
         cache = "luck damage tears",
-        origin = { name = "B -", type = "trinket" },
+        origin = { id = TrinketType.TRINKET_PERFECTION, type = "trinket" },
         flag = "positive",
         hidden = true,
         shopprice=15,
@@ -1052,7 +1052,7 @@ ConchBlessing.ItemData = {
         tags = "utility",
         hidden = false,
         flag = "positive",
-        origin = TrinketType.TRINKET_SAFETY_SCISSORS,
+        origin = { id = TrinketType.TRINKET_SAFETY_SCISSORS, type = "trinket" },
         shopprice = 15,
         script = "scripts/items/trinkets/atropos",
         callbacks = {
@@ -1060,7 +1060,7 @@ ConchBlessing.ItemData = {
             postNewRoom = "atropos.onPostNewRoom"
         },
         synergies = {
-            [CollectibleType.COLLECTIBLE_DEATH_CERTIFICATE] = {
+            [{ id = CollectibleType.COLLECTIBLE_DEATH_CERTIFICATE, type = "collectible" }] = {
                 kr = "사망 증명서 방에서 바보 카드를 드랍합니다.",
                 en = "Drops a Fool card in Death Certificate rooms."
             }
@@ -1112,10 +1112,10 @@ ConchBlessing.ItemData = {
         tags="baby summonable offensive",
         shopprice = 30,
         devilprice = 2,
-        origin = CollectibleType.COLLECTIBLE_SACK_OF_PENNIES,
+        origin = { id = CollectibleType.COLLECTIBLE_SACK_OF_PENNIES, type = "collectible" },
         flag = "positive",
         synergies = {
-            [CollectibleType.COLLECTIBLE_BFFS] = {
+            [{ id = CollectibleType.COLLECTIBLE_BFFS, type = "collectible" }] = {
                 kr = "동전 드랍 비율이 10%로 증가합니다.",
                 en = "Drop rate increases to 10%."
             }
@@ -1234,8 +1234,11 @@ local function loadAllItems()
         ConchBlessing.printDebug("External systems already loaded; skipping.")
     end
     
-	local originItemFlags = {}
-	local originIdIsTrinket = {}
+	-- Separate origin mappings by type to support IDs that exist as both collectible and trinket (Separate mappings solve ID collision issues like 109 and 145)
+	local originItemFlags = {
+		collectible = {}, -- [originID] = { itemKey1, itemKey2, ... }
+		trinket = {}      -- [originID] = { itemKey1, itemKey2, ... }
+	}
 
 	-- Normalize origin declaration to an ID and optional explicit type
 	local function resolveOriginAny(origin)
@@ -1263,7 +1266,12 @@ local function loadAllItems()
 					explicitType = explicitType or "collectible"
 				end
 			end
-			local isTrink = (explicitType == "trinket") and true or ((explicitType == "collectible") and false or nil)
+			local isTrink = nil
+			if explicitType == "trinket" then
+				isTrink = true
+			elseif explicitType == "collectible" then
+				isTrink = false
+			end
 			return id or -1, isTrink
 		end
 		return nil, nil
@@ -1274,26 +1282,47 @@ local function loadAllItems()
         for itemKey, itemData in pairs(ConchBlessing.ItemData) do
             ConchBlessing.printDebug("Processing: " .. itemKey)
             
-			-- Build origin mapping for conch mode descriptions
-			if itemData.origin and itemData.flag then
-				local originID, originIsTrinkExp = resolveOriginAny(itemData.origin)
-				if originID == nil then
-					originID = itemData.origin
-				end
-                if not originItemFlags[originID] then
-                    originItemFlags[originID] = {}
-                end
-                table.insert(originItemFlags[originID], itemKey)
-				-- Track origin type disambiguation to avoid ID collisions between collectibles and trinkets
-				if originIsTrinkExp ~= nil then
-					originIdIsTrinket[originID] = originIsTrinkExp
-				elseif originIdIsTrinket[originID] == nil then
-					-- Fallback to runtime check if not explicitly specified
+		if itemData.origin and itemData.flag then
+			local originID, originIsTrinkExp = resolveOriginAny(itemData.origin)
+			if type(originID) ~= "number" or originID <= 0 then
+				ConchBlessing.printError("  Invalid origin ID for " .. itemKey .. ": " .. tostring(originID) .. " (origin: " .. tostring(itemData.origin) .. ")")
+			else
+				local originIsTrinket = originIsTrinkExp
+				ConchBlessing.printDebug("[EID] Processing origin for " .. itemKey .. ": originID=" .. tostring(originID) .. ", explicitType=" .. tostring(originIsTrinkExp))
+				
+				if originIsTrinket == nil then
 					local cfg = Isaac.GetItemConfig()
-					originIdIsTrinket[originID] = (cfg and cfg:GetTrinket(originID) ~= nil) or false
+					local hasTrinket = (cfg and cfg:GetTrinket(originID) ~= nil) or false
+					local hasCollectible = (cfg and cfg:GetCollectible(originID) ~= nil) or false
+					ConchBlessing.printDebug("[EID] Auto-detecting origin ID " .. tostring(originID) .. ": hasTrinket=" .. tostring(hasTrinket) .. ", hasCollectible=" .. tostring(hasCollectible))
+					
+					if hasTrinket and not hasCollectible then
+						originIsTrinket = true
+					elseif hasCollectible and not hasTrinket then
+						originIsTrinket = false
+					else
+						ConchBlessing.printDebug("[EID] Ambiguous origin ID " .. tostring(originID) .. " for " .. itemKey .. "; requires explicit type declaration")
+						originIsTrinket = nil
+					end
 				end
-				ConchBlessing.printDebug("  Auto-mapped " .. itemKey .. " (flag: " .. itemData.flag .. ") to origin: " .. tostring(originID))
-            end
+				
+				if originIsTrinket == true then
+					if not originItemFlags.trinket[originID] then
+						originItemFlags.trinket[originID] = {}
+					end
+					table.insert(originItemFlags.trinket[originID], itemKey)
+					ConchBlessing.printDebug("[EID] ✓ Mapped " .. itemKey .. " to TRINKET origin " .. tostring(originID) .. " (flag: " .. itemData.flag .. ")")
+				elseif originIsTrinket == false then
+					if not originItemFlags.collectible[originID] then
+						originItemFlags.collectible[originID] = {}
+					end
+					table.insert(originItemFlags.collectible[originID], itemKey)
+					ConchBlessing.printDebug("[EID] ✓ Mapped " .. itemKey .. " to COLLECTIBLE origin " .. tostring(originID) .. " (flag: " .. itemData.flag .. ")")
+				else
+					ConchBlessing.printDebug("[EID] ✗ FAILED to map " .. itemKey .. " - originIsTrinket is nil")
+				end
+			end
+        end
             
             local scriptPath = itemData.script
             if not scriptPath or scriptPath == "" then
@@ -1320,11 +1349,14 @@ local function loadAllItems()
             end
             ConchBlessing.printDebug("  " .. itemKey .. " processed")
         end
+		
         ConchBlessing._didLoadItemScripts = true
     else
         ConchBlessing.printDebug("Item scripts already loaded; skipping.")
     end
     
+    ConchBlessing._originItemFlags = originItemFlags
+
     if not ConchBlessing._didGenerateConchDescriptions then
         ConchBlessing.printDebug("Generating conch mode descriptions...")
         
@@ -1359,8 +1391,7 @@ local function loadAllItems()
                 return normalize(base)
             end
 
-            ConchBlessing._originItemFlags = originItemFlags
-            ConchBlessing._originIdIsTrinket = originIdIsTrinket
+            -- origin maps already exported above
             ConchBlessing._conchModeTemplates = conchModeDescriptions
             ConchBlessing._conchDescCache = ConchBlessing._conchDescCache or {}
 
@@ -1370,33 +1401,45 @@ local function loadAllItems()
                 ConchBlessing._synergyByMod = {}
 				-- Resolve helper: allow targets specified by { type = "trinket"|"active"|"passive", name = "..." }
 				local function resolveTargetId(targetKey)
+					-- Returns: id (number or nil), isTrinket (boolean or nil)
 					if type(targetKey) == "number" then
-						return targetKey
+						return targetKey, nil
 					end
 					if type(targetKey) == "table" then
+						-- Support { id = number, type = "collectible"|"trinket" }
+						if type(targetKey.id) == "number" then
+							local t = targetKey.type or targetKey.kind
+							local isTrink
+							if type(t) == "string" then
+								local tl = string.lower(t)
+								isTrink = (tl == "trinket")
+							end
+							return targetKey.id, isTrink
+						end
+						-- Support { name = string, type = "collectible"|"active"|"passive"|"trinket" }
 						local t = targetKey.type or targetKey.kind
 						local n = targetKey.name
-						if type(n) ~= "string" or type(t) ~= "string" then return nil end
+						if type(n) ~= "string" or type(t) ~= "string" then return nil, nil end
 						t = string.lower(t)
 						if t == "trinket" then
-							return Isaac.GetTrinketIdByName(n)
+							return Isaac.GetTrinketIdByName(n), true
 						else
 							-- treat active/passive/collectible the same for ID resolution
-							return Isaac.GetItemIdByName(n)
+							return Isaac.GetItemIdByName(n), false
 						end
 					end
-					return nil
+					return nil, nil
 				end
 
 				for key, data in pairs(ConchBlessing.ItemData) do
                     if data and data.synergies and data.id and data.id ~= -1 then
 						for targetKey, text in pairs(data.synergies) do
-							local targetId = resolveTargetId(targetKey)
-							if type(targetId) == "number" and targetId > 0 then
+						local targetId, targetIsTrinket = resolveTargetId(targetKey)
+						if type(targetId) == "number" and targetId > 0 then
 								ConchBlessing._synergyByTarget[targetId] = ConchBlessing._synergyByTarget[targetId] or {}
-								table.insert(ConchBlessing._synergyByTarget[targetId], { key = key, text = text })
+							table.insert(ConchBlessing._synergyByTarget[targetId], { key = key, text = text })
 								ConchBlessing._synergyByMod[data.id] = ConchBlessing._synergyByMod[data.id] or {}
-								table.insert(ConchBlessing._synergyByMod[data.id], { target = targetId, text = text })
+							table.insert(ConchBlessing._synergyByMod[data.id], { target = targetId, targetIsTrinket = targetIsTrinket, text = text })
 							end
                         end
                     end
@@ -1500,25 +1543,39 @@ local function loadAllItems()
                                 end
                             end
                         end
-                        -- Conch mode (origin) part
+                        -- Conch mode (origin) part (Select appropriate origin category based on pickup type)
                         local subId = descObj.ObjSubType
                         if descObj.ObjVariant == 350 and subId and subId >= 32768 then
                             -- Golden trinket: strip golden flag to match origin/synergy maps
                             subId = subId - 32768
                         end
-                        -- Only attach when the origin type matches the pickup type being described
-                        local originIsTrinket = (ConchBlessing._originIdIsTrinket and ConchBlessing._originIdIsTrinket[subId])
-                        if originIsTrinket == nil then
-                            originIsTrinket = isTrinketId(subId)
-                        end
-                        if (descObj.ObjVariant == 350 and not originIsTrinket)
-                            or (descObj.ObjVariant == 100 and originIsTrinket) then
-                            return descObj
-                        end
-                        local itemKeys = (ConchBlessing._originItemFlags or {})[subId]
-                        local templates = ConchBlessing._conchModeTemplates or {}
-                        if itemKeys and templates[lang] then
-                            local cacheKey = tostring(descObj.ObjSubType) .. "|" .. lang
+						
+						-- Select origin category based on pickup variant (Use collectible or trinket category based on actual pickup type)
+						local originCategory = nil
+						local pickupTypeName = "unknown"
+						if descObj.ObjType == 5 then
+							if descObj.ObjVariant == 100 then
+								originCategory = "collectible"
+								pickupTypeName = "collectible"
+							elseif descObj.ObjVariant == 350 then
+								originCategory = "trinket"
+								pickupTypeName = "trinket"
+							end
+						end
+						
+						ConchBlessing.printDebug("[EID] Checking pickup: ObjType=" .. tostring(descObj.ObjType) .. ", Variant=" .. tostring(descObj.ObjVariant) .. ", SubType=" .. tostring(subId) .. ", category=" .. tostring(originCategory))
+						
+						if not originCategory then
+							ConchBlessing.printDebug("[EID] Skipping: not a collectible or trinket pickup")
+							return descObj
+						end
+						
+						local originMaps = ConchBlessing._originItemFlags or {}
+						local itemKeys = originMaps[originCategory] and originMaps[originCategory][subId] or nil
+						local templates = ConchBlessing._conchModeTemplates or {}
+						
+						if itemKeys and templates[lang] then
+                            local cacheKey = originCategory .. "|" .. tostring(subId) .. "|" .. lang
                             local cached = ConchBlessing._conchDescCache[cacheKey]
                             if not cached then
                                 local lines = {}
@@ -1541,18 +1598,28 @@ local function loadAllItems()
                                 ConchBlessing._conchDescCache[cacheKey] = cached
                             end
                             if cached and #cached > 0 then
+								ConchBlessing.printDebug("[EID] Conch attach OK: " .. pickupTypeName .. " id=" .. tostring(subId) .. ", keys=" .. tostring(table.concat(itemKeys, ",")))
                                 EID:appendToDescription(descObj, cached)
                             end
-                        end
+						else
+							ConchBlessing.printDebug("[EID] Conch attach SKIP: no " .. pickupTypeName .. " mapping for id=" .. tostring(subId))
+						end
 
                         -- Synergy part
                         local targets = ConchBlessing._synergyByTarget and ConchBlessing._synergyByTarget[subId]
                         if targets then
-                            for _, entry in ipairs(targets) do
-                                local d = ConchBlessing.ItemData[entry.key]
-                                if d and d.id and anyPlayerHas(d.id) then
-                                    local t = (type(entry.text) == "table" and (entry.text[lang] or entry.text.en)) or entry.text
-                                    local iconToken = "{{icon_" .. string.lower(entry.key) .. "}}"
+						for _, entry in ipairs(targets) do
+							local d = ConchBlessing.ItemData[entry.key]
+							if d and d.id and anyPlayerHas(d.id) then
+								local t = (type(entry.text) == "table" and (entry.text[lang] or entry.text.en)) or entry.text
+								local iconToken
+								if entry.targetIsTrinket == true then
+									iconToken = "{{Trinket" .. tostring(subId) .. "}}"
+								elseif entry.targetIsTrinket == false then
+									iconToken = "{{Collectible" .. tostring(subId) .. "}}"
+								else
+									iconToken = "{{icon_" .. string.lower(entry.key) .. "}}"
+								end
                                     local function normLine(s)
                                         s = tostring(s or "")
                                         -- strip leading # to avoid double newlines

@@ -158,6 +158,26 @@ ConchBlessing.print = function(text)
     Isaac.ConsoleOutput("[ConchBlessing] " .. tostring(text) .. "\n")
 end
 
+-- Optional enum adapter for users referencing the @tboi namespace
+do
+    _G.tboi = _G.tboi or {}
+    local ok, err = pcall(function()
+        tboi.CollectibleType = tboi.CollectibleType or CollectibleType
+        tboi.TrinketType = tboi.TrinketType or TrinketType
+        tboi.ModCallbacks = tboi.ModCallbacks or ModCallbacks
+        tboi.CacheFlag = tboi.CacheFlag or CacheFlag
+        tboi.ItemType = tboi.ItemType or ItemType
+        tboi.RoomType = tboi.RoomType or RoomType
+    end)
+    if ConchBlessing.Config and ConchBlessing.Config.debugMode then
+        if ok then
+            Isaac.ConsoleOutput("[Core] tboi enum adapter active\n")
+        else
+            Isaac.ConsoleOutput("[Core] tboi enum adapter error: " .. tostring(err) .. "\n")
+        end
+    end
+end
+
 -- load stats library first (before items and upgrade systems)
 local statsSuccess, statsErr = pcall(function()
     require("scripts.lib.stats")

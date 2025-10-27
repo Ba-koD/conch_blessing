@@ -231,6 +231,102 @@ ConchBlessing.EID.registerAllItems = function()
         EID.ModIndicator["Conch's Blessing"] = EID.ModIndicator["Conch's Blessing"] or { Name = "Conch's Blessing", Icon = nil }
     end
 
+    -- 1.75) Build separate origin mappings by type to support IDs that exist as both collectible and trinket (Separate mappings solve ID collision issues like 109 and 145)
+    local originItemFlags = {
+        collectible = {}, -- [originID] = { itemKey1, itemKey2, ... }
+        trinket = {}      -- [originID] = { itemKey1, itemKey2, ... }
+    }
+
+    -- Normalize origin declaration to an ID and optional explicit type
+    local function resolveOriginAny(origin)
+        -- Supports:
+        -- 1) number (collectible/trinket id)
+        -- 2) { id = number, type = "collectible"|"trinket" }
+        -- 3) { name = string, type = "collectible"|"trinket" }
+        -- 4) { collectible = string } or { trinket = string }
+        if type(origin) == "number" then
+            return origin, nil
+        end
+        if type(origin) == "table" then
+            local explicitType = origin.type
+            local id = origin.id
+            if not id then
+                if origin.name and explicitType == "trinket" then
+                    id = Isaac.GetTrinketIdByName(origin.name)
+                elseif origin.name and explicitType == "collectible" then
+                    id = Isaac.GetItemIdByName(origin.name)
+                elseif origin.trinket then
+                    id = Isaac.GetTrinketIdByName(origin.trinket)
+                    explicitType = explicitType or "trinket"
+                elseif origin.collectible then
+                    id = Isaac.GetItemIdByName(origin.collectible)
+                    explicitType = explicitType or "collectible"
+                end
+            end
+            local isTrink = nil
+            if explicitType == "trinket" then
+                isTrink = true
+            elseif explicitType == "collectible" then
+                isTrink = false
+            end
+            return id or -1, isTrink
+        end
+        return nil, nil
+    end
+
+    ConchBlessing.printDebug("Building origin mappings for EID descriptions...")
+    for itemKey, itemData in pairs(ConchBlessing.ItemData) do
+        if itemData.origin and itemData.flag then
+            local originID, originIsTrinkExp = resolveOriginAny(itemData.origin)
+            if type(originID) ~= "number" or originID <= 0 then
+                ConchBlessing.printError("  Invalid origin ID for " .. itemKey .. ": " .. tostring(originID))
+            else
+                -- Determine origin type: explicit > auto-detect
+                local originIsTrinket = originIsTrinkExp
+                ConchBlessing.printDebug("[EID] Processing origin for " .. itemKey .. ": originID=" .. tostring(originID) .. ", explicitType=" .. tostring(originIsTrinkExp))
+                
+                if originIsTrinket == nil then
+                    -- Auto-detect from game config only if type not explicitly specified
+                    local cfg = Isaac.GetItemConfig()
+                    local hasTrinket = (cfg and cfg:GetTrinket(originID) ~= nil) or false
+                    local hasCollectible = (cfg and cfg:GetCollectible(originID) ~= nil) or false
+                    ConchBlessing.printDebug("[EID] Auto-detecting origin ID " .. tostring(originID) .. ": hasTrinket=" .. tostring(hasTrinket) .. ", hasCollectible=" .. tostring(hasCollectible))
+                    
+                    if hasTrinket and not hasCollectible then
+                        originIsTrinket = true
+                    elseif hasCollectible and not hasTrinket then
+                        originIsTrinket = false
+                    else
+                        -- Ambiguous: skip this origin
+                        ConchBlessing.printDebug("[EID] Ambiguous origin ID " .. tostring(originID) .. " for " .. itemKey .. "; requires explicit type declaration")
+                        originIsTrinket = nil
+                    end
+                end
+                
+                -- Map to appropriate category
+                if originIsTrinket == true then
+                    if not originItemFlags.trinket[originID] then
+                        originItemFlags.trinket[originID] = {}
+                    end
+                    table.insert(originItemFlags.trinket[originID], itemKey)
+                    ConchBlessing.printDebug("[EID] Mapped " .. itemKey .. " to TRINKET origin " .. tostring(originID) .. " (flag: " .. itemData.flag .. ")")
+                elseif originIsTrinket == false then
+                    if not originItemFlags.collectible[originID] then
+                        originItemFlags.collectible[originID] = {}
+                    end
+                    table.insert(originItemFlags.collectible[originID], itemKey)
+                    ConchBlessing.printDebug("[EID] Mapped " .. itemKey .. " to COLLECTIBLE origin " .. tostring(originID) .. " (flag: " .. itemData.flag .. ")")
+                else
+                    ConchBlessing.printDebug("[EID] FAILED to map " .. itemKey .. " - originIsTrinket is nil")
+                end
+            end
+        end
+    end
+
+    -- Expose origin maps for EID modifier use
+    ConchBlessing._originItemFlags = originItemFlags
+    ConchBlessing.printDebug("Origin mappings built successfully!")
+
     -- 2) Register base names/descriptions in the resolved language
     for itemKey, itemData in pairs(ConchBlessing.ItemData) do
         local itemId = itemData.id
