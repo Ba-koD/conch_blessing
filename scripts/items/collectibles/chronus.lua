@@ -24,7 +24,12 @@ ConchBlessing.chronus.data = ConchBlessing.chronus.data or {
     absorbActions = {
         [CollectibleType.COLLECTIBLE_TWISTED_PAIR] = function(player, total, delta)
             ConchBlessing.printDebug(string.format("[Chronus] Twisted Pair absorbed: total=%d, delta=%d", tonumber(total) or 0, tonumber(delta) or 0))
-            ConchBlessing.chronus._ensureIncubusPairs(player)
+            ConchBlessing.chronus._ensureTwistedPairs(player)
+            ConchBlessing.chronus._updateTwistedPairAnchors(player)
+        end,
+        [CollectibleType.COLLECTIBLE_INCUBUS] = function(player, total, delta)
+            ConchBlessing.printDebug(string.format("[Chronus] Incubus absorbed: total=%d, delta=%d", tonumber(total) or 0, tonumber(delta) or 0))
+            ConchBlessing.chronus._ensureIncubusStack(player)
             ConchBlessing.chronus._updateIncubusAnchors(player)
         end,
         [CollectibleType.COLLECTIBLE_SUCCUBUS] = function(player, total, delta)
@@ -188,10 +193,15 @@ function ConchBlessing.chronus._finalizeAbsorb(player)
     end
 end
 
-local function spawnInvisibleIncubus(player, pairIndex, side)
+-- Twisted Pair: spawn invisible Incubus with offset (2 per pair)
+local function spawnInvisibleTwistedPairIncubus(player, pairIndex, side)
+    dbg(string.format("Spawning Twisted Pair Incubus: pairIndex=%d, side=%d", tonumber(pairIndex) or 0, tonumber(side) or 0))
     local ent = Isaac.Spawn(EntityType.ENTITY_FAMILIAR, FamiliarVariant.INCUBUS, 0, player.Position, Vector.Zero, player)
     local fam = ent and ent:ToFamiliar() or nil
-    if not fam then return nil end
+    if not fam then 
+        dbg("Failed to spawn Twisted Pair Incubus entity")
+        return nil 
+    end
     fam:ClearEntityFlags(EntityFlag.FLAG_APPEAR)
     local spr = fam:GetSprite()
     local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
@@ -199,40 +209,54 @@ local function spawnInvisibleIncubus(player, pairIndex, side)
     pcall(function() spr:LoadGraphics() end)
     fam.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
     local fd = fam:GetData()
-    fd.__chronusIncubus = true
+    fd.__chronusTwistedPair = true
     fd.__chronusPairIndex = tonumber(pairIndex) or 1
     fd.__chronusSide = tonumber(side) or 1
+    dbg(string.format("Twisted Pair Incubus spawned at position (%f, %f)", fam.Position.X, fam.Position.Y))
     return fam
 end
 
-function ConchBlessing.chronus._ensureIncubusPairs(player)
-    if not player then return end
+function ConchBlessing.chronus._ensureTwistedPairs(player)
+    if not player then 
+        dbg("_ensureTwistedPairs: player is nil")
+        return 
+    end
     local absorbedPairs = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_TWISTED_PAIR)
     local target = math.max(0, absorbedPairs * 2)
+    dbg(string.format("_ensureTwistedPairs: absorbedPairs=%d, target=%d", tonumber(absorbedPairs) or 0, tonumber(target) or 0))
+    
     local pdata = player:GetData()
-    pdata.__chronusIncubi = pdata.__chronusIncubi or {}
+    pdata.__chronusTwistedPairs = pdata.__chronusTwistedPairs or {}
+    
+    dbg(string.format("Current Twisted Pair count: %d", #pdata.__chronusTwistedPairs))
 
     local kept = {}
-    for _, f in ipairs(pdata.__chronusIncubi) do
+    for _, f in ipairs(pdata.__chronusTwistedPairs) do
         if f and f:Exists() and f:ToFamiliar() then
             local fd = f:GetData()
-            if fd and fd.__chronusIncubus then table.insert(kept, f) end
+            if fd and fd.__chronusTwistedPair then table.insert(kept, f) end
         end
     end
-    pdata.__chronusIncubi = kept
+    pdata.__chronusTwistedPairs = kept
+    dbg(string.format("After cleanup, kept Twisted Pair count: %d", #pdata.__chronusTwistedPairs))
 
-    while #pdata.__chronusIncubi < target do
-        local idx = math.floor(#pdata.__chronusIncubi / 2) + 1
-        local side = (#pdata.__chronusIncubi % 2 == 0) and 1 or -1
-        local fam = spawnInvisibleIncubus(player, idx, side)
-        if not fam then break end
-        table.insert(pdata.__chronusIncubi, fam)
+    while #pdata.__chronusTwistedPairs < target do
+        local idx = math.floor(#pdata.__chronusTwistedPairs / 2) + 1
+        local side = (#pdata.__chronusTwistedPairs % 2 == 0) and 1 or -1
+        dbg(string.format("Attempting to spawn Twisted Pair Incubus %d/%d", #pdata.__chronusTwistedPairs + 1, target))
+        local fam = spawnInvisibleTwistedPairIncubus(player, idx, side)
+        if not fam then 
+            dbg("Failed to spawn Twisted Pair Incubus, breaking loop")
+            break 
+        end
+        table.insert(pdata.__chronusTwistedPairs, fam)
     end
+    dbg(string.format("Final Twisted Pair count: %d", #pdata.__chronusTwistedPairs))
 end
 
-function ConchBlessing.chronus._updateIncubusAnchors(player)
+function ConchBlessing.chronus._updateTwistedPairAnchors(player)
     local pdata = player and player:GetData() or nil
-    local list = pdata and pdata.__chronusIncubi or nil
+    local list = pdata and pdata.__chronusTwistedPairs or nil
     if not list or #list == 0 then return end
     local dir = player:GetShootingInput()
     if not (dir and dir:Length() > 0) then dir = player:GetAimDirection() end
@@ -253,6 +277,78 @@ function ConchBlessing.chronus._updateIncubusAnchors(player)
             fam.DepthOffset = depth
             fam.Velocity = Vector.Zero
             fam:AddEntityFlags(EntityFlag.FLAG_NO_QUERY)
+        end
+    end
+end
+
+-- Incubus: spawn invisible Incubus fixed to player position (1 per item)
+local function spawnInvisibleIncubus(player)
+    dbg("Spawning Incubus (fixed position)")
+    local ent = Isaac.Spawn(EntityType.ENTITY_FAMILIAR, FamiliarVariant.INCUBUS, 0, player.Position, Vector.Zero, player)
+    local fam = ent and ent:ToFamiliar() or nil
+    if not fam then 
+        dbg("Failed to spawn Incubus entity")
+        return nil 
+    end
+    fam:ClearEntityFlags(EntityFlag.FLAG_APPEAR)
+    local spr = fam:GetSprite()
+    local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
+    pcall(function() spr:ReplaceSpritesheet(0, path) end)
+    pcall(function() spr:LoadGraphics() end)
+    fam.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
+    fam:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
+    fam.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
+    fam.GridCollisionClass = GridCollisionClass.COLLISION_NONE
+    local fd = fam:GetData()
+    fd.__chronusIncubus = true
+    dbg(string.format("Incubus spawned at position (%f, %f)", fam.Position.X, fam.Position.Y))
+    return fam
+end
+
+function ConchBlessing.chronus._ensureIncubusStack(player)
+    if not player then 
+        dbg("_ensureIncubusStack: player is nil")
+        return 
+    end
+    local absorbed = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_INCUBUS)
+    local target = math.max(0, absorbed)
+    dbg(string.format("_ensureIncubusStack: absorbed=%d, target=%d", tonumber(absorbed) or 0, tonumber(target) or 0))
+    
+    local pdata = player:GetData()
+    pdata.__chronusIncubi = pdata.__chronusIncubi or {}
+
+    local kept = {}
+    for _, f in ipairs(pdata.__chronusIncubi) do
+        if f and f:Exists() and f:ToFamiliar() then
+            local fd = f:GetData()
+            if fd and fd.__chronusIncubus then table.insert(kept, f) end
+        end
+    end
+    pdata.__chronusIncubi = kept
+    dbg(string.format("After cleanup, kept Incubus count: %d", #pdata.__chronusIncubi))
+
+    while #pdata.__chronusIncubi < target do
+        dbg(string.format("Attempting to spawn Incubus %d/%d", #pdata.__chronusIncubi + 1, target))
+        local fam = spawnInvisibleIncubus(player)
+        if not fam then 
+            dbg("Failed to spawn Incubus, breaking loop")
+            break 
+        end
+        table.insert(pdata.__chronusIncubi, fam)
+    end
+    dbg(string.format("Final Incubus count: %d", #pdata.__chronusIncubi))
+end
+
+function ConchBlessing.chronus._updateIncubusAnchors(player)
+    local pdata = player and player:GetData() or nil
+    local list = pdata and pdata.__chronusIncubi or nil
+    if not list or #list == 0 then return end
+    local depth = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
+    for _, fam in ipairs(list) do
+        if fam and fam:Exists() then
+            fam.Position = player.Position
+            fam.DepthOffset = depth
+            fam.Velocity = Vector.Zero
         end
     end
 end
@@ -341,8 +437,13 @@ ConchBlessing.chronus.onPlayerUpdate = function(_)
                     end
                 end
 
-                ConchBlessing.chronus._ensureIncubusPairs(player)
+                -- Update Twisted Pair (offset position)
+                ConchBlessing.chronus._ensureTwistedPairs(player)
+                ConchBlessing.chronus._updateTwistedPairAnchors(player)
+                -- Update Incubus (fixed to player position)
+                ConchBlessing.chronus._ensureIncubusStack(player)
                 ConchBlessing.chronus._updateIncubusAnchors(player)
+                -- Update Succubus (fixed to player position)
                 ConchBlessing.chronus._ensureSuccubusStack(player)
                 ConchBlessing.chronus._updateSuccubusAnchors(player)
             else
@@ -388,12 +489,21 @@ function ConchBlessing.chronus._revertAll(player)
     local hadAny = false
     do
         local pdata = player and player:GetData() or {}
+        -- Remove Twisted Pair
+        if pdata.__chronusTwistedPairs then
+            for _, f in ipairs(pdata.__chronusTwistedPairs) do
+                if f and f:Exists() then f:Remove() end
+            end
+            pdata.__chronusTwistedPairs = nil
+        end
+        -- Remove Incubus
         if pdata.__chronusIncubi then
             for _, f in ipairs(pdata.__chronusIncubi) do
                 if f and f:Exists() then f:Remove() end
             end
             pdata.__chronusIncubi = nil
         end
+        -- Remove Succubi
         if pdata.__chronusSuccubi then
             for _, f in ipairs(pdata.__chronusSuccubi) do
                 if f and f:Exists() then f:Remove() end
@@ -429,23 +539,63 @@ end
 
 ConchBlessing.chronus.onFamiliarUpdate = function(_, fam)
     local f = fam and fam:ToFamiliar() or nil
-    if not f or f.Variant ~= FamiliarVariant.SUCCUBUS then return end
+    if not f then return end
     local fd = f:GetData() or {}
-    if not fd.__chronusSuccubus then return end
-    if not fd.__chronusSuccubusSpr then
-        local spr = f:GetSprite()
-        local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
-        pcall(function() spr:ReplaceSpritesheet(0, path) end)
-        pcall(function() spr:LoadGraphics() end)
-        fd.__chronusSuccubusSpr = true
+    
+    -- Handle Twisted Pair Incubus (offset position with side)
+    if f.Variant == FamiliarVariant.INCUBUS and fd.__chronusTwistedPair then
+        if not fd.__chronusTwistedPairSpr then
+            local spr = f:GetSprite()
+            local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
+            pcall(function() spr:ReplaceSpritesheet(0, path) end)
+            pcall(function() spr:LoadGraphics() end)
+            fd.__chronusTwistedPairSpr = true
+            dbg(string.format("Twisted Pair Incubus sprite initialized: pairIdx=%s, side=%s", 
+                tostring(fd.__chronusPairIndex or "nil"), 
+                tostring(fd.__chronusSide or "nil")))
+        end
+        return
     end
-    f:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
-    f.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
-    f.GridCollisionClass = GridCollisionClass.COLLISION_NONE
-    local player = f.Player
-    if player then
-        f.Position = player.Position
-        f.Velocity = Vector.Zero
-        f.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
+    
+    -- Handle Incubus (fixed to player position)
+    if f.Variant == FamiliarVariant.INCUBUS and fd.__chronusIncubus then
+        if not fd.__chronusIncubusSpr then
+            local spr = f:GetSprite()
+            local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
+            pcall(function() spr:ReplaceSpritesheet(0, path) end)
+            pcall(function() spr:LoadGraphics() end)
+            fd.__chronusIncubusSpr = true
+            dbg("Incubus sprite initialized (fixed position)")
+        end
+        f:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
+        f.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
+        f.GridCollisionClass = GridCollisionClass.COLLISION_NONE
+        local player = f.Player
+        if player then
+            f.Position = player.Position
+            f.Velocity = Vector.Zero
+            f.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
+        end
+        return
+    end
+    
+    -- Handle Succubus (fixed to player position)
+    if f.Variant == FamiliarVariant.SUCCUBUS and fd.__chronusSuccubus then
+        if not fd.__chronusSuccubusSpr then
+            local spr = f:GetSprite()
+            local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
+            pcall(function() spr:ReplaceSpritesheet(0, path) end)
+            pcall(function() spr:LoadGraphics() end)
+            fd.__chronusSuccubusSpr = true
+        end
+        f:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
+        f.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
+        f.GridCollisionClass = GridCollisionClass.COLLISION_NONE
+        local player = f.Player
+        if player then
+            f.Position = player.Position
+            f.Velocity = Vector.Zero
+            f.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
+        end
     end
 end
