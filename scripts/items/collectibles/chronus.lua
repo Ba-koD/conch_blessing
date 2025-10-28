@@ -25,6 +25,21 @@ ConchBlessing.chronus.data = ConchBlessing.chronus.data or {
         [CollectibleType.COLLECTIBLE_KNIFE_PIECE_1] = true,
         [CollectibleType.COLLECTIBLE_KNIFE_PIECE_2] = true,
     },
+    -- Familiar -> Item conversion mapping
+    -- When a familiar is absorbed, it grants this item
+    -- maxGrants: 0 = unlimited, 1 = once only, 2 = twice, etc.
+    familiarToItemMap = {
+        [CollectibleType.COLLECTIBLE_ROBO_BABY] = {  -- Robo-Baby -> Technology
+            itemId = CollectibleType.COLLECTIBLE_TECHNOLOGY,
+            maxGrants = 0,  -- Unlimited: each Robo Baby grants Technology
+        },
+        [CollectibleType.COLLECTIBLE_SERAPHIM] = {  -- Seraphim -> Flying (via cache flag)
+            itemId = CollectibleType.COLLECTIBLE_SACRED_HEART,  -- No item, handled via CACHE_FLYING
+            maxGrants = 1,  -- Only first Seraphim grants flying
+        },
+        -- Add more familiar -> item conversions here
+        -- [FamiliarID] = { itemId = ItemID, maxGrants = N },
+    },
     absorbActions = {
         [CollectibleType.COLLECTIBLE_TWISTED_PAIR] = function(player, total, delta)
             ConchBlessing.printDebug(string.format("[Chronus] Twisted Pair absorbed: total=%d, delta=%d", tonumber(total) or 0, tonumber(delta) or 0))
@@ -43,8 +58,11 @@ ConchBlessing.chronus.data = ConchBlessing.chronus.data or {
         end,
         [CollectibleType.COLLECTIBLE_SERAPHIM] = function(player, total, delta)
             ConchBlessing.printDebug(string.format("[Chronus] Seraphim absorbed: total=%d, delta=%d", tonumber(total) or 0, tonumber(delta) or 0))
-            player:AddCacheFlags(CacheFlag.CACHE_FLYING)
-            player:EvaluateItems()
+            -- Custom logic for Seraphim (can be removed if not needed)
+        end,
+        [CollectibleType.COLLECTIBLE_ROBO_BABY] = function(player, total, delta)
+            ConchBlessing.printDebug(string.format("[Chronus] Robo Baby absorbed: total=%d, delta=%d", tonumber(total) or 0, tonumber(delta) or 0))
+            -- Custom logic for Robo-Baby (can be removed if not needed)
         end,
     },
 }
@@ -62,7 +80,11 @@ local function getRunSave(player)
     if not sm then return nil end
     local globalSave = sm.GetRunSave(nil)
     if not globalSave then return nil end
-    globalSave.chronus = globalSave.chronus or { absorbed = {}, totalAbsorbed = 0 }
+    globalSave.chronus = globalSave.chronus or { 
+        absorbed = {}, 
+        totalAbsorbed = 0,
+        itemGrants = {},  -- Track how many items granted per familiar: ["fam_95"] = 3
+    }
 
     if player then
         local per = sm.GetRunSave(player)
@@ -130,17 +152,54 @@ end
 
 function ConchBlessing.chronus._getAbsorbedCount(player, famId)
     local rs = getRunSave(player)
-    if not rs then 
-        dbg(string.format("[Chronus] _getAbsorbedCount: No run save for famId=%d", tonumber(famId) or 0))
-        return 0 
-    end
+    if not rs then return 0 end
     -- Use string key to match how we save it
     local key = "fam_" .. tostring(famId)
     local sub = rs.absorbed[key]
     local count = (sub and sub.count) or 0
-    dbg(string.format("[Chronus] _getAbsorbedCount: famId=%d (key=%s), count=%d, sub=%s", 
-        tonumber(famId) or 0, key, count, sub and "exists" or "nil"))
     return count
+end
+
+function ConchBlessing.chronus._handleFamiliarToItemConversion(player, familiarId, total, delta)
+    local rs = getRunSave(player)
+    if not rs then return end
+    
+    -- Check if this familiar has an item conversion defined in the map
+    local conversionData = ConchBlessing.chronus.data.familiarToItemMap[familiarId]
+    if not conversionData or not conversionData.itemId then return end
+    
+    local maxGrants = conversionData.maxGrants or 0
+    local key = "fam_" .. tostring(familiarId)
+    local currentGrants = (rs.itemGrants and rs.itemGrants[key]) or 0
+    local itemsToGrant = 0
+    
+    if maxGrants == 0 then
+        -- Unlimited: grant for each absorbed
+        itemsToGrant = delta
+    else
+        -- Limited: grant only up to maxGrants total
+        itemsToGrant = math.max(0, math.min(delta, maxGrants - currentGrants))
+    end
+    
+    if itemsToGrant > 0 then
+        for i = 1, itemsToGrant do
+            player:AddCollectible(conversionData.itemId, 0, true)
+        end
+        -- Update granted count
+        rs.itemGrants = rs.itemGrants or {}
+        rs.itemGrants[key] = currentGrants + itemsToGrant
+        ConchBlessing.SaveManager.Save()
+        
+        -- Update cache for item effects
+        player:AddCacheFlags(CacheFlag.CACHE_ALL)
+        player:EvaluateItems()
+        
+        dbg(string.format("[Chronus] Familiar ID=%d -> Granted %d item(s) (ID=%d) (total granted: %d, maxGrants: %d)", 
+            tonumber(familiarId) or 0, itemsToGrant, tonumber(conversionData.itemId) or 0, rs.itemGrants[key], maxGrants))
+    elseif delta > 0 then
+        dbg(string.format("[Chronus] Familiar ID=%d absorbed but no items granted (max %d already granted)", 
+            tonumber(familiarId) or 0, maxGrants))
+    end
 end
 
 function ConchBlessing.chronus._detectAndAbsorb(player)
@@ -188,40 +247,41 @@ function ConchBlessing.chronus._detectAndAbsorb(player)
         end
     end
 
-    -- Calculate damage for familiars with absorbActions ONLY
-    local totalActionBonusDamage = 0
+    -- Calculate damage bonus for ALL absorbed familiars
+    local totalBonusDamage = 0
     for _, info in ipairs(absorbedFamiliars) do
-        if actions[info.famId] then
-            -- Only familiars with absorbActions get damage bonus per absorbed
-            totalActionBonusDamage = totalActionBonusDamage + (ConchBlessing.chronus.STATS.DAMAGE_PER_FAMILIAR * info.delta)
-        end
+        -- All absorbed familiars get damage bonus
+        totalBonusDamage = totalBonusDamage + (ConchBlessing.chronus.STATS.DAMAGE_PER_FAMILIAR * info.delta)
+        dbg(string.format("[Chronus] Adding damage bonus for familiar ID=%d: +%.2f (delta=%d)", 
+            tonumber(info.famId) or 0, 
+            ConchBlessing.chronus.STATS.DAMAGE_PER_FAMILIAR * info.delta, 
+            tonumber(info.delta) or 0))
     end
     
-    -- Apply damage bonus for familiars with absorbActions
-    if changed and totalActionBonusDamage > 0 then
-        dbg(string.format("Applying absorbAction bonus damage: +%.2f", totalActionBonusDamage))
+    -- Apply damage bonus for all absorbed familiars (pass delta only, unified system handles cumulative)
+    if changed and totalBonusDamage > 0 then
+        dbg(string.format("[Chronus] Applying delta absorbed familiar bonus damage: +%.2f", totalBonusDamage))
         local um = ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers
         if um and um.SetItemAddition then
-            local rs = getRunSave(player)
-            local currentBonus = (rs and rs.absorbActionBonusDamage) or 0
-            local newTotal = currentBonus + totalActionBonusDamage
-            um:SetItemAddition(player, CHRONUS_ID, "Damage", newTotal, "Chronus: absorbActions damage")
+            -- SetItemAddition accumulates internally: cumulative = existing.cumulative + addition
+            -- So pass ONLY the delta (totalBonusDamage), NOT the cumulative total
+            um:SetItemAddition(player, CHRONUS_ID, "Damage", totalBonusDamage, string.format("Chronus: +%d familiars", #absorbedFamiliars))
             um:QueueCacheUpdate(player, "Damage")
             if um.SaveToSaveManager then um:SaveToSaveManager(player) end
-            if rs then
-                rs.absorbActionBonusDamage = newTotal
-                ConchBlessing.SaveManager.Save()
-            end
-            dbg(string.format("Applied action bonus: +%.2f (total: +%.2f)", totalActionBonusDamage, newTotal))
+            dbg(string.format("[Chronus] Applied delta bonus: +%.2f (unified system will accumulate)", totalBonusDamage))
         end
     end
     
-    -- Now run absorbActions (e.g., Seraphim multiplier) AFTER base damage
+    -- Now run absorbActions and item conversions AFTER base damage
     for _, info in ipairs(absorbedFamiliars) do
+        -- 1. Run custom absorb action if defined (e.g., positioning, special effects)
         local fn = actions[info.famId]
         if type(fn) == "function" then
             pcall(fn, player, info.total, info.delta)
         end
+        
+        -- 2. Auto-handle familiarToItemMap conversions for ALL familiars
+        ConchBlessing.chronus._handleFamiliarToItemConversion(player, info.famId, info.total, info.delta)
     end
 
     return changed
@@ -235,6 +295,76 @@ function ConchBlessing.chronus._finalizeAbsorb(player)
     else
         player:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
         player:EvaluateItems()
+    end
+end
+
+-- Track converted item removal for all familiar->item mappings
+function ConchBlessing.chronus._trackConvertedItemRemoval(player)
+    if not player then return end
+    
+    local rs = getRunSave(player)
+    if not rs then return end
+    
+    local familiarToItemMap = ConchBlessing.chronus.data.familiarToItemMap or {}
+    rs.itemGrants = rs.itemGrants or {}
+    
+    -- Check each familiar->item conversion
+    for familiarId, conversionData in pairs(familiarToItemMap) do
+        if type(conversionData) ~= "table" then
+            -- Old format compatibility
+            conversionData = { itemId = conversionData, maxGrants = 0 }
+        end
+        
+        local itemId = conversionData.itemId
+        if not itemId then goto continue end  -- Skip if no item (like Seraphim with flying)
+        
+        local absorbedCount = ConchBlessing.chronus._getAbsorbedCount(player, familiarId)
+        if absorbedCount <= 0 then goto continue end
+        
+        local key = "fam_" .. tostring(familiarId)
+        local grantedCount = rs.itemGrants[key] or 0
+        if grantedCount <= 0 then goto continue end
+        
+        -- Get actual converted item count
+        local currentItemCount = player:GetCollectibleNum(itemId, true)
+        
+        -- Calculate how many granted items were removed
+        local itemsRemoved = math.max(0, grantedCount - currentItemCount)
+        
+        if itemsRemoved > 0 then
+            -- Reduce absorbed familiar count by items removed (up to maxGrants limit)
+            local maxGrants = conversionData.maxGrants or 0
+            local familiarReduction
+            
+            if maxGrants == 0 then
+                -- Unlimited: 1 familiar per item removed
+                familiarReduction = itemsRemoved
+            else
+                -- Limited: reduce only up to maxGrants
+                familiarReduction = math.min(itemsRemoved, maxGrants)
+            end
+            
+            -- Update absorbed count
+            local newAbsorbedCount = math.max(0, absorbedCount - familiarReduction)
+            if newAbsorbedCount > 0 then
+                rs.absorbed[key] = { count = newAbsorbedCount, id = familiarId }
+            else
+                rs.absorbed[key] = nil
+            end
+            
+            -- Update granted count
+            rs.itemGrants[key] = math.max(0, currentItemCount)
+            
+            -- Update total absorbed
+            rs.totalAbsorbed = (rs.totalAbsorbed or 0) - familiarReduction
+            if rs.totalAbsorbed < 0 then rs.totalAbsorbed = 0 end
+            
+            ConchBlessing.SaveManager.Save()
+            dbg(string.format("[Chronus] Detected %d item (ID:%d) removal, reduced familiar (ID:%d) count: %d -> %d (maxGrants=%d)", 
+                itemsRemoved, tonumber(itemId) or 0, tonumber(familiarId) or 0, absorbedCount, newAbsorbedCount, maxGrants))
+        end
+        
+        ::continue::
     end
 end
 
@@ -262,19 +392,14 @@ local function spawnInvisibleTwistedPairIncubus(player, pairIndex, side)
 end
 
 function ConchBlessing.chronus._ensureTwistedPairs(player)
-    if not player then 
-        dbg("_ensureTwistedPairs: player is nil")
-        return 
-    end
+    if not player then return end
+    
     local absorbedPairs = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_TWISTED_PAIR)
     local target = math.max(0, absorbedPairs * 2)
-    dbg(string.format("_ensureTwistedPairs: absorbedPairs=%d, target=%d", tonumber(absorbedPairs) or 0, tonumber(target) or 0))
     
     local pdata = player:GetData()
     pdata.__chronusTwistedPairs = pdata.__chronusTwistedPairs or {}
     
-    dbg(string.format("Current Twisted Pair count: %d", #pdata.__chronusTwistedPairs))
-
     local kept = {}
     for _, f in ipairs(pdata.__chronusTwistedPairs) do
         if f and f:Exists() and f:ToFamiliar() then
@@ -283,12 +408,12 @@ function ConchBlessing.chronus._ensureTwistedPairs(player)
         end
     end
     pdata.__chronusTwistedPairs = kept
-    dbg(string.format("After cleanup, kept Twisted Pair count: %d", #pdata.__chronusTwistedPairs))
 
+    -- Only log when spawning new pairs
     while #pdata.__chronusTwistedPairs < target do
         local idx = math.floor(#pdata.__chronusTwistedPairs / 2) + 1
         local side = (#pdata.__chronusTwistedPairs % 2 == 0) and 1 or -1
-        dbg(string.format("Attempting to spawn Twisted Pair Incubus %d/%d", #pdata.__chronusTwistedPairs + 1, target))
+        dbg(string.format("Spawning Twisted Pair Incubus %d/%d", #pdata.__chronusTwistedPairs + 1, target))
         local fam = spawnInvisibleTwistedPairIncubus(player, idx, side)
         if not fam then 
             dbg("Failed to spawn Twisted Pair Incubus, breaking loop")
@@ -296,7 +421,6 @@ function ConchBlessing.chronus._ensureTwistedPairs(player)
         end
         table.insert(pdata.__chronusTwistedPairs, fam)
     end
-    dbg(string.format("Final Twisted Pair count: %d", #pdata.__chronusTwistedPairs))
 end
 
 function ConchBlessing.chronus._updateTwistedPairAnchors(player)
@@ -351,13 +475,10 @@ local function spawnInvisibleIncubus(player)
 end
 
 function ConchBlessing.chronus._ensureIncubusStack(player)
-    if not player then 
-        dbg("_ensureIncubusStack: player is nil")
-        return 
-    end
+    if not player then return end
+    
     local absorbed = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_INCUBUS)
     local target = math.max(0, absorbed)
-    dbg(string.format("_ensureIncubusStack: absorbed=%d, target=%d", tonumber(absorbed) or 0, tonumber(target) or 0))
     
     local pdata = player:GetData()
     pdata.__chronusIncubi = pdata.__chronusIncubi or {}
@@ -370,10 +491,10 @@ function ConchBlessing.chronus._ensureIncubusStack(player)
         end
     end
     pdata.__chronusIncubi = kept
-    dbg(string.format("After cleanup, kept Incubus count: %d", #pdata.__chronusIncubi))
 
+    -- Only log when spawning new incubi
     while #pdata.__chronusIncubi < target do
-        dbg(string.format("Attempting to spawn Incubus %d/%d", #pdata.__chronusIncubi + 1, target))
+        dbg(string.format("Spawning Incubus %d/%d", #pdata.__chronusIncubi + 1, target))
         local fam = spawnInvisibleIncubus(player)
         if not fam then 
             dbg("Failed to spawn Incubus, breaking loop")
@@ -381,7 +502,6 @@ function ConchBlessing.chronus._ensureIncubusStack(player)
         end
         table.insert(pdata.__chronusIncubi, fam)
     end
-    dbg(string.format("Final Incubus count: %d", #pdata.__chronusIncubi))
 end
 
 function ConchBlessing.chronus._updateIncubusAnchors(player)
@@ -482,6 +602,9 @@ ConchBlessing.chronus.onPlayerUpdate = function(_)
                     end
                 end
 
+                -- Track converted item removal (all familiar->item conversions)
+                ConchBlessing.chronus._trackConvertedItemRemoval(player)
+                
                 -- Update Twisted Pair (offset position)
                 ConchBlessing.chronus._ensureTwistedPairs(player)
                 ConchBlessing.chronus._updateTwistedPairAnchors(player)
@@ -529,33 +652,63 @@ ConchBlessing.chronus.onGameStarted = function(_)
             end
         end
         
-        local actionBonus = rs.absorbActionBonusDamage or 0
-        if actionBonus ~= 0 then
-            local um = ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers
-            if um and um.SetItemAddition then
-                local playerID = player:GetPlayerType()
-                local alreadyLoaded = false
-                if um[playerID] and um[playerID].itemAdditions and um[playerID].itemAdditions[CHRONUS_ID] then
-                    local damageAddition = um[playerID].itemAdditions[CHRONUS_ID]["Damage"]
-                    if damageAddition and damageAddition.cumulative and math.abs(damageAddition.cumulative - actionBonus) < 0.01 then
-                        alreadyLoaded = true
-                        dbg(string.format("[Chronus] Unified system already has absorbAction damage loaded (%.2f), skipping duplicate", damageAddition.cumulative))
-                    end
-                end
-                
-                if not alreadyLoaded then
-                    um:SetItemAddition(player, CHRONUS_ID, "Damage", actionBonus, "Chronus: absorbActions damage")
-                    um:QueueCacheUpdate(player, "Damage")
-                    if um.SaveToSaveManager then um:SaveToSaveManager(player) end
-                    dbg(string.format("[Chronus] Restored absorbAction bonus damage: +%.2f", actionBonus))
-                end
-            end
+        -- Unified system automatically restores damage bonuses from its own save data
+        -- No manual restoration needed; it handles cumulative additions internally
+        dbg("[Chronus] Unified system will restore absorbed familiar damage bonuses automatically")
+        
+        -- Clean up old save data fields (no longer needed as unified system manages this)
+        if rs.absorbedBonusDamage or rs.absorbActionBonusDamage then
+            rs.absorbedBonusDamage = nil
+            rs.absorbActionBonusDamage = nil
+            ConchBlessing.SaveManager.Save()
+            dbg("[Chronus] Cleaned up legacy damage bonus fields from save data")
         end
         
         local seraphimCount = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_SERAPHIM)
         dbg(string.format("Found %d absorbed Seraphim on game start", tonumber(seraphimCount) or 0))
         
-        player:AddCacheFlags(CacheFlag.CACHE_DAMAGE | CacheFlag.CACHE_FLYING)
+        -- Restore converted items for all familiar->item conversions
+        local familiarToItemMap = ConchBlessing.chronus.data.familiarToItemMap or {}
+        rs.itemGrants = rs.itemGrants or {}
+        
+        for familiarId, conversionData in pairs(familiarToItemMap) do
+            if type(conversionData) ~= "table" then
+                conversionData = { itemId = conversionData, maxGrants = 0 }
+            end
+            
+            local itemId = conversionData.itemId
+            if not itemId then goto continue_restore end  -- Skip if no item
+            
+            local familiarCount = ConchBlessing.chronus._getAbsorbedCount(player, familiarId)
+            if familiarCount > 0 then
+                local maxGrants = conversionData.maxGrants or 0
+                local itemsToGrant
+                
+                if maxGrants == 0 then
+                    -- Unlimited: grant for each familiar
+                    itemsToGrant = familiarCount
+                else
+                    -- Limited: grant only up to maxGrants
+                    itemsToGrant = math.min(familiarCount, maxGrants)
+                end
+                
+                if itemsToGrant > 0 then
+                    for i = 1, itemsToGrant do
+                        player:AddCollectible(itemId, 0, true)
+                    end
+                    -- Track granted count
+                    local key = "fam_" .. tostring(familiarId)
+                    rs.itemGrants[key] = itemsToGrant
+                    ConchBlessing.SaveManager.Save()
+                    dbg(string.format("Restored %d item(s) (ID:%d) from %d absorbed familiar (ID:%d, maxGrants=%d)", 
+                        itemsToGrant, tonumber(itemId) or 0, familiarCount, tonumber(familiarId) or 0, maxGrants))
+                end
+            end
+            
+            ::continue_restore::
+        end
+        
+        player:AddCacheFlags(CacheFlag.CACHE_DAMAGE | CacheFlag.CACHE_FLYING | CacheFlag.CACHE_TEARFLAG | CacheFlag.CACHE_FIREDELAY)
         player:EvaluateItems()
     end
 end
@@ -588,17 +741,32 @@ function ConchBlessing.chronus._revertAll(player)
             pdata.__chronusSuccubi = nil
         end
     end
+    local familiarToItemMap = ConchBlessing.chronus.data.familiarToItemMap or {}
+    
     for key, entry in pairs(rs.absorbed) do
         local count = (entry and entry.count) or 0
         if count > 0 then
             hadAny = true
             -- Extract actual ID from entry or key
             local famId = entry.id or tonumber(key:match("fam_(%d+)"))
-            if famId then
+            
+            -- Check if this familiar has item conversion mapping
+            local conversionData = famId and familiarToItemMap[famId]
+            if type(conversionData) ~= "table" and conversionData then
+                conversionData = { itemId = conversionData, maxGrants = 0 }
+            end
+            
+            if famId and not conversionData then
+                -- Normal familiar restoration (no item conversion)
                 for _ = 1, count do
                     player:AddCollectible(famId, 0, false)
                 end
                 dbg(string.format("[Chronus] Restored familiar: key=%s, ID=%d, count=%d", tostring(key), tonumber(famId) or 0, count))
+            elseif conversionData then
+                -- Familiar with item conversion - will be handled via converted item removal below
+                local itemId = conversionData.itemId or "none"
+                dbg(string.format("[Chronus] Skipping familiar ID=%d restoration (has item conversion to ID=%s): count=%d", 
+                    tonumber(famId) or 0, tostring(itemId), count))
             end
         end
     end
@@ -614,9 +782,67 @@ function ConchBlessing.chronus._revertAll(player)
             player:EvaluateItems()
         end
         
+        -- Remove converted items and restore familiars (for all familiar->item conversions)
+        rs.itemGrants = rs.itemGrants or {}
+        
+        for familiarId, conversionData in pairs(familiarToItemMap) do
+            if type(conversionData) ~= "table" then
+                conversionData = { itemId = conversionData, maxGrants = 0 }
+            end
+            
+            local itemId = conversionData.itemId
+            if not itemId then goto continue_revert end  -- Skip if no item
+            
+            local familiarCount = ConchBlessing.chronus._getAbsorbedCount(player, familiarId)
+            if familiarCount > 0 then
+                local key = "fam_" .. tostring(familiarId)
+                local grantedCount = rs.itemGrants[key] or 0
+                local currentItemCount = player:GetCollectibleNum(itemId, true)
+                
+                -- Remove granted items (only what's present)
+                local itemsToRemove = math.min(currentItemCount, grantedCount)
+                for i = 1, itemsToRemove do
+                    player:RemoveCollectible(itemId)
+                end
+                
+                -- Calculate how many familiars to restore
+                -- Based on removed items, but capped by maxGrants logic
+                local maxGrants = conversionData.maxGrants or 0
+                local familiarsToRestore
+                
+                if maxGrants == 0 then
+                    -- Unlimited: restore 1 familiar per removed item
+                    familiarsToRestore = itemsToRemove
+                else
+                    -- Limited: restore based on how many were actually granted
+                    -- If maxGrants=1 and we remove 1 item, restore min(familiarCount, amount we can restore)
+                    familiarsToRestore = math.min(itemsToRemove, familiarCount)
+                end
+                
+                -- Restore familiars
+                for i = 1, familiarsToRestore do
+                    player:AddCollectible(familiarId, 0, false)
+                end
+                
+                if familiarsToRestore < familiarCount then
+                    dbg(string.format("[Chronus] Removed %d item (ID:%d) and restored %d familiar (ID:%d). %d familiar lost (granted:%d, maxGrants=%d)", 
+                        itemsToRemove, tonumber(itemId) or 0, familiarsToRestore, tonumber(familiarId) or 0, 
+                        familiarCount - familiarsToRestore, grantedCount, maxGrants))
+                else
+                    dbg(string.format("[Chronus] Removed %d item (ID:%d) and restored %d familiar (ID:%d) (granted:%d, maxGrants=%d)", 
+                        itemsToRemove, tonumber(itemId) or 0, familiarsToRestore, tonumber(familiarId) or 0, grantedCount, maxGrants))
+                end
+            end
+            
+            ::continue_revert::
+        end
+        
         rs.absorbed = {}
         rs.totalAbsorbed = 0
-        rs.absorbActionBonusDamage = 0
+        rs.itemGrants = {}  -- Clear granted item counts
+        -- Legacy fields cleanup (unified system manages these now)
+        rs.absorbedBonusDamage = nil
+        rs.absorbActionBonusDamage = nil
         dbg("Reverted all Chronus effects and restored familiars")
         return true
     end
@@ -690,6 +916,8 @@ end
 ConchBlessing.chronus.onFireTear = function(_, tear)
     local player = tear.SpawnerEntity and tear.SpawnerEntity:ToPlayer() or nil
     if not player or not player:HasCollectible(CHRONUS_ID) then return end
+    
+    -- Robo Baby tech laser effect is handled by Technology item (granted in absorbAction)
     
     local seraphimCount = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_SERAPHIM)
     if seraphimCount > 0 then

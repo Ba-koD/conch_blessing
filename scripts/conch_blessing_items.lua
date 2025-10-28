@@ -662,8 +662,14 @@ ConchBlessing.ItemData = {
                 en = "Adds 1 additional 75% damage attack."
             },
             [{ id = CollectibleType.COLLECTIBLE_SERAPHIM, type = "collectible" }] = {
-                kr = "공중, 유도, 지형관통 효과를 얻습니다.",
-                en = "Gains flight, homing, and spectral tear effects."
+                kr = "공중, 지형관통 효과를 얻습니다.",
+                "#신성한 심장을 획득합니다.(최초 1회)",
+                en = "Gains flight, and spectral tear effects.",
+                "#Gains a Sacred Heart (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_ROBO_BABY, type = "collectible" }] = {
+                kr = "레이저를 발사합니다.",
+                en = "Fires a laser."
             },
         }
 	},
