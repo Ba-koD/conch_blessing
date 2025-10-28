@@ -29,14 +29,13 @@ local function computeRingRadiusFromRange(player)
     return ConchBlessing.voiddagger.data.Radius
 end
 
--- timeout frames by damage buckets: 10..60
+-- timeout frames by damage buckets: base 20, +5 per 10 damage (20, 25, 30, 35, 40 for dmg 0, 10, 20, 30, 40+)
 local function computeTimeoutFromDamage(damage)
     local dmg = tonumber(damage) or 0
     if dmg < 0 then dmg = 0 end
-    local bucket = math.floor(dmg / 10) + 1 -- 0~9→1, 10~19→2, ...
-    local timeout = 10 * bucket
-    if timeout > 60 then timeout = 60 end
-    if timeout < 10 then timeout = 10 end
+    local bucket = math.floor(dmg / 10) -- 0~9→0, 10~19→1, 20~29→2, ...
+    if bucket > 4 then bucket = 4 end -- max 5 stages (0~4)
+    local timeout = 20 + (5 * bucket) -- 20 + 0, 5, 10, 15, 20 = 20, 25, 30, 35, 40
     return timeout
 end
 
@@ -51,12 +50,12 @@ local function computeProcChanceFromS(shotsPerSecond)
     return p
 end
 
--- luck bonus: pFinal = pBase × (1 + 0.1 × clamp(luck, 0, 10)), capped at 100%
+-- luck bonus: pFinal = pBase × (1 + 0.1 × luck), capped at 100% (no luck limit, e.g. luck 190 → 20x multiplier)
 local function applyLuckBonus(p, luck)
-    local L = math.max(0.0, math.min(10.0, luck or 0.0))
+    local L = math.max(0.0, luck or 0.0) -- no upper limit on luck
     local factor = 1.0 + 0.1 * L
     local out = p * factor
-    if out > 1.0 then out = 1.0 end
+    if out > 1.0 then out = 1.0 end -- cap at 100%
     return out, factor, L
 end
 
