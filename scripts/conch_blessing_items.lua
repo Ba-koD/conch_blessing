@@ -645,7 +645,8 @@ ConchBlessing.ItemData = {
             update = "chronus.onPostUpdate",
 			evaluateCache = "chronus.onEvaluateCache",
 			gameStarted = "chronus.onGameStarted",
-            familiarUpdate = "chronus.onFamiliarUpdate"
+            familiarUpdate = "chronus.onFamiliarUpdate",
+            fireTear = "chronus.onFireTear"
 		},
 		synergies = {
             [{ id = CollectibleType.COLLECTIBLE_TWISTED_PAIR, type = "collectible" }] = {
@@ -655,7 +656,15 @@ ConchBlessing.ItemData = {
             [{ id = CollectibleType.COLLECTIBLE_SUCCUBUS, type = "collectible" }] = {
                 kr = "내 주변으로 오라가 고정됩니다.",
                 en = "Attracts an aura around the player."
-            }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_INCUBUS, type = "collectible" }] = {
+                kr = "75% 데미지의 공격을 1개 추가합니다..",
+                en = "Adds 1 additional 75% damage attack."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_SERAPHIM, type = "collectible" }] = {
+                kr = "공중, 유도, 지형관통 효과를 얻습니다.",
+                en = "Gains flight, homing, and spectral tear effects."
+            },
         }
 	},
     APPRAISAL_CERTIFICATE = {

@@ -22,12 +22,13 @@ function ConchBlessing.stats.unifiedMultipliers:InitPlayer(player)
     local playerID = player:GetPlayerType()
     if not self[playerID] then
         self[playerID] = {
-            itemMultipliers = {},    -- Individual item multipliers by item ID (per stat)
-            itemAdditions = {},      -- Individual item additions by item ID (per stat)
-            statMultipliers = {},    -- Current multipliers/additions state per stat
-            lastUpdateFrame = 0,     -- Last frame when multipliers were updated
-            sequenceCounter = 0,     -- Counter for tracking item update order (shared by mult/add)
-            pendingCache = {}        -- Deferred cache flags to apply on next update
+            itemMultipliers = {},          -- Individual item multipliers by item ID (per stat)
+            itemAdditions = {},            -- Individual item FLAT additions by item ID (per stat) - SEPARATE from additive multipliers
+            itemAdditiveMultipliers = {},  -- Individual item ADDITIVE multipliers by item ID (per stat) - SEPARATE from flat additions
+            statMultipliers = {},          -- Current multipliers/additions state per stat
+            lastUpdateFrame = 0,           -- Last frame when multipliers were updated
+            sequenceCounter = 0,           -- Counter for tracking item update order (shared by mult/add)
+            pendingCache = {}              -- Deferred cache flags to apply on next update
         }
         ConchBlessing.printDebug(string.format("Unified Multipliers: Initialized for player %d", playerID))
     end
@@ -173,7 +174,8 @@ function ConchBlessing.stats.unifiedMultipliers:SetItemAddition(player, itemID, 
         description = description or (existing and existing.description) or "Unknown",
         sequence = currentSequence,
         lastType = "addition",
-        eqMult = eqMult
+        eqMult = eqMult,
+        isAdditiveMultiplier = false  -- Explicitly mark as pure addition (not additive multiplier)
     }
 
     ConchBlessing.printDebug(string.format("  Stored Addition: Item %s %s = %+0.2f (Cumulative: %+0.2f, Sequence: %d)", 
@@ -202,7 +204,7 @@ function ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player
 
     -- Allow updates in the same frame if the delta changed; skip only when identical
     if self[playerID].lastSetFrameAddMul[key] == currentFrame then
-        local existing = self[playerID].itemAdditions[itemID] and self[playerID].itemAdditions[itemID][statType]
+        local existing = self[playerID].itemAdditiveMultipliers[itemID] and self[playerID].itemAdditiveMultipliers[itemID][statType]
         local prevDelta = existing and existing.lastDelta or nil
         local newDelta = multiplierValue - 1.0
         if prevDelta and math.abs(prevDelta - newDelta) < 0.00001 then
@@ -215,30 +217,29 @@ function ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player
     ConchBlessing.printDebug(string.format("SetItemAdditiveMultiplier: Player %d, Item %s, Stat %s, Mult %.2fx (Delta %+0.2f)", 
         playerID, tostring(itemID), statType, multiplierValue, delta))
 
-    -- Initialize item data structure for additions
-    if not self[playerID].itemAdditions[itemID] then
-        self[playerID].itemAdditions[itemID] = {}
+    -- Initialize item data structure for ADDITIVE MULTIPLIERS (separate storage from flat additions)
+    if not self[playerID].itemAdditiveMultipliers[itemID] then
+        self[playerID].itemAdditiveMultipliers[itemID] = {}
         ConchBlessing.printDebug(string.format("  Created new additive-mult entry for item %s", tostring(itemID)))
     end
 
-    local existing = self[playerID].itemAdditions[itemID][statType]
+    local existing = self[playerID].itemAdditiveMultipliers[itemID][statType]
     self[playerID].sequenceCounter = self[playerID].sequenceCounter + 1
     local currentSequence = self[playerID].sequenceCounter
 
     -- Update existing entry rather than overwrite to preserve running cumulative per itemID
-    local entry = self[playerID].itemAdditions[itemID][statType] or {}
+    local entry = self[playerID].itemAdditiveMultipliers[itemID][statType] or {}
     entry.lastDelta = delta
     entry.cumulative = (entry.cumulative or 0) + delta
     entry.description = description or entry.description or "Unknown"
     entry.sequence = currentSequence
-    entry.lastType = "addition" -- stored as addition container, but flagged as additive-multiplier
+    entry.lastType = "additive_multiplier"
     entry.eqMult = multiplierValue
-    entry.isAdditiveMultiplier = true
     -- Mark first-use frame for "x" display exactly once per item+stat
     if entry.firstAddMultFrame == nil then
         entry.firstAddMultFrame = currentFrame
     end
-    self[playerID].itemAdditions[itemID][statType] = entry
+    self[playerID].itemAdditiveMultipliers[itemID][statType] = entry
 
     ConchBlessing.printDebug(string.format("  Stored Additive Mult: Item %s %s = x%.2f (Delta %+0.2f, Seq %d)", 
         tostring(itemID), statType, multiplierValue, delta, currentSequence))
@@ -270,11 +271,14 @@ function ConchBlessing.stats.unifiedMultipliers:RemoveItemMultiplier(player, ite
     end
 end
 
--- Remove addition for a specific item and stat
+-- Remove addition AND additive multiplier for a specific item and stat
 function ConchBlessing.stats.unifiedMultipliers:RemoveItemAddition(player, itemID, statType)
     if not player or not itemID or not statType then return end
 
     local playerID = player:GetPlayerType()
+    local removed = false
+    
+    -- Remove flat addition
     if self[playerID] and self[playerID].itemAdditions and self[playerID].itemAdditions[itemID] then
         self[playerID].itemAdditions[itemID][statType] = nil
 
@@ -282,11 +286,24 @@ function ConchBlessing.stats.unifiedMultipliers:RemoveItemAddition(player, itemI
         if not next(self[playerID].itemAdditions[itemID]) then
             self[playerID].itemAdditions[itemID] = nil
         end
+        removed = true
+    end
+    
+    -- Remove additive multiplier
+    if self[playerID] and self[playerID].itemAdditiveMultipliers and self[playerID].itemAdditiveMultipliers[itemID] then
+        self[playerID].itemAdditiveMultipliers[itemID][statType] = nil
 
+        -- Remove empty item entry
+        if not next(self[playerID].itemAdditiveMultipliers[itemID]) then
+            self[playerID].itemAdditiveMultipliers[itemID] = nil
+        end
+        removed = true
+    end
+
+    if removed then
         -- Recalculate
         self:RecalculateStatMultiplier(player, statType)
-
-        ConchBlessing.printDebug(string.format("Unified Multipliers: Removed Addition Item %d %s", itemID, statType))
+        ConchBlessing.printDebug(string.format("Unified Multipliers: Removed Addition/AdditiveMult Item %d %s", itemID, statType))
     end
 end
 
@@ -308,13 +325,18 @@ function ConchBlessing.stats.unifiedMultipliers:RecalculateStatMultiplier(player
     
     ConchBlessing.printDebug(string.format("Recalculating %s for player %d:", statType, playerID))
     
-    -- Build union of touched itemIDs (have base multiplier and/or additions)
+    -- Build union of touched itemIDs (have base multiplier and/or additions and/or additive multipliers)
     local touched = {}
     for itemID, itemData in pairs(self[playerID].itemMultipliers) do
         if itemData[statType] then touched[itemID] = true end
     end
     if self[playerID].itemAdditions then
         for itemID, itemData in pairs(self[playerID].itemAdditions) do
+            if itemData[statType] then touched[itemID] = true end
+        end
+    end
+    if self[playerID].itemAdditiveMultipliers then
+        for itemID, itemData in pairs(self[playerID].itemAdditiveMultipliers) do
             if itemData[statType] then touched[itemID] = true end
         end
     end
@@ -327,57 +349,78 @@ function ConchBlessing.stats.unifiedMultipliers:RecalculateStatMultiplier(player
             baseSeq = self[playerID].itemMultipliers[itemID][statType].sequence or 0
             baseDesc = self[playerID].itemMultipliers[itemID][statType].description or ""
         end
+        
+        -- Flat additions (separate storage)
         local addCum, addSeq, addLastDelta, addDesc = 0, 0, 0, ""
-        local addIsAddMul = false
-        local addMulDelta = 0.0 -- additive-multiplier delta for THIS item only
         if self[playerID].itemAdditions and self[playerID].itemAdditions[itemID] and self[playerID].itemAdditions[itemID][statType] then
             local ad = self[playerID].itemAdditions[itemID][statType]
-            addIsAddMul = ad.isAdditiveMultiplier == true
-            -- Separate additive-multiplier (affects this item's effective multiplier) vs pure addition (flat stat add)
-            if addIsAddMul then
-                addMulDelta = ad.cumulative or 0
-                addLastDelta = ad.lastDelta or 0
-            else
-                addCum = ad.cumulative or 0
-                addLastDelta = ad.lastDelta or 0
-            end
+            addCum = ad.cumulative or 0
+            addLastDelta = ad.lastDelta or 0
             addSeq = ad.sequence or 0
             addDesc = ad.description or ""
         end
+        
+        -- Additive multipliers (separate storage)
+        local addMulDelta = 0.0
+        local addMulSeq = 0
+        local addMulLastDelta = 0
+        local addMulDesc = ""
+        local hasAddMul = false
+        if self[playerID].itemAdditiveMultipliers and self[playerID].itemAdditiveMultipliers[itemID] and self[playerID].itemAdditiveMultipliers[itemID][statType] then
+            local am = self[playerID].itemAdditiveMultipliers[itemID][statType]
+            addMulDelta = am.cumulative or 0
+            addMulLastDelta = am.lastDelta or 0
+            addMulSeq = am.sequence or 0
+            addMulDesc = am.description or ""
+            hasAddMul = true
+        end
+        
         -- Per-item effective multiplier: baseM + additive-mult delta
         local effectiveM = (baseM or 1.0) + (addMulDelta or 0.0)
         if effectiveM <= 0 then effectiveM = 0 end
         totalMultiplierApply = totalMultiplierApply * effectiveM
         totalAdditionApply = totalAdditionApply + addCum
 
-        -- Track latest change by sequence
-        if addSeq >= baseSeq and addSeq > lastSequence then
-            -- Prefer additive-multiplier display when additive change is latest
-            if addIsAddMul then
-                local ad = self[playerID].itemAdditions[itemID][statType]
-                local isFirstFrame = ad and ad.firstAddMultFrame == Game():GetFrameCount()
-                if isFirstFrame then
-                    -- First-use: show as x(1+delta)
-                    lastItemCurrentVal = 1.0 + (addLastDelta or 0)
+        -- Track latest change by sequence (check all three: base mult, flat addition, additive mult)
+        local latestSeq = math.max(baseSeq, addSeq, addMulSeq)
+        
+        if latestSeq > lastSequence then
+            if addMulSeq == latestSeq and hasAddMul then
+                -- Additive multiplier is latest
+                local am = self[playerID].itemAdditiveMultipliers[itemID][statType]
+                -- Check if this is the first additive multiplier for this item+stat
+                -- by comparing cumulative with lastDelta (if equal, it's the first one)
+                local isFirstMultiplier = math.abs((am.cumulative or 0) - (am.lastDelta or 0)) < 0.00001
+                if isFirstMultiplier then
+                    -- First additive multiplier: show as x(1+delta)
+                    lastItemCurrentVal = 1.0 + (addMulLastDelta or 0)
                     lastType = "multiplier"
+                    ConchBlessing.printDebug(string.format("  First additive mult for item %s %s: x%.2f", tostring(itemID), statType, lastItemCurrentVal))
                 else
-                    lastItemCurrentVal = addLastDelta
+                    -- Subsequent additive multipliers: pass lastDelta as-is for +/- display
+                    lastItemCurrentVal = addMulLastDelta
                     lastType = "add_mult"
+                    ConchBlessing.printDebug(string.format("  Subsequent additive mult for item %s %s: %+.2f (cumulative=%.2f)", 
+                        tostring(itemID), statType, lastItemCurrentVal, am.cumulative or 0))
                 end
-            else
+                lastItemID = itemID
+                lastDescription = addMulDesc
+                lastSequence = addMulSeq
+            elseif addSeq == latestSeq and addSeq > 0 then
+                -- Flat addition is latest
                 lastItemCurrentVal = addLastDelta
                 lastType = "addition"
+                lastItemID = itemID
+                lastDescription = addDesc
+                lastSequence = addSeq
+            elseif baseSeq == latestSeq then
+                -- Base multiplier is latest
+                lastItemCurrentVal = baseM
+                lastItemID = itemID
+                lastDescription = baseDesc
+                lastSequence = baseSeq
+                lastType = "multiplier"
             end
-            lastItemID = itemID
-            lastDescription = addDesc
-            lastSequence = addSeq
-            ConchBlessing.printDebug(string.format("  Item %s: base=%.2f, addMulDelta=%+0.2f, eff=%.2f, addCum=%+0.2f (last %+0.2f)", tostring(itemID), baseM, addMulDelta, effectiveM, addCum, addLastDelta))
-        elseif baseSeq > lastSequence then
-            lastItemCurrentVal = baseM
-            lastItemID = itemID
-            lastDescription = baseDesc
-            lastSequence = baseSeq
-            lastType = "multiplier"
             ConchBlessing.printDebug(string.format("  Item %s: base=%.2f, addMulDelta=%+0.2f, eff=%.2f, addCum=%+0.2f", tostring(itemID), baseM, addMulDelta, effectiveM, addCum))
         end
     end
@@ -500,8 +543,26 @@ function ConchBlessing.stats.unifiedMultipliers:SaveToSaveManager(player)
                         description = data.description,
                         sequence = data.sequence,
                         lastType = data.lastType,
-                        isAdditiveMultiplier = data.isAdditiveMultiplier,
                         eqMult = data.eqMult
+                    }
+                end
+            end
+        end
+
+        local serialItemAdditiveMultipliers = {}
+        if self[playerID].itemAdditiveMultipliers then
+            for itemID, perItem in pairs(self[playerID].itemAdditiveMultipliers) do
+                local key = serializeItemKey(itemID)
+                serialItemAdditiveMultipliers[key] = {}
+                for statType, data in pairs(perItem) do
+                    serialItemAdditiveMultipliers[key][statType] = {
+                        lastDelta = data.lastDelta,
+                        cumulative = data.cumulative,
+                        description = data.description,
+                        sequence = data.sequence,
+                        lastType = data.lastType,
+                        eqMult = data.eqMult,
+                        firstAddMultFrame = data.firstAddMultFrame
                     }
                 end
             end
@@ -510,10 +571,20 @@ function ConchBlessing.stats.unifiedMultipliers:SaveToSaveManager(player)
         playerSave.unifiedMultipliers = {
             itemMultipliers = serialItemMultipliers,
             itemAdditions = serialItemAdditions,
+            itemAdditiveMultipliers = serialItemAdditiveMultipliers,
             statMultipliers = self[playerID].statMultipliers
         }
         SaveManager.Save()
-        ConchBlessing.printDebug(string.format("Unified Multipliers: Saved to SaveManager for player %d", playerID))
+        
+        -- Debug: print what was saved
+        local multCount = 0
+        for _ in pairs(serialItemMultipliers) do multCount = multCount + 1 end
+        local addCount = 0
+        for _ in pairs(serialItemAdditions) do addCount = addCount + 1 end
+        local addMultCount = 0
+        for _ in pairs(serialItemAdditiveMultipliers) do addMultCount = addMultCount + 1 end
+        ConchBlessing.printDebug(string.format("Unified Multipliers: Saved to SaveManager for player %d (mults:%d, adds:%d, addMults:%d)", 
+            playerID, multCount, addCount, addMultCount))
     end
 end
 
@@ -546,16 +617,55 @@ function ConchBlessing.stats.unifiedMultipliers:LoadFromSaveManager(player)
                 self[playerID].itemAdditions[itemID] = perItem
             end
         end
+        self[playerID].itemAdditiveMultipliers = {}
+        if playerSave.unifiedMultipliers.itemAdditiveMultipliers then
+            for key, perItem in pairs(playerSave.unifiedMultipliers.itemAdditiveMultipliers) do
+                local itemID = deserializeItemKey(key)
+                self[playerID].itemAdditiveMultipliers[itemID] = perItem
+            end
+        end
         self[playerID].statMultipliers = playerSave.unifiedMultipliers.statMultipliers or {}
         
-        ConchBlessing.printDebug(string.format("Unified Multipliers: Loaded from SaveManager for player %d", playerID))
+        -- Debug: print what was loaded
+        local multCount = 0
+        for _ in pairs(self[playerID].itemMultipliers) do multCount = multCount + 1 end
+        local addCount = 0
+        for _ in pairs(self[playerID].itemAdditions) do addCount = addCount + 1 end
+        local addMultCount = 0
+        for _ in pairs(self[playerID].itemAdditiveMultipliers) do addMultCount = addMultCount + 1 end
+        ConchBlessing.printDebug(string.format("Unified Multipliers: Loaded from SaveManager for player %d (mults:%d, adds:%d, addMults:%d)", 
+            playerID, multCount, addCount, addMultCount))
         
         -- Recalculate all stat multipliers to ensure consistency
+        -- Collect all stat types from all sources (multipliers, additions, and additive multipliers)
+        local allStatTypes = {}
         for statType, _ in pairs(self[playerID].statMultipliers) do
-            self:RecalculateStatMultiplier(player, statType)
+            allStatTypes[statType] = true
         end
-            -- mark just-loaded for one-frame forced cache
-            self._justLoaded = true
+        for _, itemData in pairs(self[playerID].itemMultipliers) do
+            for statType, _ in pairs(itemData) do
+                allStatTypes[statType] = true
+            end
+        end
+        for _, itemData in pairs(self[playerID].itemAdditions) do
+            for statType, _ in pairs(itemData) do
+                allStatTypes[statType] = true
+            end
+        end
+        for _, itemData in pairs(self[playerID].itemAdditiveMultipliers) do
+            for statType, _ in pairs(itemData) do
+                allStatTypes[statType] = true
+            end
+        end
+        
+        -- Recalculate for all discovered stat types
+        for statType, _ in pairs(allStatTypes) do
+            self:RecalculateStatMultiplier(player, statType)
+            ConchBlessing.printDebug(string.format("[Unified] Recalculated %s after loading", statType))
+        end
+        
+        -- mark just-loaded for one-frame forced cache
+        self._justLoaded = true
     end
 end
 
@@ -639,20 +749,12 @@ function ConchBlessing.stats.multiplierDisplay:UpdateFromUnifiedSystem(player, s
     end
     
     -- Normalize display:
-    --  - multiplier: show xV
-    --  - add_mult: show +/-delta (multiplierValue-1) for current, store total for /xTotal
+    --  - multiplier: show xV (currentValue is multiplier value)
+    --  - add_mult: show +/-delta (currentValue is already delta from RecalculateStatMultiplier)
     --  - addition: still display as +N but UI later avoids total text
     local storeType = currentType or "multiplier"
     local storeCurrent = currentValue
-    if storeType == "add_mult" then
-        -- Always convert to delta (mult-1) if a multiplier sneaked in
-        -- If currentValue already is a delta (e.g., +0.20 or -0.05), leave as is
-        if currentValue > 1.0 or currentValue < -0.99 then
-            storeCurrent = currentValue - 1.0
-        else
-            storeCurrent = currentValue
-        end
-    end
+    -- For add_mult, currentValue is already the delta (lastDelta), so no conversion needed
     self.playerData[playerID].unifiedData[statType] = {
         current = storeCurrent,
         total = totalMult,
@@ -1593,12 +1695,16 @@ do
                 ConchBlessing.printDebug(string.format("[Unified] Applied Tears SPS addition at cache: %+0.4f", add))
             end
         elseif statType == "Damage" then
-            -- Apply pure multiplier first, then flat additions
-            ConchBlessing.stats.damage.applyMultiplier(player, total, 0.1, false)
+            -- Calculate final damage: (base + additions) × multiplier
             local add = self[playerID] and self[playerID].statMultipliers and self[playerID].statMultipliers[statType] and (self[playerID].statMultipliers[statType].totalAdditions or 0) or 0
-            if add ~= 0 then
-                ConchBlessing.stats.damage.applyAddition(player, add, 0)
-            end
+            local baseDamage = player.Damage
+            local finalDamage = (baseDamage + add) * total
+            
+            ConchBlessing.printDebug(string.format("[Unified] Damage calc: (%.2f base + %.2f add) × %.2fx mult = %.2f final", 
+                baseDamage, add, total, finalDamage))
+            
+            -- Apply final damage directly
+            player.Damage = math.max(0.1, finalDamage)
         elseif statType == "Range" then
             ConchBlessing.stats.range.applyMultiplier(player, total, 0.1, false)
         elseif statType == "Luck" then
