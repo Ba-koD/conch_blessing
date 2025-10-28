@@ -668,8 +668,12 @@ ConchBlessing.ItemData = {
                 "#Gains a Sacred Heart (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_ROBO_BABY, type = "collectible" }] = {
-                kr = "레이저를 발사합니다.",
-                en = "Fires a laser."
+                kr = "테크를 얻습니다.",
+                en = "Gains Technology."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_LIL_BRIMSTONE, type = "collectible" }] = {
+                kr = "혈사를 얻습니다.",
+                en = "Gains Brimstone."
             },
         }
 	},

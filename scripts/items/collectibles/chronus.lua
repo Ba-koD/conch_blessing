@@ -33,9 +33,13 @@ ConchBlessing.chronus.data = ConchBlessing.chronus.data or {
             itemId = CollectibleType.COLLECTIBLE_TECHNOLOGY,
             maxGrants = 0,  -- Unlimited: each Robo Baby grants Technology
         },
-        [CollectibleType.COLLECTIBLE_SERAPHIM] = {  -- Seraphim -> Flying (via cache flag)
-            itemId = CollectibleType.COLLECTIBLE_SACRED_HEART,  -- No item, handled via CACHE_FLYING
-            maxGrants = 1,  -- Only first Seraphim grants flying
+        [CollectibleType.COLLECTIBLE_LIL_BRIMSTONE] = {  -- Lil Brimstone -> Brimstone
+            itemId = CollectibleType.COLLECTIBLE_BRIMSTONE,
+            maxGrants = 0,  -- Unlimited: each Lil Brimstone grants Brimstone
+        },
+        [CollectibleType.COLLECTIBLE_SERAPHIM] = {  -- Seraphim -> Sacred Heart
+            itemId = CollectibleType.COLLECTIBLE_SACRED_HEART,
+            maxGrants = 1,  -- Only first Seraphim grants Sacred Heart
         },
         -- Add more familiar -> item conversions here
         -- [FamiliarID] = { itemId = ItemID, maxGrants = N },
@@ -58,11 +62,7 @@ ConchBlessing.chronus.data = ConchBlessing.chronus.data or {
         end,
         [CollectibleType.COLLECTIBLE_SERAPHIM] = function(player, total, delta)
             ConchBlessing.printDebug(string.format("[Chronus] Seraphim absorbed: total=%d, delta=%d", tonumber(total) or 0, tonumber(delta) or 0))
-            -- Custom logic for Seraphim (can be removed if not needed)
-        end,
-        [CollectibleType.COLLECTIBLE_ROBO_BABY] = function(player, total, delta)
-            ConchBlessing.printDebug(string.format("[Chronus] Robo Baby absorbed: total=%d, delta=%d", tonumber(total) or 0, tonumber(delta) or 0))
-            -- Custom logic for Robo-Baby (can be removed if not needed)
+            ConchBlessing.chronus._ensureSeraphimEffects(player)
         end,
     },
 }
@@ -559,6 +559,21 @@ function ConchBlessing.chronus._ensureSuccubusStack(player)
     end
 end
 
+-- Seraphim: add Fate costume for visual flying effect
+-- Note: Flying ability is handled in onEvaluateCache, Homing+Spectral in onFireTear
+function ConchBlessing.chronus._ensureSeraphimEffects(player)
+    if not player then return end
+    local absorbed = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_SERAPHIM)
+    if absorbed > 0 then
+        -- Add Fate costume for visual flying effect
+        local itemConfig = Isaac.GetItemConfig()
+        local fateCostume = itemConfig:GetCollectible(CollectibleType.COLLECTIBLE_FATE)
+        if fateCostume then
+            player:AddCostume(fateCostume, false)
+        end
+    end
+end
+
 function ConchBlessing.chronus._updateSuccubusAnchors(player)
     local pdata = player and player:GetData() or nil
     local list = pdata and pdata.__chronusSuccubi or nil
@@ -632,7 +647,7 @@ ConchBlessing.chronus.onEvaluateCache = function(_, player, cacheFlag)
         local seraphimCount = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_SERAPHIM)
         if seraphimCount > 0 then
             player.CanFly = true
-            dbg(string.format("[Chronus] Granted flying ability (Seraphim absorbed: %d)", tonumber(seraphimCount) or 0))
+            dbg(string.format("[Chronus] Granted flying ability (Seraphim absorbed: %d)", seraphimCount))
         end
     end
 end
