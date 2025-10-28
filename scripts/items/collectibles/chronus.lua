@@ -41,6 +41,10 @@ ConchBlessing.chronus.data = ConchBlessing.chronus.data or {
             itemId = CollectibleType.COLLECTIBLE_IPECAC,
             maxGrants = 1,  -- Only first Bob's Brain grants Ipecac
         },
+        [CollectibleType.COLLECTIBLE_LIL_MONSTRO] = {  -- Lil Monstro -> Monstro's Lung
+            itemId = CollectibleType.COLLECTIBLE_MONSTROS_LUNG,
+            maxGrants = 1,  -- Only first Lil Monstro grants Monstro's Lung
+        },
         [CollectibleType.COLLECTIBLE_SERAPHIM] = {  -- Seraphim -> Sacred Heart
             itemId = CollectibleType.COLLECTIBLE_SACRED_HEART,
             maxGrants = 1,  -- Only first Seraphim grants Sacred Heart

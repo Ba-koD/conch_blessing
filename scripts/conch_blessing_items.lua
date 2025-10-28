@@ -679,6 +679,10 @@ ConchBlessing.ItemData = {
                 kr = "구토제를 얻습니다.(최초 1회)",
                 en = "Gains Ipecac (first time only)."
             },
+            [{ id = CollectibleType.COLLECTIBLE_LIL_MONSTRO, type = "collectible" }] = {
+                kr = "몬스트로의 폐를 얻습니다.(최초 1회)",
+                en = "Gains Monstro's Lung (first time only)."
+            },
         }
 	},
     APPRAISAL_CERTIFICATE = {
