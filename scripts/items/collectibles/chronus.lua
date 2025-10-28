@@ -37,6 +37,10 @@ ConchBlessing.chronus.data = ConchBlessing.chronus.data or {
             itemId = CollectibleType.COLLECTIBLE_BRIMSTONE,
             maxGrants = 0,  -- Unlimited: each Lil Brimstone grants Brimstone
         },
+        [CollectibleType.COLLECTIBLE_BOBS_BRAIN] = {  -- Bob's Brain -> Ipecac
+            itemId = CollectibleType.COLLECTIBLE_IPECAC,
+            maxGrants = 1,  -- Only first Bob's Brain grants Ipecac
+        },
         [CollectibleType.COLLECTIBLE_SERAPHIM] = {  -- Seraphim -> Sacred Heart
             itemId = CollectibleType.COLLECTIBLE_SACRED_HEART,
             maxGrants = 1,  -- Only first Seraphim grants Sacred Heart

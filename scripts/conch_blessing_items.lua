@@ -675,6 +675,10 @@ ConchBlessing.ItemData = {
                 kr = "혈사를 얻습니다.",
                 en = "Gains Brimstone."
             },
+            [{ id = CollectibleType.COLLECTIBLE_BOBS_BRAIN, type = "collectible" }] = {
+                kr = "구토제를 얻습니다.(최초 1회)",
+                en = "Gains Ipecac (first time only)."
+            },
         }
 	},
     APPRAISAL_CERTIFICATE = {
