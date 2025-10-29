@@ -174,6 +174,14 @@ ConchBlessing.chronus.data = ConchBlessing.chronus.data or {
             itemId = CollectibleType.COLLECTIBLE_9_VOLT,
             maxGrants = 1,  -- Only first one grants 9 Volt
         },
+        [CollectibleType.COLLECTIBLE_YO_LISTEN] = {  -- Yo Listen -> X-Ray Vision
+            itemId = CollectibleType.COLLECTIBLE_XRAY_VISION,
+            maxGrants = 1,  -- Only first one grants X-Ray Vision
+        },
+        [CollectibleType.COLLECTIBLE_DADDY_LONGLEGS] = {  -- Daddy Longlegs -> Holy Light
+            itemId = CollectibleType.COLLECTIBLE_HOLY_LIGHT,
+            maxGrants = 1,  -- Only first one grants Holy Light
+        },
     },
     absorbActions = {
         [CollectibleType.COLLECTIBLE_TWISTED_PAIR] = function(player, total, delta)
@@ -1540,23 +1548,8 @@ ConchBlessing.chronus.onEntityTakeDamage = function(_, entity, amount, flags, so
     end
 end
 
--- POST_ADD_COLLECTIBLE: Vanishing Twin effect - duplicate collectibles when picked up
-ConchBlessing.chronus.onAddCollectible = function(_, player, collectibleType, charge, firstTime, slot, varData)
-    if not player or not firstTime then return end
-    if not player:HasCollectible(CHRONUS_ID) then return end
-    
-    local vanishingTwinCount = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_VANISHING_TWIN)
-    if vanishingTwinCount <= 0 then return end
-    
-    -- Don't duplicate Chronus itself or quest items
-    if collectibleType == CHRONUS_ID then return end
-    local itemConfig = Isaac.GetItemConfig():GetCollectible(collectibleType)
-    if not itemConfig then return end
-    if itemConfig.Type == ItemType.ITEM_ACTIVE and itemConfig.MaxCharges == 0 then return end  -- Quest items
-    
-    -- Duplicate the item for each Vanishing Twin absorbed
-    for i = 1, vanishingTwinCount do
-        player:AddCollectible(collectibleType, charge or 0, false)
-        dbg(string.format("[Chronus] Vanishing Twin duplicated item: ID=%d (count: %d)", collectibleType, vanishingTwinCount))
-    end
-end
+-- POST_ADD_COLLECTIBLE: Vanishing Twin effect - DISABLED (causes conflicts with other mods)
+-- TODO: Re-implement in a safer way later
+-- ConchBlessing.chronus.onAddCollectible = function(_, player, collectibleType, charge, firstTime, slot, varData)
+--     -- Vanishing Twin duplication logic
+-- end

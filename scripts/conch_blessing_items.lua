@@ -647,8 +647,7 @@ ConchBlessing.ItemData = {
 			gameStarted = "chronus.onGameStarted",
             familiarUpdate = "chronus.onFamiliarUpdate",
             fireTear = "chronus.onFireTear",
-            entityTakeDmg = "chronus.onEntityTakeDamage",
-            addCollectible = "chronus.onAddCollectible"
+            entityTakeDmg = "chronus.onEntityTakeDamage"
 		},
 		synergies = {
             [{ id = CollectibleType.COLLECTIBLE_TWISTED_PAIR, type = "collectible" }] = {
@@ -811,10 +810,6 @@ ConchBlessing.ItemData = {
                 kr = "사탕 하트를 얻습니다. (최초 1회)",
                 en = "Gains Candy Heart (first time only)."
             },
-            [{ id = CollectibleType.COLLECTIBLE_VANISHING_TWIN, type = "collectible" }] = {
-                kr = "획득한 모든 패시브 아이템을 복사합니다.",
-                en = "Duplicates all passive items picked up."
-            },
             [{ id = CollectibleType.COLLECTIBLE_SACK_OF_PENNIES, type = "collectible" }] = {
                 kr = "달러를 얻습니다. (최초 1회)",
                 en = "Gains Dollar (first time only)."
@@ -826,6 +821,14 @@ ConchBlessing.ItemData = {
             [{ id = CollectibleType.COLLECTIBLE_CHARGED_BABY, type = "collectible" }] = {
                 kr = "9볼트를 얻습니다. (최초 1회)",
                 en = "Gains 9 Volt (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_YO_LISTEN, type = "collectible" }] = {
+                kr = "엑스레이 투시를 얻습니다. (최초 1회)",
+                en = "Gains X-Ray Vision (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_DADDY_LONGLEGS, type = "collectible" }] = {
+                kr = "신성한 빛을 얻습니다. (최초 1회)",
+                en = "Gains Holy Light (first time only)."
             },
             -- Blacklisted items
             [{ id = CollectibleType.COLLECTIBLE_ONE_UP, type = "collectible" }] = {
