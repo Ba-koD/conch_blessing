@@ -640,7 +640,6 @@ ConchBlessing.ItemData = {
         origin = { id = CollectibleType.COLLECTIBLE_BFFS, type = "collectible" },
 		script = "scripts/items/collectibles/chronus",
 		callbacks = {
-			pickup = "chronus.onPickup",
 			postPlayerUpdate = "chronus.onPlayerUpdate",
             update = "chronus.onPostUpdate",
 			evaluateCache = "chronus.onEvaluateCache",
@@ -685,8 +684,8 @@ ConchBlessing.ItemData = {
                 en = "Gains Monstro's Lung (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_LIL_HAUNT, type = "collectible" }] = {
-                kr = "모든 공격에 공포 효과를 부여합니다.",
-                en = "Grants fear effect to all attacks."
+                kr = "모든 공격에 공포 효과를 3초간 부여합니다.",
+                en = "Grants fear effect to all attacks for 3 seconds."
             },
             [{ id = CollectibleType.COLLECTIBLE_BLOOD_PUPPY, type = "collectible" }] = {
                 kr = "김피를 얻습니다.(최초 1회)",
@@ -695,6 +694,54 @@ ConchBlessing.ItemData = {
             [{ id = CollectibleType.COLLECTIBLE_ANGELIC_PRISM, type = "collectible" }] = {
                 kr = "공격이 4갈래로 갈라져 나갑니다.",
                 en = "Attacks split into 4 beams."
+            },
+            [{id=CollectibleType.COLLECTIBLE_BOT_FLY, type = "collectible" }] = {
+                kr = "잃어버린 렌즈를 얻습니다(최초 1회)",
+                en = "Gains lost contact (first time only)."
+            },
+            [{id=CollectibleType.COLLECTIBLE_FREEZER_BABY, type = "collectible" }] = {
+                kr = "천왕성을 얻습니다(최초 1회)",
+                en = "Gains Uranus (first time only)."
+            },
+            [{id=CollectibleType.COLLECTIBLE_LIL_ABADDON, type = "collectible" }] = {
+                kr = "공허의 구렁텅이를 얻습니다(최초 1회)",
+                en = "Gains Maw of the Void (first time only)."
+            },
+            [{id=CollectibleType.COLLECTIBLE_MULTIDIMENSIONAL_BABY, type = "collectible" }] = {
+                kr = "20/20을 얻습니다.",
+                en = "Gains 20/20."
+            },
+            [{id=CollectibleType.COLLECTIBLE_HARLEQUIN_BABY, type = "collectible" }] = {
+                kr = "법사를 얻습니다.",
+                en = "Gains The Wiz."
+            },
+            [{id=CollectibleType.COLLECTIBLE_DEMON_BABY, type = "collectible" }] = {
+                kr = "{{Tears}} 고정연사 2.0을 얻습니다.",
+                en = "Gains +2.0 {{Tears}}SPS."
+            },
+            [{id=CollectibleType.COLLECTIBLE_LITTLE_GISH, type = "collectible" }] = {
+                kr = "모든 공격에 3초간 느림 효과를 부여합니다.",
+                en = "Grants slow effect to all attacks for 3 seconds."
+            },
+            [{id=CollectibleType.COLLECTIBLE_LIL_LOCK, type = "collectible" }] = {
+                kr = "로키의 뿔을 얻습니다.",
+                en = "Gains Loki's Horns."
+            },
+            [{id=CollectibleType.COLLECTIBLE_GHOST_BABY, type = "collectible" }] = {
+                kr = "연속체를 얻습니다.",
+                en = "Gains Continuum."
+            },
+            [{id=CollectibleType.COLLECTIBLE_ROTTEN_BABY, type = "collectible" }] = {
+                kr = "공격 시 아군 파리를 소환합니다.",
+                en = "Spawns friendly flies on attack."
+            },
+            [{id=CollectibleType.COLLECTIBLE_LITTLE_STEVEN, type = "collectible" }] = {
+                kr = "유도 효과를 얻습니다.",
+                en = "Gains homing effect."
+            },
+            [{id=CollectibleType.COLLECTIBLE_RAINBOW_BABY, type = "collectible" }] = {
+                kr = "과일 케이크를 얻습니다.(최초 1회)",
+                en = "Gains Fruit Cake (first time only)."
             },
         }
 	},
@@ -1250,6 +1297,7 @@ Sagitarius(사수자리)
 
 -- automatically load scripts and callbacks based on ItemData
 local function loadAllItems()
+    Isaac.DebugString("[ConchBlessing] loadAllItems() STARTED")
     ConchBlessing.printDebug("Loading scripts and callbacks based on ItemData...")
     
     -- Load external systems
@@ -1817,7 +1865,9 @@ local function loadAllItems()
     ConchBlessing.printDebug("Scripts loaded successfully!")
 end
 
+Isaac.DebugString("[ConchBlessing] About to call loadAllItems()...")
 loadAllItems()
+Isaac.DebugString("[ConchBlessing] loadAllItems() completed!")
 
 -- Signal that ItemData is fully loaded and ready
 ConchBlessing.ItemDataReady = true
