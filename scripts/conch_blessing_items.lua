@@ -618,7 +618,7 @@ ConchBlessing.ItemData = {
 			kr = {
 				"패밀리어 아이템을 흡수하여 제거합니다.",
 				"#흡수한 패밀리어마다 {{Damage}}데미지가 2.0 증가하고, 지정된 패밀리어는 고유한 효과를 부여합니다.",
-                "#아이템이 사라질때까지 지속됩니다.(사라지면 패밀리어가 돌아옵니다.)",
+                "#아이템이 사라질때까지 지속됩니다. (사라지면 패밀리어가 돌아옵니다.)",
 				"#일부 패밀리어는 제외 목록에 따라 흡수되지 않습니다."
 			},
 			en = {
@@ -635,18 +635,20 @@ ConchBlessing.ItemData = {
 		},
 		quality = 4,
 		tags = "offensive",
-		cache = "damage firedelay speed range luck shotspeed",
+		cache = "damage firedelay",
 		flag = "negative",
         origin = { id = CollectibleType.COLLECTIBLE_BFFS, type = "collectible" },
 		script = "scripts/items/collectibles/chronus",
 		callbacks = {
+			pickup = "chronus.onPickup",
 			postPlayerUpdate = "chronus.onPlayerUpdate",
             update = "chronus.onPostUpdate",
 			evaluateCache = "chronus.onEvaluateCache",
 			gameStarted = "chronus.onGameStarted",
             familiarUpdate = "chronus.onFamiliarUpdate",
             fireTear = "chronus.onFireTear",
-            entityTakeDmg = "chronus.onEntityTakeDamage"
+            entityTakeDmg = "chronus.onEntityTakeDamage",
+            addCollectible = "chronus.onAddCollectible"
 		},
 		synergies = {
             [{ id = CollectibleType.COLLECTIBLE_TWISTED_PAIR, type = "collectible" }] = {
@@ -662,86 +664,197 @@ ConchBlessing.ItemData = {
                 en = "Adds 1 additional 75% damage attack."
             },
             [{ id = CollectibleType.COLLECTIBLE_SERAPHIM, type = "collectible" }] = {
-                kr = "공중, 지형관통 효과를 얻습니다.",
-                "#신성한 심장을 획득합니다.(최초 1회)",
-                en = "Gains flight, and spectral tear effects.",
-                "#Gains a Sacred Heart (first time only)."
+                kr = {
+                    "공중, 지형관통 효과를 얻습니다.",
+                    "신성한 심장을 획득합니다. (최초 1회)"
+                },
+                en = {
+                    "Gains flight, and spectral tear effects.",
+                    "Gains a Sacred Heart (first time only)."
+                }
             },
             [{ id = CollectibleType.COLLECTIBLE_ROBO_BABY, type = "collectible" }] = {
                 kr = "테크를 얻습니다.",
                 en = "Gains Technology."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_BLUE_BABYS_ONLY_FRIEND, type = "collectible" }] = {
+                kr = "루도비코를 얻습니다. (최초 1회)",
+                en = "Gains Ludovico Technique (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_LIL_BRIMSTONE, type = "collectible" }] = {
                 kr = "혈사를 얻습니다.",
                 en = "Gains Brimstone."
             },
             [{ id = CollectibleType.COLLECTIBLE_BOBS_BRAIN, type = "collectible" }] = {
-                kr = "구토제를 얻습니다.(최초 1회)",
+                kr = "구토제를 얻습니다. (최초 1회)",
                 en = "Gains Ipecac (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_LIL_MONSTRO, type = "collectible" }] = {
-                kr = "몬스트로의 폐를 얻습니다.(최초 1회)",
+                kr = "몬스트로의 폐를 얻습니다. (최초 1회)",
                 en = "Gains Monstro's Lung (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_LIL_HAUNT, type = "collectible" }] = {
-                kr = "모든 공격에 공포 효과를 3초간 부여합니다.",
-                en = "Grants fear effect to all attacks for 3 seconds."
+                kr = "모든 공격에 공포 효과를 부여합니다.",
+                en = "Grants fear effect to all attacks."
             },
             [{ id = CollectibleType.COLLECTIBLE_BLOOD_PUPPY, type = "collectible" }] = {
-                kr = "김피를 얻습니다.(최초 1회)",
+                kr = "김피를 얻습니다. (최초 1회)",
                 en = "Gains Gimpy (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_ANGELIC_PRISM, type = "collectible" }] = {
                 kr = "공격이 4갈래로 갈라져 나갑니다.",
                 en = "Attacks split into 4 beams."
             },
-            [{id=CollectibleType.COLLECTIBLE_BOT_FLY, type = "collectible" }] = {
-                kr = "잃어버린 렌즈를 얻습니다(최초 1회)",
-                en = "Gains lost contact (first time only)."
+            [{ id = CollectibleType.COLLECTIBLE_BOT_FLY, type = "collectible" }] = {
+                kr = "잃어버린 렌즈를 얻습니다. (최초 1회)",
+                en = "Gains Lost Contact(first time only)."
             },
-            [{id=CollectibleType.COLLECTIBLE_FREEZER_BABY, type = "collectible" }] = {
-                kr = "천왕성을 얻습니다(최초 1회)",
+            [{ id = CollectibleType.COLLECTIBLE_FREEZER_BABY, type = "collectible" }] = {
+                kr = "천왕성을 얻습니다. (최초 1회)",
                 en = "Gains Uranus (first time only)."
             },
-            [{id=CollectibleType.COLLECTIBLE_LIL_ABADDON, type = "collectible" }] = {
-                kr = "공허의 구렁텅이를 얻습니다(최초 1회)",
+            [{ id = CollectibleType.COLLECTIBLE_LIL_ABADDON, type = "collectible" }] = {
+                kr = "공허의 구렁텅이를 얻습니다. (최초 1회)",
                 en = "Gains Maw of the Void (first time only)."
             },
-            [{id=CollectibleType.COLLECTIBLE_MULTIDIMENSIONAL_BABY, type = "collectible" }] = {
+            [{ id = CollectibleType.COLLECTIBLE_MULTIDIMENSIONAL_BABY, type = "collectible" }] = {
                 kr = "20/20을 얻습니다.",
                 en = "Gains 20/20."
             },
-            [{id=CollectibleType.COLLECTIBLE_HARLEQUIN_BABY, type = "collectible" }] = {
+            [{ id = CollectibleType.COLLECTIBLE_HARLEQUIN_BABY, type = "collectible" }] = {
                 kr = "법사를 얻습니다.",
                 en = "Gains The Wiz."
             },
-            [{id=CollectibleType.COLLECTIBLE_DEMON_BABY, type = "collectible" }] = {
-                kr = "{{Tears}} 고정연사 2.0을 얻습니다.",
-                en = "Gains +2.0 {{Tears}}SPS."
+            [{ id = CollectibleType.COLLECTIBLE_BROTHER_BOBBY, type = "collectible" }] = {
+                kr = "{{Tears}} 고정연사 +2를 얻습니다.",
+                en = "Gains +2 {{Tears}} fire rate."
             },
-            [{id=CollectibleType.COLLECTIBLE_LITTLE_GISH, type = "collectible" }] = {
-                kr = "모든 공격에 3초간 느림 효과를 부여합니다.",
-                en = "Grants slow effect to all attacks for 3 seconds."
+            [{ id = CollectibleType.COLLECTIBLE_DEMON_BABY, type = "collectible" }] = {
+                kr = "표식을 얻습니다. (최초 1회)",
+                en = "Gains Marked (first time only)."
             },
-            [{id=CollectibleType.COLLECTIBLE_LIL_LOCK, type = "collectible" }] = {
+            [{ id = CollectibleType.COLLECTIBLE_LITTLE_GISH, type = "collectible" }] = {
+                kr = "모든 공격에 느림 효과를 부여합니다.",
+                en = "Grants slowing effect to all attacks."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_LIL_LOKI, type = "collectible" }] = {
                 kr = "로키의 뿔을 얻습니다.",
                 en = "Gains Loki's Horns."
             },
-            [{id=CollectibleType.COLLECTIBLE_GHOST_BABY, type = "collectible" }] = {
+            [{ id = CollectibleType.COLLECTIBLE_GHOST_BABY, type = "collectible" }] = {
                 kr = "연속체를 얻습니다.",
                 en = "Gains Continuum."
             },
-            [{id=CollectibleType.COLLECTIBLE_ROTTEN_BABY, type = "collectible" }] = {
-                kr = "공격 시 아군 파리를 소환합니다.",
-                en = "Spawns friendly flies on attack."
+            [{ id = CollectibleType.COLLECTIBLE_ROTTEN_BABY, type = "collectible" }] = {
+                kr = "적에게 데미지를 줄 때마다 아군 파리를 소환합니다.",
+                en = "Spawns friendly flies when dealing damage to enemies."
             },
-            [{id=CollectibleType.COLLECTIBLE_LITTLE_STEVEN, type = "collectible" }] = {
+            [{ id = CollectibleType.COLLECTIBLE_LITTLE_STEVEN, type = "collectible" }] = {
                 kr = "유도 효과를 얻습니다.",
                 en = "Gains homing effect."
             },
-            [{id=CollectibleType.COLLECTIBLE_RAINBOW_BABY, type = "collectible" }] = {
-                kr = "과일 케이크를 얻습니다.(최초 1회)",
+            [{ id = CollectibleType.COLLECTIBLE_RAINBOW_BABY, type = "collectible" }] = {
+                kr = "과일 케이크를 얻습니다. (최초 1회)",
                 en = "Gains Fruit Cake (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_GUARDIAN_ANGEL, type = "collectible" }] = {
+                kr = "이동 속도{{Speed}} +0.3을 얻습니다.",
+                en = "Gains +0.3 {{Speed}} speed."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_CENSER, type = "collectible" }] = {
+                kr = "향로의 오라 효과가 플레이어 위치에 고정됩니다.",
+                en = "Censer's smoke effect is fixed to player position."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_LEECH, type = "collectible" }] = {
+                kr = "흡혈귀의 부적을 얻습니다. (최초 1회)",
+                en = "Gains Charm of the Vampire (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_BOMB_BAG, type = "collectible" }] = {
+                kr = "파이로를 얻습니다. (최초 1회)",
+                en = "Gains Pyro (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_DARK_BUM, type = "collectible" }] = {
+                kr = "주교관을 얻습니다. (최초 1회)",
+                en = "Gains Mitre (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_KEY_BUM, type = "collectible" }] = {
+                kr = "해골 열쇠를 얻습니다. (최초 1회)",
+                en = "Gains Skeleton Key (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_ABEL, type = "collectible" }] = {
+                kr = "거울을 얻습니다. (최초 1회)",
+                en = "Gains My Reflection (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_STAR_OF_BETHLEHEM, type = "collectible" }] = {
+                kr = {
+                    "베들레헴의 별 오라가 플레이어 위치에 고정됩니다.",
+                    "나침반을 얻습니다. (최초 1회)"
+                },
+                en = {
+                    "Star of Bethlehem's aura is fixed to player position.",
+                    "Gains Compass (first time only)."
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_FARTING_BABY, type = "collectible" }] = {
+                kr = "젤리 배를 얻습니다. (최초 1회)",
+                en = "Gains Jelly Belly (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_SAMSONS_CHAINS, type = "collectible" }] = {
+                kr = "천둥 허벅지를 얻습니다. (최초 1회)",
+                en = "Gains Thunder Thighs (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_FINGER, type = "collectible" }] = {
+                kr = "트랙터 빔을 얻습니다. (최초 1회)",
+                en = "Gains Tractor Beam (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_IMMACULATE_CONCEPTION, type = "collectible" }] = {
+                kr = "사탕 하트를 얻습니다. (최초 1회)",
+                en = "Gains Candy Heart (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_VANISHING_TWIN, type = "collectible" }] = {
+                kr = "획득한 모든 패시브 아이템을 복사합니다.",
+                en = "Duplicates all passive items picked up."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_SACK_OF_PENNIES, type = "collectible" }] = {
+                kr = "달러를 얻습니다. (최초 1회)",
+                en = "Gains Dollar (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_SACK_OF_SACKS, type = "collectible" }] = {
+                kr = "자루 머리를 얻습니다. (최초 1회)",
+                en = "Gains Sack Head (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_CHARGED_BABY, type = "collectible" }] = {
+                kr = "9볼트를 얻습니다. (최초 1회)",
+                en = "Gains 9 Volt (first time only)."
+            },
+            -- Blacklisted items
+            [{ id = CollectibleType.COLLECTIBLE_ONE_UP, type = "collectible" }] = {
+                kr = "크로노스에 흡수되지 않습니다.",
+                en = "Cannot be absorbed by Chronus."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_ISAACS_HEART, type = "collectible" }] = {
+                kr = "크로노스에 흡수되지 않습니다.",
+                en = "Cannot be absorbed by Chronus."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_DEAD_CAT, type = "collectible" }] = {
+                kr = "크로노스에 흡수되지 않습니다.",
+                en = "Cannot be absorbed by Chronus."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_KEY_PIECE_1, type = "collectible" }] = {
+                kr = "크로노스에 흡수되지 않습니다.",
+                en = "Cannot be absorbed by Chronus."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_KEY_PIECE_2, type = "collectible" }] = {
+                kr = "크로노스에 흡수되지 않습니다.",
+                en = "Cannot be absorbed by Chronus."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_KNIFE_PIECE_1, type = "collectible" }] = {
+                kr = "크로노스에 흡수되지 않습니다.",
+                en = "Cannot be absorbed by Chronus."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_KNIFE_PIECE_2, type = "collectible" }] = {
+                kr = "크로노스에 흡수되지 않습니다.",
+                en = "Cannot be absorbed by Chronus."
             },
         }
 	},
@@ -1297,7 +1410,6 @@ Sagitarius(사수자리)
 
 -- automatically load scripts and callbacks based on ItemData
 local function loadAllItems()
-    Isaac.DebugString("[ConchBlessing] loadAllItems() STARTED")
     ConchBlessing.printDebug("Loading scripts and callbacks based on ItemData...")
     
     -- Load external systems
@@ -1865,9 +1977,7 @@ local function loadAllItems()
     ConchBlessing.printDebug("Scripts loaded successfully!")
 end
 
-Isaac.DebugString("[ConchBlessing] About to call loadAllItems()...")
 loadAllItems()
-Isaac.DebugString("[ConchBlessing] loadAllItems() completed!")
 
 -- Signal that ItemData is fully loaded and ready
 ConchBlessing.ItemDataReady = true

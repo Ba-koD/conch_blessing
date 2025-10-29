@@ -1,6 +1,6 @@
-ConchBlessing.printDebug("[Chronus] chronus.lua loading...")
+local hiddenItemManager = require("scripts.lib.hidden_item_manager")
+
 ConchBlessing.chronus = ConchBlessing.chronus or {}
-ConchBlessing.printDebug("[Chronus] ConchBlessing.chronus table initialized")
 
 -- STATS: Item stat modifiers (Dark Rock style)
 ConchBlessing.chronus.STATS = {
@@ -14,7 +14,7 @@ ConchBlessing.chronus.data = ConchBlessing.chronus.data or {
     pairOffsetPixels = 2.0,
     laserEyeYOffset = -6,
     anchorDepthOffset = -10,
-    angelicPrismOffset = 15,  -- Pixels ahead in firing direction for Angelic Prism
+    angelicPrismOffset = 18,
     scanIntervalFrames = 1,
     suspendWindowFrames = 120,
     blacklist = {
@@ -31,75 +31,149 @@ ConchBlessing.chronus.data = ConchBlessing.chronus.data or {
     -- maxGrants: 0 = unlimited, 1 = once only, 2 = twice, etc.
     familiarToItemMap = {
         [CollectibleType.COLLECTIBLE_ROBO_BABY] = {  -- Robo-Baby -> Technology
-        itemId = CollectibleType.COLLECTIBLE_TECHNOLOGY,
-        maxGrants = 0,  -- Unlimited: each Robo Baby grants Technology
-    },
-    [CollectibleType.COLLECTIBLE_LIL_BRIMSTONE] = {  -- Lil Brimstone -> Brimstone
-        itemId = CollectibleType.COLLECTIBLE_BRIMSTONE,
-        maxGrants = 0,  -- Unlimited: each Lil Brimstone grants Brimstone
-    },
-    [CollectibleType.COLLECTIBLE_MULTIDIMENSIONAL_BABY] = {  -- Multidimensional Baby -> 20/20
-        itemId = CollectibleType.COLLECTIBLE_20_20,
-        maxGrants = 0,  -- Unlimited: each Multidimensional Baby grants 20/20
-    },
-    [CollectibleType.COLLECTIBLE_HARLEQUIN_BABY] = {  -- Harlequin Baby -> Harlequin
-        itemId = CollectibleType.COLLECTIBLE_THE_WIZ,
-        maxGrants = 0,  -- Unlimited: each Harlequin Baby grants The Wizard
-    },
-    [CollectibleType.COLLECTIBLE_LITTLE_GISH] = {  -- Little Gish -> Slowing effect on hit
-        itemId = nil,  -- No item granted, only slowing effect
-        maxGrants = 0,  -- Unlimited: all Little Gish contribute to slowing effect
-    },
-    [CollectibleType.COLLECTIBLE_LIL_LOCK] = {  -- Lil Lock -> Lil Lock
-        itemId = CollectibleType.COLLECTIBLE_LOKIS_HORNS,
-        maxGrants = 0,  -- Unlimited: each Lil Lock grants Lil Lock
-    },
-    [CollectibleType.COLLECTIBLE_GHOST_BABY] = {  -- Ghost Baby -> Continuum
-        itemId = CollectibleType.COLLECTIBLE_CONTINUUM,
-        maxGrants = 0,  -- Unlimited: each Ghost Baby grants Continuum
-    },
-    [CollectibleType.COLLECTIBLE_ROTTEN_BABY] = {  -- Rotten Baby -> Spawn Blue Fly on attack
-        itemId = nil,  -- No item granted, only Blue Fly spawn
-        maxGrants = 0,  -- Unlimited: all Rotten Baby contribute to Blue Fly spawning
-    },
-    [CollectibleType.COLLECTIBLE_LITTLE_STEVEN] = {  -- Little Steven -> Homing effect
-        itemId = nil,  -- No item granted, only homing effect
-        maxGrants = 0,  -- Unlimited: all Little Steven contribute to homing effect
-    },
-    [CollectibleType.COLLECTIBLE_RAINBOW_BABY] = {  -- Rainbow Baby -> Fruit Cake
-        itemId = CollectibleType.COLLECTIBLE_FRUIT_CAKE,
-        maxGrants = 1,  -- Only first Rainbow Baby grants Fruit Cake
-    },
-    [CollectibleType.COLLECTIBLE_BOBS_BRAIN] = {  -- Bob's Brain -> Ipecac
-    itemId = CollectibleType.COLLECTIBLE_IPECAC,
-    maxGrants = 1,  -- Only first Bob's Brain grants Ipecac
-    },
-    [CollectibleType.COLLECTIBLE_LIL_MONSTRO] = {  -- Lil Monstro -> Monstro's Lung
-    itemId = CollectibleType.COLLECTIBLE_MONSTROS_LUNG,
-    maxGrants = 1,  -- Only first Lil Monstro grants Monstro's Lung
-    },
-    [CollectibleType.COLLECTIBLE_SERAPHIM] = {  -- Seraphim -> Sacred Heart
-    itemId = CollectibleType.COLLECTIBLE_SACRED_HEART,
-    maxGrants = 1,  -- Only first Seraphim grants Sacred Heart
-    },
-    [CollectibleType.COLLECTIBLE_BLOOD_PUPPY] = {  -- Blood Puppy -> Gimpy
-    itemId = CollectibleType.COLLECTIBLE_GIMPY,
-    maxGrants = 1,  -- Only first Blood Puppy grants Gimpy
-    },
-    [CollectibleType.COLLECTIBLE_BOT_FLY] = {  -- Bot Fly -> Lost Contact
-    itemId = CollectibleType.COLLECTIBLE_LOST_CONTACT,
-    maxGrants = 1,  -- Only first Bot Fly grants Lost Contact
-    },
-    [CollectibleType.COLLECTIBLE_FREEZER_BABY] = {  -- Freezer Baby -> Uranus
-        itemId = CollectibleType.COLLECTIBLE_URANUS,
-        maxGrants = 1,  -- Only first Freezer Baby grants Uranus
-    },
-    [CollectibleType.COLLECTIBLE_LIL_ABADDON] = {  -- Lil Abaddon -> Abaddon
-        itemId = CollectibleType.COLLECTIBLE_MAW_OF_THE_VOID,
-        maxGrants = 1,  -- Only first Lil Abaddon grants Maw of the Void
-    },
-        -- Add more familiar -> item conversions here
-        -- [FamiliarID] = { itemId = ItemID, maxGrants = N },
+            itemId = CollectibleType.COLLECTIBLE_TECHNOLOGY,
+            maxGrants = 0,  -- Unlimited: each Robo Baby grants Technology
+        },
+        [CollectibleType.COLLECTIBLE_BLUE_BABYS_ONLY_FRIEND] = {  -- Blue Baby's Only Friend -> Ludovico Technique
+            itemId = CollectibleType.COLLECTIBLE_LUDOVICO_TECHNIQUE,
+            maxGrants = 1,  -- Only first one grants Ludovico Technique
+        },
+        [CollectibleType.COLLECTIBLE_LIL_BRIMSTONE] = {  -- Lil Brimstone -> Brimstone
+            itemId = CollectibleType.COLLECTIBLE_BRIMSTONE,
+            maxGrants = 0,  -- Unlimited: each Lil Brimstone grants Brimstone
+        },
+        [CollectibleType.COLLECTIBLE_BOBS_BRAIN] = {  -- Bob's Brain -> Ipecac
+            itemId = CollectibleType.COLLECTIBLE_IPECAC,
+            maxGrants = 1,  -- Only first Bob's Brain grants Ipecac
+        },
+        [CollectibleType.COLLECTIBLE_LIL_MONSTRO] = {  -- Lil Monstro -> Monstro's Lung
+            itemId = CollectibleType.COLLECTIBLE_MONSTROS_LUNG,
+            maxGrants = 1,  -- Only first Lil Monstro grants Monstro's Lung
+        },
+        [CollectibleType.COLLECTIBLE_SERAPHIM] = {  -- Seraphim -> Sacred Heart
+            itemId = CollectibleType.COLLECTIBLE_SACRED_HEART,
+            maxGrants = 1,  -- Only first Seraphim grants Sacred Heart
+        },
+        [CollectibleType.COLLECTIBLE_BLOOD_PUPPY] = {  -- Blood Puppy -> Gimpy
+            itemId = CollectibleType.COLLECTIBLE_GIMPY,
+            maxGrants = 1,  -- Only first Blood Puppy grants Gimpy
+        },
+        [CollectibleType.COLLECTIBLE_BOT_FLY] = {  -- Bot Fly -> Lost Contact
+            itemId = CollectibleType.COLLECTIBLE_LOST_CONTACT,
+            maxGrants = 1,  -- Only first Bot Fly grants Lost Contact
+        },
+        [CollectibleType.COLLECTIBLE_FREEZER_BABY] = {  -- Freezer Baby -> Uranus
+            itemId = CollectibleType.COLLECTIBLE_URANUS,
+            maxGrants = 1,  -- Only first Freezer Baby grants Uranus
+        },
+        [CollectibleType.COLLECTIBLE_LIL_ABADDON] = {  -- Lil Abaddon -> Maw of the Void
+            itemId = CollectibleType.COLLECTIBLE_MAW_OF_THE_VOID,
+            maxGrants = 1,  -- Only first Lil Abaddon grants Maw of the Void
+        },
+        [CollectibleType.COLLECTIBLE_MULTIDIMENSIONAL_BABY] = {  -- Multidimensional Baby -> 20/20
+            itemId = CollectibleType.COLLECTIBLE_20_20,
+            maxGrants = 0,  -- Unlimited: each one grants 20/20
+        },
+        [CollectibleType.COLLECTIBLE_HARLEQUIN_BABY] = {  -- Harlequin Baby -> The Wiz
+            itemId = CollectibleType.COLLECTIBLE_THE_WIZ,
+            maxGrants = 0,  -- Unlimited: each one grants The Wiz
+        },
+        [CollectibleType.COLLECTIBLE_LIL_LOKI] = {  -- Lil Loki -> Loki's Horns
+            itemId = CollectibleType.COLLECTIBLE_LOKIS_HORNS,
+            maxGrants = 0,  -- Unlimited: each one grants Loki's Horns
+        },
+        [CollectibleType.COLLECTIBLE_GHOST_BABY] = {  -- Ghost Baby -> Continuum
+            itemId = CollectibleType.COLLECTIBLE_CONTINUUM,
+            maxGrants = 0,  -- Unlimited: each one grants Continuum
+        },
+        [CollectibleType.COLLECTIBLE_RAINBOW_BABY] = {  -- Rainbow Baby -> Fruit Cake
+            itemId = CollectibleType.COLLECTIBLE_FRUIT_CAKE,
+            maxGrants = 1,  -- Only first Rainbow Baby grants Fruit Cake
+        },
+        [CollectibleType.COLLECTIBLE_LEECH] = {  -- Leech -> Charm of the Vampire
+            itemId = CollectibleType.COLLECTIBLE_CHARM_VAMPIRE,
+            maxGrants = 1,  -- Only first Leech grants Charm of the Vampire
+        },
+        [CollectibleType.COLLECTIBLE_BOMB_BAG] = {  -- Bomb Bag -> Pyro
+            itemId = CollectibleType.COLLECTIBLE_PYRO,
+            maxGrants = 1,  -- Only first Bomb Bag grants Pyro
+        },
+        [CollectibleType.COLLECTIBLE_DARK_BUM] = {  -- Dark Bum -> Mitre
+            itemId = CollectibleType.COLLECTIBLE_MITRE,
+            maxGrants = 1,  -- Only first Dark Bum grants Mitre
+        },
+        [CollectibleType.COLLECTIBLE_KEY_BUM] = {  -- Key Bum -> Skeleton Key
+            itemId = CollectibleType.COLLECTIBLE_SKELETON_KEY,
+            maxGrants = 1,  -- Only first Key Bum grants Skeleton Key
+        },
+        [CollectibleType.COLLECTIBLE_ABEL] = {  -- Abel -> My Reflection
+            itemId = CollectibleType.COLLECTIBLE_MY_REFLECTION,
+            maxGrants = 1,  -- Only first Abel grants My Reflection
+        },
+        [CollectibleType.COLLECTIBLE_DEMON_BABY] = {  -- Demon Baby -> Marked
+            itemId = CollectibleType.COLLECTIBLE_MARKED,
+            maxGrants = 1,  -- Only first Demon Baby grants Marked
+        },
+        [CollectibleType.COLLECTIBLE_BROTHER_BOBBY] = {  -- Brother Bobby -> Fire Rate +2 (handled in onEvaluateCache)
+            itemId = nil,
+            maxGrants = 0,
+        },
+        [CollectibleType.COLLECTIBLE_LITTLE_GISH] = {  -- Little Gish -> Slowing effect (handled in onEntityTakeDamage)
+            itemId = nil,
+            maxGrants = 0,
+        },
+        [CollectibleType.COLLECTIBLE_ROTTEN_BABY] = {  -- Rotten Baby -> Spawn flies (handled in onEntityTakeDamage)
+            itemId = nil,
+            maxGrants = 0,
+        },
+        [CollectibleType.COLLECTIBLE_LITTLE_STEVEN] = {  -- Little Steven -> Homing (handled in onFireTear)
+            itemId = nil,
+            maxGrants = 0,
+        },
+        [CollectibleType.COLLECTIBLE_GUARDIAN_ANGEL] = {  -- Guardian Angel -> Speed +0.3 (handled in onEvaluateCache)
+            itemId = nil,
+            maxGrants = 0,
+        },
+        [CollectibleType.COLLECTIBLE_CENSER] = {  -- Censer -> Fixed position (handled in absorbActions)
+            itemId = nil,
+            maxGrants = 0,
+        },
+        [CollectibleType.COLLECTIBLE_STAR_OF_BETHLEHEM] = {  -- Star of Bethlehem -> Compass + Fixed position
+            itemId = CollectibleType.COLLECTIBLE_COMPASS,
+            maxGrants = 1,  -- Only first one grants Compass
+        },
+        [CollectibleType.COLLECTIBLE_FARTING_BABY] = {  -- Farting Baby -> Jelly Belly
+            itemId = CollectibleType.COLLECTIBLE_JELLY_BELLY,
+            maxGrants = 1,  -- Only first one grants Jelly Belly
+        },
+        [CollectibleType.COLLECTIBLE_SAMSONS_CHAINS] = {  -- Samson's Chains -> Thunder Thighs
+            itemId = CollectibleType.COLLECTIBLE_THUNDER_THIGHS,
+            maxGrants = 1,  -- Only first one grants Thunder Thighs
+        },
+        [CollectibleType.COLLECTIBLE_FINGER] = {  -- Finger -> Tractor Beam
+            itemId = CollectibleType.COLLECTIBLE_TRACTOR_BEAM,
+            maxGrants = 1,  -- Only first one grants Tractor Beam
+        },
+        [CollectibleType.COLLECTIBLE_IMMACULATE_CONCEPTION] = {  -- Immaculate Conception -> Candy Heart
+            itemId = CollectibleType.COLLECTIBLE_CANDY_HEART,
+            maxGrants = 1,  -- Only first one grants Candy Heart
+        },
+        [CollectibleType.COLLECTIBLE_VANISHING_TWIN] = {  -- Vanishing Twin -> Double collectibles (handled in POST_ADD_COLLECTIBLE)
+            itemId = nil,
+            maxGrants = 0,
+        },
+        [CollectibleType.COLLECTIBLE_SACK_OF_PENNIES] = {  -- Sack of Pennies -> Dollar
+            itemId = CollectibleType.COLLECTIBLE_DOLLAR,
+            maxGrants = 1,  -- Only first one grants Dollar
+        },
+        [CollectibleType.COLLECTIBLE_SACK_OF_SACKS] = {  -- Sack of Sacks -> Sack Head
+            itemId = CollectibleType.COLLECTIBLE_SACK_HEAD,
+            maxGrants = 1,  -- Only first one grants Sack Head
+        },
+        [CollectibleType.COLLECTIBLE_CHARGED_BABY] = {  -- Charged Baby -> 9 Volt
+            itemId = CollectibleType.COLLECTIBLE_9_VOLT,
+            maxGrants = 1,  -- Only first one grants 9 Volt
+        },
     },
     absorbActions = {
         [CollectibleType.COLLECTIBLE_TWISTED_PAIR] = function(player, total, delta)
@@ -125,6 +199,16 @@ ConchBlessing.chronus.data = ConchBlessing.chronus.data or {
         [CollectibleType.COLLECTIBLE_SERAPHIM] = function(player, total, delta)
             ConchBlessing.printDebug(string.format("[Chronus] Seraphim absorbed: total=%d, delta=%d", tonumber(total) or 0, tonumber(delta) or 0))
             ConchBlessing.chronus._ensureSeraphimEffects(player)
+        end,
+        [CollectibleType.COLLECTIBLE_CENSER] = function(player, total, delta)
+            ConchBlessing.printDebug(string.format("[Chronus] Censer absorbed: total=%d, delta=%d", tonumber(total) or 0, tonumber(delta) or 0))
+            ConchBlessing.chronus._ensureCenserStack(player)
+            ConchBlessing.chronus._updateCenserAnchors(player)
+        end,
+        [CollectibleType.COLLECTIBLE_STAR_OF_BETHLEHEM] = function(player, total, delta)
+            ConchBlessing.printDebug(string.format("[Chronus] Star of Bethlehem absorbed: total=%d, delta=%d", tonumber(total) or 0, tonumber(delta) or 0))
+            ConchBlessing.chronus._ensureStarOfBethlehemStack(player)
+            ConchBlessing.chronus._updateStarOfBethlehemAnchors(player)
         end,
     },
 }
@@ -201,17 +285,12 @@ end
 local function countOwnedFamiliarCollectibles(player)
     local counts = {}
     local cfg = Isaac.GetItemConfig()
-    if not cfg then 
-        dbg("[Chronus] ERROR: Could not get ItemConfig")
-        return counts 
-    end
+    if not cfg then return counts end
     for id = 1, CollectibleType.NUM_COLLECTIBLES - 1 do
         local okItem, item = pcall(function() return cfg:GetCollectible(id) end)
         if okItem and item and item.Type == ItemType.ITEM_FAMILIAR then
             local okOwned, owned = pcall(function() return player:GetCollectibleNum(id, true) end)
-            if okOwned and owned and owned > 0 then 
-                counts[id] = owned
-            end
+            if okOwned and owned and owned > 0 then counts[id] = owned end
         end
     end
     return counts
@@ -359,13 +438,11 @@ function ConchBlessing.chronus._finalizeAbsorb(player)
     local um = ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers
     if um and um.QueueCacheUpdate then
         um:QueueCacheUpdate(player, "Damage")
-        um:QueueCacheUpdate(player, "FireDelay")
+        um:QueueCacheUpdate(player, "Tears")
+        um:QueueCacheUpdate(player, "Speed")
         um:QueueCacheUpdate(player, "Flying")
     else
-        -- Update all relevant cache flags for absorbed familiar effects
-        player:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
-        player:AddCacheFlags(CacheFlag.CACHE_FIREDELAY)
-        player:AddCacheFlags(CacheFlag.CACHE_FLYING)
+        player:AddCacheFlags(CacheFlag.CACHE_DAMAGE | CacheFlag.CACHE_FIREDELAY | CacheFlag.CACHE_SPEED | CacheFlag.CACHE_FLYING)
         player:EvaluateItems()
     end
 end
@@ -657,31 +734,60 @@ function ConchBlessing.chronus._ensureAngelicPrismStack(player)
     if not player then return end
     
     local absorbed = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_ANGELIC_PRISM)
-    local target = math.max(0, absorbed)
+    -- Always spawn exactly 4 prisms (one in each cardinal direction) if any Angelic Prism is absorbed
+    local target = (absorbed > 0) and 4 or 0
     
     local pdata = player:GetData()
     pdata.__chronusAngelicPrisms = pdata.__chronusAngelicPrisms or {}
+    
+    -- Remove original Angelic Prism familiars in the room (not managed by Chronus)
+    if absorbed > 0 then
+        local room = Game():GetRoom()
+        for _, entity in ipairs(Isaac.GetRoomEntities()) do
+            local fam = entity:ToFamiliar()
+            if fam and fam.Variant == FamiliarVariant.ANGELIC_PRISM then
+                local fd = fam:GetData()
+                -- Remove if NOT managed by Chronus
+                if not (fd and fd.__chronusAngelicPrism) then
+                    fam:Remove()
+                end
+            end
+        end
+    end
 
+    -- Keep existing prisms
     local kept = {}
     for _, f in ipairs(pdata.__chronusAngelicPrisms) do
         if f and f:Exists() and f:ToFamiliar() then
             local fd = f:GetData()
-            if fd and fd.__chronusAngelicPrism then table.insert(kept, f) end
+            if fd and fd.__chronusAngelicPrism then 
+                table.insert(kept, f)
+            end
         end
     end
     pdata.__chronusAngelicPrisms = kept
+    
+    -- Remove excess prisms if we have more than target
+    while #pdata.__chronusAngelicPrisms > target do
+        local fam = table.remove(pdata.__chronusAngelicPrisms)
+        if fam and fam:Exists() then
+            fam:Remove()
+        end
+    end
 
+    -- Spawn missing prisms only if we don't have enough
     while #pdata.__chronusAngelicPrisms < target do
-        dbg(string.format("Spawning Angelic Prism %d/%d", #pdata.__chronusAngelicPrisms + 1, target))
+        local index = #pdata.__chronusAngelicPrisms
+        local directionIndex = index  -- 0, 1, 2, 3 for 0°, 90°, 180°, 270°
         local fam = spawnInvisibleAngelicPrism(player)
         if not fam then 
-            dbg("Failed to spawn Angelic Prism, breaking loop")
             break 
         end
+        -- Store direction index in familiar data
+        local fd = fam:GetData()
+        fd.__chronusPrismDirection = directionIndex
         table.insert(pdata.__chronusAngelicPrisms, fam)
     end
-    
-    dbg(string.format("[Chronus] Ensured %d Angelic Prisms (target: %d)", #pdata.__chronusAngelicPrisms, target))
 end
 
 function ConchBlessing.chronus._updateAngelicPrismAnchors(player)
@@ -691,7 +797,7 @@ function ConchBlessing.chronus._updateAngelicPrismAnchors(player)
     local list = pdata.__chronusAngelicPrisms
     if not list or #list == 0 then return end
     
-    -- TEST: Only GetAimDirection (no GetShootingInput, no frame check)
+    -- Get aim direction
     local dir = player:GetAimDirection()
     if dir and dir:Length() > 0 then
         pdata.__chronusLastFireDir = dir:Normalized()
@@ -699,18 +805,30 @@ function ConchBlessing.chronus._updateAngelicPrismAnchors(player)
     end
     
     -- Use last firing direction or default to right
-    local finalDir = Vector(1, 0)
+    local baseDir = Vector(1, 0)
     if pdata.__chronusLastFireDir and pdata.__chronusLastFireDir:Length() > 0 then
-        finalDir = pdata.__chronusLastFireDir
+        baseDir = pdata.__chronusLastFireDir
     end
     
-    -- Place ahead in the firing direction (offset from data.angelicPrismOffset)
-    local forwardOffset = tonumber(ConchBlessing.chronus.data.angelicPrismOffset) or 20
+    -- Place prisms in 4 directions (0°, 90°, 180°, 270°) relative to aim direction
+    local forwardOffset = tonumber(ConchBlessing.chronus.data.angelicPrismOffset) or 15
     local depth = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
     
     for _, fam in ipairs(list) do
         if fam and fam:Exists() then
-            fam.Position = player.Position + (finalDir * forwardOffset)
+            local fd = fam:GetData()
+            local directionIndex = (fd and fd.__chronusPrismDirection) or 0
+            
+            -- Calculate rotation angle: 0° = 0, 90° = π/2, 180° = π, 270° = 3π/2
+            local angle = (directionIndex * math.pi / 2)
+            
+            -- Rotate base direction by angle
+            local rotatedDir = Vector(
+                baseDir.X * math.cos(angle) - baseDir.Y * math.sin(angle),
+                baseDir.X * math.sin(angle) + baseDir.Y * math.cos(angle)
+            )
+            
+            fam.Position = player.Position + (rotatedDir * forwardOffset)
             fam.DepthOffset = depth
             fam.Velocity = Vector.Zero
         end
@@ -743,72 +861,163 @@ function ConchBlessing.chronus._updateSuccubusAnchors(player)
     end
 end
 
-function ConchBlessing.chronus.onPlayerUpdate(_)
-    ConchBlessing.printDebug("[Chronus] onPlayerUpdate called! Frame: " .. tostring(Game():GetFrameCount()))
+--- Censer: spawn invisible Censer fixed to player position
+local function spawnInvisibleCenser(player)
+    local ent = Isaac.Spawn(EntityType.ENTITY_FAMILIAR, FamiliarVariant.CENSER, 0, player.Position, Vector.Zero, player)
+    local fam = ent and ent:ToFamiliar() or nil
+    if not fam then return nil end
+    fam:ClearEntityFlags(EntityFlag.FLAG_APPEAR)
+    local spr = fam:GetSprite()
+    local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
+    pcall(function() spr:ReplaceSpritesheet(0, path) end)
+    pcall(function() spr:LoadGraphics() end)
+    fam.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
+    fam:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
+    fam.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
+    fam.GridCollisionClass = GridCollisionClass.COLLISION_NONE
+    local fd = fam:GetData()
+    fd.__chronusCenser = true
+    return fam
+end
+
+function ConchBlessing.chronus._ensureCenserStack(player)
+    if not player then return end
+    local absorbed = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_CENSER)
+    local target = math.max(0, absorbed)
+    local pdata = player:GetData()
+    pdata.__chronusCensers = pdata.__chronusCensers or {}
+
+    local kept = {}
+    for _, f in ipairs(pdata.__chronusCensers) do
+        if f and f:Exists() and f:ToFamiliar() then
+            local fd = f:GetData()
+            if fd and fd.__chronusCenser then table.insert(kept, f) end
+        end
+    end
+    pdata.__chronusCensers = kept
+
+    while #pdata.__chronusCensers < target do
+        local fam = spawnInvisibleCenser(player)
+        if not fam then break end
+        table.insert(pdata.__chronusCensers, fam)
+    end
+    dbg(string.format("[Chronus] Ensured %d Censers (target: %d)", #pdata.__chronusCensers, target))
+end
+
+function ConchBlessing.chronus._updateCenserAnchors(player)
+    local pdata = player and player:GetData() or nil
+    local list = pdata and pdata.__chronusCensers or nil
+    if not list or #list == 0 then return end
+    local depth = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
+    for _, fam in ipairs(list) do
+        if fam and fam:Exists() then
+            fam.Position = player.Position
+            fam.DepthOffset = depth
+            fam.Velocity = Vector.Zero
+        end
+    end
+end
+
+--- Star of Bethlehem: spawn invisible Star of Bethlehem fixed to player position
+local function spawnInvisibleStarOfBethlehem(player)
+    local ent = Isaac.Spawn(EntityType.ENTITY_FAMILIAR, FamiliarVariant.STAR_OF_BETHLEHEM, 0, player.Position, Vector.Zero, player)
+    local fam = ent and ent:ToFamiliar() or nil
+    if not fam then return nil end
+    fam:ClearEntityFlags(EntityFlag.FLAG_APPEAR)
+    local spr = fam:GetSprite()
+    local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
+    pcall(function() spr:ReplaceSpritesheet(0, path) end)
+    pcall(function() spr:LoadGraphics() end)
+    fam.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
+    fam:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
+    fam.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
+    fam.GridCollisionClass = GridCollisionClass.COLLISION_NONE
+    local fd = fam:GetData()
+    fd.__chronusStarOfBethlehem = true
+    return fam
+end
+
+function ConchBlessing.chronus._ensureStarOfBethlehemStack(player)
+    if not player then return end
+    local absorbed = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_STAR_OF_BETHLEHEM)
+    local target = math.max(0, absorbed)
+    local pdata = player:GetData()
+    pdata.__chronusStarsOfBethlehem = pdata.__chronusStarsOfBethlehem or {}
+
+    local kept = {}
+    for _, f in ipairs(pdata.__chronusStarsOfBethlehem) do
+        if f and f:Exists() and f:ToFamiliar() then
+            local fd = f:GetData()
+            if fd and fd.__chronusStarOfBethlehem then table.insert(kept, f) end
+        end
+    end
+    pdata.__chronusStarsOfBethlehem = kept
+
+    while #pdata.__chronusStarsOfBethlehem < target do
+        local fam = spawnInvisibleStarOfBethlehem(player)
+        if not fam then break end
+        table.insert(pdata.__chronusStarsOfBethlehem, fam)
+    end
+    dbg(string.format("[Chronus] Ensured %d Stars of Bethlehem (target: %d)", #pdata.__chronusStarsOfBethlehem, target))
+end
+
+function ConchBlessing.chronus._updateStarOfBethlehemAnchors(player)
+    local pdata = player and player:GetData() or nil
+    local list = pdata and pdata.__chronusStarsOfBethlehem or nil
+    if not list or #list == 0 then return end
+    local depth = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
+    for _, fam in ipairs(list) do
+        if fam and fam:Exists() then
+            fam.Position = player.Position
+            fam.DepthOffset = depth
+            fam.Velocity = Vector.Zero
+        end
+    end
+end
+
+ConchBlessing.chronus.onPickup = function(_, player, collectibleType)
+    if collectibleType ~= CHRONUS_ID then return end
+    dbg("Picked up - initial sweep")
+    local changed = ConchBlessing.chronus._detectAndAbsorb(player)
+    if changed then ConchBlessing.chronus._finalizeAbsorb(player) end
+end
+
+ConchBlessing.chronus.onPlayerUpdate = function(_)
     local frame = Game():GetFrameCount()
     local n = Game():GetNumPlayers()
     for i = 0, n - 1 do
         local player = Isaac.GetPlayer(i)
         if player then
             local pdata = player:GetData()
-            local hasChronus = player:HasCollectible(CHRONUS_ID)
-            local hadChronus = pdata.__chronusHadLastFrame or false
-            
-            if hasChronus then
-                -- Check if just picked up Chronus
-                if not hadChronus then
-                    ConchBlessing.printDebug("[Chronus] Chronus detected! Starting initial familiar sweep...")
-                    pdata.__chronusHadLastFrame = true
-                    
-                    -- Initial sweep when first getting Chronus
-                    local rs = getRunSave(player)
-                    if rs then
-                        local ok, changed = pcall(function() return ConchBlessing.chronus._detectAndAbsorb(player) end)
-                        if ok and changed then 
-                            ConchBlessing.printDebug("[Chronus] Initial sweep: familiars absorbed!")
-                            ConchBlessing.chronus._finalizeAbsorb(player)
-                        else
-                            ConchBlessing.printDebug("[Chronus] Initial sweep: no familiars found")
-                        end
-                    else
-                        ConchBlessing.printDebug("[Chronus] ERROR: SaveManager not ready")
-                    end
-                end
-                
+            if player:HasCollectible(CHRONUS_ID) then
                 local hasBlacklisted = ownsAnyBlacklisted(player)
-                
-                -- Suspend if blacklisted item detected
                 if hasBlacklisted then
-                    pdata.__chronusSuspendUntil = frame
+                    pdata.__chronusSuspendUntil = frame -- immediate expire; preserve visuals
                 end
-                
-                -- Check for absorption every frame (no interval)
-                if not hasBlacklisted then
-                    local ok, changed = pcall(function() return ConchBlessing.chronus._detectAndAbsorb(player) end)
-                    if ok and changed then 
-                        ConchBlessing.chronus._finalizeAbsorb(player) 
+                pdata.__chronusNextScan = pdata.__chronusNextScan or 0
+                local interval = tonumber(ConchBlessing.chronus.data.scanIntervalFrames) or 15
+                if frame >= pdata.__chronusNextScan then
+                    pdata.__chronusNextScan = frame + interval
+                    if not hasBlacklisted then
+                        local ok, changed = pcall(function() return ConchBlessing.chronus._detectAndAbsorb(player) end)
+                        if ok and changed then ConchBlessing.chronus._finalizeAbsorb(player) end
                     end
                 end
 
                 -- Track converted item removal (all familiar->item conversions)
                 ConchBlessing.chronus._trackConvertedItemRemoval(player)
                 
-                -- Execute absorbActions for all absorbed familiars
-                local actions = ConchBlessing.chronus.data.absorbActions or {}
-                for famId, actionFunc in pairs(actions) do
-                    local count = ConchBlessing.chronus._getAbsorbedCount(player, famId)
-                    if count > 0 and type(actionFunc) == "function" then
-                        pcall(actionFunc, player, count, 0)
+                -- Auto-execute absorbActions for all absorbed familiars
+                local absorbActions = ConchBlessing.chronus.data.absorbActions
+                if absorbActions then
+                    for familiarId, action in pairs(absorbActions) do
+                        local count = ConchBlessing.chronus._getAbsorbedCount(player, familiarId)
+                        if count > 0 and type(action) == "function" then
+                            action(player, count, 0)
+                        end
                     end
                 end
             else
-                -- Lost Chronus
-                if hadChronus then
-                    ConchBlessing.printDebug("[Chronus] Chronus lost! Reverting all effects...")
-                    pdata.__chronusHadLastFrame = false
-                end
-                
-                -- Revert when Chronus is not held (every frame check)
                 ConchBlessing.chronus._revertAll(player)
             end
         end
@@ -830,14 +1039,27 @@ ConchBlessing.chronus.onEvaluateCache = function(_, player, cacheFlag)
         end
     end
     
-    -- Grant fire rate bonus when Demon Baby is absorbed
+    -- Increase fire rate when Brother Bobby is absorbed
     if cacheFlag == CacheFlag.CACHE_FIREDELAY then
-        local demonBabyCount = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_DEMON_BABY)
-        if demonBabyCount > 0 then
-            -- Each Demon Baby grants +2 fire rate (lower MaxFireDelay = faster shooting)
-            local fireRateBonus = demonBabyCount * 2
-            player.MaxFireDelay = math.max(1, player.MaxFireDelay - fireRateBonus)
-            dbg(string.format("[Chronus] Applied fire rate bonus: -%d (Demon Baby absorbed: %d)", fireRateBonus, demonBabyCount))
+        local brotherBobbyCount = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_BROTHER_BOBBY)
+        if brotherBobbyCount > 0 then
+            local bonusSPS = 2 * brotherBobbyCount
+            if ConchBlessing.stats and ConchBlessing.stats.tears and ConchBlessing.stats.tears.applyAddition then
+                ConchBlessing.stats.tears.applyAddition(player, bonusSPS, nil)
+            end
+            dbg(string.format("[Chronus] Brother Bobby fire rate bonus: +%.2f SPS (count: %d)", bonusSPS, brotherBobbyCount))
+        end
+    end
+    
+    -- Increase speed when Guardian Angel is absorbed
+    if cacheFlag == CacheFlag.CACHE_SPEED then
+        local guardianAngelCount = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_GUARDIAN_ANGEL)
+        if guardianAngelCount > 0 then
+            local bonusSpeed = 0.3 * guardianAngelCount
+            if ConchBlessing.stats and ConchBlessing.stats.speed and ConchBlessing.stats.speed.applyAddition then
+                ConchBlessing.stats.speed.applyAddition(player, bonusSpeed, nil)
+            end
+            dbg(string.format("[Chronus] Guardian Angel speed bonus: +%.2f (count: %d)", bonusSpeed, guardianAngelCount))
         end
     end
 end
@@ -941,6 +1163,20 @@ function ConchBlessing.chronus._revertAll(player)
                 if f and f:Exists() then f:Remove() end
             end
             pdata.__chronusSuccubi = nil
+        end
+        -- Remove Censers
+        if pdata.__chronusCensers then
+            for _, f in ipairs(pdata.__chronusCensers) do
+                if f and f:Exists() then f:Remove() end
+            end
+            pdata.__chronusCensers = nil
+        end
+        -- Remove Stars of Bethlehem
+        if pdata.__chronusStarsOfBethlehem then
+            for _, f in ipairs(pdata.__chronusStarsOfBethlehem) do
+                if f and f:Exists() then f:Remove() end
+            end
+            pdata.__chronusStarsOfBethlehem = nil
         end
         -- Remove Angelic Prisms
         if pdata.__chronusAngelicPrisms then
@@ -1119,10 +1355,57 @@ ConchBlessing.chronus.onFamiliarUpdate = function(_, fam)
             f.Velocity = Vector.Zero
             f.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
         end
+        f.ShadowSize = 0
         return
     end
     
-    -- Handle Angelic Prism (positioned ahead in firing direction)
+    -- Handle Censer (fixed to player position)
+    if f.Variant == FamiliarVariant.CENSER and fd.__chronusCenser then
+        if not fd.__chronusCenserSpr then
+            local spr = f:GetSprite()
+            local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
+            pcall(function() spr:ReplaceSpritesheet(0, path) end)
+            pcall(function() spr:LoadGraphics() end)
+            fd.__chronusCenserSpr = true
+            dbg("Censer sprite initialized (fixed position)")
+        end
+        f:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
+        f.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
+        f.GridCollisionClass = GridCollisionClass.COLLISION_NONE
+        local player = f.Player
+        if player then
+            f.Position = player.Position
+            f.Velocity = Vector.Zero
+            f.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
+        end
+        f.ShadowSize = 0
+        return
+    end
+    
+    -- Handle Star of Bethlehem (fixed to player position)
+    if f.Variant == FamiliarVariant.STAR_OF_BETHLEHEM and fd.__chronusStarOfBethlehem then
+        if not fd.__chronusStarOfBethlehemSpr then
+            local spr = f:GetSprite()
+            local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
+            pcall(function() spr:ReplaceSpritesheet(0, path) end)
+            pcall(function() spr:LoadGraphics() end)
+            fd.__chronusStarOfBethlehemSpr = true
+            dbg("Star of Bethlehem sprite initialized (fixed position)")
+        end
+        f:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
+        f.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
+        f.GridCollisionClass = GridCollisionClass.COLLISION_NONE
+        local player = f.Player
+        if player then
+            f.Position = player.Position
+            f.Velocity = Vector.Zero
+            f.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
+        end
+        f.ShadowSize = 0
+        return
+    end
+    
+    -- Handle Angelic Prism (positioned in 4 directions)
     if f.Variant == FamiliarVariant.ANGELIC_PRISM and fd.__chronusAngelicPrism then
         if not fd.__chronusAngelicPrismSpr then
             local spr = f:GetSprite()
@@ -1130,30 +1413,42 @@ ConchBlessing.chronus.onFamiliarUpdate = function(_, fam)
             pcall(function() spr:ReplaceSpritesheet(0, path) end)
             pcall(function() spr:LoadGraphics() end)
             fd.__chronusAngelicPrismSpr = true
-            dbg("Angelic Prism sprite initialized (TEST: GetAimDirection only)")
         end
         f:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
         f.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
         f.GridCollisionClass = GridCollisionClass.COLLISION_NONE
+        
         local player = f.Player
         if player then
             local pdata = player:GetData()
             if pdata then
-                -- TEST: Only GetAimDirection (no GetShootingInput, no frame check)
+                -- Get aim direction
                 local dir = player:GetAimDirection()
                 if dir and dir:Length() > 0 then
                     pdata.__chronusLastFireDir = dir:Normalized()
                 end
                 
                 -- Use last firing direction or default to right
-                local finalDir = Vector(1, 0)
+                local baseDir = Vector(1, 0)
                 if pdata.__chronusLastFireDir and pdata.__chronusLastFireDir:Length() > 0 then
-                    finalDir = pdata.__chronusLastFireDir
+                    baseDir = pdata.__chronusLastFireDir
                 end
                 
-                -- Place ahead in the firing direction (offset from data.angelicPrismOffset)
-                local forwardOffset = tonumber(ConchBlessing.chronus.data.angelicPrismOffset)
-                f.Position = player.Position + (finalDir * forwardOffset)
+                -- Get direction index for this prism
+                local directionIndex = (fd.__chronusPrismDirection) or 0
+                
+                -- Calculate rotation angle: 0° = 0, 90° = π/2, 180° = π, 270° = 3π/2
+                local angle = (directionIndex * math.pi / 2)
+                
+                -- Rotate base direction by angle
+                local rotatedDir = Vector(
+                    baseDir.X * math.cos(angle) - baseDir.Y * math.sin(angle),
+                    baseDir.X * math.sin(angle) + baseDir.Y * math.cos(angle)
+                )
+                
+                -- Place in rotated direction
+                local forwardOffset = tonumber(ConchBlessing.chronus.data.angelicPrismOffset) or 15
+                f.Position = player.Position + (rotatedDir * forwardOffset)
                 f.Velocity = Vector.Zero
                 f.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
             end
@@ -1175,23 +1470,16 @@ ConchBlessing.chronus.onFireTear = function(_, tear)
         pdata.__chronusLastTearFrame = Game():GetFrameCount()
     end
     
+    -- Seraphim: homing + spectral
     local seraphimCount = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_SERAPHIM)
     if seraphimCount > 0 then
         tear:AddTearFlags(TearFlags.TEAR_HOMING | TearFlags.TEAR_SPECTRAL)
     end
     
-    -- Add homing effect from Little Steven
+    -- Little Steven: homing
     local littleStevenCount = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_LITTLE_STEVEN)
     if littleStevenCount > 0 then
         tear:AddTearFlags(TearFlags.TEAR_HOMING)
-    end
-    
-    -- Spawn Blue Fly for each Rotten Baby absorbed
-    local rottenBabyCount = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_ROTTEN_BABY)
-    if rottenBabyCount > 0 then
-        for i = 1, rottenBabyCount do
-            player:AddBlueFlies(1, player.Position, nil)
-        end
     end
 end
 
@@ -1219,7 +1507,7 @@ ConchBlessing.chronus.onEntityTakeDamage = function(_, entity, amount, flags, so
     
     if not player or not player:HasCollectible(CHRONUS_ID) then return end
     
-    -- Apply fear effect from Lil Haunt
+    -- Lil Haunt: fear effect
     local lilHauntCount = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_LIL_HAUNT)
     if lilHauntCount > 0 then
         if npc:IsVulnerableEnemy() and npc:IsActiveEnemy() then
@@ -1229,17 +1517,46 @@ ConchBlessing.chronus.onEntityTakeDamage = function(_, entity, amount, flags, so
         end
     end
     
-    -- Apply slowing effect from Little Gish
+    -- Little Gish: slowing effect
     local littleGishCount = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_LITTLE_GISH)
     if littleGishCount > 0 then
         if npc:IsVulnerableEnemy() and npc:IsActiveEnemy() then
             if not npc:HasEntityFlags(EntityFlag.FLAG_FRIENDLY) and not npc:HasEntityFlags(EntityFlag.FLAG_CHARM) then
-                npc:AddSlowing(EntityRef(player), 90, 0.5, Color(0.5, 0.5, 0.5, 1.0, 0, 0, 0))
+                npc:AddSlowing(EntityRef(player), 90, 0.5, Color(0.5, 0.5, 0.5, 1, 0, 0, 0))
+            end
+        end
+    end
+    
+    -- Rotten Baby: spawn blue flies on damage
+    local rottenBabyCount = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_ROTTEN_BABY)
+    if rottenBabyCount > 0 then
+        if npc:IsVulnerableEnemy() and npc:IsActiveEnemy() then
+            if not npc:HasEntityFlags(EntityFlag.FLAG_FRIENDLY) and not npc:HasEntityFlags(EntityFlag.FLAG_CHARM) then
+                for i = 1, rottenBabyCount do
+                    player:AddBlueFlies(1, player.Position, nil)
+                end
             end
         end
     end
 end
 
-ConchBlessing.printDebug("[Chronus] chronus.lua loaded successfully!")
-ConchBlessing.printDebug("[Chronus] onPlayerUpdate function exists: " .. tostring(ConchBlessing.chronus.onPlayerUpdate ~= nil))
-ConchBlessing.printDebug("[Chronus] onPlayerUpdate type: " .. tostring(type(ConchBlessing.chronus.onPlayerUpdate)))
+-- POST_ADD_COLLECTIBLE: Vanishing Twin effect - duplicate collectibles when picked up
+ConchBlessing.chronus.onAddCollectible = function(_, player, collectibleType, charge, firstTime, slot, varData)
+    if not player or not firstTime then return end
+    if not player:HasCollectible(CHRONUS_ID) then return end
+    
+    local vanishingTwinCount = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_VANISHING_TWIN)
+    if vanishingTwinCount <= 0 then return end
+    
+    -- Don't duplicate Chronus itself or quest items
+    if collectibleType == CHRONUS_ID then return end
+    local itemConfig = Isaac.GetItemConfig():GetCollectible(collectibleType)
+    if not itemConfig then return end
+    if itemConfig.Type == ItemType.ITEM_ACTIVE and itemConfig.MaxCharges == 0 then return end  -- Quest items
+    
+    -- Duplicate the item for each Vanishing Twin absorbed
+    for i = 1, vanishingTwinCount do
+        player:AddCollectible(collectibleType, charge or 0, false)
+        dbg(string.format("[Chronus] Vanishing Twin duplicated item: ID=%d (count: %d)", collectibleType, vanishingTwinCount))
+    end
+end
