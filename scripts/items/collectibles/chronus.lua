@@ -49,6 +49,10 @@ ConchBlessing.chronus.data = ConchBlessing.chronus.data or {
             itemId = CollectibleType.COLLECTIBLE_SACRED_HEART,
             maxGrants = 1,  -- Only first Seraphim grants Sacred Heart
         },
+        [CollectibleType.COLLECTIBLE_BLOOD_PUPPY] = {  -- Blood Puppy -> Gimpy
+            itemId = CollectibleType.COLLECTIBLE_GIMPY,
+            maxGrants = 1,  -- Only first Blood Puppy grants Gimpy
+        },
         -- Add more familiar -> item conversions here
         -- [FamiliarID] = { itemId = ItemID, maxGrants = N },
     },
@@ -67,6 +71,11 @@ ConchBlessing.chronus.data = ConchBlessing.chronus.data or {
             ConchBlessing.printDebug(string.format("[Chronus] Succubus absorbed: total=%d, delta=%d", tonumber(total) or 0, tonumber(delta) or 0))
             ConchBlessing.chronus._ensureSuccubusStack(player)
             ConchBlessing.chronus._updateSuccubusAnchors(player)
+        end,
+        [CollectibleType.COLLECTIBLE_ANGELIC_PRISM] = function(player, total, delta)
+            ConchBlessing.printDebug(string.format("[Chronus] Angelic Prism absorbed: total=%d, delta=%d", tonumber(total) or 0, tonumber(delta) or 0))
+            ConchBlessing.chronus._ensureAngelicPrismStack(player)
+            ConchBlessing.chronus._updateAngelicPrismAnchors(player)
         end,
         [CollectibleType.COLLECTIBLE_SERAPHIM] = function(player, total, delta)
             ConchBlessing.printDebug(string.format("[Chronus] Seraphim absorbed: total=%d, delta=%d", tonumber(total) or 0, tonumber(delta) or 0))
@@ -565,6 +574,94 @@ function ConchBlessing.chronus._ensureSuccubusStack(player)
     end
 end
 
+-- Angelic Prism: spawn invisible Angelic Prism positioned ahead in firing direction (1 per item)
+local function spawnInvisibleAngelicPrism(player)
+    dbg("Spawning Angelic Prism (positioned in firing direction, invisible)")
+    local ent = Isaac.Spawn(EntityType.ENTITY_FAMILIAR, FamiliarVariant.ANGELIC_PRISM, 0, player.Position, Vector.Zero, player)
+    local fam = ent and ent:ToFamiliar() or nil
+    if not fam then 
+        dbg("Failed to spawn Angelic Prism entity")
+        return nil 
+    end
+    fam:ClearEntityFlags(EntityFlag.FLAG_APPEAR)
+    local spr = fam:GetSprite()
+    local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
+    pcall(function() spr:ReplaceSpritesheet(0, path) end)
+    pcall(function() spr:LoadGraphics() end)
+    fam.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
+    fam:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
+    fam.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
+    fam.GridCollisionClass = GridCollisionClass.COLLISION_NONE
+    local fd = fam:GetData()
+    fd.__chronusAngelicPrism = true
+    dbg(string.format("Angelic Prism spawned at position (%f, %f)", fam.Position.X, fam.Position.Y))
+    return fam
+end
+
+function ConchBlessing.chronus._ensureAngelicPrismStack(player)
+    if not player then return end
+    
+    local absorbed = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_ANGELIC_PRISM)
+    local target = math.max(0, absorbed)
+    
+    local pdata = player:GetData()
+    pdata.__chronusAngelicPrisms = pdata.__chronusAngelicPrisms or {}
+
+    local kept = {}
+    for _, f in ipairs(pdata.__chronusAngelicPrisms) do
+        if f and f:Exists() and f:ToFamiliar() then
+            local fd = f:GetData()
+            if fd and fd.__chronusAngelicPrism then table.insert(kept, f) end
+        end
+    end
+    pdata.__chronusAngelicPrisms = kept
+
+    while #pdata.__chronusAngelicPrisms < target do
+        dbg(string.format("Spawning Angelic Prism %d/%d", #pdata.__chronusAngelicPrisms + 1, target))
+        local fam = spawnInvisibleAngelicPrism(player)
+        if not fam then 
+            dbg("Failed to spawn Angelic Prism, breaking loop")
+            break 
+        end
+        table.insert(pdata.__chronusAngelicPrisms, fam)
+    end
+    
+    dbg(string.format("[Chronus] Ensured %d Angelic Prisms (target: %d)", #pdata.__chronusAngelicPrisms, target))
+end
+
+function ConchBlessing.chronus._updateAngelicPrismAnchors(player)
+    if not player then return end
+    local pdata = player:GetData()
+    if not pdata then return end
+    local list = pdata.__chronusAngelicPrisms
+    if not list or #list == 0 then return end
+    
+    -- TEST: Only GetAimDirection (no GetShootingInput, no frame check)
+    local dir = player:GetAimDirection()
+    if dir and dir:Length() > 0 then
+        pdata.__chronusLastFireDir = dir:Normalized()
+        dbg(string.format("[Chronus] GetAimDirection: (%.3f, %.3f)", dir.X, dir.Y))
+    end
+    
+    -- Use last firing direction or default to right
+    local finalDir = Vector(1, 0)
+    if pdata.__chronusLastFireDir and pdata.__chronusLastFireDir:Length() > 0 then
+        finalDir = pdata.__chronusLastFireDir
+    end
+    
+    -- Place 20 pixels ahead in the firing direction
+    local forwardOffset = 20
+    local depth = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
+    
+    for _, fam in ipairs(list) do
+        if fam and fam:Exists() then
+            fam.Position = player.Position + (finalDir * forwardOffset)
+            fam.DepthOffset = depth
+            fam.Velocity = Vector.Zero
+        end
+    end
+end
+
 function ConchBlessing.chronus._ensureSeraphimEffects(player)
     if not player then return end
     local absorbed = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_SERAPHIM)
@@ -632,6 +729,9 @@ ConchBlessing.chronus.onPlayerUpdate = function(_)
                 -- Update Succubus (fixed to player position)
                 ConchBlessing.chronus._ensureSuccubusStack(player)
                 ConchBlessing.chronus._updateSuccubusAnchors(player)
+                -- Update Angelic Prism (positioned in firing direction, ignores movement, every frame)
+                ConchBlessing.chronus._ensureAngelicPrismStack(player)
+                ConchBlessing.chronus._updateAngelicPrismAnchors(player)
             else
                 ConchBlessing.chronus._revertAll(player)
             end
@@ -754,6 +854,13 @@ function ConchBlessing.chronus._revertAll(player)
                 if f and f:Exists() then f:Remove() end
             end
             pdata.__chronusSuccubi = nil
+        end
+        -- Remove Angelic Prisms
+        if pdata.__chronusAngelicPrisms then
+            for _, f in ipairs(pdata.__chronusAngelicPrisms) do
+                if f and f:Exists() then f:Remove() end
+            end
+            pdata.__chronusAngelicPrisms = nil
         end
     end
     local familiarToItemMap = ConchBlessing.chronus.data.familiarToItemMap or {}
@@ -914,6 +1021,7 @@ ConchBlessing.chronus.onFamiliarUpdate = function(_, fam)
             pcall(function() spr:ReplaceSpritesheet(0, path) end)
             pcall(function() spr:LoadGraphics() end)
             fd.__chronusSuccubusSpr = true
+            dbg("Succubus sprite initialized (fixed position)")
         end
         f:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
         f.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
@@ -924,14 +1032,63 @@ ConchBlessing.chronus.onFamiliarUpdate = function(_, fam)
             f.Velocity = Vector.Zero
             f.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
         end
+        return
+    end
+    
+    -- Handle Angelic Prism (positioned ahead in firing direction)
+    if f.Variant == FamiliarVariant.ANGELIC_PRISM and fd.__chronusAngelicPrism then
+        if not fd.__chronusAngelicPrismSpr then
+            local spr = f:GetSprite()
+            local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
+            pcall(function() spr:ReplaceSpritesheet(0, path) end)
+            pcall(function() spr:LoadGraphics() end)
+            fd.__chronusAngelicPrismSpr = true
+            dbg("Angelic Prism sprite initialized (TEST: GetAimDirection only)")
+        end
+        f:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
+        f.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
+        f.GridCollisionClass = GridCollisionClass.COLLISION_NONE
+        local player = f.Player
+        if player then
+            local pdata = player:GetData()
+            if pdata then
+                -- TEST: Only GetAimDirection (no GetShootingInput, no frame check)
+                local dir = player:GetAimDirection()
+                if dir and dir:Length() > 0 then
+                    pdata.__chronusLastFireDir = dir:Normalized()
+                end
+                
+                -- Use last firing direction or default to right
+                local finalDir = Vector(1, 0)
+                if pdata.__chronusLastFireDir and pdata.__chronusLastFireDir:Length() > 0 then
+                    finalDir = pdata.__chronusLastFireDir
+                end
+                
+                -- Place 20 pixels ahead in the firing direction
+                local forwardOffset = 20
+                f.Position = player.Position + (finalDir * forwardOffset)
+                f.Velocity = Vector.Zero
+                f.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
+            end
+        end
+        return
     end
 end
 
 -- Add homing and spectral effects when Seraphim is absorbed
+-- Also track actual firing direction from tear velocity for Angelic Prism positioning
 ConchBlessing.chronus.onFireTear = function(_, tear)
     local player = tear.SpawnerEntity and tear.SpawnerEntity:ToPlayer() or nil
     if not player or not player:HasCollectible(CHRONUS_ID) then return end
     
+    -- Track actual tear firing direction (360 degrees, accurate for analog sticks and items like Marked)
+    local pdata = player:GetData()
+    if pdata and tear.Velocity and tear.Velocity:Length() > 0 then
+        pdata.__chronusLastFireDir = tear.Velocity:Normalized()
+        pdata.__chronusLastTearFrame = Game():GetFrameCount()
+        dbg(string.format("[Chronus] Tear fired at frame %d, direction: (%.3f, %.3f)", 
+            pdata.__chronusLastTearFrame, tear.Velocity.X, tear.Velocity.Y))
+    end
     
     local seraphimCount = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_SERAPHIM)
     if seraphimCount > 0 then

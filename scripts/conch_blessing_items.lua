@@ -688,6 +688,14 @@ ConchBlessing.ItemData = {
                 kr = "모든 공격에 공포 효과를 부여합니다.",
                 en = "Grants fear effect to all attacks."
             },
+            [{ id = CollectibleType.COLLECTIBLE_BLOOD_PUPPY, type = "collectible" }] = {
+                kr = "김피를 얻습니다.(최초 1회)",
+                en = "Gains Gimpy (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_ANGELIC_PRISM, type = "collectible" }] = {
+                kr = "공격이 4갈래로 갈라져 나갑니다.",
+                en = "Attacks split into 4 beams."
+            },
         }
 	},
     APPRAISAL_CERTIFICATE = {
