@@ -324,7 +324,7 @@ function ConchBlessing.chronus._trackConvertedItemRemoval(player)
         end
         
         local itemId = conversionData.itemId
-        if not itemId then goto continue end  -- Skip if no item (like Seraphim with flying)
+        if not itemId then goto continue end
         
         local absorbedCount = ConchBlessing.chronus._getAbsorbedCount(player, familiarId)
         if absorbedCount <= 0 then goto continue end
@@ -417,7 +417,6 @@ function ConchBlessing.chronus._ensureTwistedPairs(player)
     end
     pdata.__chronusTwistedPairs = kept
 
-    -- Only log when spawning new pairs
     while #pdata.__chronusTwistedPairs < target do
         local idx = math.floor(#pdata.__chronusTwistedPairs / 2) + 1
         local side = (#pdata.__chronusTwistedPairs % 2 == 0) and 1 or -1
@@ -500,7 +499,6 @@ function ConchBlessing.chronus._ensureIncubusStack(player)
     end
     pdata.__chronusIncubi = kept
 
-    -- Only log when spawning new incubi
     while #pdata.__chronusIncubi < target do
         dbg(string.format("Spawning Incubus %d/%d", #pdata.__chronusIncubi + 1, target))
         local fam = spawnInvisibleIncubus(player)
@@ -567,13 +565,10 @@ function ConchBlessing.chronus._ensureSuccubusStack(player)
     end
 end
 
--- Seraphim: add Fate costume for visual flying effect
--- Note: Flying ability is handled in onEvaluateCache, Homing+Spectral in onFireTear
 function ConchBlessing.chronus._ensureSeraphimEffects(player)
     if not player then return end
     local absorbed = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_SERAPHIM)
     if absorbed > 0 then
-        -- Add Fate costume for visual flying effect
         local itemConfig = Isaac.GetItemConfig()
         local fateCostume = itemConfig:GetCollectible(CollectibleType.COLLECTIBLE_FATE)
         if fateCostume then
@@ -675,11 +670,8 @@ ConchBlessing.chronus.onGameStarted = function(_)
             end
         end
         
-        -- Unified system automatically restores damage bonuses from its own save data
-        -- No manual restoration needed; it handles cumulative additions internally
         dbg("[Chronus] Unified system will restore absorbed familiar damage bonuses automatically")
         
-        -- Clean up old save data fields (no longer needed as unified system manages this)
         if rs.absorbedBonusDamage or rs.absorbActionBonusDamage then
             rs.absorbedBonusDamage = nil
             rs.absorbActionBonusDamage = nil
@@ -940,12 +932,45 @@ ConchBlessing.chronus.onFireTear = function(_, tear)
     local player = tear.SpawnerEntity and tear.SpawnerEntity:ToPlayer() or nil
     if not player or not player:HasCollectible(CHRONUS_ID) then return end
     
-    -- Robo Baby tech laser effect is handled by Technology item (granted in absorbAction)
     
     local seraphimCount = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_SERAPHIM)
     if seraphimCount > 0 then
-        -- Add homing and spectral effects when Seraphim is absorbed
         tear:AddTearFlags(TearFlags.TEAR_HOMING | TearFlags.TEAR_SPECTRAL)
         dbg(string.format("Added homing and spectral to tear (Seraphim absorbed: %d)", tonumber(seraphimCount) or 0))
+    end
+end
+
+-- Apply fear effect when player's attack hits an enemy (works for all attack types: tears, lasers, brimstone, knives, etc.)
+ConchBlessing.chronus.onEntityTakeDamage = function(_, entity, amount, flags, source, countdown)
+    local npc = entity:ToNPC()
+    if not npc then return end
+    
+    if not source or not source.Entity then return end
+    
+    local player = source.Entity:ToPlayer()
+    if not player then
+        local tear = source.Entity:ToTear()
+        local laser = source.Entity:ToLaser()
+        local knife = source.Entity:ToKnife()
+        
+        if tear then
+            player = tear.SpawnerEntity and tear.SpawnerEntity:ToPlayer() or nil
+        elseif laser then
+            player = laser.SpawnerEntity and laser.SpawnerEntity:ToPlayer() or nil
+        elseif knife then
+            player = knife.SpawnerEntity and knife.SpawnerEntity:ToPlayer() or nil
+        end
+    end
+    
+    if not player or not player:HasCollectible(CHRONUS_ID) then return end
+    
+    local lilHauntCount = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_LIL_HAUNT)
+    if lilHauntCount > 0 then
+        if npc:IsVulnerableEnemy() and npc:IsActiveEnemy() then
+            if not npc:HasEntityFlags(EntityFlag.FLAG_FRIENDLY) and not npc:HasEntityFlags(EntityFlag.FLAG_CHARM) then
+                npc:AddFear(EntityRef(player), 90)
+                dbg(string.format("Applied fear effect to enemy (Lil Haunt absorbed: %d)", tonumber(lilHauntCount) or 0))
+            end
+        end
     end
 end

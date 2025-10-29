@@ -646,7 +646,8 @@ ConchBlessing.ItemData = {
 			evaluateCache = "chronus.onEvaluateCache",
 			gameStarted = "chronus.onGameStarted",
             familiarUpdate = "chronus.onFamiliarUpdate",
-            fireTear = "chronus.onFireTear"
+            fireTear = "chronus.onFireTear",
+            entityTakeDmg = "chronus.onEntityTakeDamage"
 		},
 		synergies = {
             [{ id = CollectibleType.COLLECTIBLE_TWISTED_PAIR, type = "collectible" }] = {
@@ -682,6 +683,10 @@ ConchBlessing.ItemData = {
             [{ id = CollectibleType.COLLECTIBLE_LIL_MONSTRO, type = "collectible" }] = {
                 kr = "몬스트로의 폐를 얻습니다.(최초 1회)",
                 en = "Gains Monstro's Lung (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_LIL_HAUNT, type = "collectible" }] = {
+                kr = "모든 공격에 공포 효과를 부여합니다.",
+                en = "Grants fear effect to all attacks."
             },
         }
 	},
@@ -952,19 +957,19 @@ ConchBlessing.ItemData = {
         eid = {
             kr = {
                 "행운이 4 증가합니다.",
-                "#{{Tears}}고정연사가 2.0 증가합니다.",
+                "#{{Tears}} 고정연사가 2.0 증가합니다.",
                 "#피격 당하지 않은 채로 다음 층으로 이동 시, B -로 진화합니다."
             },
             en = {
                 "Luck increases by 4.",
-                "#{{Tears}}Fixed SPS increases by 2.0.",
+                "#{{Tears}} Fixed SPS increases by 2.0.",
                 "#When moving to the next floor without taking damage, evolves into B -."
             }
         },
         gfx = "c_minus.png",
         tags = "offensive",
         cache = "tears",
-        origin = { id = TrinketType.TRINKET_PERFECTION, type = "trinket" },
+        origin = { type = "trinket", name = "F -" },
         flag = "positive",
         hidden = true,
         shopprice=15,
@@ -989,8 +994,8 @@ ConchBlessing.ItemData = {
         eid = {
             kr = {
                 "행운이 3 증가합니다.",
-                "#{{Tears}}고정 연사가 3.0 증가합니다.",
-                "#{{Damage}}공격력이 3.0 증가합니다.",
+                "#{{Tears}} 고정 연사가 3.0 증가합니다.",
+                "#{{Damage}} 공격력이 3.0 증가합니다.",
                 "#피격 당하지 않은 채로 다음 층으로 이동 시, A -로 진화합니다."
             },
             en = {
@@ -1003,7 +1008,7 @@ ConchBlessing.ItemData = {
         gfx = "b_minus.png",
         tags = "offensive",
         cache = "luck damage",
-        origin = { id = TrinketType.TRINKET_PERFECTION, type = "trinket" },
+        origin = { type = "trinket", name = "C -" },
         flag = "positive",
         hidden = true,
         shopprice=15,
@@ -1028,15 +1033,15 @@ ConchBlessing.ItemData = {
         eid = {
             kr = {
                 "행운이 2 증가합니다.",
-                "#{{Tears}}고정연사가 4.0 증가합니다.",
-                "#{{Damage}}공격력이 4.0 증가합니다.",
+                "#{{Tears}} 고정연사가 4.0 증가합니다.",
+                "#{{Damage}} 공격력이 4.0 증가합니다.",
                 "#4배수가 공격력, 행운, 연사에 나눠서 적용됩니다. (중첩X)",
                 "#0.8배이상으로 나눠서 적용됩니다.",
             },
             en = {
                 "Luck increases by 2.",
-                "#{{Tears}}Fixed SPS increases by 4.0.",
-                "#{{Damage}}Damage increases by 4.0.",
+                "#{{Tears}} Fixed SPS increases by 4.0.",
+                "#{{Damage}} Damage increases by 4.0.",
                 "#4x multipliers are distributed to Damage, Luck, and SPS. (No stacking)",
                 "#Multipliers are at least 0.8x.",
             }
@@ -1044,7 +1049,7 @@ ConchBlessing.ItemData = {
         gfx = "a_minus.png",
         tags = "offensive",
         cache = "luck damage tears",
-        origin = { id = TrinketType.TRINKET_PERFECTION, type = "trinket" },
+        origin = { type = "trinket", name = "B -" },
         flag = "positive",
         hidden = true,
         shopprice=15,
