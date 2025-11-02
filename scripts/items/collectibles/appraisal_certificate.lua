@@ -3,111 +3,54 @@ local isc = require("scripts.lib.isaacscript-common")
 ConchBlessing.appraisal = ConchBlessing.appraisal or {}
 local M = ConchBlessing.appraisal
 
+-- Configuration
 M.config = M.config or {
     costCoins = 30,
-    replaceMax = 512,
-    preferStageAPI = true,
     debug = true,
-    scanMaxProbe = 8192,
-    scanEmptyLimit = nil,
-    queueWaitFrames = 45,
-    enterDelayFrames = 20,
-    returnRetryFrames = 10,
+    conversionDelayFrames = 15, -- Delay before converting items after entering DC
 }
 
+-- State
 M.state = M.state or {
     active = false,
     prevRoomIndex = nil,
     prevDimension = nil,
-    trinketIter = nil,
-    spawnedCount = 0,
-    cidToTid = {},
-    groupId = nil,
-    usingDC = false,
-    usingStageAPI = false,
-    trinketList = nil,
-    usedTid = {},
-    nextTrinketIndex = 1,
+    conversionScheduledFrame = nil,
+    conversionCompleted = false,
     pendingTrinketId = nil,
-    queuedCheckStartedAt = 0,
     pendingPlayerSeed = nil,
-    blockFurtherPickups = false,
-    pendingReturnToRoom = false,
-    lastReturnAttemptFrame = 0,
-    returnReadyAtFrame = nil,
-	allowedPickupHash = nil,
+    allowedPickupHash = nil,
 }
 
-local function buildTrinketIterator()
-    local cfg = Isaac.GetItemConfig()
-    if not cfg then
-        return function()
-            return nil
-        end
-    end
-    local ids = {}
-    for id = 1, TrinketType.NUM_TRINKETS - 1 do
-        local ok, tr = pcall(function()
-            return cfg:GetTrinket(id)
-        end)
-        if ok and tr then
-            table.insert(ids, id)
-        end
-    end
-    local i = 0
-    return function()
-        i = i + 1
-        return ids[i]
-    end
-end
-
-local function _buildTrinketList()
-    local cfg = Isaac.GetItemConfig()
-    local list = {}
-    if not cfg then return list end
-    local maxProbe = (M.config and M.config.scanMaxProbe) or 8192
-    local emptyStreak = 0
-    local emptyLimit = (M.config and M.config.scanEmptyLimit)
-    for id = 1, maxProbe do
-        local ok, tr = pcall(function() return cfg:GetTrinket(id) end)
-        if ok and tr then
-            table.insert(list, id)
-            emptyStreak = 0
-        else
-            emptyStreak = emptyStreak + 1
-            if emptyLimit and emptyStreak >= emptyLimit then
-                break
-            end
-        end
-    end
-    if M.config and M.config.debug then
-        ConchBlessing.print(string.format("[Appraisal] Built trinket list: count=%d, maxProbe=%d, emptyLimit=%s", #list, maxProbe, tostring(emptyLimit)))
-    end
-    return list
-end
-
-local function getCurrentDimension(level, roomIndex)
-    if level and level.GetDimension then
+-- Get current dimension (0 = normal, 1 = ???, 2 = Death Certificate)
+local function getCurrentDimension()
+    local game = Game()
+    local level = game:GetLevel()
+    
+    if level.GetDimension then
         local ok, dim = pcall(function() return level:GetDimension() end)
         if ok then return dim end
     end
-    level = level or (Game() and Game():GetLevel())
-    if not level then return nil end
-    local idx = roomIndex or level:GetCurrentRoomIndex()
+    
+    local idx = level:GetCurrentRoomIndex()
     local okRef, ref = pcall(function() return level:GetRoomByIdx(idx, -1) end)
     if not okRef or not ref then return nil end
+    
     for i = 0, 2 do
         local okRoom, room = pcall(function() return level:GetRoomByIdx(idx, i) end)
         if okRoom and room and GetPtrHash(room) == GetPtrHash(ref) then
             return i
         end
     end
+    
     return nil
 end
 
+-- Check if anyone has Atropos trinket (prevents auto-pickup)
 local function anyoneHasAtropos()
     local id = ConchBlessing.ItemData and ConchBlessing.ItemData.ATROPOS and ConchBlessing.ItemData.ATROPOS.id
     if not id or id <= 0 then return false end
+    
     local game = Game()
     for i = 0, game:GetNumPlayers() - 1 do
         local p = game:GetPlayer(i)
@@ -118,339 +61,289 @@ local function anyoneHasAtropos()
     return false
 end
 
-local function mapCollectibleToTrinket(collectibleId)
-    -- Map 5.100.ID -> 5.350.ID by the same ID if that trinket exists. Otherwise, remove.
-    if type(collectibleId) ~= "number" or collectibleId <= 0 then return nil end
-    if M.state.cidToTid[collectibleId] ~= nil then return M.state.cidToTid[collectibleId] end
-
+-- Check if trinket with given ID exists
+local function trinketExists(trinketId)
     local cfg = Isaac.GetItemConfig()
-    if not cfg then return nil end
-
-    local ok, tr = pcall(function()
-        return cfg:GetTrinket(collectibleId)
-    end)
-
-    if ok and tr then
-        M.state.cidToTid[collectibleId] = collectibleId
-        if M.config and M.config.debug then
-            ConchBlessing.print(string.format("[Appraisal] Direct map C:%d -> T:%d", collectibleId, collectibleId))
-        end
-        return collectibleId
-    end
-
-    if M.config and M.config.debug then
-        ConchBlessing.print(string.format("[Appraisal] No matching trinket for C:%d; will remove", collectibleId))
-    end
-    M.state.cidToTid[collectibleId] = nil
-    return nil
+    if not cfg then return false end
+    
+    local ok, trinket = pcall(function() return cfg:GetTrinket(trinketId) end)
+    return ok and trinket ~= nil
 end
 
--- Process a single collectible pickup in DC dimension: replace to trinket or remove
-local function processCollectiblePickupInDC(pickup)
-    if not pickup or pickup:IsDead() then return end
-    if pickup.Variant ~= PickupVariant.PICKUP_COLLECTIBLE then return end
-    local data = pickup:GetData()
-    if data and data.appraisalProcessed then return end
-    local cid = pickup.SubType or 0
-    local tid = mapCollectibleToTrinket(cid)
-    if not tid then
-        if M.config and M.config.debug then
-            ConchBlessing.print(string.format("[Appraisal] Removing leftover collectible C:%d (no trinket remaining)", cid))
-        end
-        pickup:Remove()
-        if data then data.appraisalProcessed = true end
-        return
+-- Convert all collectibles to trinkets in DC dimension
+local function convertAllCollectiblesInDC()
+    if M.config.debug then
+        ConchBlessing.print("[Appraisal] Starting collectible to trinket conversion")
     end
-    local pos = pickup.Position
-    pickup:Remove()
-    local trinket = Isaac.Spawn(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_TRINKET, tid, pos, Vector.Zero, nil)
-    if M.config and M.config.debug then
-        ConchBlessing.print(string.format("[Appraisal] Replaced C:%d -> T:%d at (%.1f,%.1f)", cid, tid, pos.X, pos.Y))
-    end
-    if not M.state.groupId then
-        local lvl = Game():GetLevel()
-        M.state.groupId = tostring(lvl:GetCurrentRoomIndex()) .. ":" .. tostring(Game():GetFrameCount())
-    end
-    local td = trinket and trinket:GetData() or nil
-    if td then
-        td.appraisalGroupId = M.state.groupId
-        td.appraisalMappedFrom = cid
-    end
-    M.state.spawnedCount = (M.state.spawnedCount or 0) + 1
-    if data then data.appraisalProcessed = true end
-end
-
-function M.onUseItem(_, collectibleID, rng, player, useFlags, activeSlot, varData)
-    local coins = player:GetNumCoins()
-    local cost = M.config.costCoins or 30
-    do
-        local game = Game()
-        local level = game:GetLevel()
-        local dim = getCurrentDimension(level)
-        if dim == 2 then
-            if M.config and M.config.debug then
-                ConchBlessing.print("[Appraisal] Cannot use Appraisal Certificate inside AC dimension")
+    
+    local entities = Isaac.FindByType(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_COLLECTIBLE, -1, false, false)
+    local convertedCount = 0
+    local removedCount = 0
+    
+    for _, e in ipairs(entities) do
+        local pickup = e:ToPickup()
+        if pickup and not pickup:IsDead() then
+            local collectibleId = pickup.SubType
+            local pos = pickup.Position
+            
+            -- Remove the collectible
+            pickup:Remove()
+            
+            -- Check if corresponding trinket exists
+            if trinketExists(collectibleId) then
+                -- Spawn trinket with same ID
+                Isaac.Spawn(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_TRINKET, collectibleId, pos, Vector.Zero, nil)
+                convertedCount = convertedCount + 1
+                
+                if M.config.debug then
+                    ConchBlessing.print(string.format("[Appraisal] Converted C:%d -> T:%d", collectibleId, collectibleId))
+                end
+            else
+                -- No trinket with this ID, just delete
+                removedCount = removedCount + 1
+                
+                if M.config.debug then
+                    ConchBlessing.print(string.format("[Appraisal] Removed C:%d (no trinket exists)", collectibleId))
+                end
             end
-            return { Discharge = false, Remove = false, ShowAnim = false }
         end
     end
-    if coins < cost then
-        ConchBlessing.print("[Appraisal] Not enough coins (" .. tostring(coins) .. "/" .. tostring(cost) .. ")")
-        return { Discharge = false, Remove = false, ShowAnim = false }
+    
+    if M.config.debug then
+        ConchBlessing.print(string.format("[Appraisal] Conversion complete: %d converted, %d removed", convertedCount, removedCount))
     end
+    
+    M.state.conversionCompleted = true
+end
 
-    player:AddCoins(-cost)
+-- Use Item callback
+function M.onUseItem(_, collectibleID, rng, player, useFlags, activeSlot, varData)
     local game = Game()
     local level = game:GetLevel()
-    M.state.prevRoomIndex = level:GetCurrentRoomIndex()
-    do
-        local safety = 0
-        while safety < 6 do
-            local t0 = player:GetTrinket(0)
-            local t1 = player:GetTrinket(1)
-            if (not t0 or t0 == 0) and (not t1 or t1 == 0) then
-                break
-            end
-            player:UseActiveItem(CollectibleType.COLLECTIBLE_SMELTER, UseFlag.USE_NOANIM, 0)
-            safety = safety + 1
+    local currentDim = getCurrentDimension()
+    
+    -- Cannot use inside Death Certificate dimension
+    if currentDim == 2 then
+        if M.config.debug then
+            ConchBlessing.print("[Appraisal] Cannot use inside Death Certificate dimension")
         end
+        return { Discharge = false, Remove = false, ShowAnim = false }
     end
-    local prevDim = getCurrentDimension(level)
-    M.state.prevDimension = prevDim
+    
+    -- Check if player has enough coins
+    local coins = player:GetNumCoins()
+    local cost = M.config.costCoins or 30
+    
+    if coins < cost then
+        if M.config.debug then
+            ConchBlessing.print(string.format("[Appraisal] Not enough coins (%d/%d)", coins, cost))
+        end
+        return { Discharge = false, Remove = false, ShowAnim = false }
+    end
+    
+    -- Consume coins
+    player:AddCoins(-cost)
+    
+    if M.config.debug then
+        ConchBlessing.print(string.format("[Appraisal] Used item, consumed %d coins", cost))
+    end
+    
+    -- Clear trinkets using Smelter
+    local safety = 0
+    while safety < 6 do
+        local t0 = player:GetTrinket(0)
+        local t1 = player:GetTrinket(1)
+        if (not t0 or t0 == 0) and (not t1 or t1 == 0) then
+            break
+        end
+        player:UseActiveItem(CollectibleType.COLLECTIBLE_SMELTER, UseFlag.USE_NOANIM, 0)
+        safety = safety + 1
+    end
+    
+    -- Initialize state
     M.state.active = true
-    M.state.trinketIter = buildTrinketIterator()
-    M.state.spawnedCount = 0
-    M.state.cidToTid = {}
-    M.state.groupId = nil
-    M.state.usingDC = true
-    M.state.usingStageAPI = false
-    M.state.usedTid = {}
-    M.state.nextTrinketIndex = 1
-
-    M.state._enterScheduledAt = nil
+    M.state.prevRoomIndex = level:GetCurrentRoomIndex()
+    M.state.prevDimension = currentDim
+    M.state.conversionScheduledFrame = nil
+    M.state.conversionCompleted = false
+    M.state.pendingTrinketId = nil
+    M.state.pendingPlayerSeed = nil
+    M.state.allowedPickupHash = nil
+    
+    -- Use Death Certificate
     player:UseActiveItem(CollectibleType.COLLECTIBLE_DEATH_CERTIFICATE, UseFlag.USE_NOANIM, 0)
-
+    
+    if M.config.debug then
+        ConchBlessing.print("[Appraisal] Entering Death Certificate dimension")
+    end
+    
     return { Discharge = false, Remove = false, ShowAnim = false }
 end
 
-function M.onPostPickupInit(_, pickup)
-    if not (M.state.active and M.state.usingDC) then
-        return
-    end
-    local level = Game():GetLevel()
-    local currentDim = getCurrentDimension(level)
-    if currentDim ~= 2 then
-        return
-    end
-    processCollectiblePickupInDC(pickup)
-end
-
-function M.onPrePickupCollision(_, pickup, collider, low)
-    if not (M.state.active and M.state.usingDC) then
-        return
-    end
-    if pickup.Variant ~= PickupVariant.PICKUP_TRINKET then
-        return
-    end
-    local player = collider and collider:ToPlayer() or nil
-    if not player then
-        return
-    end
-
-    local trinketId = pickup.SubType
-    if trinketId and trinketId > 0 then
-		-- Allow only the first trinket entity; block others until queue finishes
-		local ph = GetPtrHash(pickup)
-		if M.config and M.config.debug then
-			ConchBlessing.print(string.format("[Appraisal] PreCollision ph=%s, allowed=%s, block=%s", tostring(ph), tostring(M.state.allowedPickupHash), tostring(M.state.blockFurtherPickups)))
-		end
-		if M.state.allowedPickupHash == nil then
-			M.state.allowedPickupHash = ph
-		elseif M.state.allowedPickupHash ~= ph then
-			return true
-		end
-        if anyoneHasAtropos() then
-            return
-        end
-		-- Do not block the allowed pickup itself; only others are blocked above
-        M.state.pendingTrinketId = trinketId
-        M.state.queuedCheckStartedAt = Game():GetFrameCount()
-        M.state.pendingPlayerSeed = player.InitSeed
-        M.state.blockFurtherPickups = true
-        if M.config and M.config.debug then
-            ConchBlessing.print(string.format("[Appraisal] Queued T:%d for smelt after queue clears", trinketId))
-        end
-        local pickedHash = GetPtrHash(pickup)
-        local trinkets = Isaac.FindByType(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_TRINKET, -1, false, false)
-        for _, e in ipairs(trinkets) do
-            if GetPtrHash(e) ~= pickedHash then
-                local p2 = e:ToPickup()
-                if p2 then p2:Remove() end
-            end
-        end
-        pcall(function()
-            local sfx = SFXManager()
-            sfx:Play(SoundEffect.SOUND_HOLY, 1.0, 0, false, 1.0)
-        end)
-        M.state.pendingReturnToRoom = true
-        M.state._enterScheduledAt = nil
-        return
-    end
-end
-
+-- Post New Room callback
 function M.onPostNewRoom()
-    do
-        local game = Game()
-        local level = game:GetLevel()
-        local currentDim = getCurrentDimension(level)
-        if M.state.active and M.state.usingDC and currentDim == 2 then
-            local entities = Isaac.FindByType(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_COLLECTIBLE, -1, false, false)
-            for _, e in ipairs(entities) do
-                local p = e:ToPickup()
-                if p then
-                    processCollectiblePickupInDC(p)
-                end
-            end
-            if M.config and M.config.debug then
-                ConchBlessing.print("[Appraisal] Converted collectibles to trinkets on entering DC room")
-            end
+    if not M.state.active then return end
+    
+    local game = Game()
+    local level = game:GetLevel()
+    local currentDim = getCurrentDimension()
+    local currentRoomIndex = level:GetCurrentRoomIndex()
+    
+    -- Check if we entered Death Certificate dimension
+    if currentDim == 2 and not M.state.conversionCompleted then
+        -- Schedule conversion after a few frames to ensure all items are spawned
+        local delayFrames = M.config.conversionDelayFrames or 15
+        M.state.conversionScheduledFrame = game:GetFrameCount() + delayFrames
+        
+        if M.config.debug then
+            ConchBlessing.print(string.format("[Appraisal] Entered DC dimension, scheduling conversion in %d frames", delayFrames))
         end
     end
-    if M.state.active and M.state.prevRoomIndex ~= nil then
-        local cur = Game():GetLevel():GetCurrentRoomIndex()
-        if cur == M.state.prevRoomIndex then
-            M.state.active = false
-            M.state.trinketIter = nil
-            M.state.spawnedCount = 0
-            M.state.cidToTid = {}
-            M.state.groupId = nil
-            M.state.usingDC = false
-            M.state.usedTid = {}
-            M.state.nextTrinketIndex = 1
-            M.state.pendingTrinketId = nil
-            M.state.pendingPlayerSeed = nil
-            M.state.blockFurtherPickups = false
-            M.state.allowedPickupHash = nil
+    
+    -- Check if we returned to original room
+    if M.state.prevRoomIndex and currentRoomIndex == M.state.prevRoomIndex and currentDim ~= 2 then
+        if M.config.debug then
+            ConchBlessing.print("[Appraisal] Returned to original room, cleaning up")
         end
-    end
-    if M.state.pendingReturnToRoom and M.state.prevRoomIndex ~= nil then
-        local game = Game()
-        local level = game:GetLevel()
-        local currentDim = getCurrentDimension(level)
-        if currentDim == 2 then
-            return
-        end
-        local curIdx = level:GetCurrentRoomIndex()
-        local wantIdx = M.state.prevRoomIndex
-        if curIdx ~= wantIdx then
-            pcall(function()
-                level.EnterDoor = -1
-                level.LeaveDoor = -1
-            end)
-            game:StartRoomTransition(wantIdx, Direction.NO_DIRECTION, RoomTransitionAnim.FADE, nil, 0)
-            if M.config and M.config.debug then
-                ConchBlessing.print(string.format("[Appraisal] Forcing return to pre-DC room idx=%d (cur=%d, dim=%s)", wantIdx, curIdx, tostring(currentDim)))
-            end
-        else
-            if M.config and M.config.debug then
-                ConchBlessing.print(string.format("[Appraisal] Already in pre-DC room idx=%d; skipping extra transition", wantIdx))
-            end
-        end
-        M.state.pendingReturnToRoom = false
+        
+        -- Clean up state
+        M.state.active = false
         M.state.prevRoomIndex = nil
         M.state.prevDimension = nil
-        local player = Isaac.GetPlayer(0)
-        pcall(function() player:AnimateSad() end)
+        M.state.conversionScheduledFrame = nil
+        M.state.conversionCompleted = false
+        M.state.pendingTrinketId = nil
+        M.state.pendingPlayerSeed = nil
+        M.state.allowedPickupHash = nil
     end
 end
 
-function M.onUpdate()
-    if not (M.state.active and M.state.usingDC) then
-        return
-    end
-    local game = Game()
-    if M.state._enterScheduledAt and game:GetFrameCount() >= M.state._enterScheduledAt then
-        M.state._enterScheduledAt = nil
-        local player = Isaac.GetPlayer(0)
-        if player then
-            player:UseActiveItem(CollectibleType.COLLECTIBLE_DEATH_CERTIFICATE, UseFlag.USE_NOANIM, 0)
-            if M.config and M.config.debug then
-                ConchBlessing.print("[Appraisal] Entering DC after pre-effect")
+-- Post Pickup Init callback
+function M.onPostPickupInit(_, pickup)
+    if not M.state.active then return end
+    
+    local currentDim = getCurrentDimension()
+    if currentDim ~= 2 then return end
+    
+    -- If conversion already completed, convert any newly spawned collectibles
+    if M.state.conversionCompleted and pickup.Variant == PickupVariant.PICKUP_COLLECTIBLE then
+        local collectibleId = pickup.SubType
+        local pos = pickup.Position
+        
+        pickup:Remove()
+        
+        if trinketExists(collectibleId) then
+            Isaac.Spawn(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_TRINKET, collectibleId, pos, Vector.Zero, nil)
+            if M.config.debug then
+                ConchBlessing.print(string.format("[Appraisal] Converted spawned C:%d -> T:%d", collectibleId, collectibleId))
+            end
+        else
+            if M.config.debug then
+                ConchBlessing.print(string.format("[Appraisal] Removed spawned C:%d (no trinket)", collectibleId))
             end
         end
     end
-    do
-        local level = game:GetLevel()
-        local currentDim = getCurrentDimension(level)
-        if currentDim == 2 then
-            local entities = Isaac.FindByType(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_COLLECTIBLE, -1, false, false)
-            for _, e in ipairs(entities) do
-                local p = e:ToPickup()
-                if p then
-                    processCollectiblePickupInDC(p)
-                end
-            end
-            local player = Isaac.GetPlayer(0)
-            local queued = player and player.QueuedItem or nil
-            local hasQueuedTrinket = queued ~= nil and queued.Item ~= nil
-            if hasQueuedTrinket and not anyoneHasAtropos() then
-                local pickedHash = -1
-                local trinkets = Isaac.FindByType(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_TRINKET, -1, false, false)
-                for _, e in ipairs(trinkets) do
-                    local p2 = e:ToPickup()
-                    if p2 then
-                        p2:Remove()
-                    end
-                end
-            end
-        end
-    end
-    if not M.state.pendingTrinketId then
-        return
-    end
-    local player = Isaac.GetPlayer(0)
-    if not player or (M.state.pendingPlayerSeed and player.InitSeed ~= M.state.pendingPlayerSeed) then
-        return
-    end
-    local queued = player.QueuedItem
-    local queueActive = queued ~= nil and queued.Item ~= nil
-    local elapsed = game:GetFrameCount() - (M.state.queuedCheckStartedAt or 0)
-    if M.config and M.config.debug then
-        if elapsed % 15 == 0 then
-            ConchBlessing.print(string.format("[Appraisal] Queue polling: active=%s, elapsed=%d", tostring(queueActive), elapsed))
-        end
-    end
-    if queueActive then
-        return
-    end
+end
 
-    local tid = M.state.pendingTrinketId
-    if tid and tid > 0 then
-        pcall(function() player:FlushQueueItem() end)
-        local ok = pcall(function()
-            isc.smeltTrinket(nil, player, tid, 1)
-        end)
-        if not ok then
-            player:AddTrinket(tid, true)
-            player:UseActiveItem(CollectibleType.COLLECTIBLE_SMELTER, UseFlag.USE_NOANIM, 0)
+-- Pre Pickup Collision callback (handle trinket pickup)
+function M.onPrePickupCollision(_, pickup, collider, low)
+    if not M.state.active then return end
+    if pickup.Variant ~= PickupVariant.PICKUP_TRINKET then return end
+    
+    local player = collider and collider:ToPlayer() or nil
+    if not player then return end
+    
+    local trinketId = pickup.SubType
+    if not trinketId or trinketId <= 0 then return end
+    
+    -- Block other trinkets if one is already being picked up
+    local ph = GetPtrHash(pickup)
+    if M.state.allowedPickupHash == nil then
+        M.state.allowedPickupHash = ph
+    elseif M.state.allowedPickupHash ~= ph then
+        return true -- Block this pickup
+    end
+    
+    -- If player has Atropos, don't auto-smelt
+    if anyoneHasAtropos() then return end
+    
+    -- Store pending trinket for smelting
+    M.state.pendingTrinketId = trinketId
+    M.state.pendingPlayerSeed = player.InitSeed
+    
+    if M.config.debug then
+        ConchBlessing.print(string.format("[Appraisal] Picked up T:%d, will smelt and return", trinketId))
+    end
+    
+    -- Remove all other trinkets
+    local pickedHash = GetPtrHash(pickup)
+    local trinkets = Isaac.FindByType(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_TRINKET, -1, false, false)
+    for _, e in ipairs(trinkets) do
+        if GetPtrHash(e) ~= pickedHash then
+            local p = e:ToPickup()
+            if p then p:Remove() end
         end
-        if player:HasTrinket(tid, true) then
-            player:TryRemoveTrinket(tid)
+    end
+    
+    -- Play sound
+    pcall(function()
+        local sfx = SFXManager()
+        sfx:Play(SoundEffect.SOUND_HOLY, 1.0, 0, false, 1.0)
+    end)
+end
+
+-- Update callback
+function M.onUpdate()
+    if not M.state.active then return end
+    
+    local game = Game()
+    local currentFrame = game:GetFrameCount()
+    local currentDim = getCurrentDimension()
+    
+    -- Execute scheduled conversion
+    if M.state.conversionScheduledFrame and currentFrame >= M.state.conversionScheduledFrame then
+        M.state.conversionScheduledFrame = nil
+        
+        if currentDim == 2 and not M.state.conversionCompleted then
+            convertAllCollectiblesInDC()
         end
-        do
-            local trinkets = Isaac.FindByType(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_TRINKET, -1, false, false)
-            for _, e in ipairs(trinkets) do
-                local p = e:ToPickup()
-                if p then
-                    local d = p:GetData()
-                    if d and (M.state.groupId and d.appraisalGroupId == M.state.groupId) then
-                        p:Remove()
-                    end
-                end
+    end
+    
+    -- Handle trinket smelting and return
+    if M.state.pendingTrinketId then
+        local player = Isaac.GetPlayer(0)
+        if not player or (M.state.pendingPlayerSeed and player.InitSeed ~= M.state.pendingPlayerSeed) then
+            return
+        end
+        
+        -- Check if queue is clear
+        local queued = player.QueuedItem
+        local queueActive = queued ~= nil and queued.Item ~= nil
+        
+        if not queueActive then
+            local trinketId = M.state.pendingTrinketId
+            
+            -- Smelt the trinket
+            pcall(function() player:FlushQueueItem() end)
+            local ok = pcall(function()
+                isc.smeltTrinket(nil, player, trinketId, 1)
+            end)
+            if not ok then
+                player:AddTrinket(trinketId, true)
+                player:UseActiveItem(CollectibleType.COLLECTIBLE_SMELTER, UseFlag.USE_NOANIM, 0)
             end
-        end
-        if M.state.pendingReturnToRoom and M.state.prevRoomIndex then
-            if not anyoneHasAtropos() then
+            
+            -- Remove trinket if still held
+            if player:HasTrinket(trinketId, true) then
+                player:TryRemoveTrinket(trinketId)
+            end
+            
+            if M.config.debug then
+                ConchBlessing.print(string.format("[Appraisal] Smelted T:%d, returning to original room", trinketId))
+            end
+            
+            -- Return to original room
+            if M.state.prevRoomIndex then
                 local level = game:GetLevel()
                 pcall(function()
                     level.EnterDoor = -1
@@ -460,29 +353,29 @@ function M.onUpdate()
                     local sfx = SFXManager()
                     sfx:Stop(SoundEffect.SOUND_DEVIL_CARD)
                     sfx:Stop(SoundEffect.SOUND_DEVILROOM_DEAL)
-                    sfx:Stop(SoundEffect.SOUND_EVIL_LAUGH)
                 end)
                 game:StartRoomTransition(M.state.prevRoomIndex, Direction.NO_DIRECTION, RoomTransitionAnim.FADE, nil, 0)
-                if M.config and M.config.debug then
-                    ConchBlessing.print(string.format("[Appraisal] Returning after queue delay to idx=%d", M.state.prevRoomIndex))
-                end
             end
+            
+            M.state.pendingTrinketId = nil
+            M.state.pendingPlayerSeed = nil
+            M.state.allowedPickupHash = nil
         end
     end
+end
 
-    M.state.active = false
-    M.state.trinketIter = nil
-    M.state.spawnedCount = 0
-    M.state.cidToTid = {}
-    M.state.groupId = nil
-    M.state.usingDC = false
-    M.state.usedTid = {}
-    M.state.nextTrinketIndex = 1
-    M.state.pendingTrinketId = nil
-    M.state.pendingPlayerSeed = nil
-    M.state.blockFurtherPickups = false
-    M.state.pendingReturnToRoom = false
-    M.state.allowedPickupHash = nil
+-- Required by item system
+function M.onBeforeChange(upgradePos, pickup, itemData)
+    if M.config.debug then
+        ConchBlessing.print("[Appraisal] onBeforeChange called")
+    end
+    return true
+end
+
+function M.onAfterChange(upgradePos, pickup, itemData)
+    if M.config.debug then
+        ConchBlessing.print("[Appraisal] onAfterChange called")
+    end
 end
 
 return M
