@@ -1848,10 +1848,23 @@ local function loadAllItems()
                                 if anyPlayerHas(entry.target) then
                                     local t = (type(entry.text) == "table" and (entry.text[lang] or entry.text.en)) or entry.text
                                     local iconToken
-                                    if isTrinketId(entry.target) then
+                                    -- Use the explicitly stored targetIsTrinket flag from synergy definition
+                                    ConchBlessing.printDebug("[EID Synergy] Processing target ID: " .. tostring(entry.target) .. ", targetIsTrinket flag: " .. tostring(entry.targetIsTrinket))
+                                    if entry.targetIsTrinket == true then
                                         iconToken = "{{Trinket" .. tostring(entry.target) .. "}}"
-                                    else
+                                        ConchBlessing.printDebug("[EID Synergy] Using Trinket icon for ID: " .. tostring(entry.target))
+                                    elseif entry.targetIsTrinket == false then
                                         iconToken = "{{Collectible" .. tostring(entry.target) .. "}}"
+                                        ConchBlessing.printDebug("[EID Synergy] Using Collectible icon for ID: " .. tostring(entry.target))
+                                    else
+                                        -- Fallback: auto-detect if type was not explicitly specified
+                                        local isTrinket = isTrinketId(entry.target)
+                                        ConchBlessing.printDebug("[EID Synergy] Auto-detecting type for ID: " .. tostring(entry.target) .. ", isTrinket: " .. tostring(isTrinket))
+                                        if isTrinket then
+                                            iconToken = "{{Trinket" .. tostring(entry.target) .. "}}"
+                                        else
+                                            iconToken = "{{Collectible" .. tostring(entry.target) .. "}}"
+                                        end
                                     end
                                     local function normLine(s)
                                         s = tostring(s or "")
