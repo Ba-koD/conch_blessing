@@ -7,7 +7,10 @@ ConchBlessing.injectablsteroids.data = {
     minMultiplier = 0.5,
     maxMultiplier = 2.0,
     speedDecrease = 0,
-    instantDeathPercent = 1  -- 1% chance of instant death when used
+    baseInstantDeathPercent = 1,  -- Base 1% chance of instant death when used
+    instantDeathPercentIncrement = 3,  -- Increases by 3% per use
+    currentInstantDeathPercent = 1,  -- Current instant death chance (resets per floor)
+    currentFloorUseCount = 0  -- Number of uses on current floor
 }
 
 local SaveManager = require("scripts.lib.save_manager")
@@ -56,7 +59,7 @@ ConchBlessing.injectablsteroids.onUseItem = function(player, collectibleID, useF
     player:AnimateCollectible(INJECTABLE_STEROIDS_ID, "Pickup", "PlayerPickupSparkle")
     
     -- Check for instant death chance
-    local instantDeathChance = ConchBlessing.injectablsteroids.data.instantDeathPercent
+    local instantDeathChance = ConchBlessing.injectablsteroids.data.currentInstantDeathPercent
     ConchBlessing.printDebug("Instant death chance: " .. tostring(instantDeathChance) .. "%")
     
     if instantDeathChance > 0 then
@@ -66,6 +69,12 @@ ConchBlessing.injectablsteroids.onUseItem = function(player, collectibleID, useF
         if deathRoll <= instantDeathChance then
             ConchBlessing.printDebug("INSTANT DEATH TRIGGERED! Player dies from Injectable Steroids overdose")
             player:TakeDamage(999, DamageFlag.DAMAGE_NO_PENALTIES, EntityRef(player), 0)
+            
+            -- Increment use count and death chance even on death
+            ConchBlessing.injectablsteroids.data.currentFloorUseCount = ConchBlessing.injectablsteroids.data.currentFloorUseCount + 1
+            ConchBlessing.injectablsteroids.data.currentInstantDeathPercent = ConchBlessing.injectablsteroids.data.currentInstantDeathPercent + ConchBlessing.injectablsteroids.data.instantDeathPercentIncrement
+            ConchBlessing.printDebug("Player died! Death chance increased to " .. tostring(ConchBlessing.injectablsteroids.data.currentInstantDeathPercent) .. "% for next use")
+            
             return { Discharge = true, Remove = false, ShowAnim = true }
         else
             ConchBlessing.printDebug("Instant death avoided, continuing with normal effect")
@@ -186,6 +195,11 @@ ConchBlessing.injectablsteroids.onUseItem = function(player, collectibleID, useF
         ConchBlessing.oralsteroids._lastInjectableUseFrame = Game():GetFrameCount()
         ConchBlessing.printDebug("Injectable Steroids: Notified Oral Steroids of recent use (frame " .. Game():GetFrameCount() .. ")")
     end
+    
+    -- Increment use count and death chance after successful use
+    ConchBlessing.injectablsteroids.data.currentFloorUseCount = ConchBlessing.injectablsteroids.data.currentFloorUseCount + 1
+    ConchBlessing.injectablsteroids.data.currentInstantDeathPercent = ConchBlessing.injectablsteroids.data.currentInstantDeathPercent + ConchBlessing.injectablsteroids.data.instantDeathPercentIncrement
+    ConchBlessing.printDebug("Injectable Steroids used successfully! Death chance increased to " .. tostring(ConchBlessing.injectablsteroids.data.currentInstantDeathPercent) .. "% for next use (floor use count: " .. tostring(ConchBlessing.injectablsteroids.data.currentFloorUseCount) .. ")")
     
     ConchBlessing.printDebug("=== Injectable Steroids onUseItem END ===")
     
@@ -375,6 +389,11 @@ ConchBlessing.injectablsteroids.onNewLevel = function(_)
         return
     end
     
+    -- Reset instant death chance and use count on new floor
+    ConchBlessing.injectablsteroids.data.currentInstantDeathPercent = ConchBlessing.injectablsteroids.data.baseInstantDeathPercent
+    ConchBlessing.injectablsteroids.data.currentFloorUseCount = 0
+    ConchBlessing.printDebug("Injectable Steroids: New floor! Death chance reset to " .. tostring(ConchBlessing.injectablsteroids.data.currentInstantDeathPercent) .. "%")
+    
     if not player:HasCollectible(INJECTABLE_STEROIDS_ID) then
         return
     end
@@ -453,4 +472,52 @@ do
             return saveData
         end)
     end
+end
+
+-- EID dynamic description modifier to show current death chance
+if EID then
+    EID:addDescriptionModifier("Injectable Steroids Death Chance", function(descObj)
+        -- Only modify Injectable Steroids description
+        if descObj.ObjType == EntityType.ENTITY_PICKUP 
+           and descObj.ObjVariant == PickupVariant.PICKUP_COLLECTIBLE 
+           and descObj.ObjSubType == INJECTABLE_STEROIDS_ID then
+            
+            local currentDeathChance = ConchBlessing.injectablsteroids.data.currentInstantDeathPercent
+            local floorUseCount = ConchBlessing.injectablsteroids.data.currentFloorUseCount
+            
+            -- Get current language for localization
+            local currentLang = "kr"
+            if ConchBlessing and ConchBlessing.Config and ConchBlessing.Config.language then
+                local lang = ConchBlessing.Config.language
+                if lang == "Korean" or lang == "kr" then
+                    currentLang = "kr"
+                elseif lang == "English" or lang == "en" then
+                    currentLang = "en"
+                end
+            end
+            
+            -- Add death chance info to description
+            local deathChanceText = ""
+            if currentLang == "kr" then
+                deathChanceText = "#{{ColorRed}}현재 즉사 확률: " .. tostring(currentDeathChance) .. "%{{CR}}"
+                if floorUseCount > 0 then
+                    deathChanceText = deathChanceText .. " (이번 층 사용: " .. tostring(floorUseCount) .. "회)"
+                end
+            else
+                deathChanceText = "#{{ColorRed}}Current Death Chance: " .. tostring(currentDeathChance) .. "%{{CR}}"
+                if floorUseCount > 0 then
+                    deathChanceText = deathChanceText .. " (Used this floor: " .. tostring(floorUseCount) .. " times)"
+                end
+            end
+            
+            -- Append to existing description
+            descObj.Description = descObj.Description .. deathChanceText
+            
+            ConchBlessing.printDebug("[EID] Injectable Steroids: Added death chance info to description: " .. tostring(currentDeathChance) .. "%")
+        end
+        
+        return descObj
+    end)
+    
+    ConchBlessing.printDebug("[EID] Injectable Steroids: Description modifier registered")
 end

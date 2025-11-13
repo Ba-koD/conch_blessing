@@ -537,7 +537,10 @@ local function spawnInvisibleTwistedPairIncubus(player, pairIndex, side)
     fam:ClearEntityFlags(EntityFlag.FLAG_APPEAR)
     local spr = fam:GetSprite()
     local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
-    pcall(function() spr:ReplaceSpritesheet(0, path) end)
+    -- Replace all sprite layers to hide wings and body
+    for i = 0, 10 do
+        pcall(function() spr:ReplaceSpritesheet(i, path) end)
+    end
     pcall(function() spr:LoadGraphics() end)
     fam.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
     local fd = fam:GetData()
@@ -618,7 +621,10 @@ local function spawnInvisibleIncubus(player)
     fam:ClearEntityFlags(EntityFlag.FLAG_APPEAR)
     local spr = fam:GetSprite()
     local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
-    pcall(function() spr:ReplaceSpritesheet(0, path) end)
+    -- Replace all sprite layers to hide wings and body
+    for i = 0, 10 do
+        pcall(function() spr:ReplaceSpritesheet(i, path) end)
+    end
     pcall(function() spr:LoadGraphics() end)
     fam.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
     fam:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
@@ -680,7 +686,10 @@ local function spawnInvisibleSuccubus(player)
     fam:ClearEntityFlags(EntityFlag.FLAG_APPEAR)
     local spr = fam:GetSprite()
     local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
-    pcall(function() spr:ReplaceSpritesheet(0, path) end)
+    -- Replace all sprite layers to hide wings and body
+    for i = 0, 10 do
+        pcall(function() spr:ReplaceSpritesheet(i, path) end)
+    end
     pcall(function() spr:LoadGraphics() end)
     fam.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
     fam:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
@@ -726,7 +735,10 @@ local function spawnInvisibleAngelicPrism(player)
     fam:ClearEntityFlags(EntityFlag.FLAG_APPEAR)
     local spr = fam:GetSprite()
     local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
-    pcall(function() spr:ReplaceSpritesheet(0, path) end)
+    -- Replace all sprite layers
+    for i = 0, 10 do
+        pcall(function() spr:ReplaceSpritesheet(i, path) end)
+    end
     pcall(function() spr:LoadGraphics() end)
     fam.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
     fam:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
@@ -847,11 +859,9 @@ function ConchBlessing.chronus._ensureSeraphimEffects(player)
     if not player then return end
     local absorbed = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_SERAPHIM)
     if absorbed > 0 then
-        local itemConfig = Isaac.GetItemConfig()
-        local fateCostume = itemConfig:GetCollectible(CollectibleType.COLLECTIBLE_FATE)
-        if fateCostume then
-            player:AddCostume(fateCostume, false)
-        end
+        -- Flying effect is granted via onEvaluateCache (CACHE_FLYING)
+        -- No costume needed - keep appearance clean like other absorbed familiars
+        dbg(string.format("[Chronus] Seraphim absorbed: %d (flying granted without costume)", absorbed))
     end
 end
 
@@ -877,7 +887,10 @@ local function spawnInvisibleCenser(player)
     fam:ClearEntityFlags(EntityFlag.FLAG_APPEAR)
     local spr = fam:GetSprite()
     local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
-    pcall(function() spr:ReplaceSpritesheet(0, path) end)
+    -- Replace all sprite layers
+    for i = 0, 10 do
+        pcall(function() spr:ReplaceSpritesheet(i, path) end)
+    end
     pcall(function() spr:LoadGraphics() end)
     fam.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
     fam:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
@@ -934,7 +947,10 @@ local function spawnInvisibleStarOfBethlehem(player)
     fam:ClearEntityFlags(EntityFlag.FLAG_APPEAR)
     local spr = fam:GetSprite()
     local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
-    pcall(function() spr:ReplaceSpritesheet(0, path) end)
+    -- Replace all sprite layers
+    for i = 0, 10 do
+        pcall(function() spr:ReplaceSpritesheet(i, path) end)
+    end
     pcall(function() spr:LoadGraphics() end)
     fam.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
     fam:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
@@ -1312,10 +1328,13 @@ ConchBlessing.chronus.onFamiliarUpdate = function(_, fam)
         if not fd.__chronusTwistedPairSpr then
             local spr = f:GetSprite()
             local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
-            pcall(function() spr:ReplaceSpritesheet(0, path) end)
+            -- Replace all sprite layers to hide wings and body
+            for i = 0, 10 do
+                pcall(function() spr:ReplaceSpritesheet(i, path) end)
+            end
             pcall(function() spr:LoadGraphics() end)
             fd.__chronusTwistedPairSpr = true
-            dbg(string.format("Twisted Pair Incubus sprite initialized: pairIdx=%s, side=%s", 
+            dbg(string.format("Twisted Pair Incubus sprite initialized (all layers): pairIdx=%s, side=%s", 
                 tostring(fd.__chronusPairIndex or "nil"), 
                 tostring(fd.__chronusSide or "nil")))
         end
@@ -1327,10 +1346,13 @@ ConchBlessing.chronus.onFamiliarUpdate = function(_, fam)
         if not fd.__chronusIncubusSpr then
             local spr = f:GetSprite()
             local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
-            pcall(function() spr:ReplaceSpritesheet(0, path) end)
+            -- Replace all sprite layers to hide wings and body
+            for i = 0, 10 do
+                pcall(function() spr:ReplaceSpritesheet(i, path) end)
+            end
             pcall(function() spr:LoadGraphics() end)
             fd.__chronusIncubusSpr = true
-            dbg("Incubus sprite initialized (fixed position)")
+            dbg("Incubus sprite initialized (all layers, fixed position)")
         end
         f:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
         f.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
@@ -1349,10 +1371,13 @@ ConchBlessing.chronus.onFamiliarUpdate = function(_, fam)
         if not fd.__chronusSuccubusSpr then
             local spr = f:GetSprite()
             local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
-            pcall(function() spr:ReplaceSpritesheet(0, path) end)
+            -- Replace all sprite layers to hide wings and body
+            for i = 0, 10 do
+                pcall(function() spr:ReplaceSpritesheet(i, path) end)
+            end
             pcall(function() spr:LoadGraphics() end)
             fd.__chronusSuccubusSpr = true
-            dbg("Succubus sprite initialized (fixed position)")
+            dbg("Succubus sprite initialized (all layers, fixed position)")
         end
         f:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
         f.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
@@ -1372,10 +1397,13 @@ ConchBlessing.chronus.onFamiliarUpdate = function(_, fam)
         if not fd.__chronusCenserSpr then
             local spr = f:GetSprite()
             local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
-            pcall(function() spr:ReplaceSpritesheet(0, path) end)
+            -- Replace all sprite layers
+            for i = 0, 10 do
+                pcall(function() spr:ReplaceSpritesheet(i, path) end)
+            end
             pcall(function() spr:LoadGraphics() end)
             fd.__chronusCenserSpr = true
-            dbg("Censer sprite initialized (fixed position)")
+            dbg("Censer sprite initialized (all layers, fixed position)")
         end
         f:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
         f.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
@@ -1395,10 +1423,13 @@ ConchBlessing.chronus.onFamiliarUpdate = function(_, fam)
         if not fd.__chronusStarOfBethlehemSpr then
             local spr = f:GetSprite()
             local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
-            pcall(function() spr:ReplaceSpritesheet(0, path) end)
+            -- Replace all sprite layers
+            for i = 0, 10 do
+                pcall(function() spr:ReplaceSpritesheet(i, path) end)
+            end
             pcall(function() spr:LoadGraphics() end)
             fd.__chronusStarOfBethlehemSpr = true
-            dbg("Star of Bethlehem sprite initialized (fixed position)")
+            dbg("Star of Bethlehem sprite initialized (all layers, fixed position)")
         end
         f:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
         f.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
@@ -1418,7 +1449,10 @@ ConchBlessing.chronus.onFamiliarUpdate = function(_, fam)
         if not fd.__chronusAngelicPrismSpr then
             local spr = f:GetSprite()
             local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
-            pcall(function() spr:ReplaceSpritesheet(0, path) end)
+            -- Replace all sprite layers
+            for i = 0, 10 do
+                pcall(function() spr:ReplaceSpritesheet(i, path) end)
+            end
             pcall(function() spr:LoadGraphics() end)
             fd.__chronusAngelicPrismSpr = true
         end
