@@ -5,7 +5,7 @@
     <id>3545334858</id>
     <description>🐚 소라고둥의 축복 (Conch’s Blessing)
 
-아이작에 &amp;quot;소라고둥의 축복&amp;quot; 업그레이드 시스템을 추가합니다. 기존 아이템을 세련된 연출과 함께 변환하고, 언어/스폰/타이밍을 세밀하게 커스터마이징할 수 있습니다.
+아이작에 소라고둥의 축복 업그레이드 시스템을 추가합니다. 기존 아이템을 세련된 연출과 함께 변환하고, 언어/스폰/타이밍을 세밀하게 커스터마이징할 수 있습니다.
 
 아이템 설명 가이드 : https://tboi.rnen.kr
 
@@ -40,7 +40,7 @@ Inspiration: Style inspired by &amp;quot;Lazy MattPack [RGON]&amp;quot; by Mr. H
 Required Mod: Magic Conch (Steam Workshop: https://steamcommunity.com/sharedfiles/filedetails/?id=3540206030)
 
 RGON Recommended</description>
-    <version>1.0.41</version>
+    <version>1.0.43</version>
     <visibility>Public</visibility>
     <tag id="Lua"/>
     <tag id="Items"/>
