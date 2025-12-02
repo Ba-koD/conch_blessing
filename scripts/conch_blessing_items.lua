@@ -1583,19 +1583,8 @@ local function loadAllItems()
         if EID then
             -- unify: prepare data and register a single modifier handling both conch-mode and synergies
             local function resolveModLang()
-                local normalize = (ConchBlessing and ConchBlessing.Config and ConchBlessing.NormalizeLanguage)
-                    or (require("scripts.conch_blessing_config").NormalizeLanguage)
-                local cfg = ConchBlessing and ConchBlessing.Config and ConchBlessing.Config.language
-                local base = cfg or "Auto"
-                if base == "Auto" or base == "auto" then
-                    local eidLang = (EID and EID.Config and EID.Config.Language) or (EID and EID.UserConfig and EID.UserConfig.Language)
-                    if eidLang and eidLang ~= "auto" then
-                        base = eidLang
-                    else
-                        base = (Options and Options.Language) or "en"
-                    end
-                end
-                return normalize(base)
+                local ConchBlessing_Config = require("scripts.conch_blessing_config")
+                return ConchBlessing_Config.GetCurrentLanguage()
             end
 
             -- origin maps already exported above

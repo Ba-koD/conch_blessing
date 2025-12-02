@@ -485,16 +485,9 @@ if EID then
             local currentDeathChance = ConchBlessing.injectablsteroids.data.currentInstantDeathPercent
             local floorUseCount = ConchBlessing.injectablsteroids.data.currentFloorUseCount
             
-            -- Get current language for localization
-            local currentLang = "kr"
-            if ConchBlessing and ConchBlessing.Config and ConchBlessing.Config.language then
-                local lang = ConchBlessing.Config.language
-                if lang == "Korean" or lang == "kr" then
-                    currentLang = "kr"
-                elseif lang == "English" or lang == "en" then
-                    currentLang = "en"
-                end
-            end
+            -- Get current language for localization (auto-detect from EID/game)
+            local ConchBlessing_Config = require("scripts.conch_blessing_config")
+            local currentLang = ConchBlessing_Config.GetCurrentLanguage()
             
             -- Add death chance info to description
             local deathChanceText = ""

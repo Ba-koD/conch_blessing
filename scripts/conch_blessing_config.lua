@@ -4,55 +4,40 @@ local Version = "1.0.0"
 ConchBlessing_Config.Version = Version
 
 local DefaultConfig = {
-    language = "Auto", -- 0 = Auto, otherwise can be index into LANGUAGE_MAP or language code string (e.g., "en")
     debugMode = false,
     spawnCollectibles = false, -- allow collectibles to spawn naturally (default: false)
     spawnTrinkets = false,     -- allow trinkets to spawn naturally (default: false)
 }
 
--- Language map managed from config
--- index starts at 1 for MCM (0 will mean Auto)
-ConchBlessing_Config.LANGUAGE_MAP = {
-    { code = "en", name = "English" },
-    { code = "kr", name = "Korean" },
-}
+-- Supported language codes for validation
+ConchBlessing_Config.SUPPORTED_LANGS = { "en", "kr", "ja", "zh" }
 
----Resolve current language code from config and game options
----@param mod table
+---Resolve current language code automatically
+---Priority: EID language setting -> Game language setting
 ---@return string langCode
-function ConchBlessing_Config.GetCurrentLanguage(mod)
+function ConchBlessing_Config.GetCurrentLanguage()
     local normalize = ConchBlessing_Config.NormalizeLanguage
     local function isSupported(code)
-        for _, l in ipairs(ConchBlessing_Config.LANGUAGE_MAP) do
-            if l.code == code then return true end
+        for _, lang in ipairs(ConchBlessing_Config.SUPPORTED_LANGS) do
+            if lang == code then return true end
         end
         return false
     end
 
-    -- If user set a direct code string, honor it
-    local cfgLang = mod and mod.Config and mod.Config.language
-    if type(cfgLang) == "string" and cfgLang ~= "Auto" and cfgLang ~= "auto" then
-        local c = normalize(cfgLang)
-        return isSupported(c) and c or "en"
-    end
-
-    -- If user selected by index via MCM (1..#LANGUAGE_MAP)
-    if type(cfgLang) == "number" and cfgLang > 0 then
-        local langObj = ConchBlessing_Config.LANGUAGE_MAP[cfgLang]
-        if langObj and langObj.code then
-            local c = normalize(langObj.code)
-            return isSupported(c) and c or "en"
+    -- Priority 1: EID language setting (if EID is available)
+    if EID then
+        local eidLang = (EID.Config and EID.Config.Language) or (EID.UserConfig and EID.UserConfig.Language)
+        if eidLang and eidLang ~= "auto" then
+            local c = normalize(eidLang)
+            if isSupported(c) then
+                return c
+            end
         end
     end
 
-    -- Auto: prefer EID language first; if not available, use Options
-    local eidLang = (EID and ((EID.Config and EID.Config.Language) or (EID.UserConfig and EID.UserConfig.Language)))
-    if eidLang and eidLang ~= "auto" then
-        local c = normalize(eidLang)
-        return isSupported(c) and c or "en"
-    end
-    local opt = normalize((Options and Options.Language) or "en")
-    return isSupported(opt) and opt or "en"
+    -- Priority 2: Game language setting
+    local gameLang = normalize((Options and Options.Language) or "en")
+    return isSupported(gameLang) and gameLang or "en"
 end
 
 ---Normalize various language codes to our internal codes

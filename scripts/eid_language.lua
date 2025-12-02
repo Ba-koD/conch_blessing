@@ -3,25 +3,10 @@
 
 local isc = require("scripts.lib.isaacscript-common")
 
--- Inline language resolver to ensure immediate reflection of config
+-- Language resolver: EID setting -> Game setting (no mod-specific override)
 local function getCurrentLang()
-    local normalize = (ConchBlessing and ConchBlessing.Config and ConchBlessing.NormalizeLanguage)
-        or (require("scripts.conch_blessing_config").NormalizeLanguage)
-
-    local cfg = ConchBlessing and ConchBlessing.Config and ConchBlessing.Config.language
-    if type(cfg) == "string" and cfg ~= "Auto" and cfg ~= "auto" then
-        return normalize(cfg)
-    end
-
-    -- If Auto, prefer EID language first (if available), else fall back to Options
-    if EID then
-        local eidLang = (EID.Config and EID.Config.Language) or (EID.UserConfig and EID.UserConfig.Language)
-        if eidLang and eidLang ~= "auto" then
-            return normalize(eidLang)
-        end
-    end
-
-    return normalize((Options and Options.Language) or "en")
+    local ConchBlessing_Config = require("scripts.conch_blessing_config")
+    return ConchBlessing_Config.GetCurrentLanguage()
 end
 
 ConchBlessing.EID = ConchBlessing.EID or {}
@@ -30,6 +15,8 @@ ConchBlessing._eidRegistered = ConchBlessing._eidRegistered or { } -- [type:id][
 -- Add multilingual description to EID
 -- Usage: ConchBlessing.EID.addOptLangDescription(itemId, itemData)
 -- itemData should have name, description, and eid as multilingual objects
+-- This function registers ALL available languages from itemData to EID,
+-- so EID can display the correct language based on its own settings (not MCM)
 ConchBlessing.EID.addOptLangDescription = function(itemId, itemData)
     if not EID then
         ConchBlessing.printDebug("EID not found, skipping language registration")
@@ -41,108 +28,91 @@ ConchBlessing.EID.addOptLangDescription = function(itemId, itemData)
         return
     end
     
-    -- Get current language from config / Options
-    local currentLang = getCurrentLang()
-    ConchBlessing.printDebug("Current language: " .. currentLang)
-    
-    -- Extract name for current language with fallback to English
-    local itemName = nil
-    if type(itemData.name) == "table" then
-        itemName = itemData.name[currentLang] or itemData.name["en"]
-        ConchBlessing.printDebug("Resolved name (" .. currentLang .. "): " .. tostring(itemName))
-    else
-        itemName = itemData.name
-        ConchBlessing.printDebug("Resolved name (string): " .. tostring(itemName))
+    -- Helper: map internal language code to EID language code
+    local function toEIDLang(code)
+        local map = { en = "en_us", kr = "ko_kr", ja = "ja_jp", zh = "zh_cn" }
+        return map[code] or "en_us"
     end
     
-    -- Extract eid description for current language with fallback to English
-    local eidDescription = nil
-    if type(itemData.eid) == "table" then
-        local eidData = itemData.eid[currentLang] or itemData.eid["en"]
-        if type(eidData) == "table" then
-            eidDescription = table.concat(eidData, "\n")
-        else
-            eidDescription = eidData
-        end
-        ConchBlessing.printDebug("Resolved eid (" .. currentLang .. "): " .. tostring(eidDescription))
-    else
-        eidDescription = itemData.eid
-        ConchBlessing.printDebug("Resolved eid (string): " .. tostring(eidDescription))
-    end
-    
-    -- Register with EID if we have both name and eid description
-    if itemName and eidDescription then
-        -- helper: map internal code -> EID code
-        local function toEIDLang(code)
-            local map = { en = "en_us", kr = "ko_kr", ja = "ja_jp", zh = "zh_cn" }
-            return map[code] or (EID and EID.Config and EID.Config.Language) or (EID and EID.DefaultLanguageCode) or "en_us"
-        end
-
-        -- Always register English as fallback so EID's internal fallback works for any unsupported language
-        local englishName = (type(itemData.name) == "table" and (itemData.name["en"] or itemData.name.en)) or itemData.name
-        local englishDesc
-        if type(itemData.eid) == "table" then
-            local enEid = itemData.eid["en"] or itemData.eid.en
-            englishDesc = type(enEid) == "table" and table.concat(enEid, "\n") or enEid
-        else
-            englishDesc = itemData.eid
-        end
-
-        local isTrinket = (itemData.type == "trinket")
-        local regKey = (isTrinket and "T:" or "C:") .. tostring(itemId)
-        if englishName and englishDesc and not (ConchBlessing._eidRegistered[regKey] and ConchBlessing._eidRegistered[regKey].en_us) then
-            if isTrinket then
-                EID:addTrinket(itemId, englishDesc, englishName, "en_us")
+    -- Helper: extract text from itemData field (supports both string and table)
+    local function extractText(field, langCode)
+        if type(field) == "table" then
+            local data = field[langCode]
+            if type(data) == "table" then
+                return table.concat(data, "\n")
             else
-                EID:addCollectible(itemId, englishDesc, englishName, "en_us")
+                return data
             end
-            ConchBlessing._eidRegistered[regKey] = ConchBlessing._eidRegistered[regKey] or {}
-            ConchBlessing._eidRegistered[regKey].en_us = true
+        else
+            return field
         end
-
-        -- Additionally register the currently resolved language if it isn't English
-        if currentLang ~= "en" then
-            local eidLangCode = toEIDLang(currentLang)
-            if not (ConchBlessing._eidRegistered[regKey] and ConchBlessing._eidRegistered[regKey][eidLangCode]) then
+    end
+    
+    local isTrinket = (itemData.type == "trinket")
+    local regKey = (isTrinket and "T:" or "C:") .. tostring(itemId)
+    ConchBlessing._eidRegistered[regKey] = ConchBlessing._eidRegistered[regKey] or {}
+    
+    -- Collect all available languages from itemData.name
+    local availableLanguages = {}
+    if type(itemData.name) == "table" then
+        for langCode, _ in pairs(itemData.name) do
+            availableLanguages[langCode] = true
+        end
+    end
+    -- Also check itemData.eid for additional languages
+    if type(itemData.eid) == "table" then
+        for langCode, _ in pairs(itemData.eid) do
+            availableLanguages[langCode] = true
+        end
+    end
+    -- Always ensure English is registered as fallback
+    availableLanguages["en"] = true
+    
+    -- Register each available language to EID
+    local registeredCount = 0
+    for langCode, _ in pairs(availableLanguages) do
+        local eidLangCode = toEIDLang(langCode)
+        
+        -- Skip if already registered for this language
+        if not ConchBlessing._eidRegistered[regKey][eidLangCode] then
+            local itemName = extractText(itemData.name, langCode)
+            local eidDescription = extractText(itemData.eid, langCode)
+            
+            -- Fallback to English if language not found in either field
+            if not itemName then
+                itemName = extractText(itemData.name, "en")
+            end
+            if not eidDescription then
+                eidDescription = extractText(itemData.eid, "en")
+            end
+            
+            if itemName and eidDescription then
+                -- Register to EID with correct language code
                 if isTrinket then
                     EID:addTrinket(itemId, eidDescription, itemName, eidLangCode)
                 else
                     EID:addCollectible(itemId, eidDescription, itemName, eidLangCode)
                 end
-                ConchBlessing._eidRegistered[regKey] = ConchBlessing._eidRegistered[regKey] or {}
+                
                 ConchBlessing._eidRegistered[regKey][eidLangCode] = true
-                ConchBlessing.printDebug("[EID] Registered current mod language mapping: " .. tostring(eidLangCode))
+                registeredCount = registeredCount + 1
+                ConchBlessing.printDebug("[EID] Registered " .. eidLangCode .. ": " .. itemName)
+            else
+                ConchBlessing.printDebug("[EID] Missing text for " .. langCode .. " (name=" .. tostring(itemName) .. ", desc=" .. tostring(eidDescription) .. ")")
             end
         end
-
-        -- Mirror into EID's current display language, so descriptions follow our MCM setting without forcing EID language
-        local eidDisplayLang = (EID and ((EID.Config and EID.Config.Language) or EID.DefaultLanguageCode)) or nil
-        if eidDisplayLang then
-            local targetLang = tostring(eidDisplayLang)
-            local already = ConchBlessing._eidRegistered[regKey] and ConchBlessing._eidRegistered[regKey][targetLang]
-            if not already then
-                if isTrinket then
-                    EID:addTrinket(itemId, eidDescription, itemName, targetLang)
-                else
-                    EID:addCollectible(itemId, eidDescription, itemName, targetLang)
-                end
-                ConchBlessing._eidRegistered[regKey] = ConchBlessing._eidRegistered[regKey] or {}
-                ConchBlessing._eidRegistered[regKey][targetLang] = true
-                ConchBlessing.printDebug("[EID] Mirrored mapping into EID display language: " .. targetLang)
-            end
-        else
-            ConchBlessing.printDebug("[EID] No EID display language detected for mirroring")
-        end
-        ConchBlessing.printDebug(string.format("EID registered (%s): %s - %s", isTrinket and "trinket" or "collectible", itemName, eidDescription))
-        
-        -- Store in ConchBlessing.EID table for reference with type-prefixed key to avoid collisions
-        ConchBlessing.EID[regKey] = {
-            name = itemName,
-            description = eidDescription
-        }
-    else
-        ConchBlessing.printDebug("Missing name or eid description, skipping EID registration")
     end
+    
+    ConchBlessing.printDebug(string.format("[EID] Registered %d language(s) for item ID %d (%s)", registeredCount, itemId, isTrinket and "trinket" or "collectible"))
+    
+    -- Store current language version in ConchBlessing.EID table for reference (used by ShowItemText)
+    local currentLang = getCurrentLang()
+    local itemName = extractText(itemData.name, currentLang) or extractText(itemData.name, "en")
+    local eidDescription = extractText(itemData.eid, currentLang) or extractText(itemData.eid, "en")
+    ConchBlessing.EID[regKey] = {
+        name = itemName,
+        description = eidDescription
+    }
 end
 
 ConchBlessing.EID.AddEIDCollectible = function(id, name, description, eidDescription)
@@ -160,68 +130,13 @@ end
 ConchBlessing.EID.registerAllItems = function()
     ConchBlessing.printDebug("Registering all items with EID...")
 
-    -- 1) Do NOT force EID language. Instead, only try to load a suitable font for current language
+    -- 1) Prepare language mapping for EID registration (without forcing EID language changes)
     local function toEIDLang(code)
         local map = { en = "en_us", kr = "ko_kr", ja = "ja_jp", zh = "zh_cn" }
         return map[code] or "en_us"
     end
-    local short = getCurrentLang() -- prioritizes ConchBlessing.Config.language
+    local short = getCurrentLang() -- auto-detect from EID/game language
     local eidLang = toEIDLang(short)
-    if EID then
-        EID.Config = EID.Config or {}
-        -- Debug: show current EID language (not forcing changes)
-        ConchBlessing.printDebug("[EID] Current EID.Config.Language = " .. tostring(EID.Config.Language))
-
-        -- Try to load font from External Item Descriptions' font folder if exists
-        -- NOTE: Do not hardcode exact font type; respect EID.Config.FontType if available
-        local fontType = EID.Config["FontType"]
-        local externalFontBase = "C:/Program Files (x86)/Steam/steamapps/common/The Binding of Isaac Rebirth/mods/external item descriptions_836319872/resources/font/"
-        local function tryLoadFont(path)
-            if type(EID.loadFont) == "function" then
-                local ok, err = pcall(function()
-                    EID:loadFont(path)
-                end)
-                if ok then
-                    ConchBlessing.printDebug("[EID] Loaded font: " .. tostring(path))
-                    return true
-                else
-                    ConchBlessing.printDebug("[EID] Failed to load font: " .. tostring(path) .. ", error=" .. tostring(err))
-                end
-            end
-            return false
-        end
-
-        -- Candidate font paths in order (language-aware first, then generic by FontType, then EID default path)
-        local candidates = {}
-        -- language-specific families commonly used by EID (these filenames may vary by user setup; we attempt reasonable variants)
-        table.insert(candidates, externalFontBase .. "eid_" .. tostring(fontType or "") .. ".fnt")
-        table.insert(candidates, externalFontBase .. "eid_default.fnt")
-        -- fallback to EID's own mod fonts if present
-        if EID.modPath then
-            if fontType then
-                table.insert(candidates, EID.modPath .. "resources/font/eid_" .. tostring(fontType) .. ".fnt")
-            end
-            table.insert(candidates, EID.modPath .. "resources/font/eid_default.fnt")
-        end
-
-        local loaded = false
-        for _, p in ipairs(candidates) do
-            if p and p ~= externalFontBase .. "eid_.fnt" then
-                if tryLoadFont(p) then
-                    loaded = true
-                    break
-                end
-            end
-        end
-
-        -- Signal EID to refresh without changing its language
-        EID.MCM_OptionChanged = true
-        EID.ForceRefreshCache = true
-        ConchBlessing.printDebug("[EID] Font refresh requested; language preserved: " .. tostring(EID.Config.Language))
-        if not loaded then
-            ConchBlessing.printDebug("[EID] No candidate font loaded; EID will keep current font settings")
-        end
-    end
 
     -- 1.5) Ensure EID mod context for proper mod name tagging on registrations
     local prevCurrentMod = EID and EID._currentMod
@@ -339,10 +254,18 @@ ConchBlessing.EID.registerAllItems = function()
         end
     end
 
-    -- 3) Register specials (Golden/Mom's Box) for the current language only
-    local function getBaseEidTextForCurrentLang(itemData)
+    -- 3) Register specials (Golden/Mom's Box) for ALL available languages
+    -- Supported languages for registration
+    local supportedLangs = { "en", "kr", "ja", "zh" }
+    
+    local function getBaseEidTextForLang(itemData, langCode)
         local eidSrc = itemData.eid
-        local langEid = (type(eidSrc) == "table") and (eidSrc[short] or eidSrc["en"]) or eidSrc
+        local langEid
+        if type(eidSrc) == "table" then
+            langEid = eidSrc[langCode] or eidSrc["en"]
+        else
+            langEid = eidSrc
+        end
         local baseText = ""
         if type(langEid) == "table" then
             baseText = table.concat(langEid, "\n")
@@ -371,44 +294,61 @@ ConchBlessing.EID.registerAllItems = function()
     for key, data in pairs(ConchBlessing.ItemData or {}) do
         if data and data.type == "trinket" and data.id and data.id ~= -1 and data.specials then
             local specTop = data.specials
-            local specLang = type(specTop[short]) == "table" and specTop[short] or nil
-            local function pick(k)
-                if specLang and specLang[k] ~= nil then return specLang[k] end
-                return specTop[k]
-            end
-            local nVal = pick("normal")
-            local mVal = pick("moms_box")
-            local bVal = pick("both")
+            
+            -- Register for each supported language
+            for _, langCode in ipairs(supportedLangs) do
+                local targetEidLang = toEIDLang(langCode)
+                local specLang = type(specTop[langCode]) == "table" and specTop[langCode] or nil
+                
+                local function pick(k)
+                    if specLang and specLang[k] ~= nil then return specLang[k] end
+                    return specTop[k]
+                end
+                local nVal = pick("normal")
+                local mVal = pick("moms_box")
+                local bVal = pick("both")
 
-            if nVal ~= nil or mVal ~= nil or bVal ~= nil then
-                if type(nVal) == "table" then
-                    -- Array full replace for current language
-                    local base = getBaseEidTextForCurrentLang(data)
-                    local ln = nVal
-                    local lm = (type(mVal) == "table") and mVal or ln
-                    local lb = (type(bVal) == "table") and bVal or lm
-                    local t1 = replaceNumbersInOrder(base, ln, false)
-                    local t2 = replaceNumbersInOrder(base, lm, true)
-                    local t3 = replaceNumbersInOrder(base, lb, true)
-                    EID:CreateDescriptionTableIfMissing("goldenTrinketEffects", eidLang)
-                    EID.descriptions[eidLang].goldenTrinketEffects[data.id] = { t1, t2, t3 }
-                    EID:addGoldenTrinketTable(data.id, { fullReplace = true })
-                else
-                    local num = tonumber(nVal)
-                    if num then
-                        -- Language-specific multiplier metadata
-                        EID:CreateDescriptionTableIfMissing("goldenTrinketData", eidLang)
-                        EID.descriptions[eidLang].goldenTrinketData[data.id] = { t = { num } }
+                if nVal ~= nil or mVal ~= nil or bVal ~= nil then
+                    if type(nVal) == "table" then
+                        -- Array full replace for this language
+                        local base = getBaseEidTextForLang(data, langCode)
+                        local ln = nVal
+                        local lm = (type(mVal) == "table") and mVal or ln
+                        local lb = (type(bVal) == "table") and bVal or lm
+                        local t1 = replaceNumbersInOrder(base, ln, false)
+                        local t2 = replaceNumbersInOrder(base, lm, true)
+                        local t3 = replaceNumbersInOrder(base, lb, true)
+                        EID:CreateDescriptionTableIfMissing("goldenTrinketEffects", targetEidLang)
+                        EID.descriptions[targetEidLang].goldenTrinketEffects[data.id] = { t1, t2, t3 }
+                        -- Only call addGoldenTrinketTable once (for en_us as base)
+                        if langCode == "en" then
+                            EID:addGoldenTrinketTable(data.id, { fullReplace = true })
+                        end
+                        ConchBlessing.printDebug("[EID] Golden trinket fullReplace registered for " .. key .. " (" .. targetEidLang .. ")")
                     else
-                        -- String find/replace for current language
-                        EID:CreateDescriptionTableIfMissing("goldenTrinketEffects", eidLang)
-                        local repl = {
-                            tostring(nVal or ""),
-                            tostring(mVal or nVal or ""),
-                            tostring(bVal or mVal or nVal or "")
-                        }
-                        EID.descriptions[eidLang].goldenTrinketEffects[data.id] = repl
-                        EID:addGoldenTrinketTable(data.id, { findReplace = true })
+                        local num = tonumber(nVal)
+                        if num then
+                            -- Numeric multiplier (language-independent, only register once)
+                            if langCode == "en" then
+                                EID:CreateDescriptionTableIfMissing("goldenTrinketData", targetEidLang)
+                                EID.descriptions[targetEidLang].goldenTrinketData[data.id] = { t = { num } }
+                                ConchBlessing.printDebug("[EID] Golden trinket multiplier registered for " .. key .. ": " .. tostring(num))
+                            end
+                        else
+                            -- String find/replace for this language
+                            EID:CreateDescriptionTableIfMissing("goldenTrinketEffects", targetEidLang)
+                            local repl = {
+                                tostring(nVal or ""),
+                                tostring(mVal or nVal or ""),
+                                tostring(bVal or mVal or nVal or "")
+                            }
+                            EID.descriptions[targetEidLang].goldenTrinketEffects[data.id] = repl
+                            -- Only call addGoldenTrinketTable once (for en_us as base)
+                            if langCode == "en" then
+                                EID:addGoldenTrinketTable(data.id, { findReplace = true })
+                            end
+                            ConchBlessing.printDebug("[EID] Golden trinket findReplace registered for " .. key .. " (" .. targetEidLang .. ")")
+                        end
                     end
                 end
             end

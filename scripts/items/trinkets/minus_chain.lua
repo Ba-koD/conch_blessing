@@ -7,6 +7,8 @@ if ConchBlessing and ConchBlessing._minusChainRegistered then
 	return true
 end
 
+local DamageUtils = ConchBlessing.DamageUtils or require("scripts.lib.damage_utils")
+
 local function idByName(name)
 	local ok, id = pcall(function()
 		return Isaac.GetTrinketIdByName(name)
@@ -26,12 +28,20 @@ if TID_B and TID_B > 0 and TID_A and TID_A > 0 then CHAIN_NEXT[TID_B] = TID_A en
 
 ConchBlessing._minusNoHit = ConchBlessing._minusNoHit or {}
 
--- Mark damage taken
+-- Mark damage taken (exclude self-inflicted damage like Time = Power)
 ConchBlessing.originalMod:AddCallback(ModCallbacks.MC_ENTITY_TAKE_DMG, function(_, ent, amount, flags, src, countdown)
 	local player = ent and ent:ToPlayer() or nil
 	if not player then return end
+	
+	-- Exclude self-inflicted damage (same logic as Time = Power)
+	if DamageUtils.isSelfInflictedDamage(flags) then
+		ConchBlessing.printDebug(string.format("[MinusChain] Ignored self-inflicted damage (flags=%d)", flags or -1))
+		return
+	end
+	
 	local idx = player.ControllerIndex or 0
 	ConchBlessing._minusNoHit[idx] = false
+	ConchBlessing.printDebug(string.format("[MinusChain] Player took damage, noHit[%d] = false", idx))
 end)
 
 -- Initialize flag at game start
