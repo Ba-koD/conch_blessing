@@ -379,7 +379,8 @@ ConchBlessing.ItemData = {
                 "#중첩시 합연산으로 증가합니다.",
                 "#{{Warning}} 몸이 점점 노래집니다...",
                 "#{{Warning}} 기본 1% 확률로 즉사합니다.",
-                "#{{Warning}} 사용시 즉사 확률이 3%씩 증가하고 층마다 초기화됩니다."
+                "#{{Warning}} 사용시 즉사 확률이 3%씩 증가하고 층마다 초기화됩니다.",
+                "#방 클리어시마다 즉사확률이 0.25% 감소합니다."
             },
             en = {
                 "Damage, fire rate, range, and luck are changed to 0.5~2.0x when used",
@@ -387,7 +388,8 @@ ConchBlessing.ItemData = {
                 "#When stacked, increases by addition",
                 "#{{Warning}}Your body is gradually turning yellow...",
                 "#{{Warning}}Base 1% chance of instant death when used",
-                "#{{Warning}}Death chance increases by 3% each use, resets each floor."
+                "#{{Warning}}Death chance increases by 3% each use, resets each floor.",
+                "#Each room clear decreases death chance by 0.25%."
             }
         },
         pool = {
@@ -412,7 +414,8 @@ ConchBlessing.ItemData = {
             evaluateCache = "injectablsteroids.onEvaluateCache",
             gameStarted = "injectablsteroids.onGameStarted",
             newLevel = "injectablsteroids.onNewLevel",
-            update = "injectablsteroids.onUpdate"
+            update = "injectablsteroids.onUpdate",
+            postRoomClear = "injectablsteroids.onRoomClear"
         },
         onBeforeChange = "injectablsteroids.onBeforeChange",
         onAfterChange = "injectablsteroids.onAfterChange",

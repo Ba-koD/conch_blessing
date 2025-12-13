@@ -172,6 +172,7 @@ ConchBlessing.CallbackManager.callbackMapping = {
     postEntityKill = { callback = ModCallbacks.MC_POST_ENTITY_KILL, needsId = false },
     preNPCUpdate = { callback = ModCallbacks.MC_PRE_NPC_UPDATE, needsId = false },
     preSpawnCleanAward = { callback = ModCallbacks.MC_PRE_SPAWN_CLEAN_AWARD, needsId = false },
+    postRoomClear = { callback = ModCallbacks.MC_PRE_SPAWN_CLEAN_AWARD, needsId = false },
     preRoomEntitySpawn = { callback = ModCallbacks.MC_PRE_ROOM_ENTITY_SPAWN, needsId = false },
     preEntityDevolve = { callback = ModCallbacks.MC_PRE_ENTITY_DEVOLVE, needsId = false },
     preModUnload = { callback = ModCallbacks.MC_PRE_MOD_UNLOAD, needsId = false }

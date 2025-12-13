@@ -382,6 +382,37 @@ ConchBlessing.injectablsteroids.onGameStarted = function(_)
     ConchBlessing.printDebug("=== Injectable Steroids onGameStarted END ===")
 end
 
+-- Room clear callback: reduce instant death chance by 0.25%
+ConchBlessing.injectablsteroids.onRoomClear = function()
+    local player = Isaac.GetPlayer(0)
+    if not player then
+        return
+    end
+    
+    -- Only reduce if player has the item
+    if not player:HasCollectible(INJECTABLE_STEROIDS_ID) then
+        return
+    end
+    
+    local data = ConchBlessing.injectablsteroids.data
+    local reductionAmount = 0.25
+    local previousChance = data.currentInstantDeathPercent
+    
+    -- Reduce death chance, but don't go below base value
+    if data.currentInstantDeathPercent > data.baseInstantDeathPercent then
+        data.currentInstantDeathPercent = math.max(
+            data.baseInstantDeathPercent,
+            data.currentInstantDeathPercent - reductionAmount
+        )
+        ConchBlessing.printDebug("Injectable Steroids: Room cleared! Death chance reduced from " .. 
+            tostring(previousChance) .. "% to " .. tostring(data.currentInstantDeathPercent) .. 
+            "% (base: " .. tostring(data.baseInstantDeathPercent) .. "%)")
+    else
+        ConchBlessing.printDebug("Injectable Steroids: Room cleared! Death chance already at base (" .. 
+            tostring(data.baseInstantDeathPercent) .. "%), no reduction applied")
+    end
+end
+
 -- charge restore when new level
 ConchBlessing.injectablsteroids.onNewLevel = function(_)
     local player = Isaac.GetPlayer(0)

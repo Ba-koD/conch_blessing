@@ -190,3 +190,57 @@ end
 ConchBlessing.voiddagger.onAfterChange = function(upgradePos, pickup, _)
     ConchBlessing.template.neutral.onAfterChange(upgradePos, pickup, ConchBlessing.voiddagger.data)
 end
+
+-- EID dynamic description modifier to show current proc chance
+if EID then
+    EID:addDescriptionModifier("Void Dagger Proc Chance", function(descObj)
+        -- Only modify Void Dagger description
+        if descObj.ObjType == EntityType.ENTITY_PICKUP 
+           and descObj.ObjVariant == PickupVariant.PICKUP_COLLECTIBLE 
+           and descObj.ObjSubType == VOID_DAGGER_ID then
+            
+            local player = Isaac.GetPlayer(0)
+            if not player then
+                return descObj
+            end
+            
+            -- Calculate current proc chance based on player stats
+            local maxDelay = player.MaxFireDelay or 0
+            local shotsPerSecond = math.max(1.0, 30.0 / (maxDelay + 1.0))
+            
+            -- Base chance: max(5%, (30 - SPS)%)
+            local pBase = (30.0 - shotsPerSecond) / 100.0
+            if pBase < 0.05 then pBase = 0.05 end
+            if pBase > 1.0 then pBase = 1.0 end
+            
+            -- Apply luck bonus: pFinal = pBase × (1 + 0.1 × luck)
+            local luck = math.max(0.0, player.Luck or 0.0)
+            local luckFactor = 1.0 + 0.1 * luck
+            local pFinal = pBase * luckFactor
+            if pFinal > 1.0 then pFinal = 1.0 end
+            
+            -- Get current language for localization
+            local ConchBlessing_Config = require("scripts.conch_blessing_config")
+            local currentLang = ConchBlessing_Config.GetCurrentLanguage()
+            
+            -- Add proc chance info to description
+            local procChanceText = ""
+            if currentLang == "kr" then
+                procChanceText = "#{{ColorYellow}}현재 발동 확률: " .. string.format("%.1f", pFinal * 100) .. "%{{CR}}"
+                procChanceText = procChanceText .. " (기본: " .. string.format("%.1f", pBase * 100) .. "%, {{Luck}}x" .. string.format("%.1f", luckFactor) .. ")"
+            else
+                procChanceText = "#{{ColorYellow}}Current Proc Chance: " .. string.format("%.1f", pFinal * 100) .. "%{{CR}}"
+                procChanceText = procChanceText .. " (Base: " .. string.format("%.1f", pBase * 100) .. "%, {{Luck}}x" .. string.format("%.1f", luckFactor) .. ")"
+            end
+            
+            -- Append to existing description
+            descObj.Description = descObj.Description .. procChanceText
+            
+            ConchBlessing.printDebug("[EID] Void Dagger: Added proc chance info - base=" .. string.format("%.1f", pBase * 100) .. "%, final=" .. string.format("%.1f", pFinal * 100) .. "%")
+        end
+        
+        return descObj
+    end)
+    
+    ConchBlessing.printDebug("[EID] Void Dagger: Description modifier registered")
+end
