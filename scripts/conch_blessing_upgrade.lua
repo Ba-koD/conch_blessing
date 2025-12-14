@@ -338,6 +338,32 @@ ConchBlessing.tableLength = function(t)
     return count
 end
 
+-- Check if Delete Mode is enabled in Magic Conch
+local function isDeleteModeEnabled()
+    -- Check via API Config
+    if MagicConch and MagicConch.API and MagicConch.API.Config then
+        return MagicConch.API.Config.deleteMode == true
+    end
+    -- Check via direct Config
+    if MagicConch and MagicConch.Config then
+        return MagicConch.Config.deleteMode == true
+    end
+    return false
+end
+
+-- Delete a pickup item with effect
+local function deletePickupWithEffect(entity)
+    local sfxManager = SFXManager()
+    sfxManager:Play(SoundEffect.SOUND_THUMBS_DOWN, 0.7)
+    
+    -- Spawn poof effect at item position
+    Isaac.Spawn(EntityType.ENTITY_EFFECT, EffectVariant.POOF01, 0, entity.Position, Vector.Zero, nil)
+    
+    -- Remove the entity
+    entity:Remove()
+    ConchBlessing.printDebug("Delete Mode: Item removed at position " .. tostring(entity.Position.X) .. ", " .. tostring(entity.Position.Y))
+end
+
 -- Magic Conch result handling function
 local function handleMagicConchResult(result)
     ConchBlessing.printDebug("Magic Conch result received: " .. result.text .. " (type: " .. result.type .. ")")
@@ -353,11 +379,17 @@ local function handleMagicConchResult(result)
     local entities = Isaac.GetRoomEntities()
     local transformed = false
     local upgradeCount = 0
+    local deleteCount = 0
+    
+    -- Check if Delete Mode is enabled
+    local deleteModeActive = isDeleteModeEnabled()
+    ConchBlessing.printDebug("Delete Mode active: " .. tostring(deleteModeActive))
     
     ConchBlessing.printDebug("Number of entities in room: " .. tostring(#entities))
     
-    -- 먼저 모든 변환 가능한 아이템을 찾아서 수집
+    -- Collect items for upgrade and delete
     local upgradeableItems = {}
+    local deleteableItems = {}
     
     for _, entity in ipairs(entities) do
         -- check if it's a pickup (collectible or trinket)
@@ -376,7 +408,9 @@ local function handleMagicConchResult(result)
             -- find item in conversion map by type + id (trinket/collectible 구분)
             local originKey = (isTrinketPickup and "T:" or "C:") .. tostring(baseId)
             local originMappings = ConchBlessing.ItemMaps[originKey]
+            
             if originMappings then
+                -- This item HAS evolution possibilities
                 ConchBlessing.printDebug("Convertible item found: originKey=" .. originKey)
 
                 local availableFlags = {}
@@ -388,6 +422,7 @@ local function handleMagicConchResult(result)
 
                 local upgradeData = originMappings[result.type]
                 if upgradeData then
+                    -- Flag matches - perform upgrade
                     ConchBlessing.printDebug("Flag matches! Item conversion: id=" .. tostring(baseId) .. " -> " .. tostring(upgradeData.upgradeId))
                     ConchBlessing.printDebug("  Flag type: " .. upgradeData.flag .. ", Result type: " .. result.type)
 
@@ -399,7 +434,19 @@ local function handleMagicConchResult(result)
                         isTrinketPickup = isTrinketPickup,
                     })
                 else
+                    -- Flag does NOT match - if Delete Mode is on, delete the item
                     ConchBlessing.printDebug("Flag does not match. No conversion.")
+                    if deleteModeActive then
+                        ConchBlessing.printDebug("Delete Mode: Item has evolution but result type doesn't match any flag. Marking for deletion.")
+                        table.insert(deleteableItems, entity)
+                    end
+                end
+            else
+                -- This item has NO evolution possibilities in ConchBlessing
+                -- If Delete Mode is on and result is "negative", delete the item
+                if deleteModeActive and result.type == "negative" then
+                    ConchBlessing.printDebug("Delete Mode: Item has no evolution and result is negative. Marking for deletion.")
+                    table.insert(deleteableItems, entity)
                 end
             end
         end
@@ -460,7 +507,17 @@ local function handleMagicConchResult(result)
         ConchBlessing.printDebug("Total " .. upgradeCount .. " items queued for upgrade!")
     end
     
-    if not transformed then
+    -- Process deleteable items (Delete Mode)
+    if #deleteableItems > 0 then
+        ConchBlessing.printDebug("Delete Mode: Processing " .. #deleteableItems .. " items for deletion...")
+        for _, entity in ipairs(deleteableItems) do
+            deletePickupWithEffect(entity)
+            deleteCount = deleteCount + 1
+        end
+        ConchBlessing.printDebug("Delete Mode: Total " .. deleteCount .. " items deleted!")
+    end
+    
+    if not transformed and deleteCount == 0 then
         ConchBlessing.printDebug("No convertible field item found or conditions not met.")
     end
 end
