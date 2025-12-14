@@ -963,6 +963,81 @@ ConchBlessing.ItemData = {
             update = "moneytear.onUpdate"
         }
     },
+    UTILITY_BELT = {
+        type = "passive",
+        id = Isaac.GetItemIdByName("Utility Belt"),
+        name = {
+            kr = "다용도 벨트",
+            en = "Utility Belt"
+        },
+        description = {
+            kr = "손가락이 더 많아졌다",
+            en = "More fingers for more buttons"
+        },
+        eid = {
+            kr = {
+                "획득 시 현재 액티브 아이템을 포켓 슬롯으로 이동합니다.",
+                "#포켓 슬롯이 이미 차있다면 이동하지 않습니다.",
+                "#액티브 아이템이 없다면 다음 획득하는 액티브를 포켓 슬롯으로 이동합니다.",
+                "#{{Warning}} 일부 아이템은 이동할 수 없습니다."
+            },
+            en = {
+                "On pickup, moves your current active item to the pocket slot.",
+                "#If pocket is already occupied, does nothing.",
+                "#If no active, the next acquired active will be moved to the pocket slot.",
+                "#{{Warning}} Some items cannot be moved."
+            }
+        },
+        pool = {
+            RoomType.ROOM_TREASURE,
+            RoomType.ROOM_SHOP
+        },
+        gfx = "utility_belt.png",
+        tags = "utility",
+        quality = 3,
+        origin = { id = CollectibleType.COLLECTIBLE_BELT, type = "collectible" },
+        flag = "positive",
+        shopprice = 15,
+        script = "scripts/items/collectibles/utility_belt",
+        callbacks = {
+            postPlayerUpdate = "utilitybelt.onPlayerUpdate",
+            gameStarted = "utilitybelt.onGameStarted",
+            newLevel = "utilitybelt.onNewLevel",
+            update = "utilitybelt.onUpdate"
+        },
+        onBeforeChange = "utilitybelt.onBeforeChange",
+        onAfterChange = "utilitybelt.onAfterChange",
+        synergies = {
+            [{ id = CollectibleType.COLLECTIBLE_BOOK_OF_VIRTUES, type = "collectible" }] = {
+                kr = "{{Warning}} 해당 액티브는 포켓 슬롯으로 이동되지 않습니다",
+                en = "{{Warning}} This active cannot be moved to pocket slot"
+            },
+            [{ id = CollectibleType.COLLECTIBLE_D_INFINITY, type = "collectible" }] = {
+                kr = "{{Warning}} 해당 액티브는 포켓 슬롯으로 이동되지 않습니다",
+                en = "{{Warning}} This active cannot be moved to pocket slot"
+            },
+            [{ id = CollectibleType.COLLECTIBLE_BLANK_CARD, type = "collectible" }] = {
+                kr = "{{Warning}} 해당 액티브는 포켓 슬롯으로 이동되지 않습니다",
+                en = "{{Warning}} This active cannot be moved to pocket slot"
+            },
+            [{ id = CollectibleType.COLLECTIBLE_PLACEBO, type = "collectible" }] = {
+                kr = "{{Warning}} 해당 액티브는 포켓 슬롯으로 이동되지 않습니다",
+                en = "{{Warning}} This active cannot be moved to pocket slot"
+            },
+            [{ id = CollectibleType.COLLECTIBLE_CLEAR_RUNE, type = "collectible" }] = {
+                kr = "{{Warning}} 해당 액티브는 포켓 슬롯으로 이동되지 않습니다",
+                en = "{{Warning}} This active cannot be moved to pocket slot"
+            },
+            [{ id = CollectibleType.COLLECTIBLE_GLOWING_HOUR_GLASS, type = "collectible" }] = {
+                kr = "{{Warning}} 해당 액티브는 포켓 슬롯으로 이동되지 않습니다",
+                en = "{{Warning}} This active cannot be moved to pocket slot"
+            },
+            [{ id = CollectibleType.COLLECTIBLE_JAR_OF_WISPS, type = "collectible" }] = {
+                kr = "{{Warning}} 해당 액티브는 포켓 슬롯으로 이동되지 않습니다",
+                en = "{{Warning}} This active cannot be moved to pocket slot"
+            },
+        }
+    },
 
     -- Trinkets
     TIME_POWER = {

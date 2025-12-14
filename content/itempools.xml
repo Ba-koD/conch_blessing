@@ -34,11 +34,13 @@
         <Item Name="Chronus" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Appraisal Certificate" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Money = Tear" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Utility Belt" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
     <Pool Name="shop">
         <Item Name="Power Training" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Appraisal Certificate" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Money = Tear" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Utility Belt" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Time = Money" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
     <Pool Name="curse">
