@@ -971,8 +971,8 @@ ConchBlessing.ItemData = {
             en = "Utility Belt"
         },
         description = {
-            kr = "손가락이 더 많아졌다",
-            en = "More fingers for more buttons"
+            kr = "잇 아이템",
+            en = "It Item"
         },
         eid = {
             kr = {
