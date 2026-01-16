@@ -1038,6 +1038,95 @@ ConchBlessing.ItemData = {
             },
         }
     },
+    SEALED_DEMON_SWORD = {
+        type = "passive",
+        id = Isaac.GetItemIdByName("Sealed Demon Sword"),
+        name = {
+            kr = "봉인된 마검",
+            en = "Sealed Demon Sword"
+        },
+        description = {
+            kr = "더 많은 피가 필요해...",
+            en = "Need more blood..."
+        },
+        eid = {
+            kr = {
+                "{{Speed}} 이동속도가 -0.2 감소합니다.",
+                "#{{Warning}} 몬스터를 300마리 처치하면 티르핑으로 진화합니다."
+            },
+            en = {
+                "{{Speed}} Movement speed -0.2",
+                "#{{Warning}} After killing 300 enemies, evolves into Tyrfing."
+            }
+        },
+        pool = {
+            RoomType.ROOM_DEVIL,
+            RoomType.ROOM_CURSE
+        },
+        gfx = "sealed_demon_sword.png",
+        tags = "offensive",
+        cache = "speed",
+        quality = 0,
+        origin = { id = CollectibleType.COLLECTIBLE_RED_STEW, type = "collectible" },
+        flag = "positive",
+        shopprice = 10,
+        devilprice = 1,
+        script = "scripts/items/collectibles/sealed_demon_sword",
+        callbacks = {
+            pickup = "sealeddemonsword.onPickup",
+            evaluateCache = "sealeddemonsword.onEvaluateCache",
+            postNPCDeath = "sealeddemonsword.onNPCDeath",
+            gameStarted = "sealeddemonsword.onGameStarted",
+            update = "sealeddemonsword.onUpdate"
+        },
+        onBeforeChange = "sealeddemonsword.onBeforeChange",
+        onAfterChange = "sealeddemonsword.onAfterChange",
+        synergies = {}
+    },
+    TYRFING = {
+        type = "passive",
+        id = Isaac.GetItemIdByName("Tyrfing"),
+        name = {
+            kr = "티르핑",
+            en = "Tyrfing"
+        },
+        description = {
+            kr = "저주받은 마검",
+            en = "Cursed Demon Sword"
+        },
+        eid = {
+            kr = {
+                "몬스터 처치 시마다 {{Damage}}공격력이 +0.05 증가합니다.",
+                "#{{Warning}} 피격 시 누적된 공격력의 50%를 잃습니다."
+            },
+            en = {
+                "Gain +0.05 {{Damage}}Damage per enemy killed.",
+                "#{{Warning}} Lose 50% of accumulated damage when hit."
+            }
+        },
+        pool = {},
+        gfx = "tyrfing.png",
+        tags = "offensive",
+        cache = "damage",
+        quality = 4,
+        hidden = true,
+        origin = { type = "collectible", name = "Sealed Demon Sword" },
+        flag = "negative",
+        shopprice = 30,
+        devilprice = 2,
+        script = "scripts/items/collectibles/tyrfing",
+        callbacks = {
+            pickup = "tyrfing.onPickup",
+            evaluateCache = "tyrfing.onEvaluateCache",
+            entityTakeDmg = "tyrfing.onEntityTakeDamage",
+            postNPCDeath = "tyrfing.onNPCDeath",
+            gameStarted = "tyrfing.onGameStarted",
+            update = "tyrfing.onUpdate"
+        },
+        onBeforeChange = "tyrfing.onBeforeChange",
+        onAfterChange = "tyrfing.onAfterChange",
+        synergies = {}
+    },
 
     -- Trinkets
     TIME_POWER = {
