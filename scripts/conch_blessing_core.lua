@@ -188,6 +188,16 @@ else
     ConchBlessing.printError("Stats library load failed: " .. tostring(statsErr))
 end
 
+-- load vanilla multipliers table (for bonus damage calculation with vanilla item multipliers)
+local vanillaMultSuccess, vanillaMultErr = pcall(function()
+    require("scripts.lib.vanilla_multipliers")
+end)
+if vanillaMultSuccess then
+    ConchBlessing.print("Vanilla Multipliers table loaded successfully!")
+else
+    ConchBlessing.printError("Vanilla Multipliers table load failed: " .. tostring(vanillaMultErr))
+end
+
 -- load items and management
 local itemsSuccess, itemsErr = pcall(function()
     require("scripts/conch_blessing_items")

@@ -413,31 +413,12 @@ ConchBlessing.injectablsteroids.onRoomClear = function()
     end
 end
 
--- charge restore when new level
+-- Reset death chance on new level (no charge restore)
 ConchBlessing.injectablsteroids.onNewLevel = function(_)
-    local player = Isaac.GetPlayer(0)
-    if not player then
-        return
-    end
-    
     -- Reset instant death chance and use count on new floor
     ConchBlessing.injectablsteroids.data.currentInstantDeathPercent = ConchBlessing.injectablsteroids.data.baseInstantDeathPercent
     ConchBlessing.injectablsteroids.data.currentFloorUseCount = 0
     ConchBlessing.printDebug("Injectable Steroids: New floor! Death chance reset to " .. tostring(ConchBlessing.injectablsteroids.data.currentInstantDeathPercent) .. "%")
-    
-    if not player:HasCollectible(INJECTABLE_STEROIDS_ID) then
-        return
-    end
-    
-    local slots = {ActiveSlot.SLOT_PRIMARY, ActiveSlot.SLOT_SECONDARY, ActiveSlot.SLOT_POCKET, ActiveSlot.SLOT_POCKET2}
-    
-    for _, slot in ipairs(slots) do
-        local activeItem = player:GetActiveItem(slot)
-        if activeItem == INJECTABLE_STEROIDS_ID then
-            player:SetActiveCharge(1, slot)
-            ConchBlessing.printDebug(string.format("Injectable Steroids charge restored in slot %d", slot))
-        end
-    end
 end
 
 -- upgrade related functions

@@ -1734,16 +1734,44 @@ local function loadAllItems()
     if not ConchBlessing._didGenerateConchDescriptions then
         ConchBlessing.printDebug("Generating conch mode descriptions...")
         
-        local conchModeDescriptions = {
+        -- Color definitions for flag types
+        local flagColors = {
+            positive = "{{ColorGreen}}",
+            neutral = "{{ColorYellow}}",
+            negative = "{{ColorRed}}"
+        }
+        
+        -- Flag text by language
+        local flagText = {
             kr = {
-                positive = "소라고둥 모드 긍정시 {{item_name}}으로 변환",
-                neutral = "소라고둥 모드 중립시 {{item_name}}으로 변환",
-                negative = "소라고둥 모드 부정시 {{item_name}}으로 변환"
+                positive = "긍정",
+                neutral = "중립",
+                negative = "부정"
             },
             en = {
-                positive = "Conch mode positive: transforms into {{item_name}}",
-                neutral = "Conch mode neutral: transforms into {{item_name}}",
-                negative = "Conch mode negative: transforms into {{item_name}}"
+                positive = "positive",
+                neutral = "neutral",
+                negative = "negative"
+            }
+        }
+        
+        -- Helper function to colorize flag text
+        local function colorizeFlag(flagType, lang)
+            local color = flagColors[flagType] or ""
+            local text = flagText[lang] and flagText[lang][flagType] or flagType
+            return color .. text .. "{{CR}}"
+        end
+        
+        local conchModeDescriptions = {
+            kr = {
+                positive = "소라고둥 모드 " .. colorizeFlag("positive", "kr") .. "시 {{item_name}}으로 변환",
+                neutral = "소라고둥 모드 " .. colorizeFlag("neutral", "kr") .. "시 {{item_name}}으로 변환",
+                negative = "소라고둥 모드 " .. colorizeFlag("negative", "kr") .. "시 {{item_name}}으로 변환"
+            },
+            en = {
+                positive = "Conch mode " .. colorizeFlag("positive", "en") .. ": transforms into {{item_name}}",
+                neutral = "Conch mode " .. colorizeFlag("neutral", "en") .. ": transforms into {{item_name}}",
+                negative = "Conch mode " .. colorizeFlag("negative", "en") .. ": transforms into {{item_name}}"
             }
         }
         

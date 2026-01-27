@@ -1129,6 +1129,7 @@ end
 ConchBlessing.stats.damage = {}
 
 -- apply damage multiplier (includes poison damage)
+-- Does NOT scale with vanilla item multipliers
 function ConchBlessing.stats.damage.applyMultiplier(player, multiplier, minDamage, showDisplay)
     if not player then 
         ConchBlessing.printError("Player not found in ConchBlessing.stats.damage.applyMultiplier")
@@ -1151,7 +1152,42 @@ function ConchBlessing.stats.damage.applyMultiplier(player, multiplier, minDamag
     return newDamage
 end
 
+-- apply damage multiplier WITH vanilla multiplier scaling
+-- Multiplier is amplified by vanilla item multipliers (Cricket's Head, etc.)
+function ConchBlessing.stats.damage.applyMultiplierScaled(player, multiplier, minDamage, showDisplay)
+    if not player then 
+        ConchBlessing.printError("Player not found in ConchBlessing.stats.damage.applyMultiplierScaled")
+        return
+    end
+    
+    -- Get vanilla multiplier
+    local vanillaMultiplier = 1.0
+    if ConchBlessing.VanillaMultipliers and ConchBlessing.VanillaMultipliers.GetPlayerDamageMultiplier then
+        vanillaMultiplier = ConchBlessing.VanillaMultipliers:GetPlayerDamageMultiplier(player)
+    end
+    
+    local scaledMultiplier = multiplier * vanillaMultiplier
+    local baseDamage = player.Damage
+    local newDamage = baseDamage * scaledMultiplier
+    
+    -- apply minimum damage limit
+    if minDamage then
+        newDamage = math.max(minDamage, newDamage)
+    end
+    
+    player.Damage = newDamage
+    
+    -- apply poison damage multiplier (also scaled)
+    ConchBlessing.stats.damage.applyPoisonDamageMultiplier(player, scaledMultiplier)
+    
+    ConchBlessing.printDebug(string.format("[Damage] MultiplierScaled: %.2fx * %.2fx (vanilla) = %.2fx -> Total: %.2f", 
+        multiplier, vanillaMultiplier, scaledMultiplier, newDamage))
+    
+    return newDamage, scaledMultiplier
+end
+
 -- apply damage addition (includes poison damage)
+-- Does NOT scale with vanilla item multipliers
 function ConchBlessing.stats.damage.applyAddition(player, addition, minDamage)
     if not player then return end
     
@@ -1169,6 +1205,37 @@ function ConchBlessing.stats.damage.applyAddition(player, addition, minDamage)
     ConchBlessing.stats.damage.applyPoisonDamageAddition(player, addition)
     
     return newDamage
+end
+
+-- apply damage addition WITH vanilla multiplier scaling (Epiphany style)
+-- Bonus damage scales with Cricket's Head, Polyphemus, etc.
+function ConchBlessing.stats.damage.applyAdditionScaled(player, addition, minDamage)
+    if not player then return end
+    
+    -- Get vanilla multiplier
+    local vanillaMultiplier = 1.0
+    if ConchBlessing.VanillaMultipliers and ConchBlessing.VanillaMultipliers.GetPlayerDamageMultiplier then
+        vanillaMultiplier = ConchBlessing.VanillaMultipliers:GetPlayerDamageMultiplier(player)
+    end
+    
+    local scaledAddition = addition * vanillaMultiplier
+    local baseDamage = player.Damage
+    local newDamage = baseDamage + scaledAddition
+    
+    -- apply minimum damage limit
+    if minDamage then
+        newDamage = math.max(minDamage, newDamage)
+    end
+    
+    player.Damage = newDamage
+    
+    -- apply poison damage addition (also scaled)
+    ConchBlessing.stats.damage.applyPoisonDamageAddition(player, scaledAddition)
+    
+    ConchBlessing.printDebug(string.format("[Damage] AdditionScaled: %.2f * %.2fx (vanilla) = %.2f -> Total: %.2f", 
+        addition, vanillaMultiplier, scaledAddition, newDamage))
+    
+    return newDamage, scaledAddition
 end
 
 -- apply poison damage multiplier
@@ -1237,6 +1304,7 @@ ConchBlessing.stats.tears = {}
 ConchBlessing.stats.speed = {}
 
 -- apply speed multiplier
+-- Does NOT scale with vanilla multipliers
 function ConchBlessing.stats.speed.applyMultiplier(player, multiplier, minSpeed, showDisplay)
     if not player then return end
     
@@ -1253,7 +1321,32 @@ function ConchBlessing.stats.speed.applyMultiplier(player, multiplier, minSpeed,
     return newSpeed
 end
 
+-- apply speed multiplier WITH vanilla multiplier scaling
+function ConchBlessing.stats.speed.applyMultiplierScaled(player, multiplier, minSpeed, showDisplay)
+    if not player then return end
+    
+    -- Speed doesn't have a dedicated vanilla multiplier table, use 1.0
+    local vanillaMultiplier = 1.0
+    
+    local scaledMultiplier = multiplier * vanillaMultiplier
+    local baseSpeed = player.MoveSpeed
+    local newSpeed = baseSpeed * scaledMultiplier
+    
+    -- apply minimum speed limit
+    if minSpeed then
+        newSpeed = math.max(minSpeed, newSpeed)
+    end
+    
+    player.MoveSpeed = newSpeed
+    
+    ConchBlessing.printDebug(string.format("[Speed] MultiplierScaled: %.2fx * %.2fx = %.2fx -> Total: %.2f", 
+        multiplier, vanillaMultiplier, scaledMultiplier, newSpeed))
+    
+    return newSpeed, scaledMultiplier
+end
+
 -- apply speed addition
+-- Does NOT scale with vanilla multipliers
 function ConchBlessing.stats.speed.applyAddition(player, addition, minSpeed)
     if not player then return end
     
@@ -1270,10 +1363,37 @@ function ConchBlessing.stats.speed.applyAddition(player, addition, minSpeed)
     return newSpeed
 end
 
+-- apply speed addition WITH vanilla multiplier scaling
+-- Note: Speed doesn't have many vanilla multipliers, but included for consistency
+function ConchBlessing.stats.speed.applyAdditionScaled(player, addition, minSpeed)
+    if not player then return end
+    
+    -- Speed doesn't have a dedicated vanilla multiplier table, use 1.0
+    -- Could be extended if needed
+    local vanillaMultiplier = 1.0
+    
+    local scaledAddition = addition * vanillaMultiplier
+    local baseSpeed = player.MoveSpeed
+    local newSpeed = baseSpeed + scaledAddition
+    
+    -- apply minimum speed limit
+    if minSpeed then
+        newSpeed = math.max(minSpeed, newSpeed)
+    end
+    
+    player.MoveSpeed = newSpeed
+    
+    ConchBlessing.printDebug(string.format("[Speed] AdditionScaled: %.2f * %.2fx = %.2f -> Total: %.2f", 
+        addition, vanillaMultiplier, scaledAddition, newSpeed))
+    
+    return newSpeed, scaledAddition
+end
+
 -- range related functions
 ConchBlessing.stats.range = {}
 
 -- apply range multiplier
+-- Does NOT scale with vanilla multipliers
 function ConchBlessing.stats.range.applyMultiplier(player, multiplier, minRange, showDisplay)
     if not player then return end
     
@@ -1290,7 +1410,32 @@ function ConchBlessing.stats.range.applyMultiplier(player, multiplier, minRange,
     return newRange
 end
 
+-- apply range multiplier WITH vanilla multiplier scaling
+function ConchBlessing.stats.range.applyMultiplierScaled(player, multiplier, minRange, showDisplay)
+    if not player then return end
+    
+    -- Range doesn't have a dedicated vanilla multiplier table, use 1.0
+    local vanillaMultiplier = 1.0
+    
+    local scaledMultiplier = multiplier * vanillaMultiplier
+    local baseRange = player.TearRange
+    local newRange = baseRange * scaledMultiplier
+    
+    -- apply minimum range limit
+    if minRange then
+        newRange = math.max(minRange, newRange)
+    end
+    
+    player.TearRange = newRange
+    
+    ConchBlessing.printDebug(string.format("[Range] MultiplierScaled: %.2fx * %.2fx = %.2fx -> Total: %.2f", 
+        multiplier, vanillaMultiplier, scaledMultiplier, newRange))
+    
+    return newRange, scaledMultiplier
+end
+
 -- apply range addition
+-- Does NOT scale with vanilla multipliers
 function ConchBlessing.stats.range.applyAddition(player, addition, minRange)
     if not player then return end
     
@@ -1307,10 +1452,35 @@ function ConchBlessing.stats.range.applyAddition(player, addition, minRange)
     return newRange
 end
 
+-- apply range addition WITH vanilla multiplier scaling
+function ConchBlessing.stats.range.applyAdditionScaled(player, addition, minRange)
+    if not player then return end
+    
+    -- Range doesn't have a dedicated vanilla multiplier table, use 1.0
+    local vanillaMultiplier = 1.0
+    
+    local scaledAddition = addition * vanillaMultiplier
+    local baseRange = player.TearRange
+    local newRange = baseRange + scaledAddition
+    
+    -- apply minimum range limit
+    if minRange then
+        newRange = math.max(minRange, newRange)
+    end
+    
+    player.TearRange = newRange
+    
+    ConchBlessing.printDebug(string.format("[Range] AdditionScaled: %.2f * %.2fx = %.2f -> Total: %.2f", 
+        addition, vanillaMultiplier, scaledAddition, newRange))
+    
+    return newRange, scaledAddition
+end
+
 -- luck related functions
 ConchBlessing.stats.luck = {}
 
 -- apply luck multiplier
+-- Does NOT scale with vanilla multipliers
 function ConchBlessing.stats.luck.applyMultiplier(player, multiplier, minLuck, showDisplay)
     if not player then return end
     
@@ -1333,7 +1503,38 @@ function ConchBlessing.stats.luck.applyMultiplier(player, multiplier, minLuck, s
     return newLuck
 end
 
+-- apply luck multiplier WITH vanilla multiplier scaling
+function ConchBlessing.stats.luck.applyMultiplierScaled(player, multiplier, minLuck, showDisplay)
+    if not player then return end
+    
+    -- Luck doesn't have a dedicated vanilla multiplier table, use 1.0
+    local vanillaMultiplier = 1.0
+    
+    local scaledMultiplier = multiplier * vanillaMultiplier
+    local baseLuck = player.Luck
+    local newLuck = baseLuck
+    
+    -- If base luck is zero, keep it at zero regardless of multiplier or clamp
+    if baseLuck == 0 then
+        newLuck = 0
+    else
+        newLuck = baseLuck * scaledMultiplier
+        -- apply minimum luck limit only when base is not zero
+        if minLuck then
+            newLuck = math.max(minLuck, newLuck)
+        end
+    end
+    
+    player.Luck = newLuck
+    
+    ConchBlessing.printDebug(string.format("[Luck] MultiplierScaled: %.2fx * %.2fx = %.2fx -> Total: %.2f", 
+        multiplier, vanillaMultiplier, scaledMultiplier, newLuck))
+    
+    return newLuck, scaledMultiplier
+end
+
 -- apply luck addition
+-- Does NOT scale with vanilla multipliers
 function ConchBlessing.stats.luck.applyAddition(player, addition, minLuck)
     if not player then return end
     
@@ -1350,10 +1551,35 @@ function ConchBlessing.stats.luck.applyAddition(player, addition, minLuck)
     return newLuck
 end
 
+-- apply luck addition WITH vanilla multiplier scaling
+function ConchBlessing.stats.luck.applyAdditionScaled(player, addition, minLuck)
+    if not player then return end
+    
+    -- Luck doesn't have a dedicated vanilla multiplier table, use 1.0
+    local vanillaMultiplier = 1.0
+    
+    local scaledAddition = addition * vanillaMultiplier
+    local baseLuck = player.Luck
+    local newLuck = baseLuck + scaledAddition
+    
+    -- apply minimum luck limit
+    if minLuck then
+        newLuck = math.max(minLuck, newLuck)
+    end
+    
+    player.Luck = newLuck
+    
+    ConchBlessing.printDebug(string.format("[Luck] AdditionScaled: %.2f * %.2fx = %.2f -> Total: %.2f", 
+        addition, vanillaMultiplier, scaledAddition, newLuck))
+    
+    return newLuck, scaledAddition
+end
+
 -- shot speed related functions
 ConchBlessing.stats.shotSpeed = {}
 
 -- apply shot speed multiplier
+-- Does NOT scale with vanilla multipliers
 function ConchBlessing.stats.shotSpeed.applyMultiplier(player, multiplier, minShotSpeed, showDisplay)
     if not player then return end
     
@@ -1370,7 +1596,32 @@ function ConchBlessing.stats.shotSpeed.applyMultiplier(player, multiplier, minSh
     return newShotSpeed
 end
 
+-- apply shot speed multiplier WITH vanilla multiplier scaling
+function ConchBlessing.stats.shotSpeed.applyMultiplierScaled(player, multiplier, minShotSpeed, showDisplay)
+    if not player then return end
+    
+    -- ShotSpeed doesn't have a dedicated vanilla multiplier table, use 1.0
+    local vanillaMultiplier = 1.0
+    
+    local scaledMultiplier = multiplier * vanillaMultiplier
+    local baseShotSpeed = player.ShotSpeed
+    local newShotSpeed = baseShotSpeed * scaledMultiplier
+    
+    -- apply minimum shot speed limit
+    if minShotSpeed then
+        newShotSpeed = math.max(minShotSpeed, newShotSpeed)
+    end
+    
+    player.ShotSpeed = newShotSpeed
+    
+    ConchBlessing.printDebug(string.format("[ShotSpeed] MultiplierScaled: %.2fx * %.2fx = %.2fx -> Total: %.2f", 
+        multiplier, vanillaMultiplier, scaledMultiplier, newShotSpeed))
+    
+    return newShotSpeed, scaledMultiplier
+end
+
 -- apply shot speed addition
+-- Does NOT scale with vanilla multipliers
 function ConchBlessing.stats.shotSpeed.applyAddition(player, addition, minShotSpeed)
     if not player then return end
     
@@ -1387,6 +1638,30 @@ function ConchBlessing.stats.shotSpeed.applyAddition(player, addition, minShotSp
     return newShotSpeed
 end
 
+-- apply shot speed addition WITH vanilla multiplier scaling
+function ConchBlessing.stats.shotSpeed.applyAdditionScaled(player, addition, minShotSpeed)
+    if not player then return end
+    
+    -- ShotSpeed doesn't have a dedicated vanilla multiplier table, use 1.0
+    local vanillaMultiplier = 1.0
+    
+    local scaledAddition = addition * vanillaMultiplier
+    local baseShotSpeed = player.ShotSpeed
+    local newShotSpeed = baseShotSpeed + scaledAddition
+    
+    -- apply minimum shot speed limit
+    if minShotSpeed then
+        newShotSpeed = math.max(minShotSpeed, newShotSpeed)
+    end
+    
+    player.ShotSpeed = newShotSpeed
+    
+    ConchBlessing.printDebug(string.format("[ShotSpeed] AdditionScaled: %.2f * %.2fx = %.2f -> Total: %.2f", 
+        addition, vanillaMultiplier, scaledAddition, newShotSpeed))
+    
+    return newShotSpeed, scaledAddition
+end
+
 -- calculate MaxFireDelay based on SPS (Shots Per Second)
 function ConchBlessing.stats.tears.calculateMaxFireDelay(baseFireDelay, multiplier, minFireDelay)
     if not baseFireDelay or not multiplier then return baseFireDelay end
@@ -1400,6 +1675,7 @@ function ConchBlessing.stats.tears.calculateMaxFireDelay(baseFireDelay, multipli
 end
 
 -- apply fire delay multiplier (based on SPS)
+-- Does NOT scale with vanilla multipliers
 function ConchBlessing.stats.tears.applyMultiplier(player, multiplier, minFireDelay, showDisplay)
     if not player then return end
     
@@ -1417,7 +1693,33 @@ function ConchBlessing.stats.tears.applyMultiplier(player, multiplier, minFireDe
     return newFireDelay
 end
 
+-- apply fire delay multiplier WITH vanilla fire rate multiplier scaling (based on SPS)
+function ConchBlessing.stats.tears.applyMultiplierScaled(player, multiplier, minFireDelay, showDisplay)
+    if not player then return end
+    
+    -- Get vanilla fire rate multiplier
+    local vanillaMultiplier = 1.0
+    if ConchBlessing.VanillaMultipliers and ConchBlessing.VanillaMultipliers.GetPlayerFireRateMultiplier then
+        vanillaMultiplier = ConchBlessing.VanillaMultipliers:GetPlayerFireRateMultiplier(player)
+    end
+    
+    local scaledMultiplier = multiplier * vanillaMultiplier
+    local baseFireDelay = player.MaxFireDelay
+    local baseSPS = 30 / (baseFireDelay + 1)
+    local newFireDelay = ConchBlessing.stats.tears.calculateMaxFireDelay(baseFireDelay, scaledMultiplier, nil)
+    local newSPS = 30 / (newFireDelay + 1)
+
+    -- Debug: show SPS multiplier application details
+    ConchBlessing.printDebug(string.format("[Tears] MultiplierScaled: baseFD=%.4f baseSPS=%.4f mult=%.4f * %.2fx = %.4f -> newFD=%.4f newSPS=%.4f",
+        baseFireDelay, baseSPS, multiplier, vanillaMultiplier, scaledMultiplier, newFireDelay, newSPS))
+
+    player.MaxFireDelay = newFireDelay
+    
+    return newFireDelay, scaledMultiplier
+end
+
 -- apply fire delay addition (based on SPS)
+-- Does NOT scale with vanilla multipliers
 function ConchBlessing.stats.tears.applyAddition(player, addition, minFireDelay)
     if not player then return end
     
@@ -1434,6 +1736,32 @@ function ConchBlessing.stats.tears.applyAddition(player, addition, minFireDelay)
     player.MaxFireDelay = newMaxFireDelay
 
     return newMaxFireDelay
+end
+
+-- apply fire delay addition WITH vanilla fire rate multiplier scaling (based on SPS)
+function ConchBlessing.stats.tears.applyAdditionScaled(player, addition, minFireDelay)
+    if not player then return end
+    
+    -- Get vanilla fire rate multiplier
+    local vanillaMultiplier = 1.0
+    if ConchBlessing.VanillaMultipliers and ConchBlessing.VanillaMultipliers.GetPlayerFireRateMultiplier then
+        vanillaMultiplier = ConchBlessing.VanillaMultipliers:GetPlayerFireRateMultiplier(player)
+    end
+    
+    local scaledAddition = addition * vanillaMultiplier
+    local baseFireDelay = player.MaxFireDelay
+    local baseSPS = 30 / (baseFireDelay + 1)
+    local targetSPS = baseSPS + scaledAddition
+    local newMaxFireDelay = (30 / targetSPS) - 1
+    local newSPS = 30 / (newMaxFireDelay + 1)
+    
+    -- Debug: show SPS addition application details
+    ConchBlessing.printDebug(string.format("[Tears] AdditionScaled: baseFD=%.4f baseSPS=%.4f addSPS=%+.4f * %.2fx = %+.4f -> newFD=%.4f newSPS=%.4f",
+        baseFireDelay, baseSPS, addition, vanillaMultiplier, scaledAddition, newMaxFireDelay, newSPS))
+    
+    player.MaxFireDelay = newMaxFireDelay
+
+    return newMaxFireDelay, scaledAddition
 end
 
 -- unified stats apply functions
