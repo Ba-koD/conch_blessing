@@ -1014,18 +1014,12 @@ ConchBlessing.chronus.onPlayerUpdate = function(_)
         if player then
             local pdata = player:GetData()
             if player:HasCollectible(CHRONUS_ID) then
-                local hasBlacklisted = ownsAnyBlacklisted(player)
-                if hasBlacklisted then
-                    pdata.__chronusSuspendUntil = frame -- immediate expire; preserve visuals
-                end
                 pdata.__chronusNextScan = pdata.__chronusNextScan or 0
                 local interval = tonumber(ConchBlessing.chronus.data.scanIntervalFrames) or 15
                 if frame >= pdata.__chronusNextScan then
                     pdata.__chronusNextScan = frame + interval
-                    if not hasBlacklisted then
-                        local ok, changed = pcall(function() return ConchBlessing.chronus._detectAndAbsorb(player) end)
-                        if ok and changed then ConchBlessing.chronus._finalizeAbsorb(player) end
-                    end
+                    local ok, changed = pcall(function() return ConchBlessing.chronus._detectAndAbsorb(player) end)
+                    if ok and changed then ConchBlessing.chronus._finalizeAbsorb(player) end
                 end
 
                 -- Track converted item removal (all familiar->item conversions)
@@ -1388,7 +1382,6 @@ ConchBlessing.chronus.onFamiliarUpdate = function(_, fam)
             f.Velocity = Vector.Zero
             f.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
         end
-        f.ShadowSize = 0
         return
     end
     
@@ -1414,7 +1407,6 @@ ConchBlessing.chronus.onFamiliarUpdate = function(_, fam)
             f.Velocity = Vector.Zero
             f.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
         end
-        f.ShadowSize = 0
         return
     end
     
@@ -1440,7 +1432,6 @@ ConchBlessing.chronus.onFamiliarUpdate = function(_, fam)
             f.Velocity = Vector.Zero
             f.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
         end
-        f.ShadowSize = 0
         return
     end
     

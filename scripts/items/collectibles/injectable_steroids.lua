@@ -36,6 +36,83 @@ if not json then
     }
 end
 
+local function rebuildInjectableUnified(player, playerID)
+    local um = ConchBlessing.stats.unifiedMultipliers
+    um:RemoveItemAddition(player, INJECTABLE_STEROIDS_ID, "Tears")
+    um:RemoveItemAddition(player, INJECTABLE_STEROIDS_ID, "Damage")
+    um:RemoveItemAddition(player, INJECTABLE_STEROIDS_ID, "Range")
+    um:RemoveItemAddition(player, INJECTABLE_STEROIDS_ID, "Luck")
+    local playerSave = SaveManager.GetRunSave(player)
+    local arr = playerSave and playerSave.injectableSteroids or {}
+    for i = 1, #arr do
+        local m = arr[i]
+        um:SetItemAdditiveMultiplier(player, INJECTABLE_STEROIDS_ID, "Tears", m.tears or 1.0, "Injectable Steroids #" .. i)
+        um:SetItemAdditiveMultiplier(player, INJECTABLE_STEROIDS_ID, "Damage", m.damage or 1.0, "Injectable Steroids #" .. i)
+        um:SetItemAdditiveMultiplier(player, INJECTABLE_STEROIDS_ID, "Range", m.range or 1.0, "Injectable Steroids #" .. i)
+        um:SetItemAdditiveMultiplier(player, INJECTABLE_STEROIDS_ID, "Luck", m.luck or 1.0, "Injectable Steroids #" .. i)
+    end
+    um:SaveToSaveManager(player)
+end
+
+local function showInjectableRemovalDisplay(player, removedEntry)
+    if not removedEntry then return end
+    local um = ConchBlessing.stats.unifiedMultipliers
+    local playerID = player:GetPlayerType()
+    local statMap = {
+        Damage = "damage",
+        Tears = "tears",
+        Range = "range",
+        Luck = "luck"
+    }
+    for statType, key in pairs(statMap) do
+        local mult = removedEntry[key]
+        if type(mult) == "number" then
+            local delta = mult - 1.0
+            if math.abs(delta) > 0.00001 then
+                local total = 1.0
+                if um[playerID] and um[playerID].statMultipliers and um[playerID].statMultipliers[statType] then
+                    total = um[playerID].statMultipliers[statType].total or 1.0
+                end
+                ConchBlessing.stats.multiplierDisplay:ForceDisplay(player, statType, -delta, total, "remove_mult")
+            end
+        end
+    end
+end
+
+ConchBlessing.injectablsteroids.removeLastUse = function(player, removeCount, applyCacheUpdate)
+    if not player then return end
+    local playerSave = SaveManager.GetRunSave(player)
+    if not playerSave then return end
+    if not playerSave.injectableSteroids then
+        playerSave.injectableSteroids = {}
+    end
+    local arr = playerSave.injectableSteroids
+    local current = #arr
+    local remove = tonumber(removeCount) or 1
+    if remove <= 0 or current <= 0 then return end
+    local target = math.max(0, current - remove)
+    local removedEntry = arr[current]
+    for i = current, target + 1, -1 do
+        arr[i] = nil
+    end
+    playerSave.injectableSteroids = arr
+    SaveManager.Save()
+    rebuildInjectableUnified(player, player:GetPlayerType())
+    if not ConchBlessing.injectablsteroids._lastUseCount then
+        ConchBlessing.injectablsteroids._lastUseCount = {}
+    end
+    ConchBlessing.injectablsteroids._lastUseCount[player:GetPlayerType()] = -1
+    ConchBlessing.injectablsteroids._lastProcessedFrame = nil
+    ConchBlessing.injectablsteroids._lastProcessedPlayer = nil
+    if applyCacheUpdate ~= false then
+        player:AddCacheFlags(CacheFlag.CACHE_ALL)
+        player:EvaluateItems()
+        showInjectableRemovalDisplay(player, removedEntry)
+    else
+        showInjectableRemovalDisplay(player, removedEntry)
+    end
+end
+
 ConchBlessing.injectablsteroids.onUseItem = function(player, collectibleID, useFlags, activeSlot, customVarData)
     ConchBlessing.printDebug("=== Injectable Steroids onUseItem START ===")
     ConchBlessing.printDebug("collectibleID: " .. tostring(collectibleID))

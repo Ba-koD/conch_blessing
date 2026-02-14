@@ -785,6 +785,23 @@ function ConchBlessing.stats.multiplierDisplay:UpdateFromUnifiedSystem(player, s
     end
 end
 
+function ConchBlessing.stats.multiplierDisplay:ForceDisplay(player, statType, currentValue, totalMult, currentType)
+    if not player or not statType then return end
+    self:InitPlayer(player)
+    local playerID = player:GetPlayerType()
+    if not self.playerData[playerID].unifiedData then
+        self.playerData[playerID].unifiedData = {}
+    end
+    self.playerData[playerID].unifiedData[statType] = {
+        current = currentValue,
+        total = totalMult,
+        currentType = currentType or "multiplier",
+        timestamp = Game():GetFrameCount()
+    }
+    self.playerData[playerID].displayStartFrame = Game():GetFrameCount()
+    self.playerData[playerID].isDisplaying = true
+end
+
 -- Render a single multiplier stat (like milkshake mod)
 local function RenderMultiplierStat(statType, currentValue, totalMult, currentType, pos, alpha)
     -- Type validation for multipliers
@@ -800,7 +817,7 @@ local function RenderMultiplierStat(statType, currentValue, totalMult, currentTy
     local currentText
     if currentType == "addition" then
         return -- plain additions are hidden entirely
-    elseif currentType == "add_mult" then
+    elseif currentType == "add_mult" or currentType == "remove_mult" then
         -- Always show delta for additive multipliers (e.g., 0.96 -> -0.04)
         currentText = string.format("%+0.2f", currentValue)
     else
@@ -816,7 +833,7 @@ local function RenderMultiplierStat(statType, currentValue, totalMult, currentTy
     
     -- Current value color (green for positive, red for negative, white for neutral)
     local currentColor
-    if currentType == "addition" or currentType == "add_mult" then
+    if currentType == "addition" or currentType == "add_mult" or currentType == "remove_mult" then
         if currentValue > 0 then
             currentColor = KColor(0/255, 255/255, 0/255, alpha)
         elseif currentValue < 0 then

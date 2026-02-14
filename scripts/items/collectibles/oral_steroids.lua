@@ -15,6 +15,104 @@ ConchBlessing.oralsteroids.data = {
     speedDecrease = 0
 }
 
+local function rebuildOralUnified(player, playerID)
+    local um = ConchBlessing.stats.unifiedMultipliers
+    um:RemoveItemAddition(player, ORAL_STEROIDS_ID, "Tears")
+    um:RemoveItemAddition(player, ORAL_STEROIDS_ID, "Damage")
+    um:RemoveItemAddition(player, ORAL_STEROIDS_ID, "Range")
+    um:RemoveItemAddition(player, ORAL_STEROIDS_ID, "Luck")
+    local stored = ConchBlessing.oralsteroids.storedMultipliers and ConchBlessing.oralsteroids.storedMultipliers[playerID] or {}
+    for i = 1, #stored do
+        local m = stored[i]
+        um:SetItemAdditiveMultiplier(player, ORAL_STEROIDS_ID, "Tears", m.tears or 1.0, "Oral Steroids #" .. i)
+        um:SetItemAdditiveMultiplier(player, ORAL_STEROIDS_ID, "Damage", m.damage or 1.0, "Oral Steroids #" .. i)
+        um:SetItemAdditiveMultiplier(player, ORAL_STEROIDS_ID, "Range", m.range or 1.0, "Oral Steroids #" .. i)
+        um:SetItemAdditiveMultiplier(player, ORAL_STEROIDS_ID, "Luck", m.luck or 1.0, "Oral Steroids #" .. i)
+    end
+    um:SaveToSaveManager(player)
+end
+
+local function showOralRemovalDisplay(player, removedEntry)
+    if not removedEntry then return end
+    local um = ConchBlessing.stats.unifiedMultipliers
+    local playerID = player:GetPlayerType()
+    local statMap = {
+        Damage = "damage",
+        Tears = "tears",
+        Range = "range",
+        Luck = "luck"
+    }
+    for statType, key in pairs(statMap) do
+        local mult = removedEntry[key]
+        if type(mult) == "number" then
+            local delta = mult - 1.0
+            if math.abs(delta) > 0.00001 then
+                local total = 1.0
+                if um[playerID] and um[playerID].statMultipliers and um[playerID].statMultipliers[statType] then
+                    total = um[playerID].statMultipliers[statType].total or 1.0
+                end
+                ConchBlessing.stats.multiplierDisplay:ForceDisplay(player, statType, -delta, total, "remove_mult")
+            end
+        end
+    end
+end
+
+ConchBlessing.oralsteroids.removeLastStack = function(player, removeCount, applyCacheUpdate)
+    if not player then return end
+    local playerID = player:GetPlayerType()
+    if not ConchBlessing.oralsteroids.storedMultipliers then
+        ConchBlessing.oralsteroids.storedMultipliers = {}
+    end
+    if not ConchBlessing.oralsteroids.storedMultipliers[playerID] then
+        ConchBlessing.oralsteroids.storedMultipliers[playerID] = {}
+    end
+    local stored = ConchBlessing.oralsteroids.storedMultipliers[playerID]
+    local current = #stored
+    local remove = tonumber(removeCount) or 1
+    if remove <= 0 or current <= 0 then return end
+    local target = math.max(0, current - remove)
+    local removedEntry = stored[current]
+    for i = current, target + 1, -1 do
+        stored[i] = nil
+    end
+    ConchBlessing.oralsteroids.storedMultipliers[playerID] = stored
+    local playerSave = SaveManager.GetRunSave(player)
+    if playerSave then
+        playerSave.oralSteroids = stored
+        SaveManager.Save()
+    end
+    rebuildOralUnified(player, playerID)
+    if not ConchBlessing.oralsteroids._lastItemCount then
+        ConchBlessing.oralsteroids._lastItemCount = {}
+    end
+    ConchBlessing.oralsteroids._lastItemCount[playerID] = target
+    ConchBlessing.oralsteroids._lastProcessedFrame = nil
+    ConchBlessing.oralsteroids._lastProcessedItemNum = nil
+    if applyCacheUpdate ~= false then
+        player:AddCacheFlags(CacheFlag.CACHE_ALL)
+        player:EvaluateItems()
+        showOralRemovalDisplay(player, removedEntry)
+    else
+        showOralRemovalDisplay(player, removedEntry)
+    end
+end
+
+ConchBlessing.oralsteroids.onPlayerUpdate = function(_, player)
+    if not player then return end
+    local playerID = player:GetPlayerType()
+    if not ConchBlessing.oralsteroids.storedMultipliers then
+        ConchBlessing.oralsteroids.storedMultipliers = {}
+    end
+    if not ConchBlessing.oralsteroids.storedMultipliers[playerID] then
+        ConchBlessing.oralsteroids.storedMultipliers[playerID] = {}
+    end
+    local itemNum = player:GetCollectibleNum(ORAL_STEROIDS_ID)
+    local storedCount = #ConchBlessing.oralsteroids.storedMultipliers[playerID]
+    if storedCount > itemNum then
+        ConchBlessing.oralsteroids.removeLastStack(player, storedCount - itemNum, true)
+    end
+end
+
 ConchBlessing.oralsteroids.onEvaluateCache = function(_, player, cacheFlag)
     if not player:HasCollectible(ORAL_STEROIDS_ID) then return end
     
@@ -52,6 +150,10 @@ ConchBlessing.oralsteroids.onEvaluateCache = function(_, player, cacheFlag)
     end
     
     local storedCount = #ConchBlessing.oralsteroids.storedMultipliers[playerID]
+    if storedCount > itemNum then
+        ConchBlessing.oralsteroids.removeLastStack(player, storedCount - itemNum, false)
+        storedCount = #ConchBlessing.oralsteroids.storedMultipliers[playerID]
+    end
     
     -- If storedMultipliers is empty but we have saved data, load it first
     if storedCount == 0 and itemNum > 0 then

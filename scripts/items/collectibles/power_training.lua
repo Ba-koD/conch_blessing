@@ -32,6 +32,87 @@ ConchBlessing.powertraining.data = {
     speedDecrease = 0
 }
 
+local function rebuildPowerTrainingUnified(player, playerID)
+    local um = ConchBlessing.stats.unifiedMultipliers
+    um:RemoveItemAddition(player, POWER_TRAINING_ID, "Tears")
+    um:RemoveItemAddition(player, POWER_TRAINING_ID, "Damage")
+    um:RemoveItemAddition(player, POWER_TRAINING_ID, "Range")
+    um:RemoveItemAddition(player, POWER_TRAINING_ID, "Luck")
+    local playerSave = SaveManager.GetRunSave(player)
+    local arr = playerSave and playerSave.powerTraining or {}
+    for i = 1, #arr do
+        local m = arr[i]
+        um:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Tears", m.tears or 1.0, "Power Training #" .. i)
+        um:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Damage", m.damage or 1.0, "Power Training #" .. i)
+        um:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Range", m.range or 1.0, "Power Training #" .. i)
+        um:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Luck", m.luck or 1.0, "Power Training #" .. i)
+    end
+    um:SaveToSaveManager(player)
+end
+
+local function showPowerTrainingRemovalDisplay(player, removedEntry)
+    if not removedEntry then return end
+    local um = ConchBlessing.stats.unifiedMultipliers
+    local playerID = player:GetPlayerType()
+    local statMap = {
+        Damage = "damage",
+        Tears = "tears",
+        Range = "range",
+        Luck = "luck"
+    }
+    for statType, key in pairs(statMap) do
+        local mult = removedEntry[key]
+        if type(mult) == "number" then
+            local delta = mult - 1.0
+            if math.abs(delta) > 0.00001 then
+                local total = 1.0
+                if um[playerID] and um[playerID].statMultipliers and um[playerID].statMultipliers[statType] then
+                    total = um[playerID].statMultipliers[statType].total or 1.0
+                end
+                ConchBlessing.stats.multiplierDisplay:ForceDisplay(player, statType, -delta, total, "remove_mult")
+            end
+        end
+    end
+end
+
+ConchBlessing.powertraining.removeLastUse = function(player, removeCount, applyCacheUpdate)
+    if not player then return end
+    local playerSave = SaveManager.GetRunSave(player)
+    if not playerSave then return end
+    if not playerSave.powerTraining then
+        playerSave.powerTraining = {}
+    end
+    local arr = playerSave.powerTraining
+    local current = #arr
+    local remove = tonumber(removeCount) or 1
+    if remove <= 0 or current <= 0 then return end
+    local target = math.max(0, current - remove)
+    local removedEntry = arr[current]
+    for i = current, target + 1, -1 do
+        arr[i] = nil
+    end
+    playerSave.powerTraining = arr
+    SaveManager.Save()
+    if ConchBlessing.powertraining.storedMultipliers then
+        local playerID = player:GetPlayerType()
+        ConchBlessing.powertraining.storedMultipliers[playerID] = arr
+    end
+    rebuildPowerTrainingUnified(player, player:GetPlayerType())
+    if not ConchBlessing.powertraining._lastUseCount then
+        ConchBlessing.powertraining._lastUseCount = {}
+    end
+    ConchBlessing.powertraining._lastUseCount[player:GetPlayerType()] = -1
+    ConchBlessing.powertraining._lastProcessedFrame = nil
+    ConchBlessing.powertraining._lastProcessedPlayer = nil
+    if applyCacheUpdate ~= false then
+        player:AddCacheFlags(CacheFlag.CACHE_ALL)
+        player:EvaluateItems()
+        showPowerTrainingRemovalDisplay(player, removedEntry)
+    else
+        showPowerTrainingRemovalDisplay(player, removedEntry)
+    end
+end
+
 ConchBlessing.powertraining.onUseItem = function(player, collectibleID, useFlags, activeSlot, customVarData)
     ConchBlessing.printDebug("=== Power Training onUseItem START ===")
     ConchBlessing.printDebug("collectibleID: " .. tostring(collectibleID))

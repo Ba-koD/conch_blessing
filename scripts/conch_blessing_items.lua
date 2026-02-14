@@ -355,6 +355,7 @@ ConchBlessing.ItemData = {
         script = "scripts/items/collectibles/oral_steroids",
         callbacks = {
             evaluateCache = "oralsteroids.onEvaluateCache",
+            postPlayerUpdate = "oralsteroids.onPlayerUpdate",
             gameStarted = "oralsteroids.onGameStarted",
             update = "oralsteroids.onUpdate"
         },
