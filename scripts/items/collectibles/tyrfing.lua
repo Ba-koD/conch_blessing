@@ -84,8 +84,12 @@ ConchBlessing.tyrfing.onEntityTakeDamage = function(_, entity, amount, flags, so
     local currentDamage = data.accumulatedDamage or 0
     
     if currentDamage > 0 then
-        -- Lose 50% of accumulated damage
-        local damageLost = currentDamage * DAMAGE_LOSS_ON_HIT
+        local stackCount = player:GetCollectibleNum(TYRFING_ID)
+        if stackCount < 1 then
+            stackCount = 1
+        end
+        local lossRate = DAMAGE_LOSS_ON_HIT / stackCount
+        local damageLost = currentDamage * lossRate
         data.accumulatedDamage = currentDamage - damageLost
         
         ConchBlessing.printDebug(string.format("[Tyrfing] Player took damage! Lost %.2f damage (%.2f -> %.2f)", 

@@ -32,6 +32,8 @@
     </Pool>
     <Pool Name="treasure">
         <Item Name="Void Dagger" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Ice Breath" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Fire Breath" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Power Training" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Dragon" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Chronus" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
@@ -41,6 +43,8 @@
         <Item Name="Polycoria" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
     <Pool Name="shop">
+        <Item Name="Ice Breath" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Fire Breath" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Power Training" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Appraisal Certificate" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Money = Tear" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>

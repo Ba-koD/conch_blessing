@@ -1098,11 +1098,11 @@ ConchBlessing.ItemData = {
         eid = {
             kr = {
                 "몬스터 처치 시마다 {{Damage}}공격력이 +0.05 증가합니다.",
-                "#{{Warning}} 피격 시 누적된 공격력의 50%를 잃습니다."
+                "#{{Warning}} 피격 시 누적된 공격력의 (50/보유 개수)%를 잃습니다."
             },
             en = {
                 "Gain +0.05 {{Damage}}Damage per enemy killed.",
-                "#{{Warning}} Lose 50% of accumulated damage when hit."
+                "#{{Warning}} Lose (50/stack) of accumulated damage when hit."
             }
         },
         pool = {},
@@ -1169,6 +1169,92 @@ ConchBlessing.ItemData = {
             postNewLevel = "polycoria.onNewFloor",
             gameStarted = "polycoria.onGameStarted",
             postPlayerUpdate = "polycoria.onPlayerUpdate",
+        }
+    },
+    ICE_BREATH = {
+        type = "passive",
+        id = Isaac.GetItemIdByName("Ice Breath"),
+        name = {
+            kr = "아이스 브레스",
+            en = "Ice Breath"
+        },
+        description = {
+            kr = "서리의 숨결",
+            en = "Breath of frost"
+        },
+        eid = {
+            kr = {
+                "{{Warning}} 눈물 발사가 불가능합니다.",
+                "#공격 방향으로 플레이어 데미지의 15%의 푸른 불꽃을 초당 10회 발사합니다.",
+                "#빙결 확률이 {{Luck}}운 수치와 동일합니다.",
+                "#중첩 시 데미지/확률이 n배로 증가합니다."
+            },
+            en = {
+                "{{Warning}} Cannot fire tears.",
+                "#Fire 15% of {{Damage}} ice flames 10 times per second.",
+                "#Freeze chance is equal to {{Luck}}Luck.",
+                "#Stacks scale damage and freeze chance linearly."
+            }
+        },
+        pool = {
+            RoomType.ROOM_SHOP,
+            RoomType.ROOM_TREASURE
+        },
+        quality = 4,
+        tags = "offensive",
+        hidden = false,
+        shopprice = 30,
+        devilprice = 2,
+        origin = { id = CollectibleType.COLLECTIBLE_CANDLE, type = "collectible" },
+        flag = "positive",
+        script = "scripts/items/collectibles/ice_breath",
+        callbacks = {
+            postPlayerUpdate = "icebreath.onPlayerUpdate",
+            tearCollision = "icebreath.onTearCollision",
+            tearUpdate = "icebreath.onTearUpdate"
+        }
+    },
+    FIRE_BREATH = {
+        type = "passive",
+        id = Isaac.GetItemIdByName("Fire Breath"),
+        name = {
+            kr = "파이어 브레스",
+            en = "Fire Breath"
+        },
+        description = {
+            kr = "작열의 숨결",
+            en = "Breath of flame"
+        },
+        eid = {
+            kr = {
+                "{{Warning}} 눈물 발사가 불가능합니다.",
+                "#공격 방향으로 플레이어 데미지의 30%의 붉은 불꽃을 초당 10회 발사합니다.",
+                "#화상 확률이 {{Luck}}운 수치의 두배입니다.",
+                "#중첩 시 데미지/확률이 n배로 증가합니다."
+            },
+            en = {
+                "{{Warning}} Cannot fire tears.",
+                "#Fire 30% of {{Damage}} fire flames 10 times per second.",
+                "#Burn chance is 2 times {{Luck}}Luck.",
+                "#Stacks scale damage and burn chance linearly."
+            }
+        },
+        pool = {
+            RoomType.ROOM_SHOP,
+            RoomType.ROOM_TREASURE
+        },
+        quality = 4,
+        tags = "offensive",
+        hidden = false,
+        shopprice = 30,
+        devilprice = 2,
+        origin = { id = CollectibleType.COLLECTIBLE_RED_CANDLE, type = "collectible" },
+        flag = "positive",
+        script = "scripts/items/collectibles/fire_breath",
+        callbacks = {
+            postPlayerUpdate = "firebreath.onPlayerUpdate",
+            tearCollision = "firebreath.onTearCollision",
+            tearUpdate = "firebreath.onTearUpdate"
         }
     },
 
