@@ -1127,6 +1127,49 @@ ConchBlessing.ItemData = {
         onAfterChange = "tyrfing.onAfterChange",
         synergies = {}
     },
+    POLYCORIA = {
+        type = "passive",
+        id = Isaac.GetItemIdByName("Polycoria"),
+        name = {
+            kr = "동공과다증",
+            en = "Polycoria"
+        },
+        description = {
+            kr = "마르지 않는 눈물",
+            en = "Unending tears"
+        },
+        eid = {
+            kr = {
+                "{{Collectible" .. tostring(CollectibleType.COLLECTIBLE_20_20) .. "}} 20/20을 획득합니다",
+                "#피격 없이 층을 클리어할 때마다 20/20을 하나 얻습니다.",
+            },
+            en = {
+                "{{Collectible" .. tostring(CollectibleType.COLLECTIBLE_20_20) .. "}} Grants 20/20",
+                "#When clearing a floor without taking damage, you get 20/20.",
+            }
+        },
+        pool = {
+            RoomType.ROOM_DEVIL,
+            RoomType.ROOM_TREASURE,
+            RoomType.ROOM_SECRET,
+        },
+        quality = 4,
+        tags = "offensive tearsup",
+        cache = "firedelay",
+        hidden = false,
+        shopprice = 30,
+        devilprice = 2,
+        origin = { id = CollectibleType.COLLECTIBLE_INNER_EYE, type = "collectible" },
+        flag = "positive",
+        script = "scripts/items/collectibles/polycoria",
+        callbacks = {
+            pickup = "polycoria.onPickup",
+            entityTakeDmg = "polycoria.onDamage",
+            postNewLevel = "polycoria.onNewFloor",
+            gameStarted = "polycoria.onGameStarted",
+            postPlayerUpdate = "polycoria.onPlayerUpdate",
+        }
+    },
 
     -- Trinkets
     TIME_POWER = {
