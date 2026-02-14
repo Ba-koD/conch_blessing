@@ -36,7 +36,7 @@ end
 local function getChanceFromLuck(luck, stackCount, mult)
     local l = math.max(0.0, luck or 0.0)
     local m = mult or 1.0
-    local p = l * stackCount * m
+    local p = (l * 0.01) * stackCount * m
     if p > 1.0 then p = 1.0 end
     if p < 0 then p = 0 end
     return p

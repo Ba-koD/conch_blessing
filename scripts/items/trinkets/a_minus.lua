@@ -21,6 +21,8 @@ local function getTrinketIdByName(name)
 end
 
 local TID = getTrinketIdByName("A -")
+local TID_B = getTrinketIdByName("B -")
+local DamageUtils = ConchBlessing.DamageUtils or require("scripts.lib.damage_utils")
 
 -- Get trinket total effective count (includes golden and Mom's Box)
 local function getCount(player, baseId)
@@ -192,5 +194,33 @@ function ConchBlessing.aminus.onEvaluateCache(_, player, cacheFlag)
         end
 	end
 end
+
+ConchBlessing.originalMod:AddCallback(ModCallbacks.MC_ENTITY_TAKE_DMG, function(_, ent, amount, flags, src, countdown)
+	local player = ent and ent:ToPlayer() or nil
+	if not player then return end
+	if DamageUtils and DamageUtils.isSelfInflictedDamage and DamageUtils.isSelfInflictedDamage(flags) then
+		return
+	end
+	if not TID or TID <= 0 then return end
+	if not TID_B or TID_B <= 0 then return end
+
+	for slot = 0, 1 do
+		local raw = player:GetTrinket(slot)
+		if raw and raw > 0 then
+			local baseId = raw
+			local isGolden = false
+			if raw >= 32768 then
+				baseId = raw - 32768
+				isGolden = true
+			end
+			if baseId == TID then
+				player:TryRemoveTrinket(raw)
+				local newId = TID_B + (isGolden and 32768 or 0)
+				local offset = (slot == 0) and Vector(-20, 0) or Vector(20, 0)
+				Isaac.Spawn(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_TRINKET, newId, player.Position + offset, Vector.Zero, player)
+			end
+		end
+	end
+end)
 
 return true

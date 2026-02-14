@@ -1509,6 +1509,7 @@ ConchBlessing.ItemData = {
                 "#{{Damage}} 공격력이 4.0 증가합니다.",
                 "#4배수가 공격력, 행운, 연사에 나눠서 적용됩니다. (중첩X)",
                 "#0.8배이상으로 나눠서 적용됩니다.",
+                "#피격 시 B -로 강등됩니다.",
             },
             en = {
                 "Luck increases by 2.",
@@ -1516,6 +1517,7 @@ ConchBlessing.ItemData = {
                 "#{{Damage}} Damage increases by 4.0.",
                 "#4x multipliers are distributed to Damage, Luck, and SPS. (No stacking)",
                 "#Multipliers are at least 0.8x.",
+                "#On hit, downgrades to B -.",
             }
         },
         gfx = "a_minus.png",
