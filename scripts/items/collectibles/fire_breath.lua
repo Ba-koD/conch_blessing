@@ -4,7 +4,7 @@ local FIRE_CANDLE_ID = Isaac.GetItemIdByName("Fire Breath")
 local ICE_CANDLE_ID = Isaac.GetItemIdByName("Ice Breath")
 
 ConchBlessing.firebreath.data = {
-    baseDamageCoef = 0.30,
+    baseDamageCoef = 0.03,
     baseBurnChance = 0.0,
     burnDuration = 90,
     ticksPerSecond = 30,
@@ -50,6 +50,11 @@ local function directionFromMove(dir)
     return nil
 end
 
+local function getShotsPerSecond(player)
+    local maxDelay = player.MaxFireDelay or 0
+    return math.max(1.0, 30.0 / (maxDelay + 1.0))
+end
+
 local function getBreathDirection(player, key)
     local pdata = player:GetData()
     local dir = player:GetAimDirection()
@@ -72,7 +77,8 @@ local function getBreathDirection(player, key)
 end
 
 local function spawnFireBreath(player, direction, stackCount)
-    local damageCoef = ConchBlessing.firebreath.data.baseDamageCoef * stackCount
+    local sps = getShotsPerSecond(player)
+    local damageCoef = (sps * ConchBlessing.firebreath.data.baseDamageCoef) * stackCount
     local baseDamage = (player.Damage or 0) * damageCoef
     local basePos = player.Position + (direction * 5)
     local shotSpeed = (player.ShotSpeed or 1.0) * 2
@@ -95,27 +101,17 @@ local function spawnFireBreath(player, direction, stackCount)
         tear:SetColor(color, 0, 0, false, false)
         tear.Velocity = vel
         tear.Scale = ConchBlessing.firebreath.data.flameScale
-        tear.TearFlags = tear.TearFlags | TearFlags.TEAR_SPECTRAL | TearFlags.TEAR_PIERCING
-        if TearFlags and TearFlags.TEAR_NO_KNOCKBACK then
-            tear.TearFlags = tear.TearFlags | TearFlags.TEAR_NO_KNOCKBACK
-        end
+        tear:AddTearFlags(TearFlags.TEAR_SPECTRAL | TearFlags.TEAR_PIERCING)
         tear.CollisionDamage = baseDamage
-        tear.KnockbackMultiplier = 0
+        if tear.SetKnockbackMultiplier then
+            tear:SetKnockbackMultiplier(0)
+        else
+            tear.KnockbackMultiplier = 0
+        end
         local range = (player.TearRange or 0) / 40.0
         local life = math.max(5, math.floor(range * 6))
         if tear.SetTimeout then
             tear:SetTimeout(life)
-        end
-        tear.Visible = false
-        local fire = Isaac.Spawn(EntityType.ENTITY_EFFECT, EffectVariant.RED_CANDLE_FLAME, 0, tear.Position, vel, player):ToEffect()
-        if fire then
-            fire.SpriteScale = Vector(ConchBlessing.firebreath.data.flameScale, ConchBlessing.firebreath.data.flameScale)
-            fire.Scale = ConchBlessing.firebreath.data.flameScale
-            fire.CollisionDamage = baseDamage
-            fire.GridCollisionClass = GridCollisionClass.COLLISION_NONE
-            if fire.SetTimeout then
-                fire:SetTimeout(life)
-            end
         end
         local tdata = tear:GetData()
         tdata.__ConchFireBreath = {
@@ -158,7 +154,9 @@ ConchBlessing.firebreath.onPlayerUpdate = function(_, player)
     local playerID = player:GetPlayerType()
     local frame = Game():GetFrameCount()
     if ConchBlessing.firebreath._lastFireFrame[playerID] == frame then return end
-    if frame % 3 ~= 0 then return end
+    local tps = ConchBlessing.firebreath.data.ticksPerSecond or 30
+    local interval = math.max(1, math.floor(30 / tps))
+    if frame % interval ~= 0 then return end
     ConchBlessing.firebreath._lastFireFrame[playerID] = frame
     local stackCount = player:GetCollectibleNum(FIRE_CANDLE_ID)
     if stackCount < 1 then return end

@@ -1141,11 +1141,11 @@ ConchBlessing.ItemData = {
         },
         eid = {
             kr = {
-                "{{Collectible" .. tostring(CollectibleType.COLLECTIBLE_20_20) .. "}} 20/20을 획득합니다",
+                "20/20을 획득합니다",
                 "#피격 없이 층을 클리어할 때마다 20/20을 하나 얻습니다.",
             },
             en = {
-                "{{Collectible" .. tostring(CollectibleType.COLLECTIBLE_20_20) .. "}} Grants 20/20",
+                "Grants 20/20",
                 "#When clearing a floor without taking damage, you get 20/20.",
             }
         },
@@ -1185,13 +1185,15 @@ ConchBlessing.ItemData = {
         eid = {
             kr = {
                 "{{Warning}} 눈물 발사가 불가능합니다.",
-                "#공격 방향으로 플레이어 데미지의 15%의 푸른 불꽃을 초당 10회 발사합니다.",
+                "#공격 방향으로 초당 30회 푸른 불꽃을 발사합니다.",
+                "#푸른 불꽃은 플레이어 {{Damage}}데미지의 {{Tears}}연사 x 2%",
                 "#빙결 확률이 {{Luck}}운 수치와 동일합니다.",
                 "#중첩 시 데미지/확률이 n배로 증가합니다."
             },
             en = {
                 "{{Warning}} Cannot fire tears.",
-                "#Fire 15% of {{Damage}} ice flames 10 times per second.",
+                "#Fire ice flames 30 times per second.",
+                "#Fire ice flames that deal {{Damage}} × ({{Tears}}SPS × 2%).",
                 "#Freeze chance is equal to {{Luck}}Luck.",
                 "#Stacks scale damage and freeze chance linearly."
             }
@@ -1228,13 +1230,15 @@ ConchBlessing.ItemData = {
         eid = {
             kr = {
                 "{{Warning}} 눈물 발사가 불가능합니다.",
-                "#공격 방향으로 플레이어 데미지의 30%의 붉은 불꽃을 초당 10회 발사합니다.",
+                "#공격 방향으로 초당 30회 붉은 불꽃을 발사합니다.",
+                "#붉은 불꽃은 플레이어 {{Damage}}데미지의 {{Tears}}연사 x 3%",
                 "#화상 확률이 {{Luck}}운 수치의 두배입니다.",
                 "#중첩 시 데미지/확률이 n배로 증가합니다."
             },
             en = {
                 "{{Warning}} Cannot fire tears.",
-                "#Fire 30% of {{Damage}} fire flames 10 times per second.",
+                "#Fire flames 30 times per second.",
+                "#Fire flames that deal {{Damage}} × ({{Tears}}SPS × 3%).",
                 "#Burn chance is 2 times {{Luck}}Luck.",
                 "#Stacks scale damage and burn chance linearly."
             }
