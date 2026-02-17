@@ -10,7 +10,9 @@ ConchBlessing.icebreath.data = {
     ticksPerSecond = 30,
     flameScale = 1.0,
     spawnScale = 1.0,
-    growFrames = 1
+    growFrames = 1,
+    noKnockback = true,
+    rangeLifeScale = 1.0
 }
 
 local function setBlindfold(player, enabled)
@@ -55,6 +57,30 @@ local function getShotsPerSecond(player)
     return math.max(1.0, 30.0 / (maxDelay + 1.0))
 end
 
+local function buildBreathFlags(noKnockback)
+    local flags = TearFlags.TEAR_SPECTRAL | TearFlags.TEAR_PIERCING
+    if noKnockback and TearFlags.TEAR_NO_KNOCKBACK then
+        flags = flags | TearFlags.TEAR_NO_KNOCKBACK
+    end
+    return flags
+end
+
+local function applyBreathTear(tear, baseDamage, color, scale, noKnockback)
+    tear:ChangeVariant(TearVariant.FIRE)
+    tear:SetColor(color, -1, 1, false, false)
+    tear.Scale = scale
+    tear.TearFlags = buildBreathFlags(noKnockback)
+    tear.GridCollisionClass = GridCollisionClass.COLLISION_NONE
+    tear.CollisionDamage = baseDamage
+    if noKnockback then
+        if tear.SetKnockbackMultiplier then
+            tear:SetKnockbackMultiplier(0)
+        else
+            tear.KnockbackMultiplier = 0
+        end
+    end
+end
+
 local function getBreathDirection(player, key)
     local pdata = player:GetData()
     local dir = player:GetAimDirection()
@@ -95,28 +121,32 @@ local function spawnIceBreath(player, direction, stackCount)
         local tear = player:FireTear(pos, vel, false, false, false, player, damageCoef)
         if not tear then return end
         tear.SpriteScale = Vector(ConchBlessing.icebreath.data.spawnScale, ConchBlessing.icebreath.data.spawnScale)
-        tear:ChangeVariant(TearVariant.FIRE)
         tear.Velocity = vel
-        tear.Scale = ConchBlessing.icebreath.data.flameScale
-        tear:AddTearFlags(TearFlags.TEAR_SPECTRAL | TearFlags.TEAR_PIERCING)
-        tear.CollisionDamage = baseDamage
-        tear:SetColor(Color(0.3, 0.6, 1.0, 1.0, 0, 0, 0), -1, 1, false, false)
-        if tear.SetKnockbackMultiplier then
-            tear:SetKnockbackMultiplier(0)
-        else
-            tear.KnockbackMultiplier = 0
-        end
-        local range = (player.TearRange or 0) / 40.0
-        local life = math.max(5, math.floor(range * 6))
+        local color = Color(0.3, 0.6, 1.0, 1.0, 0, 0, 0)
+        applyBreathTear(
+            tear,
+            baseDamage,
+            color,
+            ConchBlessing.icebreath.data.spawnScale,
+            ConchBlessing.icebreath.data.noKnockback
+        )
+        local rangeScale = ConchBlessing.icebreath.data.rangeLifeScale or 0.6
+        local maxDistance = math.max(40, (player.TearRange or 0) * rangeScale)
+        local speedLen = math.max(0.1, tear.Velocity:Length())
+        local lifeFrames = math.max(4, math.floor(maxDistance / speedLen))
         if tear.SetTimeout then
-            tear:SetTimeout(life)
+            tear:SetTimeout(lifeFrames)
         end
         local tdata = tear:GetData()
         tdata.__ConchIceBreath = {
             chance = getChanceFromLuck(player.Luck, stackCount, 1.0),
             duration = ConchBlessing.icebreath.data.freezeDuration,
             source = player,
-            baseDamage = baseDamage
+            baseDamage = baseDamage,
+            noKnockback = ConchBlessing.icebreath.data.noKnockback,
+            startPos = Vector(tear.Position.X, tear.Position.Y),
+            maxDistance = maxDistance,
+            lifeFrames = lifeFrames
         }
     end
 
@@ -165,7 +195,6 @@ ConchBlessing.icebreath.onTearCollision = function(_, tear, collider, _)
     if not tear or not collider then return end
     local npc = collider:ToNPC()
     if not npc or not npc:IsVulnerableEnemy() then return end
-    local preVel = npc.Velocity
     local data = tear:GetData()
     if not data or not data.__ConchIceBreath then return end
     if data.__ConchIceBreathApplied then return end
@@ -181,30 +210,34 @@ ConchBlessing.icebreath.onTearCollision = function(_, tear, collider, _)
         end
         npc:SetColor(Color(0.5, 0.8, 1.0, 1.0, 0, 0, 0), duration, 1, false, true)
     end
-    if preVel then
-        npc.Velocity = preVel
-    end
 end
 
 ConchBlessing.icebreath.onTearUpdate = function(_, tear)
     if not tear then return end
     local data = tear:GetData()
     if not data or not data.__ConchIceBreath then return end
+    if data.__ConchIceBreath.lifeFrames and tear.FrameCount >= data.__ConchIceBreath.lifeFrames then
+        tear:Remove()
+        return
+    end
+    if data.__ConchIceBreath.startPos and data.__ConchIceBreath.maxDistance then
+        if tear.Position:Distance(data.__ConchIceBreath.startPos) >= data.__ConchIceBreath.maxDistance then
+            tear:Remove()
+            return
+        end
+    end
+    local color = Color(0.3, 0.6, 1.0, 1.0, 0, 0, 0)
     local targetScale = ConchBlessing.icebreath.data.flameScale
     local startScale = ConchBlessing.icebreath.data.spawnScale
     local growFrames = ConchBlessing.icebreath.data.growFrames or 1
     local t = math.min(1, math.max(0, tear.FrameCount / growFrames))
     local currentScale = startScale + (targetScale - startScale) * t
-    if tear.Scale ~= currentScale then
-        tear.Scale = currentScale
-    end
     local targetVec = Vector(currentScale, currentScale)
     if tear.SpriteScale.X ~= targetVec.X or tear.SpriteScale.Y ~= targetVec.Y then
         tear.SpriteScale = targetVec
     end
-    if data.__ConchIceBreath.baseDamage and tear.CollisionDamage ~= data.__ConchIceBreath.baseDamage then
-        tear.CollisionDamage = data.__ConchIceBreath.baseDamage
-    end
+    local baseDamage = data.__ConchIceBreath.baseDamage or tear.CollisionDamage
+    applyBreathTear(tear, baseDamage, color, currentScale, data.__ConchIceBreath.noKnockback)
     if tear.FrameCount <= 1 then
         local spr = tear:GetSprite()
         if spr then
