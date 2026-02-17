@@ -70,6 +70,9 @@ local function applyBreathTear(tear, baseDamage, color, scale, noKnockback)
     tear:SetColor(color, -1, 1, false, false)
     tear.Scale = scale
     tear.TearFlags = buildBreathFlags(noKnockback)
+    if EntityCollisionClass and EntityCollisionClass.ENTCOLL_NONE then
+        tear.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
+    end
     tear.GridCollisionClass = GridCollisionClass.COLLISION_NONE
     tear.CollisionDamage = baseDamage
     if noKnockback then
@@ -191,25 +194,33 @@ ConchBlessing.icebreath.onPlayerUpdate = function(_, player)
     spawnIceBreath(player, direction, stackCount)
 end
 
-ConchBlessing.icebreath.onTearCollision = function(_, tear, collider, _)
-    if not tear or not collider then return end
-    local npc = collider:ToNPC()
-    if not npc or not npc:IsVulnerableEnemy() then return end
-    local data = tear:GetData()
-    if not data or not data.__ConchIceBreath then return end
-    if data.__ConchIceBreathApplied then return end
-    data.__ConchIceBreathApplied = true
-    local chance = data.__ConchIceBreath.chance or 0
+local function processIceBreathHit(tear, npc, breathData)
+    if not tear or not npc or not breathData then return end
+    local source = breathData.source or tear.SpawnerEntity or tear
+    local damage = breathData.baseDamage or tear.CollisionDamage or 0
+    if damage > 0 then
+        npc:TakeDamage(damage, 0, EntityRef(source), 0)
+    end
+    if breathData.__ConchIceBreathApplied then return end
+    breathData.__ConchIceBreathApplied = true
+    local chance = breathData.chance or 0
     if chance <= 0 then return end
     if math.random() <= chance then
-        local source = data.__ConchIceBreath.source or tear.SpawnerEntity or npc
-        local duration = data.__ConchIceBreath.duration or 60
-        npc:AddFreeze(EntityRef(source), duration)
+        local freezeSource = breathData.source or tear.SpawnerEntity or npc
+        local duration = breathData.duration or 60
+        npc:AddFreeze(EntityRef(freezeSource), duration)
         if EntityFlag and EntityFlag.FLAG_ICE then
             npc:AddEntityFlags(EntityFlag.FLAG_ICE)
         end
         npc:SetColor(Color(0.5, 0.8, 1.0, 1.0, 0, 0, 0), duration, 1, false, true)
     end
+end
+
+ConchBlessing.icebreath.onTearCollision = function(_, tear, collider, _)
+    if not tear then return end
+    local data = tear:GetData()
+    if not data or not data.__ConchIceBreath then return end
+    return false
 end
 
 ConchBlessing.icebreath.onTearUpdate = function(_, tear)
@@ -238,6 +249,24 @@ ConchBlessing.icebreath.onTearUpdate = function(_, tear)
     end
     local baseDamage = data.__ConchIceBreath.baseDamage or tear.CollisionDamage
     applyBreathTear(tear, baseDamage, color, currentScale, data.__ConchIceBreath.noKnockback)
+    data.__ConchIceBreathHits = data.__ConchIceBreathHits or {}
+    local roomEntities = Isaac.GetRoomEntities()
+    local hitRadiusPadding = 4
+    for i = 1, #roomEntities do
+        local ent = roomEntities[i]
+        local npc = ent and ent:ToNPC() or nil
+        if npc and npc:IsVulnerableEnemy() and not npc:IsDead() then
+            local hitId = npc.InitSeed or npc.Index
+            if not data.__ConchIceBreathHits[hitId] then
+                local dist = tear.Position:Distance(npc.Position)
+                local hitRadius = (tear.Size or 0) + (npc.Size or 0) + hitRadiusPadding
+                if dist <= hitRadius then
+                    data.__ConchIceBreathHits[hitId] = true
+                    processIceBreathHit(tear, npc, data.__ConchIceBreath)
+                end
+            end
+        end
+    end
     if tear.FrameCount <= 1 then
         local spr = tear:GetSprite()
         if spr then

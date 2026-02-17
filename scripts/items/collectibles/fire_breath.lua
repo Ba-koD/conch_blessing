@@ -70,6 +70,9 @@ local function applyBreathTear(tear, baseDamage, color, scale, noKnockback)
     tear:SetColor(color, 0, 0, false, false)
     tear.Scale = scale
     tear.TearFlags = buildBreathFlags(noKnockback)
+    if EntityCollisionClass and EntityCollisionClass.ENTCOLL_NONE then
+        tear.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
+    end
     tear.GridCollisionClass = GridCollisionClass.COLLISION_NONE
     tear.CollisionDamage = baseDamage
     if noKnockback then
@@ -192,27 +195,35 @@ ConchBlessing.firebreath.onPlayerUpdate = function(_, player)
     spawnFireBreath(player, direction, stackCount)
 end
 
-ConchBlessing.firebreath.onTearCollision = function(_, tear, collider, _)
-    if not tear or not collider then return end
-    local npc = collider:ToNPC()
-    if not npc or not npc:IsVulnerableEnemy() then return end
-    local data = tear:GetData()
-    if not data or not data.__ConchFireBreath then return end
-    if data.__ConchFireBreathApplied then return end
-    data.__ConchFireBreathApplied = true
-    local chance = data.__ConchFireBreath.chance or 0
+local function processFireBreathHit(tear, npc, breathData)
+    if not tear or not npc or not breathData then return end
+    local source = breathData.source or tear.SpawnerEntity or tear
+    local damage = breathData.baseDamage or tear.CollisionDamage or 0
+    if damage > 0 then
+        npc:TakeDamage(damage, 0, EntityRef(source), 0)
+    end
+    if breathData.__ConchFireBreathApplied then return end
+    breathData.__ConchFireBreathApplied = true
+    local chance = breathData.chance or 0
     if chance <= 0 then return end
     if math.random() <= chance then
-        local source = data.__ConchFireBreath.source or tear.SpawnerEntity or npc
+        local burnSource = breathData.source or tear.SpawnerEntity or npc
         local burnDamage = 0
-        local sp = source and source.ToPlayer and source:ToPlayer() or nil
+        local sp = burnSource and burnSource.ToPlayer and burnSource:ToPlayer() or nil
         if sp then
             burnDamage = math.max(1.0, (sp.Damage or 1.0) * 0.2)
         else
             burnDamage = 1.0
         end
-        npc:AddBurn(EntityRef(source), data.__ConchFireBreath.duration or 60, burnDamage)
+        npc:AddBurn(EntityRef(burnSource), breathData.duration or 60, burnDamage)
     end
+end
+
+ConchBlessing.firebreath.onTearCollision = function(_, tear, collider, _)
+    if not tear then return end
+    local data = tear:GetData()
+    if not data or not data.__ConchFireBreath then return end
+    return false
 end
 
 ConchBlessing.firebreath.onTearUpdate = function(_, tear)
@@ -242,6 +253,24 @@ ConchBlessing.firebreath.onTearUpdate = function(_, tear)
     end
     local baseDamage = data.__ConchFireBreath.baseDamage or tear.CollisionDamage
     applyBreathTear(tear, baseDamage, color, currentScale, data.__ConchFireBreath.noKnockback)
+    data.__ConchFireBreathHits = data.__ConchFireBreathHits or {}
+    local roomEntities = Isaac.GetRoomEntities()
+    local hitRadiusPadding = 4
+    for i = 1, #roomEntities do
+        local ent = roomEntities[i]
+        local npc = ent and ent:ToNPC() or nil
+        if npc and npc:IsVulnerableEnemy() and not npc:IsDead() then
+            local hitId = npc.InitSeed or npc.Index
+            if not data.__ConchFireBreathHits[hitId] then
+                local dist = tear.Position:Distance(npc.Position)
+                local hitRadius = (tear.Size or 0) + (npc.Size or 0) + hitRadiusPadding
+                if dist <= hitRadius then
+                    data.__ConchFireBreathHits[hitId] = true
+                    processFireBreathHit(tear, npc, data.__ConchFireBreath)
+                end
+            end
+        end
+    end
     if tear.FrameCount <= 1 then
         local spr = tear:GetSprite()
         if spr then
