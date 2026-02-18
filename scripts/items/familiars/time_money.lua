@@ -331,7 +331,7 @@ function ConchBlessing.timemoney.onEntityTakeDamage(_, entity, amount, flags, so
     if not player then return end
     local id = getItemId()
     if not id or player:GetCollectibleNum(id) <= 0 then return end
-    if DamageUtils and DamageUtils.isSelfInflictedDamage and DamageUtils.isSelfInflictedDamage(flags) then
+    if DamageUtils and DamageUtils.isSelfInflictedDamage and DamageUtils.isSelfInflictedDamage(flags, source) then
         return
     end
     local ps = getPlayerState(player)

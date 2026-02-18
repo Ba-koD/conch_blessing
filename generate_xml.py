@@ -189,7 +189,9 @@ def parse_lua_file(file_path):
         # WorkingNow 확인
         working_now_match = re.search(r'WorkingNow\s*=\s*true', item_data)
         is_working_now = working_now_match is not None
-        if is_working_now:
+        hidden_match = re.search(r'hidden\s*=\s*(true|false)', item_data)
+        is_hidden = hidden_match is not None and hidden_match.group(1) == 'true'
+        if is_working_now and not is_hidden:
             print(f"  WorkingNow detected - skipping XML generation for {name}")
             continue
         
@@ -285,9 +287,8 @@ def parse_lua_file(file_path):
             print(f"  Cache: {item_info['cache']}")
         
         # extract hidden
-        hidden_match = re.search(r'hidden\s*=\s*(true|false)', item_data)
         if hidden_match:
-            item_info['hidden'] = hidden_match.group(1) == 'true'
+            item_info['hidden'] = is_hidden
             print(f"  Hidden: {item_info['hidden']}")
         
         # extract price (상점 가격)

@@ -10,7 +10,6 @@
     <Pool Name="secret">
         <Item Name="Live Eye" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Oral Steroids" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
-        <Item Name="Polycoria" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Time = Money" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
     <Pool Name="ultraSecret">
@@ -27,7 +26,6 @@
         <Item Name="Injectable Steroids" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Chronus" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Sealed Demon Sword" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
-        <Item Name="Polycoria" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Time = Money" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
     <Pool Name="treasure">
@@ -38,9 +36,10 @@
         <Item Name="Appraisal Certificate" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Money = Tear" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Utility Belt" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
-        <Item Name="Polycoria" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Ice Breath" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Fire Breath" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Two Faced Penny" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Inf D6" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
     <Pool Name="shop">
         <Item Name="Power Training" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
@@ -49,6 +48,7 @@
         <Item Name="Utility Belt" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Ice Breath" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Fire Breath" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Two Faced Penny" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Time = Money" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
     <Pool Name="curse">

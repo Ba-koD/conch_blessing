@@ -47,7 +47,7 @@ ConchBlessing.polycoria.onDamage = function(_, entity, amount, flags, src, count
     if not player or not player:HasCollectible(ITEM_ID) then return end
     
     -- Exclude self-inflicted damage (same logic as Minus Chain and Time = Power)
-    if DamageUtils.isSelfInflictedDamage(flags) then
+    if DamageUtils.isSelfInflictedDamage(flags, src) then
         ConchBlessing.printDebug(string.format("Polycoria: Ignored self-inflicted damage (flags=%d)", flags or -1))
         return
     end

@@ -198,7 +198,7 @@ end
 ConchBlessing.originalMod:AddCallback(ModCallbacks.MC_ENTITY_TAKE_DMG, function(_, ent, amount, flags, src, countdown)
 	local player = ent and ent:ToPlayer() or nil
 	if not player then return end
-	if DamageUtils and DamageUtils.isSelfInflictedDamage and DamageUtils.isSelfInflictedDamage(flags) then
+	if DamageUtils and DamageUtils.isSelfInflictedDamage and DamageUtils.isSelfInflictedDamage(flags, src) then
 		return
 	end
 	if not TID or TID <= 0 then return end

@@ -183,7 +183,7 @@ function ConchBlessing.timelucktrinket.onEntityTakeDamage(_, entity, amount, fla
 	local id = getTrinketId()
 	if not id then return end
 	if not player:HasTrinket(id) then return end
-	if DamageUtils.isSelfInflictedDamage(flags) then
+	if DamageUtils.isSelfInflictedDamage(flags, source) then
 		ConchBlessing.printDebug(string.format("[Time=Luck] ignore pause by flags=%d", flags or -1))
 		return
 	end

@@ -34,7 +34,7 @@ ConchBlessing.originalMod:AddCallback(ModCallbacks.MC_ENTITY_TAKE_DMG, function(
 	if not player then return end
 	
 	-- Exclude self-inflicted damage (same logic as Time = Power)
-	if DamageUtils.isSelfInflictedDamage(flags) then
+	if DamageUtils.isSelfInflictedDamage(flags, src) then
 		ConchBlessing.printDebug(string.format("[MinusChain] Ignored self-inflicted damage (flags=%d)", flags or -1))
 		return
 	end
@@ -95,4 +95,3 @@ end)
 
 ConchBlessing._minusChainRegistered = true
 return true
-

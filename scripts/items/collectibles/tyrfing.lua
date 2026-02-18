@@ -75,7 +75,7 @@ ConchBlessing.tyrfing.onEntityTakeDamage = function(_, entity, amount, flags, so
     if not player:HasCollectible(TYRFING_ID) then return end
     
     -- Ignore self-inflicted damage (same as time_power)
-    if DamageUtils.isSelfInflictedDamage(flags) then
+    if DamageUtils.isSelfInflictedDamage(flags, source) then
         ConchBlessing.printDebug(string.format("[Tyrfing] Ignored self-inflicted damage (flags=%d)", flags or -1))
         return
     end

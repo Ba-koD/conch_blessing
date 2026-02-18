@@ -839,7 +839,7 @@ ConchBlessing.ItemData = {
                 en = "Gains Holy Light (first time only)."
             },
             -- Blacklisted items
-            [{ id = CollectibleType.COLLECTIBLE_ONE_UP, type = "collectible" }] = {
+            [{ id = CollectibleType.COLLECTIBLE_1UP, type = "collectible" }] = {
                 kr = "크로노스에 흡수되지 않습니다.",
                 en = "Cannot be absorbed by Chronus."
             },
@@ -1128,49 +1128,6 @@ ConchBlessing.ItemData = {
         onAfterChange = "tyrfing.onAfterChange",
         synergies = {}
     },
-    POLYCORIA = {
-        type = "passive",
-        id = Isaac.GetItemIdByName("Polycoria"),
-        name = {
-            kr = "동공과다증",
-            en = "Polycoria"
-        },
-        description = {
-            kr = "마르지 않는 눈물",
-            en = "Unending tears"
-        },
-        eid = {
-            kr = {
-                "20/20을 획득합니다",
-                "#피격 없이 층을 클리어할 때마다 20/20을 하나 얻습니다.",
-            },
-            en = {
-                "Grants 20/20",
-                "#When clearing a floor without taking damage, you get 20/20.",
-            }
-        },
-        pool = {
-            RoomType.ROOM_DEVIL,
-            RoomType.ROOM_TREASURE,
-            RoomType.ROOM_SECRET,
-        },
-        quality = 4,
-        tags = "offensive tearsup",
-        cache = "firedelay",
-        hidden = false,
-        shopprice = 30,
-        devilprice = 2,
-        origin = { id = CollectibleType.COLLECTIBLE_INNER_EYE, type = "collectible" },
-        flag = "positive",
-        script = "scripts/items/collectibles/polycoria",
-        callbacks = {
-            pickup = "polycoria.onPickup",
-            entityTakeDmg = "polycoria.onDamage",
-            postNewLevel = "polycoria.onNewFloor",
-            gameStarted = "polycoria.onGameStarted",
-            postPlayerUpdate = "polycoria.onPlayerUpdate",
-        }
-    },
     ICE_BREATH = {
         type = "passive",
         id = Isaac.GetItemIdByName("Ice Breath"),
@@ -1259,6 +1216,75 @@ ConchBlessing.ItemData = {
             postPlayerUpdate = "firebreath.onPlayerUpdate",
             tearCollision = "firebreath.onTearCollision",
             tearUpdate = "firebreath.onTearUpdate"
+        }
+    },
+    TWO_FACED_PENNY = {
+        type = "passive",
+        id = Isaac.GetItemIdByName("Two Faced Penny"),
+        name = {
+            kr = "투 페이스드 페니",
+            en = "Two Faced Penny"
+        },
+        description = {
+            kr = "이식되는 욕망",
+            en = "Grafted desire"
+        },
+        eid = {
+            kr = {
+                "획득 후 다음 아이템을 하나 더 획득합니다.",
+                "#피격 없이 층을 클리어하면 해당 아이템을 하나 더 획득합니다."
+            },
+            en = {
+                "After pickup, your next item is duplicated once.",
+                "#Clear a floor without taking damage to gain that item again."
+            }
+        },
+        pool = {
+            RoomType.ROOM_TREASURE,
+            RoomType.ROOM_SHOP
+        },
+        gfx = "two_faced_penny.png",
+        tags = "utility",
+        quality = 3,
+        origin = { id = CollectibleType.COLLECTIBLE_BOX, type = "collectible" },
+        flag = "positive",
+        shopprice = 15,
+        script = "scripts/items/collectibles/two_faced_penny",
+        callbacks = {
+            postPlayerUpdate = "twofacedpenny.onPlayerUpdate",
+            entityTakeDmg = "twofacedpenny.onDamage",
+            postNewLevel = "twofacedpenny.onNewFloor",
+            gameStarted = "twofacedpenny.onGameStarted"
+        }
+    },
+    INF_D6 = {
+        type = "active",
+        id = Isaac.GetItemIdByName("Inf D6"),
+        name = {
+            kr = "무한 주사위",
+            en = "Inf D6"
+        },
+        description = {
+            kr = "마음대로 골라먹는 재미!",
+            en = "Enjoy rerolling the dice whenever you want!"
+        },
+        eid = {
+            kr = {
+                "편의성 아이템",
+            },
+            en = {
+                "Convenience item.",
+            }
+        },
+        gfx = "inf_d6.png",
+        tags = "utility",
+        hidden = true,
+        shopprice = 999,
+        maxcharges = 0,
+        chargetype = "normal",
+        script = "scripts/items/collectibles/inf_d6",
+        callbacks = {
+            use = "infd6.onUse",
         }
     },
 

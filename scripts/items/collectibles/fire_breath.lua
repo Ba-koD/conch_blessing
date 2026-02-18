@@ -12,7 +12,8 @@ ConchBlessing.firebreath.data = {
     spawnScale = 1.0,
     growFrames = 1,
     noKnockback = true,
-    rangeLifeScale = 1.0
+    rangeLifeScale = 1.0,
+    nonMonsterKnockback = 6.0
 }
 
 local function setBlindfold(player, enabled)
@@ -219,6 +220,29 @@ local function processFireBreathHit(tear, npc, breathData)
     end
 end
 
+local function processFireBreathHitEntity(tear, ent, breathData)
+    if not tear or not ent or not breathData then return end
+    local source = breathData.source or tear.SpawnerEntity or tear
+    local damage = breathData.baseDamage or tear.CollisionDamage or 0
+    if damage > 0 then
+        ent:TakeDamage(damage, 0, EntityRef(source), 0)
+    end
+end
+
+local function isNonMonsterPushTarget(ent)
+    return ent and ent.Type == EntityType.ENTITY_BOMB
+end
+
+local function pushNonMonster(tear, ent, breathData)
+    if not tear or not ent then return end
+    if not ent.Velocity then return end
+    local strength = (breathData and breathData.nonMonsterKnockback) or ConchBlessing.firebreath.data.nonMonsterKnockback or 6.0
+    local dir = ent.Position - tear.Position
+    if dir.X == 0 and dir.Y == 0 then return end
+    local push = dir:Normalized() * strength
+    ent.Velocity = ent.Velocity + push
+end
+
 ConchBlessing.firebreath.onTearCollision = function(_, tear, collider, _)
     if not tear then return end
     local data = tear:GetData()
@@ -254,6 +278,16 @@ ConchBlessing.firebreath.onTearUpdate = function(_, tear)
     local baseDamage = data.__ConchFireBreath.baseDamage or tear.CollisionDamage
     applyBreathTear(tear, baseDamage, color, currentScale, data.__ConchFireBreath.noKnockback)
     data.__ConchFireBreathHits = data.__ConchFireBreathHits or {}
+    local room = Game():GetRoom()
+    local grid = room and room:GetGridEntityFromPos(tear.Position) or nil
+    if grid then
+        local gtype = (grid.GetType and grid:GetType()) or nil
+        local isFireGrid = GridEntityType and gtype == GridEntityType.GRID_FIREPLACE
+        local isTntGrid = GridEntityType and gtype == GridEntityType.GRID_TNT
+        if isFireGrid or isTntGrid then
+            grid:Destroy()
+        end
+    end
     local roomEntities = Isaac.GetRoomEntities()
     local hitRadiusPadding = 4
     for i = 1, #roomEntities do
@@ -267,6 +301,19 @@ ConchBlessing.firebreath.onTearUpdate = function(_, tear)
                 if dist <= hitRadius then
                     data.__ConchFireBreathHits[hitId] = true
                     processFireBreathHit(tear, npc, data.__ConchFireBreath)
+                end
+            end
+        elseif isNonMonsterPushTarget(ent) then
+            local hitId = ent.InitSeed or ent.Index
+            if not data.__ConchFireBreathHits[hitId] then
+                local dist = tear.Position:Distance(ent.Position)
+                local hitRadius = (tear.Size or 0) + (ent.Size or 0) + hitRadiusPadding
+                if dist <= hitRadius then
+                    data.__ConchFireBreathHits[hitId] = true
+                    pushNonMonster(tear, ent, data.__ConchFireBreath)
+                    if ent.Type == EntityType.ENTITY_FIREPLACE or ent.Type == EntityType.ENTITY_BOMB then
+                        processFireBreathHitEntity(tear, ent, data.__ConchFireBreath)
+                    end
                 end
             end
         end
