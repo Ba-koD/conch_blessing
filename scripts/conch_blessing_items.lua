@@ -1222,12 +1222,12 @@ ConchBlessing.ItemData = {
         type = "passive",
         id = Isaac.GetItemIdByName("Two Faced Penny"),
         name = {
-            kr = "투 페이스드 페니",
+            kr = "양면 동전",
             en = "Two Faced Penny"
         },
         description = {
-            kr = "이식되는 욕망",
-            en = "Grafted desire"
+            kr = "확률은 100%!",
+            en = "Probability is 100%!"
         },
         eid = {
             kr = {
@@ -1245,8 +1245,8 @@ ConchBlessing.ItemData = {
         },
         gfx = "two_faced_penny.png",
         tags = "utility",
-        quality = 3,
-        origin = { id = CollectibleType.COLLECTIBLE_BOX, type = "collectible" },
+        quality = 4,
+        origin = { id = CollectibleType.CollectibleType.COLLECTIBLE_CROOKED_PENNY, type = "collectible" },
         flag = "positive",
         shopprice = 15,
         script = "scripts/items/collectibles/two_faced_penny",
