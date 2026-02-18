@@ -1281,6 +1281,7 @@ ConchBlessing.ItemData = {
         hidden = true,
         shopprice = 999,
         maxcharges = 0,
+        quality = 0,
         chargetype = "normal",
         script = "scripts/items/collectibles/inf_d6",
         callbacks = {
