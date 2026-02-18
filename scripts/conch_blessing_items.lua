@@ -1246,7 +1246,7 @@ ConchBlessing.ItemData = {
         gfx = "two_faced_penny.png",
         tags = "utility",
         quality = 4,
-        origin = { id = CollectibleType.CollectibleType.COLLECTIBLE_CROOKED_PENNY, type = "collectible" },
+        origin = { id = CollectibleType.COLLECTIBLE_CROOKED_PENNY, type = "collectible" },
         flag = "positive",
         shopprice = 15,
         script = "scripts/items/collectibles/two_faced_penny",
