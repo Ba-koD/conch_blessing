@@ -21,6 +21,7 @@ local function getPlayerData(player)
             lastPennyCount = 0,
             lastCollectibleCounts = nil,
             slots = {},
+            obtainedItems = {}, -- 이미 두 배 지급된 아이템 ID 저장 (Set)
         }
     end
     return data.__twofacedpenny
@@ -121,24 +122,18 @@ ConchBlessing.twofacedpenny.onPlayerUpdate = function(_, player)
                     end
                 end
 
-                local extraAlready = 0
                 if pendingIndex then
                     slots[pendingIndex].itemId = foundId
-                    grantItem(player, foundId, 1, pData)
-                    extraAlready = 1
                     pData.tookDamageThisFloor = false
-                end
-
-                local matchCount = 0
-                for _, slot in ipairs(slots) do
-                    if slot.itemId == foundId then
-                        matchCount = matchCount + 1
+                    
+                    -- 최초 획득인지 확인 (이미 두 배 지급된 아이템이 아니면)
+                    pData.obtainedItems = pData.obtainedItems or {}
+                    if not pData.obtainedItems[foundId] then
+                        -- 최초 획득: 두 배 지급
+                        grantItem(player, foundId, 1, pData)
+                        pData.obtainedItems[foundId] = true
                     end
-                end
-                local extra = matchCount - extraAlready
-                if extra > 0 then
-                    grantItem(player, foundId, extra, pData)
-                    pData.tookDamageThisFloor = false
+                    -- 이미 획득한 아이템이면 두 배 지급 안 함 (노피격 보너스만 슬롯에 저장)
                 end
             end
         end
