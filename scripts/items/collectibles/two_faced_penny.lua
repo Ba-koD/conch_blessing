@@ -20,8 +20,7 @@ local function getPlayerData(player)
             currentFloorKey = nil,
             lastPennyCount = 0,
             lastCollectibleCounts = nil,
-            slots = {},
-            obtainedItems = {}, -- 이미 두 배 지급된 아이템 ID 저장 (Set)
+            slots = {}, -- 각 슬롯: { itemId = number, doubled = boolean }
         }
     end
     return data.__twofacedpenny
@@ -112,28 +111,30 @@ ConchBlessing.twofacedpenny.onPlayerUpdate = function(_, player)
                 suppress[foundId] = suppress[foundId] - skipped
                 foundDelta = foundDelta - skipped
             end
-            for _ = 1, foundDelta do
-                local slots = pData.slots or {}
-                local pendingIndex = nil
-                for i, slot in ipairs(slots) do
-                    if not slot.itemId then
-                        pendingIndex = i
-                        break
-                    end
+            -- 모든 빈 슬롯이 새 아이템을 추적하도록 설정
+            local slots = pData.slots or {}
+            local emptySlots = {}
+            for i, slot in ipairs(slots) do
+                if not slot.itemId then
+                    table.insert(emptySlots, i)
                 end
-
-                if pendingIndex then
-                    slots[pendingIndex].itemId = foundId
+            end
+            
+            -- foundDelta만큼의 새 아이템 획득에 대해 처리
+            -- 각 획득마다 모든 빈 슬롯이 그 아이템을 바라봄
+            for _ = 1, foundDelta do
+                for _, slotIndex in ipairs(emptySlots) do
+                    slots[slotIndex].itemId = foundId
+                    slots[slotIndex].doubled = false
                     pData.tookDamageThisFloor = false
-                    
-                    -- 최초 획득인지 확인 (이미 두 배 지급된 아이템이 아니면)
-                    pData.obtainedItems = pData.obtainedItems or {}
-                    if not pData.obtainedItems[foundId] then
-                        -- 최초 획득: 두 배 지급
-                        grantItem(player, foundId, 1, pData)
-                        pData.obtainedItems[foundId] = true
-                    end
-                    -- 이미 획득한 아이템이면 두 배 지급 안 함 (노피격 보너스만 슬롯에 저장)
+                end
+            end
+            
+            -- 이제 각 슬롯의 doubled 상태에 따라 두 배 지급
+            for _, slot in ipairs(slots) do
+                if slot.itemId == foundId and not slot.doubled then
+                    grantItem(player, foundId, 1, pData)
+                    slot.doubled = true
                 end
             end
         end

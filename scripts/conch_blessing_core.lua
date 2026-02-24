@@ -178,6 +178,12 @@ do
     end
 end
 
+-- Initialize HiddenItemManager
+local HiddenItemManager = require("scripts.lib.hidden_item_manager")
+HiddenItemManager:Init(mod)
+ConchBlessing.HiddenItemManager = HiddenItemManager
+ConchBlessing.print("HiddenItemManager initialized!")
+
 -- load stats library first (before items and upgrade systems)
 local statsSuccess, statsErr = pcall(function()
     require("scripts.lib.stats")

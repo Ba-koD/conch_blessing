@@ -1141,18 +1141,20 @@ ConchBlessing.ItemData = {
         },
         eid = {
             kr = {
-                "{{Warning}} 눈물 발사가 불가능합니다.",
-                "#공격 방향으로 초당 30회 푸른 불꽃을 발사합니다.",
-                "#푸른 불꽃은 플레이어 {{Damage}}데미지의 {{Tears}}연사 x 2%",
-                "#빙결 확률이 {{Luck}}운 수치와 동일합니다.",
-                "#중첩 시 데미지/확률이 n배로 증가합니다."
+                "{{Warning}} 눈물이 얼음 불꽃으로 변합니다.",
+                "#공격 버튼을 홀드하여 차징합니다 (몬스트로의 폐).",
+                "#차징된 눈물이 발사 시 얼음 불꽃으로 변환됩니다.",
+                "#얼음 불꽃은 {{Damage}}데미지의 30%를 줍니다.",
+                "#{{Luck}}운에 따라 적을 빙결시킵니다.",
+                "#중첩 시 데미지가 n배로 증가합니다."
             },
             en = {
-                "{{Warning}} Cannot fire tears.",
-                "#Fire ice flames 30 times per second.",
-                "#Fire ice flames that deal {{Damage}} × ({{Tears}}SPS × 2%).",
-                "#Freeze chance is equal to {{Luck}}Luck.",
-                "#Stacks scale damage and freeze chance linearly."
+                "{{Warning}} Tears transform into ice flames.",
+                "#Hold attack button to charge (Monstro's Lung).",
+                "#Charged tears transform into ice flames when fired.",
+                "#Ice flames deal 30% of {{Damage}}Damage.",
+                "#Chance to freeze enemies based on {{Luck}}Luck.",
+                "#Stacks increase damage linearly."
             }
         },
         pool = {
@@ -1169,8 +1171,8 @@ ConchBlessing.ItemData = {
         script = "scripts/items/collectibles/ice_breath",
         callbacks = {
             postPlayerUpdate = "icebreath.onPlayerUpdate",
-            tearCollision = "icebreath.onTearCollision",
-            tearUpdate = "icebreath.onTearUpdate"
+            postEffectUpdate = "icebreath.onEffectUpdate",
+            fireTear = "icebreath.onFireTear"
         }
     },
     FIRE_BREATH = {
@@ -1186,18 +1188,18 @@ ConchBlessing.ItemData = {
         },
         eid = {
             kr = {
-                "{{Warning}} 눈물 발사가 불가능합니다.",
-                "#공격 방향으로 초당 30회 붉은 불꽃을 발사합니다.",
-                "#붉은 불꽃은 플레이어 {{Damage}}데미지의 {{Tears}}연사 x 3%",
-                "#화상 확률이 {{Luck}}운 수치의 두배입니다.",
-                "#중첩 시 데미지/확률이 n배로 증가합니다."
+                "{{Warning}} 눈물이 불꽃으로 변합니다.",
+                "#공격 버튼을 홀드하여 차징합니다 (몬스트로의 폐).",
+                "#차징된 눈물이 발사 시 불꽃으로 변환됩니다.",
+                "#불꽃은 {{Damage}}데미지의 60%를 줍니다.",
+                "#중첩 시 데미지가 n배로 증가합니다."
             },
             en = {
-                "{{Warning}} Cannot fire tears.",
-                "#Fire flames 30 times per second.",
-                "#Fire flames that deal {{Damage}} × ({{Tears}}SPS × 3%).",
-                "#Burn chance is 2 times {{Luck}}Luck.",
-                "#Stacks scale damage and burn chance linearly."
+                "{{Warning}} Tears transform into flames.",
+                "#Hold attack button to charge (Monstro's Lung).",
+                "#Charged tears transform into flames when fired.",
+                "#Flames deal 60% of {{Damage}}Damage.",
+                "#Stacks increase damage linearly."
             }
         },
         pool = {
@@ -1214,8 +1216,7 @@ ConchBlessing.ItemData = {
         script = "scripts/items/collectibles/fire_breath",
         callbacks = {
             postPlayerUpdate = "firebreath.onPlayerUpdate",
-            tearCollision = "firebreath.onTearCollision",
-            tearUpdate = "firebreath.onTearUpdate"
+            fireTear = "firebreath.onFireTear"
         }
     },
     TWO_FACED_PENNY = {
