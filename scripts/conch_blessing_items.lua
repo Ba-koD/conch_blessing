@@ -1141,20 +1141,16 @@ ConchBlessing.ItemData = {
         },
         eid = {
             kr = {
-                "{{Warning}} 눈물이 얼음 불꽃으로 변합니다.",
-                "#공격 버튼을 홀드하여 차징합니다 (몬스트로의 폐).",
-                "#차징된 눈물이 발사 시 얼음 불꽃으로 변환됩니다.",
-                "#얼음 불꽃은 {{Damage}}데미지의 30%를 줍니다.",
-                "#{{Luck}}운에 따라 적을 빙결시킵니다.",
-                "#중첩 시 데미지가 n배로 증가합니다."
+                "(15-{{Luck}}운)발마다 얼음 불꽃 발사",
+                "#한 번에 최대 {{Tears}}연사 수치만큼 발사 (최소 1개)",
+                "#얼음 불꽃은 내 {{Damage}}데미지의 20%",
+                "#적중 시 {{Luck}}운% 확률로 빙결 (최대 100%)"
             },
             en = {
-                "{{Warning}} Tears transform into ice flames.",
-                "#Hold attack button to charge (Monstro's Lung).",
-                "#Charged tears transform into ice flames when fired.",
-                "#Ice flames deal 30% of {{Damage}}Damage.",
-                "#Chance to freeze enemies based on {{Luck}}Luck.",
-                "#Stacks increase damage linearly."
+                "Fires ice flames every (15-{{Luck}}Luck) tears",
+                "#Fires up to {{Tears}} count per burst (minimum 1)",
+                "#Ice flames deal 20% of your {{Damage}}Damage",
+                "#On hit: {{Luck}}% chance to freeze (max 100%)"
             }
         },
         pool = {
@@ -1188,18 +1184,16 @@ ConchBlessing.ItemData = {
         },
         eid = {
             kr = {
-                "{{Warning}} 눈물이 불꽃으로 변합니다.",
-                "#공격 버튼을 홀드하여 차징합니다 (몬스트로의 폐).",
-                "#차징된 눈물이 발사 시 불꽃으로 변환됩니다.",
-                "#불꽃은 {{Damage}}데미지의 60%를 줍니다.",
-                "#중첩 시 데미지가 n배로 증가합니다."
+                "(15-{{Luck}}운)발마다 불꽃 발사",
+                "#한 번에 최대 {{Tears}}연사 수치만큼 발사 (최소 1개)",
+                "#불꽃은 내 {{Damage}}데미지의 30%",
+                "#적중 시 ({{Luck}}운 x5)% 확률로 화상 (최대 100%)"
             },
             en = {
-                "{{Warning}} Tears transform into flames.",
-                "#Hold attack button to charge (Monstro's Lung).",
-                "#Charged tears transform into flames when fired.",
-                "#Flames deal 60% of {{Damage}}Damage.",
-                "#Stacks increase damage linearly."
+                "Fires flames every (15-{{Luck}}Luck) tears",
+                "#Fires up to {{Tears}} count per burst (minimum 1)",
+                "#Flames deal 30% of your {{Damage}}Damage",
+                "#On hit: ({{Luck}} x5)% chance to burn (max 100%)"
             }
         },
         pool = {
@@ -1216,7 +1210,8 @@ ConchBlessing.ItemData = {
         script = "scripts/items/collectibles/fire_breath",
         callbacks = {
             postPlayerUpdate = "firebreath.onPlayerUpdate",
-            fireTear = "firebreath.onFireTear"
+            fireTear = "firebreath.onFireTear",
+            postEffectUpdate = "firebreath.onEffectUpdate"
         }
     },
     TWO_FACED_PENNY = {

@@ -1,40 +1,283 @@
 ConchBlessing.firebreath = {}
 
-local game = Game()
-local FIRE_CANDLE_ID = Isaac.GetItemIdByName("Fire Breath")
-local ICE_CANDLE_ID = Isaac.GetItemIdByName("Ice Breath")
+local FIRE_BREATH_ID = Isaac.GetItemIdByName("Fire Breath")
+
+-- API refs checked:
+-- - EffectVariant.RED_CANDLE_FLAME (52)
+-- - EffectVariant.BLUE_FLAME (10)
+local FIRE_EFFECT_VARIANT = (EffectVariant and (EffectVariant.RED_CANDLE_FLAME or EffectVariant.BLUE_FLAME)) or 52
+local GENERIC_EFFECT_VARIANT = (EffectVariant and (EffectVariant.BLUE_FLAME or EffectVariant.RED_CANDLE_FLAME)) or 10
 
 ConchBlessing.firebreath.data = {
-    damageCoef = 0.6, -- 데미지의 60%
-    flameCount = 20, -- 발사할 불꽃 수
-    flameLifetime = 30, -- 불꽃 지속시간
+    damageCoef = 0.3, -- 데미지의 30%
+    burnChance = 0.0, -- fallback chance (actual: Luck x5%)
+    lingerFrames = 30, -- 사거리 도달 후 잔류 프레임
+    slowdownDistance = 36, -- 사거리 근처 감속 거리
+    postRangeDrag = 0.88, -- 사거리 도달 후 감속 계수
+    flameAnimationPath = "gfx/effects/flame.anm2",
+    -- "tear_flame" | "entity_flame" | "entity_effect"
+    projectileMode = "tear_flame",
+    startScale = 0.55, -- 생성 시 작은 불꽃 크기
+    endScale = 1.0, -- 이동하며 커지는 불꽃 크기
 }
+
+ConchBlessing.firebreath._isSpawningInternal = false
+
+local FIRE_BASE_COLOR = { r = 1.0, g = 0.82, b = 0.45, ro = 0.03, go = 0.01, bo = 0.0 }
 
 local function getPlayerData(player)
     local data = player:GetData()
     if not data.__ConchFireBreath then
         data.__ConchFireBreath = {
-            hasHiddenLung = false,
-            lastDirection = Vector(1, 0),
+            tearCount = 0,
         }
     end
     return data.__ConchFireBreath
 end
 
-local function getFireDirection(player, pData)
-    local dir = player:GetAimDirection()
-    if dir.X ~= 0 or dir.Y ~= 0 then
-        dir = dir:Normalized()
-        pData.lastDirection = dir
-        return dir
-    end
-    return pData.lastDirection or Vector(1, 0)
+local function clamp(value, minValue, maxValue)
+    if value < minValue then return minValue end
+    if value > maxValue then return maxValue end
+    return value
 end
 
-local function spawnFireFlames(player, direction, stackCount)
+local function getProjectileMode()
+    local mode = ConchBlessing.firebreath.data.projectileMode
+    if mode == "entity_flame" or mode == "entity_effect" or mode == "tear_flame" then
+        return mode
+    end
+    return "tear_flame"
+end
+
+local function getFireInterval(luck)
+    local interval = math.floor(15 - luck)
+    if interval < 1 then
+        interval = 1
+    end
+    return interval
+end
+
+local function getFlameCountFromTears(player)
+    local maxFireDelay = math.max(0, player.MaxFireDelay or 10)
+    local tearsRate = 30 / (maxFireDelay + 1)
+    return math.max(1, math.floor(tearsRate))
+end
+
+local function getFlameSpeedMultiplier(player)
+    return clamp(player.ShotSpeed or 1.0, 0.7, 1.6)
+end
+
+local function getFlameTravelDistance(player)
+    return math.max(80, player.TearRange or 260)
+end
+
+local function getBurnChance(player)
+    local luck = (player and player.Luck) or 0
+    return clamp(luck * 5, 0, 100) / 100
+end
+
+local function makeMotionState(origin, direction, speed, maxDistance)
+    local lingerFrames = ConchBlessing.firebreath.data.lingerFrames or 30
+    local travelFrames = math.ceil(maxDistance / math.max(0.1, speed))
+    local life = math.max(12, travelFrames + lingerFrames + math.random(0, 10))
+    return {
+        origin = Vector(origin.X, origin.Y),
+        travelDir = Vector(direction.X, direction.Y),
+        maxDistance = maxDistance,
+        initialSpeed = speed,
+        reachedRange = false,
+        slowdownDistance = ConchBlessing.firebreath.data.slowdownDistance or 36,
+        driftSpeed = math.max(0.2, speed * 0.08),
+        postRangeDrag = ConchBlessing.firebreath.data.postRangeDrag or 0.88,
+        lifeLeft = life,
+        maxLife = life,
+    }
+end
+
+local function attachMotionState(targetData, motionState)
+    for k, v in pairs(motionState) do
+        targetData[k] = v
+    end
+end
+
+local function updateProjectileMotion(projectile, breathData)
+    if not breathData.lifeLeft then
+        return true
+    end
+
+    breathData.lifeLeft = breathData.lifeLeft - 1
+    if breathData.lifeLeft <= 0 then
+        return false
+    end
+
+    local origin = breathData.origin
+    local travelDir = breathData.travelDir
+    local maxDistance = breathData.maxDistance
+    if not (origin and travelDir and maxDistance) then
+        return true
+    end
+
+    local traveled = (projectile.Position - origin):Length()
+    if not breathData.reachedRange then
+        local remaining = maxDistance - traveled
+        if remaining <= 0 then
+            breathData.reachedRange = true
+            projectile.Position = origin + travelDir * maxDistance
+            projectile.Velocity = travelDir * (breathData.driftSpeed or 0.2)
+        else
+            local progress = clamp(traveled / math.max(1, maxDistance), 0, 1)
+            local speedRatio = 1.0 - progress * 0.55
+            local slowdownDistance = breathData.slowdownDistance or 36
+            if remaining < slowdownDistance then
+                local nearEndRatio = clamp(remaining / slowdownDistance, 0.25, 1.0)
+                speedRatio = speedRatio * nearEndRatio
+            end
+            speedRatio = clamp(speedRatio, 0.2, 1.0)
+            local targetSpeed = math.max(0.2, (breathData.initialSpeed or 1.0) * speedRatio)
+            local targetVelocity = travelDir * targetSpeed
+            projectile.Velocity = projectile.Velocity * 0.6 + targetVelocity * 0.4
+        end
+    else
+        projectile.Velocity = projectile.Velocity * (breathData.postRangeDrag or 0.88)
+        if projectile.Velocity:Length() < 0.08 then
+            projectile.Velocity = Vector.Zero
+        end
+    end
+
+    return true
+end
+
+local function applyFadeColor(projectile, breathData)
+    local maxLife = breathData.maxLife or 0
+    if maxLife <= 0 then
+        return
+    end
+
+    local ratio = clamp((breathData.lifeLeft or 0) / maxLife, 0, 1)
+    local alpha = clamp(0.2 + ratio * 0.8, 0.2, 1.0)
+    projectile:SetColor(
+        Color(FIRE_BASE_COLOR.r, FIRE_BASE_COLOR.g, FIRE_BASE_COLOR.b, alpha, FIRE_BASE_COLOR.ro, FIRE_BASE_COLOR.go, FIRE_BASE_COLOR.bo),
+        1,
+        1,
+        false,
+        false
+    )
+end
+
+local function applyProjectileScale(projectile, breathData, isTear)
+    local startScale = breathData.startScale
+    local endScale = breathData.endScale
+    if (not startScale) or (not endScale) then
+        return
+    end
+
+    local progress = nil
+    if breathData.origin and breathData.maxDistance and breathData.maxDistance > 0 then
+        local traveled = (projectile.Position - breathData.origin):Length()
+        progress = clamp(traveled / breathData.maxDistance, 0, 1)
+    else
+        local maxLife = breathData.maxLife or 0
+        if maxLife <= 0 then
+            return
+        end
+        progress = 1 - clamp((breathData.lifeLeft or 0) / maxLife, 0, 1)
+    end
+
+    local scale = startScale + (endScale - startScale) * progress
+    if isTear then
+        projectile.Scale = scale
+    else
+        projectile.SpriteScale = Vector(scale, scale)
+    end
+end
+
+local function spawnEffectFlame(player, position, velocity, direction, speed, damage, targetDistance, mode)
+    local variant = (mode == "entity_flame") and FIRE_EFFECT_VARIANT or GENERIC_EFFECT_VARIANT
+    local effect = Isaac.Spawn(EntityType.ENTITY_EFFECT, variant, 0, position, velocity, player):ToEffect()
+    if not effect then
+        return
+    end
+
+    local motionState = makeMotionState(position, direction, speed, targetDistance)
+    effect:SetTimeout(motionState.lifeLeft)
+    effect.Timeout = motionState.lifeLeft
+    local startScale = ConchBlessing.firebreath.data.startScale or 0.55
+    local endScale = ConchBlessing.firebreath.data.endScale or 1.0
+    effect.CollisionDamage = damage
+    effect.SpriteScale = Vector(startScale, startScale)
+    effect.GridCollisionClass = EntityGridCollisionClass.GRIDCOLL_NONE
+    effect:SetColor(Color(FIRE_BASE_COLOR.r, FIRE_BASE_COLOR.g, FIRE_BASE_COLOR.b, 1.0, FIRE_BASE_COLOR.ro, FIRE_BASE_COLOR.go, FIRE_BASE_COLOR.bo), -1, 1, false, false)
+
+    local sprite = effect:GetSprite()
+    if sprite and mode == "entity_effect" and ConchBlessing.firebreath.data.flameAnimationPath then
+        sprite:Load(ConchBlessing.firebreath.data.flameAnimationPath, true)
+        sprite:Play("Idle", true)
+    end
+
+    local fdata = effect:GetData()
+    fdata.__ConchFireBreath = {
+        source = player,
+        baseDamage = damage,
+        burnChance = getBurnChance(player),
+        projectileMode = mode,
+        startScale = startScale,
+        endScale = endScale,
+    }
+    attachMotionState(fdata.__ConchFireBreath, motionState)
+end
+
+local function spawnTearFlame(player, position, velocity, direction, speed, damage, targetDistance)
+    -- Keep signature to avoid touching current fire logic/count call sites.
+    local _ = direction
+    _ = speed
+    _ = targetDistance
+
+    local legacyVariant = (EffectVariant and EffectVariant.BLUE_FLAME) or GENERIC_EFFECT_VARIANT
+    local flame = Isaac.Spawn(
+        EntityType.ENTITY_EFFECT,
+        legacyVariant,
+        0,
+        position,
+        velocity * 1.5,
+        player
+    ):ToEffect()
+    if not flame then
+        return
+    end
+
+    local timeout = 30 + math.random(0, 10)
+    flame:SetTimeout(timeout)
+    flame.Timeout = timeout
+    flame.CollisionDamage = damage
+    flame.SpriteScale = Vector(0.8, 0.8)
+    flame.GridCollisionClass = EntityGridCollisionClass.GRIDCOLL_NONE
+    flame:SetColor(Color(FIRE_BASE_COLOR.r, FIRE_BASE_COLOR.g, FIRE_BASE_COLOR.b, 1.0, FIRE_BASE_COLOR.ro, FIRE_BASE_COLOR.go, FIRE_BASE_COLOR.bo), -1, 1, false, false)
+
+    local fdata = flame:GetData()
+    fdata.__ConchFireBreath = {
+        source = player,
+        baseDamage = damage,
+        burnChance = getBurnChance(player),
+        -- Keep non-manual damage path like old behavior.
+        projectileMode = "entity_flame",
+    }
+end
+
+local function spawnFireProjectiles(player, direction)
+    local stackCount = player:GetCollectibleNum(FIRE_BREATH_ID)
+    local flameCount = getFlameCountFromTears(player)
     local damage = (player.Damage or 1) * ConchBlessing.firebreath.data.damageCoef * stackCount
-    
-    for i = 1, ConchBlessing.firebreath.data.flameCount do
+    local flameSpeedMultiplier = getFlameSpeedMultiplier(player)
+    local targetDistance = getFlameTravelDistance(player)
+    local mode = getProjectileMode()
+
+    local spawningTearMode = (mode == "tear_flame")
+    if spawningTearMode then
+        ConchBlessing.firebreath._isSpawningInternal = true
+        ConchBlessing.__ConchBreathSpawning = true
+    end
+
+    for _ = 1, flameCount do
         local spreadAngle = (math.random() - 0.5) * 0.8
         local cosA = math.cos(spreadAngle)
         local sinA = math.sin(spreadAngle)
@@ -42,102 +285,125 @@ local function spawnFireFlames(player, direction, stackCount)
             direction.X * cosA - direction.Y * sinA,
             direction.X * sinA + direction.Y * cosA
         )
-        
-        local speed = 8 + math.random() * 4
-        local vel = spreadDir * speed
-        
-        local flame = Isaac.Spawn(
-            EntityType.ENTITY_EFFECT,
-            EffectVariant.BLUE_FLAME,
-            0,
-            player.Position + direction * 10,
-            vel,
-            player
-        ):ToEffect()
-        
-        if flame then
-            flame:SetTimeout(ConchBlessing.firebreath.data.flameLifetime + math.random(0, 10))
-            flame.CollisionDamage = damage
-            flame.SpriteScale = Vector(0.8, 0.8)
-            
-            local color = Color(1.0, 0.5, 0.1, 1.0, 0, 0, 0)
-            flame:SetColor(color, -1, 1, false, false)
-            
-            local fdata = flame:GetData()
-            fdata.__ConchFireBreath = {
-                source = player,
-                baseDamage = damage,
-            }
+
+        local speed = (8 + math.random() * 4) * flameSpeedMultiplier
+        local velocity = spreadDir * speed
+        local spawnPos = player.Position + direction * 10
+
+        if mode == "tear_flame" then
+            spawnTearFlame(player, spawnPos, velocity, spreadDir, speed, damage, targetDistance)
+        else
+            spawnEffectFlame(player, spawnPos, velocity, spreadDir, speed, damage, targetDistance, mode)
         end
     end
-    
+
+    if spawningTearMode then
+        ConchBlessing.firebreath._isSpawningInternal = false
+        ConchBlessing.__ConchBreathSpawning = false
+    end
+
     SFXManager():Play(SoundEffect.SOUND_FLAMETHROWER_END, 1.0, 0, false, 0.8)
 end
 
--- 눈물 발사 시 차징된 눈물을 불꽃으로 변환
 ConchBlessing.firebreath.onFireTear = function(_, tear)
+    if ConchBlessing.firebreath._isSpawningInternal or ConchBlessing.__ConchBreathSpawning then
+        return
+    end
+
+    local tearData = tear:GetData()
+    if tearData and tearData.__ConchFireBreath then
+        return
+    end
+
     local player = tear.SpawnerEntity and tear.SpawnerEntity:ToPlayer()
-    if not player or not player:HasCollectible(FIRE_CANDLE_ID) then return end
-    
-    -- 눈물 제거하고 불꽃으로 변환
-    local direction = tear.Velocity:Normalized()
-    if direction:Length() < 0.1 then
-        direction = Vector(1, 0)
+    if not player or not player:HasCollectible(FIRE_BREATH_ID) then return end
+
+    local pData = getPlayerData(player)
+    local interval = getFireInterval(player.Luck or 0)
+    pData.tearCount = (pData.tearCount or 0) + 1
+
+    if pData.tearCount >= interval then
+        pData.tearCount = 0
+        local direction = tear.Velocity:Normalized()
+        if direction:Length() < 0.1 then
+            direction = Vector(1, 0)
+        end
+        spawnFireProjectiles(player, direction)
     end
-    
-    local stackCount = player:GetCollectibleNum(FIRE_CANDLE_ID)
-    local damage = (player.Damage or 1) * ConchBlessing.firebreath.data.damageCoef * stackCount
-    
-    -- 눈물 속도에 따라 불꽃 발사
-    local speed = tear.Velocity:Length()
-    local spreadAngle = (math.random() - 0.5) * 0.3
-    local cosA = math.cos(spreadAngle)
-    local sinA = math.sin(spreadAngle)
-    local spreadDir = Vector(
-        direction.X * cosA - direction.Y * sinA,
-        direction.X * sinA + direction.Y * cosA
-    )
-    
-    local flame = Isaac.Spawn(
-        EntityType.ENTITY_EFFECT,
-        EffectVariant.BLUE_FLAME,
-        0,
-        tear.Position,
-        spreadDir * speed * 1.5,
-        player
-    ):ToEffect()
-    
-    if flame then
-        flame:SetTimeout(ConchBlessing.firebreath.data.flameLifetime)
-        flame.CollisionDamage = damage
-        flame.SpriteScale = Vector(0.8, 0.8)
-        
-        local color = Color(1.0, 0.5, 0.1, 1.0, 0, 0, 0)
-        flame:SetColor(color, -1, 1, false, false)
-    end
-    
-    tear:Remove()
 end
 
 ConchBlessing.firebreath.onPlayerUpdate = function(_, player)
     if not player then return end
-    local hasFire = player:HasCollectible(FIRE_CANDLE_ID)
-    local hasIce = player:HasCollectible(ICE_CANDLE_ID)
-    
-    local pData = getPlayerData(player)
-    
-    -- 몬스트로의 폐를 숨겨서 부여 (차징 시스템 활용)
-    if hasFire and not pData.hasHiddenLung then
-        if ConchBlessing.HiddenItemManager then
-            ConchBlessing.HiddenItemManager:Add(player, CollectibleType.COLLECTIBLE_MONSTROS_LUNG)
-            pData.hasHiddenLung = true
-        end
-    elseif not hasFire and pData.hasHiddenLung then
-        if ConchBlessing.HiddenItemManager then
-            ConchBlessing.HiddenItemManager:Remove(player, CollectibleType.COLLECTIBLE_MONSTROS_LUNG)
-            pData.hasHiddenLung = false
+    if not player:HasCollectible(FIRE_BREATH_ID) then
+        local pData = getPlayerData(player)
+        pData.tearCount = 0
+    end
+end
+
+ConchBlessing.firebreath.onEffectUpdate = function(_, effect)
+    if not effect then return end
+    local data = effect:GetData()
+    if not data or not data.__ConchFireBreath then return end
+
+    local breathData = data.__ConchFireBreath
+    if not updateProjectileMotion(effect, breathData) then
+        effect:Remove()
+        return
+    end
+    applyFadeColor(effect, breathData)
+    applyProjectileScale(effect, breathData, false)
+
+    local applyManualDamage = (breathData.projectileMode == "entity_effect")
+    local entities = Isaac.GetRoomEntities()
+    for _, ent in ipairs(entities) do
+        local npc = ent:ToNPC()
+        if npc and npc:IsVulnerableEnemy() then
+            local dist = effect.Position:Distance(npc.Position)
+            if dist < 30 then
+                local source = breathData.source or effect
+                local damage = breathData.baseDamage or 1
+                if applyManualDamage then
+                    npc:TakeDamage(damage, 0, EntityRef(source), 0)
+                end
+                if math.random() < (breathData.burnChance or ConchBlessing.firebreath.data.burnChance) then
+                    npc:AddBurn(EntityRef(source), 120, damage * 0.5)
+                    npc:SetColor(Color(1.0, 0.5, 0.0, 1.0, 0, 0, 0), 120, 1, false, true)
+                end
+            end
         end
     end
+end
+
+ConchBlessing.firebreath.onTearUpdate = function(_, tear)
+    if not tear then return end
+    local data = tear:GetData()
+    if not data or not data.__ConchFireBreath then return end
+
+    if not updateProjectileMotion(tear, data.__ConchFireBreath) then
+        tear:Remove()
+        return
+    end
+    applyFadeColor(tear, data.__ConchFireBreath)
+    applyProjectileScale(tear, data.__ConchFireBreath, true)
+end
+
+ConchBlessing.firebreath.onTearCollision = function(_, tear, collider, _)
+    if not (tear and collider) then return nil end
+    local data = tear:GetData()
+    if not data or not data.__ConchFireBreath then return nil end
+
+    local npc = collider:ToNPC()
+    if not (npc and npc:IsVulnerableEnemy()) then return nil end
+
+    local breathData = data.__ConchFireBreath
+    local source = breathData.source or tear
+    local damage = breathData.baseDamage or tear.CollisionDamage or 1
+    if math.random() < (breathData.burnChance or ConchBlessing.firebreath.data.burnChance) then
+        npc:AddBurn(EntityRef(source), 120, damage * 0.5)
+        npc:SetColor(Color(1.0, 0.5, 0.0, 1.0, 0, 0, 0), 120, 1, false, true)
+    end
+
+    return nil
 end
 
 return ConchBlessing.firebreath
