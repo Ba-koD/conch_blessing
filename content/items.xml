@@ -15,15 +15,16 @@
     <passive id="12" name="Tyrfing" gfx="tyrfing.png" quality="4" tags="offensive" cache="damage" hidden="true" shopprice="30" devilprice="2"/>
     <passive id="13" name="Ice Breath" gfx="ice_breath.png" quality="4" tags="offensive" shopprice="30" devilprice="2"/>
     <passive id="14" name="Fire Breath" gfx="fire_breath.png" quality="4" tags="offensive" shopprice="30" devilprice="2"/>
-    <passive id="15" name="Two Faced Penny" gfx="two_faced_penny.png" quality="3" tags="utility" shopprice="15"/>
-    <active id="16" name="Inf D6" gfx="inf_d6.png" tags="utility" hidden="true" shopprice="999" chargetype="normal"/>
-    <trinket id="17" name="Time = Power" gfx="time_power.png" tags="offensive" cache="damage" shopprice="15"/>
-    <trinket id="18" name="Time = Tear" gfx="time_tear.png" tags="offensive" cache="fireDelay" shopprice="15"/>
-    <trinket id="19" name="Time = Luck" gfx="time_luck.png" tags="utility" cache="luck" shopprice="15"/>
-    <trinket id="20" name="F -" gfx="f_minus.png" tags="offensive" cache="luck" shopprice="15"/>
-    <trinket id="21" name="C -" gfx="c_minus.png" tags="offensive" cache="tears" hidden="true" shopprice="15"/>
-    <trinket id="22" name="B -" gfx="b_minus.png" tags="offensive" cache="luck damage" hidden="true" shopprice="15"/>
-    <trinket id="23" name="A -" gfx="a_minus.png" tags="offensive" cache="luck damage tears" hidden="true" shopprice="15"/>
-    <trinket id="24" name="Atropos" gfx="atropos.png" tags="utility" shopprice="15"/>
-    <familiar id="25" name="Time = Money" gfx="time_money.png" quality="4" cache="familiars" shopprice="30" devilprice="2"/>
+    <passive id="15" name="SOFLAM" gfx="soflam.png" quality="4" tags="offensive" cache="tearflag" shopprice="25" devilprice="2"/>
+    <passive id="16" name="Two Faced Penny" gfx="two_faced_penny.png" quality="4" tags="utility" shopprice="15"/>
+    <active id="17" name="Inf D6" gfx="inf_d6.png" quality="0" tags="utility" hidden="true" shopprice="999" chargetype="normal"/>
+    <trinket id="18" name="Time = Power" gfx="time_power.png" tags="offensive" cache="damage" shopprice="15"/>
+    <trinket id="19" name="Time = Tear" gfx="time_tear.png" tags="offensive" cache="fireDelay" shopprice="15"/>
+    <trinket id="20" name="Time = Luck" gfx="time_luck.png" tags="utility" cache="luck" shopprice="15"/>
+    <trinket id="21" name="F -" gfx="f_minus.png" tags="offensive" cache="luck" shopprice="15"/>
+    <trinket id="22" name="C -" gfx="c_minus.png" tags="offensive" cache="tears" hidden="true" shopprice="15"/>
+    <trinket id="23" name="B -" gfx="b_minus.png" tags="offensive" cache="luck damage" hidden="true" shopprice="15"/>
+    <trinket id="24" name="A -" gfx="a_minus.png" tags="offensive" cache="luck damage tears" hidden="true" shopprice="15"/>
+    <trinket id="25" name="Atropos" gfx="atropos.png" tags="utility" shopprice="15"/>
+    <familiar id="26" name="Time = Money" gfx="time_money.png" quality="4" cache="familiars" shopprice="30" devilprice="2"/>
 </items>

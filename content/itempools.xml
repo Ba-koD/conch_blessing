@@ -38,6 +38,7 @@
         <Item Name="Utility Belt" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Ice Breath" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Fire Breath" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="SOFLAM" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Two Faced Penny" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Inf D6" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>

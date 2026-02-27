@@ -1214,6 +1214,50 @@ ConchBlessing.ItemData = {
             postEffectUpdate = "firebreath.onEffectUpdate"
         }
     },
+    SOFLAM = {
+        type = "passive",
+        id = Isaac.GetItemIdByName("SOFLAM"),
+        name = {
+            kr = "SOFLAM",
+            en = "SOFLAM"
+        },
+        description = {
+            kr = "타겟 조준 완료",
+            en = "Target acquired"
+        },
+        eid = {
+            kr = {
+                "눈물이 적 적중 시 5% 확률로 타겟이 지정됩니다 ({{Luck}}운 x5% 추가)",
+                "#타겟으로 지정되면 2초 뒤 Epic Fetus 미사일 5발이 위에서 떨어집니다",
+                "#미사일은 내 {{Damage}}공격력의 20배 데미지"
+            },
+            en = {
+                "On hit: 5% chance to designate the target (+{{Luck}}Luck x5%)",
+                "#Designated target will be struck by 5 Epic Fetus missiles after 2 seconds",
+                "#Missile deals 20 times of your {{Damage}}Damage"
+            }
+        },
+        pool = {
+            RoomType.ROOM_TREASURE
+        },
+        quality = 4,
+        tags = "offensive",
+        cache = "tearflag",
+        hidden = false,
+        shopprice = 25,
+        devilprice = 2,
+        origin = { id = CollectibleType.COLLECTIBLE_EPIC_FETUS, type = "collectible" },
+        flag = "positive",
+        script = "scripts/items/collectibles/soflam",
+        callbacks = {
+            pickup = "soflam.onPickup",
+            evaluateCache = "soflam.onEvaluateCache",
+            tearCollision = "soflam.onTearCollision",
+            update = "soflam.onUpdate",
+            postNewRoom = "soflam.onNewRoom",
+            gameStarted = "soflam.onGameStarted"
+        }
+    },
     TWO_FACED_PENNY = {
         type = "passive",
         id = Isaac.GetItemIdByName("Two Faced Penny"),
