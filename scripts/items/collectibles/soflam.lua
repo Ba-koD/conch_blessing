@@ -6,12 +6,12 @@ local SOFLAM_ID = Isaac.GetItemIdByName("SOFLAM")
 -- Configuration
 -- ===================================================================
 ConchBlessing.soflam.data = {
-    baseProcPercent     = 5,       -- base 5% chance
+    baseProcPercent     = 10,      -- base 10% chance
     luckProcPerPoint    = 5,       -- +5% per luck point
-    bombDamageMultiplier = 20,      -- 200% player damage
-    lockOnDelayFrames   = 60,     -- 2 seconds lock-on phase
+    bombDamageMultiplier = 10,     -- 10x player damage
+    lockOnDelayFrames   = 45,     -- 1.5 seconds lock-on phase
     rocketTravelFrames  = 0,      -- Fallback max frames for rocket fall
-    rocketCount         = 5,      -- Rockets dropped per strike
+    rocketCount         = 1,      -- Rockets dropped per strike
     rocketIntervalFrames = 2,     -- Delay between rockets in the same strike
 }
 
@@ -40,12 +40,46 @@ local function getPlayerFromTear(tear)
     return nil
 end
 
---- Calculate proc chance: base 5% + luck * 5%, capped [0, 100]
+--- Calculate proc chance: base 10% + luck * 5%, capped [0, 100]
 local function getProcChance(player)
     local luck = (player and player.Luck) or 0
     local data = ConchBlessing.soflam.data
     local chancePercent = data.baseProcPercent + luck * data.luckProcPerPoint
     return clamp(chancePercent, 0, 100) / 100
+end
+
+-- Rocket count follows current multishot tear count when available.
+local function getRocketCountFromMultishot(player)
+    local baseCount = ConchBlessing.soflam.data.rocketCount or 1
+    if not (player and player.GetMultiShotParams) then
+        return baseCount
+    end
+
+    local weaponType = 1
+    if player.GetWeaponType then
+        local okWeaponType, currentWeaponType = pcall(function()
+            return player:GetWeaponType()
+        end)
+        if okWeaponType and type(currentWeaponType) == "number" then
+            weaponType = currentWeaponType
+        end
+    end
+
+    local okParams, multiParams = pcall(function()
+        return player:GetMultiShotParams(weaponType)
+    end)
+    if not (okParams and multiParams and multiParams.GetNumTears) then
+        return baseCount
+    end
+
+    local okNumTears, numTears = pcall(function()
+        return multiParams:GetNumTears()
+    end)
+    if not okNumTears or type(numTears) ~= "number" then
+        return baseCount
+    end
+
+    return math.max(1, math.floor(numTears + 0.5))
 end
 
 local function findPlayerByInitSeed(initSeed)
@@ -66,6 +100,17 @@ local function findNpcByInitSeed(initSeed)
         local npc = entity:ToNPC()
         if npc and npc.InitSeed == initSeed and npc:Exists() then
             return npc
+        end
+    end
+    return nil
+end
+
+local function findPendingStrike(playerInitSeed, npcInitSeed, roomIndex)
+    for _, strike in ipairs(ConchBlessing.soflam._pendingStrikes) do
+        if strike.playerInitSeed == playerInitSeed
+            and strike.npcInitSeed == npcInitSeed
+            and strike.roomIndex == roomIndex then
+            return strike
         end
     end
     return nil
@@ -121,10 +166,10 @@ local function spawnRocketEffect(position, spawner)
 end
 
 -- ===================================================================
--- Detonation: Epic Fetus-style explosion dealing 200% damage
+-- Detonation: Epic Fetus-style explosion dealing 10x damage
 -- ===================================================================
 local function detonateAtPosition(player, position)
-    local damage = (player.Damage or 3.5) * (ConchBlessing.soflam.data.bombDamageMultiplier or 2)
+    local damage = (player.Damage or 3.5) * (ConchBlessing.soflam.data.bombDamageMultiplier or 10)
 
     -- Use Isaac.Explode for a clean Epic Fetus-style explosion
     Isaac.Explode(position, player, damage)
@@ -142,6 +187,15 @@ local function queueStrike(player, npc)
 
     local position = Vector(npc.Position.X, npc.Position.Y)
     local roomIndex = Game():GetLevel():GetCurrentRoomIndex()
+    local rocketCount = getRocketCountFromMultishot(player)
+
+    -- Prevent duplicate queued strikes from multishot tears on the same target.
+    local existingStrike = findPendingStrike(player.InitSeed, npc.InitSeed, roomIndex)
+    if existingStrike then
+        -- Keep the larger value in case multishot changed before impact.
+        existingStrike.remainingRockets = math.max(existingStrike.remainingRockets or 1, rocketCount)
+        return
+    end
 
     -- Spawn the target crosshair for 2 seconds
     local crosshair = spawnTargetCrosshair(position, player)
@@ -158,7 +212,7 @@ local function queueStrike(player, npc)
         lastKnownPosition = position,
         crosshairEffect   = crosshair,
         rocketEffect      = nil,
-        remainingRockets  = ConchBlessing.soflam.data.rocketCount or 1,
+        remainingRockets  = rocketCount,
     })
 end
 
@@ -291,11 +345,12 @@ ConchBlessing.soflam.onUpdate = function(_)
 
             -- Check if rocket visually hit the floor perfectly (usually frame 14 or finishing "Fall")
             if (strike.countdown or 0) <= 0 or sprite:IsFinished("Fall") or sprite:GetFrame() >= 14 then
-                -- Do NOT remove the rocket effect so the animation can play out visually even on frame 0
+                -- Remove the effect before manual detonation to prevent duplicate native ROCKET impact.
+                strike.rocketEffect:Remove()
+                strike.rocketEffect = nil
                 detonateAtPosition(player, strike.lastKnownPosition)
                 strike.remainingRockets = (strike.remainingRockets or 1) - 1
                 if strike.remainingRockets > 0 then
-                    strike.rocketEffect = nil
                     strike.phase = "rocket_interval"
                     strike.countdown = ConchBlessing.soflam.data.rocketIntervalFrames or 2
                 else
