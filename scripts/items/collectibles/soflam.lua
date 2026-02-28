@@ -105,17 +105,6 @@ local function findNpcByInitSeed(initSeed)
     return nil
 end
 
-local function findPendingStrike(playerInitSeed, npcInitSeed, roomIndex)
-    for _, strike in ipairs(ConchBlessing.soflam._pendingStrikes) do
-        if strike.playerInitSeed == playerInitSeed
-            and strike.npcInitSeed == npcInitSeed
-            and strike.roomIndex == roomIndex then
-            return strike
-        end
-    end
-    return nil
-end
-
 -- ===================================================================
 -- Visual: spawn Epic Fetus-style crosshair target on the enemy
 -- ===================================================================
@@ -203,14 +192,6 @@ local function queueStrike(player, npc)
     local position = Vector(npc.Position.X, npc.Position.Y)
     local roomIndex = Game():GetLevel():GetCurrentRoomIndex()
     local rocketCount = getRocketCountFromMultishot(player)
-
-    -- Prevent duplicate queued strikes from multishot tears on the same target.
-    local existingStrike = findPendingStrike(player.InitSeed, npc.InitSeed, roomIndex)
-    if existingStrike then
-        -- Keep the larger value in case multishot changed before impact.
-        existingStrike.remainingRockets = math.max(existingStrike.remainingRockets or 1, rocketCount)
-        return
-    end
 
     -- Spawn the target crosshair for 2 seconds
     local crosshair = spawnTargetCrosshair(position, player)
