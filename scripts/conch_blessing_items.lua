@@ -1227,14 +1227,14 @@ ConchBlessing.ItemData = {
         },
         eid = {
             kr = {
-                "#공격이 적을 관통합니다",
-                "눈물이 적 적중 시 10% 확률로 타겟이 지정됩니다 ({{Luck}}운 x5% 추가)",
+                "공격이 적을 관통합니다",
+                "#눈물이 적 적중 시 10% 확률로 타겟이 지정됩니다 ({{Luck}}운 x5% 추가)",
                 "#타겟으로 지정되면 1.5초 뒤 현재 멀티샷 수만큼 Epic Fetus 미사일이 1발씩 연속으로 떨어집니다",
                 "#미사일은 내 {{Damage}}공격력의 10배 데미지"
             },
             en = {
-                "#Your tears pierce enemies",
-                "On hit: 10% chance to designate the target (+{{Luck}}Luck x5%)",
+                "Your tears pierce enemies",
+                "#On hit: 10% chance to designate the target (+{{Luck}}Luck x5%)",
                 "#After 1.5 seconds, Epic Fetus missiles strike one-by-one equal to your current multishot count",
                 "#Missile deals 10 times of your {{Damage}}Damage"
             }
