@@ -170,12 +170,27 @@ end
 -- ===================================================================
 local function detonateAtPosition(player, position)
     local damage = (player.Damage or 3.5) * (ConchBlessing.soflam.data.bombDamageMultiplier or 10)
-
-    -- Use Isaac.Explode for a clean Epic Fetus-style explosion
-    Isaac.Explode(position, player, damage)
-
-    -- SFX is handled by Isaac.Explode, but add extra screen shake for impact
     local game = Game()
+    local tearFlags = (player and player.TearFlags) or TearFlags.TEAR_NORMAL
+    if tearFlags == 0 then
+        tearFlags = TearFlags.TEAR_NORMAL
+    end
+
+    -- Vanilla-like full bomb package (damage + VFX + tearflag effects).
+    -- DamageSource=true allows self damage while still respecting explosion immunity.
+    game:BombExplosionEffects(
+        position,
+        damage,
+        tearFlags,
+        Color.Default,
+        player,
+        1,
+        true,
+        true,
+        DamageFlag.DAMAGE_EXPLOSION
+    )
+
+    -- Add extra screen shake for impact.
     game:ShakeScreen(4)
 end
 
