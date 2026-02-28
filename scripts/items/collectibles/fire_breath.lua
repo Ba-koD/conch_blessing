@@ -4,9 +4,7 @@ local FIRE_BREATH_ID = Isaac.GetItemIdByName("Fire Breath")
 
 -- API refs checked:
 -- - EffectVariant.RED_CANDLE_FLAME (52)
--- - EffectVariant.BLUE_FLAME (10)
-local FIRE_EFFECT_VARIANT = (EffectVariant and (EffectVariant.RED_CANDLE_FLAME or EffectVariant.BLUE_FLAME)) or 52
-local GENERIC_EFFECT_VARIANT = (EffectVariant and (EffectVariant.BLUE_FLAME or EffectVariant.RED_CANDLE_FLAME)) or 10
+local FIRE_EFFECT_VARIANT = (EffectVariant and EffectVariant.RED_CANDLE_FLAME) or 52
 
 ConchBlessing.firebreath.data = {
     damageCoef = 0.3, -- 데미지의 30%
@@ -192,7 +190,7 @@ local function applyProjectileScale(projectile, breathData, isTear)
 end
 
 local function spawnEffectFlame(player, position, velocity, direction, speed, damage, targetDistance, mode)
-    local variant = (mode == "entity_flame") and FIRE_EFFECT_VARIANT or GENERIC_EFFECT_VARIANT
+    local variant = FIRE_EFFECT_VARIANT
     local effect = Isaac.Spawn(EntityType.ENTITY_EFFECT, variant, 0, position, velocity, player):ToEffect()
     if not effect then
         return
@@ -232,7 +230,7 @@ local function spawnTearFlame(player, position, velocity, direction, speed, dama
     _ = speed
     _ = targetDistance
 
-    local legacyVariant = (EffectVariant and EffectVariant.BLUE_FLAME) or GENERIC_EFFECT_VARIANT
+    local legacyVariant = FIRE_EFFECT_VARIANT
     local flame = Isaac.Spawn(
         EntityType.ENTITY_EFFECT,
         legacyVariant,
