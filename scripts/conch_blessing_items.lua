@@ -1254,6 +1254,7 @@ ConchBlessing.ItemData = {
         callbacks = {
             pickup = "soflam.onPickup",
             evaluateCache = "soflam.onEvaluateCache",
+            fireTear = "soflam.onFireTear",
             tearCollision = "soflam.onTearCollision",
             update = "soflam.onUpdate",
             postNewRoom = "soflam.onNewRoom",
@@ -1261,8 +1262,14 @@ ConchBlessing.ItemData = {
         },
         synergies = {
             [{ id = CollectibleType.COLLECTIBLE_MR_MEGA, type = "collectible" }] = {
-                kr = "폭발 범위가 1.5배, 미사일 데미지가 2배가 됩니다",
-                en = "Explosion radius x1.5 and missile damage x2"
+                kr = {
+                    "폭발 범위가 1.5배가 됩니다 (1회)",
+                    "#미사일 데미지가 Mr. Mega 개수만큼 2배씩 중첩됩니다"
+                },
+                en = {
+                    "Explosion radius gets a one-time x1.5 bonus",
+                    "#Missile damage stacks as x2 per Mr. Mega copy"
+                }
             }
         }
     },

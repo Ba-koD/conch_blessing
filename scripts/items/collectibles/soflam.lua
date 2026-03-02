@@ -43,6 +43,29 @@ local function getPlayerFromTear(tear)
     return nil
 end
 
+local function getCollectibleCount(player, collectibleId)
+    if not (player and collectibleId and collectibleId > 0 and player.GetCollectibleNum) then
+        return 0
+    end
+
+    local okCount, count = pcall(function()
+        return player:GetCollectibleNum(collectibleId, true)
+    end)
+    if not okCount then
+        okCount, count = pcall(function()
+            return player:GetCollectibleNum(collectibleId)
+        end)
+    end
+    if okCount and type(count) == "number" then
+        return math.max(0, math.floor(count))
+    end
+
+    if player.HasCollectible and player:HasCollectible(collectibleId) then
+        return 1
+    end
+    return 0
+end
+
 --- Calculate proc chance: base 10% + luck * 5%, capped [0, 100]
 local function getProcChance(player)
     local luck = (player and player.Luck) or 0
@@ -174,9 +197,9 @@ end
 local function detonateAtPosition(player, position)
     local damage = (player.Damage or 3.5) * (ConchBlessing.soflam.data.bombDamageMultiplier or 10)
     local game = Game()
-    local hasMrMega = (player and MR_MEGA_ID and player.HasCollectible and player:HasCollectible(MR_MEGA_ID)) and true or false
-    if hasMrMega then
-        damage = damage * (ConchBlessing.soflam.data.mrMegaDamageMultiplier or 2)
+    local mrMegaCount = getCollectibleCount(player, MR_MEGA_ID)
+    if mrMegaCount > 0 then
+        damage = damage * ((ConchBlessing.soflam.data.mrMegaDamageMultiplier or 2) ^ mrMegaCount)
     end
     local bombFlags = BitSet128 and BitSet128(0, 0) or 0
     if player and player.GetBombFlags then
@@ -229,7 +252,7 @@ local function detonateAtPosition(player, position)
         local naturalDamage = bomb.ExplosionDamage or 100
         local naturalRadiusMultiplier = bomb.RadiusMultiplier or 1
         local naturalRadius = getBombRadiusFromDamage(naturalDamage) * naturalRadiusMultiplier
-        if hasMrMega then
+        if mrMegaCount > 0 then
             naturalRadius = naturalRadius * (ConchBlessing.soflam.data.mrMegaRadiusMultiplier or 1.5)
         end
 
@@ -351,6 +374,22 @@ ConchBlessing.soflam.onEvaluateCache = function(_, player, cacheFlag)
     end
     if player and player:HasCollectible(SOFLAM_ID) then
         player.TearFlags = player.TearFlags | TearFlags.TEAR_PIERCING
+    end
+end
+
+-- Hard-apply piercing to fired tears to avoid cache/order edge cases.
+ConchBlessing.soflam.onFireTear = function(_, tear)
+    if not tear then return end
+
+    local player = getPlayerFromTear(tear)
+    if not (player and player:HasCollectible(SOFLAM_ID)) then
+        return
+    end
+
+    if tear.AddTearFlags then
+        tear:AddTearFlags(TearFlags.TEAR_PIERCING)
+    else
+        tear.TearFlags = tear.TearFlags | TearFlags.TEAR_PIERCING
     end
 end
 
@@ -493,6 +532,14 @@ end
 --- Game start: clear state
 ConchBlessing.soflam.onGameStarted = function(_)
     clearPendingStrikes()
+    local numPlayers = Game():GetNumPlayers()
+    for i = 0, numPlayers - 1 do
+        local player = Isaac.GetPlayer(i)
+        if player and player:HasCollectible(SOFLAM_ID) then
+            player:AddCacheFlags(CacheFlag.CACHE_TEARFLAG)
+            player:EvaluateItems()
+        end
+    end
 end
 
 return ConchBlessing.soflam
