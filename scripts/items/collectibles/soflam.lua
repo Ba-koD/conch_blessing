@@ -1,6 +1,7 @@
 ConchBlessing.soflam = {}
 
 local SOFLAM_ID = Isaac.GetItemIdByName("SOFLAM")
+local MR_MEGA_ID = (CollectibleType and (CollectibleType.COLLECTIBLE_MR_MEGA or CollectibleType.MR_MEGA)) or 106
 
 -- ===================================================================
 -- Configuration
@@ -8,7 +9,9 @@ local SOFLAM_ID = Isaac.GetItemIdByName("SOFLAM")
 ConchBlessing.soflam.data = {
     baseProcPercent     = 10,      -- base 10% chance
     luckProcPerPoint    = 5,       -- +5% per luck point
-    bombDamageMultiplier = 10,     -- 10x player damage
+    bombDamageMultiplier = 10,     -- Base 10x player damage
+    mrMegaDamageMultiplier = 2,    -- Mr. Mega synergy: x2 missile damage (=> total 20x)
+    mrMegaRadiusMultiplier = 1.5,  -- Mr. Mega synergy: x1.5 explosion radius
     lockOnDelayFrames   = 45,     -- 1.5 seconds lock-on phase
     rocketTravelFrames  = 0,      -- Fallback max frames for rocket fall
     rocketCount         = 1,      -- Rockets dropped per strike
@@ -105,6 +108,17 @@ local function findNpcByInitSeed(initSeed)
     return nil
 end
 
+-- Matches the game's internal explosion-radius buckets.
+local function getBombRadiusFromDamage(damage)
+    if damage > 175 then
+        return 105
+    end
+    if damage <= 140 then
+        return 75
+    end
+    return 90
+end
+
 -- ===================================================================
 -- Visual: spawn Epic Fetus-style crosshair target on the enemy
 -- ===================================================================
@@ -155,29 +169,112 @@ local function spawnRocketEffect(position, spawner)
 end
 
 -- ===================================================================
--- Detonation: Epic Fetus-style explosion dealing 10x damage
+-- Detonation: Epic Fetus-style explosion (base 10x damage, Mr. Mega synergy supported)
 -- ===================================================================
 local function detonateAtPosition(player, position)
     local damage = (player.Damage or 3.5) * (ConchBlessing.soflam.data.bombDamageMultiplier or 10)
     local game = Game()
-    local tearFlags = (player and player.TearFlags) or TearFlags.TEAR_NORMAL
-    if tearFlags == 0 then
-        tearFlags = TearFlags.TEAR_NORMAL
+    local hasMrMega = (player and MR_MEGA_ID and player.HasCollectible and player:HasCollectible(MR_MEGA_ID)) and true or false
+    if hasMrMega then
+        damage = damage * (ConchBlessing.soflam.data.mrMegaDamageMultiplier or 2)
+    end
+    local bombFlags = BitSet128 and BitSet128(0, 0) or 0
+    if player and player.GetBombFlags then
+        local okBombFlags, flags = pcall(function()
+            return player:GetBombFlags(true)
+        end)
+        if not okBombFlags then
+            okBombFlags, flags = pcall(function()
+                return player:GetBombFlags()
+            end)
+        end
+        if okBombFlags and flags ~= nil then
+            bombFlags = flags
+        end
+    elseif player and player.TearFlags ~= nil then
+        bombFlags = player.TearFlags
+    end
+    if type(bombFlags) == "number" and BitSet128 then
+        bombFlags = BitSet128(bombFlags, 0)
     end
 
-    -- Vanilla-like full bomb package (damage + VFX + tearflag effects).
-    -- DamageSource=true allows self damage while still respecting explosion immunity.
-    game:BombExplosionEffects(
+    local bombVariant = 0
+    if player and player.GetBombVariant then
+        local okVariant, variant = pcall(function()
+            return player:GetBombVariant(bombFlags, false)
+        end)
+        if okVariant and type(variant) == "number" then
+            bombVariant = variant
+        end
+    end
+
+    local bomb = Isaac.Spawn(
+        EntityType.ENTITY_BOMB,
+        bombVariant,
+        0,
         position,
-        damage,
-        tearFlags,
-        Color.Default,
-        player,
-        1,
-        true,
-        true,
-        DamageFlag.DAMAGE_EXPLOSION
-    )
+        Vector.Zero,
+        player
+    ):ToBomb()
+
+    if bomb then
+        local okSetFlags = pcall(function()
+            bomb.Flags = bombFlags
+        end)
+        if not okSetFlags then
+            -- Keep default flags if the runtime rejects custom flag assignment.
+        end
+
+        -- Snapshot natural bomb range after variant/flags are applied.
+        local naturalDamage = bomb.ExplosionDamage or 100
+        local naturalRadiusMultiplier = bomb.RadiusMultiplier or 1
+        local naturalRadius = getBombRadiusFromDamage(naturalDamage) * naturalRadiusMultiplier
+        if hasMrMega then
+            naturalRadius = naturalRadius * (ConchBlessing.soflam.data.mrMegaRadiusMultiplier or 1.5)
+        end
+
+        bomb.ExplosionDamage = damage
+
+        local customRadius = getBombRadiusFromDamage(damage)
+        if customRadius > 0 then
+            bomb.RadiusMultiplier = naturalRadius / customRadius
+        end
+
+        bomb.IsFetus = true
+        if bomb.SetExplosionCountdown then
+            bomb:SetExplosionCountdown(0)
+        else
+            local customScale = 1
+            if customRadius > 0 then
+                customScale = naturalRadius / customRadius
+            end
+            game:BombExplosionEffects(
+                position,
+                damage,
+                bombFlags,
+                Color.Default,
+                player,
+                customScale,
+                true,
+                true,
+                DamageFlag.DAMAGE_EXPLOSION
+            )
+            bomb:Remove()
+        end
+    else
+        -- Fallback to manual explosion if spawning a bomb fails.
+        game:BombExplosionEffects(
+            position,
+            damage,
+            bombFlags,
+            Color.Default,
+            player,
+            1,
+            true,
+            true,
+            DamageFlag.DAMAGE_EXPLOSION
+        )
+    end
 
     -- Add extra screen shake for impact.
     game:ShakeScreen(4)

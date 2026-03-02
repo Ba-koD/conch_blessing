@@ -1258,6 +1258,12 @@ ConchBlessing.ItemData = {
             update = "soflam.onUpdate",
             postNewRoom = "soflam.onNewRoom",
             gameStarted = "soflam.onGameStarted"
+        },
+        synergies = {
+            [{ id = CollectibleType.COLLECTIBLE_MR_MEGA, type = "collectible" }] = {
+                kr = "폭발 범위가 1.5배, 미사일 데미지가 2배가 됩니다",
+                en = "Explosion radius x1.5 and missile damage x2"
+            }
         }
     },
     TWO_FACED_PENNY = {
