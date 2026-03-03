@@ -487,11 +487,11 @@ ConchBlessing.ItemData = {
         eid = {
             kr = {
                 "공중과 지형관통을 얻습니다.",
-                "#5번 공격마다 랜덤한 방향으로 노란색 Tech X를 5발 발사합니다",
+                "#5번 공격마다 랜덤한 방향으로 번개구체를 5발 발사합니다",
             },
             en = {
                 "Gain flight and Spectral tears.",
-                "#Every 5th attack, fires 5 yellow Tech X shots in random directions."
+                "#Every 5th attack, fires 5 lightning shots in random directions."
             }
         },
         pool = {
@@ -501,18 +501,16 @@ ConchBlessing.ItemData = {
         synergies = {
             [{type = "collectible", name = "Dragon" }] = {
                 kr = {
-                    "전기 구체가 소용돌이로 변합니다",
-                    "#소용돌이는 접촉 시 다단히트 데미지를 줍니다.",
-                    "#소용돌이가 멈추면 해당 위치에 Whirlpool이 생성되어 2초간 적을 끌어당기며 같은 접촉 데미지를 줍니다.",
-                    "#Whirlpool 소멸 시 SOFLAM 방식으로 내 데미지의 25배 폭발을 일으킵니다.",
-                    "#드래곤 중첩마다 소용돌이/Whirlpool 접촉 데미지가 +25%p 증가합니다.",
+                    "전기 구체가 태풍으로 변합니다",
+                    "#태풍이 멈추면 해당 위치에 소용돌이가 생성되어 2초간 적을 끌어당깁니다",
+                    "#소용돌이가 사라질 때, 내 데미지의 25배의 폭발이 발생합니다",
+                    "#중첩시 데미지 25% 증가",
                 },
                 en = {
-                    "Electric orbs become vortexes",
-                    "#Vortexes deal multi-hit touch damage.",
-                    "#When a vortex stops, it becomes a whirlpool that pulls enemies for 2 seconds and deals the same touch damage.",
-                    "#On whirlpool expiry, it triggers a SOFLAM-style explosion for 25x your damage.",
-                    "#Vortex/whirlpool touch damage gains +25 percentage points per Dragon stack.",
+                    "Lightning shots are replaced with a tornado",
+                    "#When the tornado ends, it creates a vortex that pulls in enemies for 2 seconds",
+                    "#When the vortex disappears, it explodes for 25x your damage",
+                    "#Each additional Dragon increases damage by 25%"
                 }
             },
         },
@@ -2235,11 +2233,23 @@ local function loadAllItems()
 						end
 
                         -- Synergy part
+                        -- Prevent duplicate lines when self-synergy (e.g. Dragon -> Dragon)
+                        -- is matched by both target and mod views in the same pass.
+                        local appendedSynergyPairs = {}
+                        local function shouldAppendSynergy(sourceId, targetId)
+                            local key = tostring(sourceId) .. "->" .. tostring(targetId)
+                            if appendedSynergyPairs[key] then
+                                return false
+                            end
+                            appendedSynergyPairs[key] = true
+                            return true
+                        end
+
                         local targets = ConchBlessing._synergyByTarget and ConchBlessing._synergyByTarget[subId]
                         if targets then
 						for _, entry in ipairs(targets) do
 							local d = ConchBlessing.ItemData[entry.key]
-							if d and d.id and anyPlayerHas(d.id) then
+							if d and d.id and anyPlayerHas(d.id) and shouldAppendSynergy(d.id, subId) then
 								local t = (type(entry.text) == "table" and (entry.text[lang] or entry.text.en)) or entry.text
 								local iconToken
 								if entry.targetIsTrinket == true then
@@ -2271,7 +2281,7 @@ local function loadAllItems()
                         local asMod = ConchBlessing._synergyByMod and ConchBlessing._synergyByMod[subId]
                         if asMod then
                             for _, entry in ipairs(asMod) do
-                                if anyPlayerHas(entry.target) then
+                                if anyPlayerHas(entry.target) and shouldAppendSynergy(subId, entry.target) then
                                     local t = (type(entry.text) == "table" and (entry.text[lang] or entry.text.en)) or entry.text
                                     local iconToken
                                     -- Use the explicitly stored targetIsTrinket flag from synergy definition

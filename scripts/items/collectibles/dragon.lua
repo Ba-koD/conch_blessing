@@ -617,6 +617,9 @@ local function removeGridAtIndex(room, gridIndex, sourceEntity)
             room:DestroyGrid(gridIndex, false)
         end)
         if ok then
+            pcall(function()
+                room:SetGridPath(gridIndex, 0)
+            end)
             return true
         end
     end
@@ -625,6 +628,9 @@ local function removeGridAtIndex(room, gridIndex, sourceEntity)
             room:RemoveGridEntity(gridIndex, 0, false)
         end)
         if ok then
+            pcall(function()
+                room:SetGridPath(gridIndex, 0)
+            end)
             return true
         end
     end
@@ -634,54 +640,66 @@ end
 local function interactWithNearbySpecialEntities(position, radius, sourceEntity)
     local scanRadius = math.max(8, radius or (ConchBlessing.dragon.data.gridInteractionRadius or 36))
     local sourceRef = EntityRef(sourceEntity or Isaac.GetPlayer(0))
-    local explodeFlags = ((DamageFlag and DamageFlag.DAMAGE_EXPLOSION) or 0)
-        | ((DamageFlag and DamageFlag.DAMAGE_IGNORE_ARMOR) or 0)
     local fireFlags = ((DamageFlag and DamageFlag.DAMAGE_FIRE) or 0)
         | ((DamageFlag and DamageFlag.DAMAGE_IGNORE_ARMOR) or 0)
 
     for _, entity in ipairs(Isaac.GetRoomEntities()) do
         if entity and entity.Position:Distance(position) <= scanRadius then
             if entity.Type == ENTITY_TYPE_MOVABLE_TNT then
-                local exploded = false
-                local npc = entity:ToNPC()
-                if npc then
-                    exploded = pcall(function()
-                        npc:TakeDamage(60, explodeFlags, sourceRef, 0)
-                    end)
+                local eData = entity:GetData()
+                if eData and eData.__ConchDragonTntTriggered then
+                    goto __continue_entity_scan
                 end
-                if (not exploded) and entity.ToBomb then
+                if eData then
+                    eData.__ConchDragonTntTriggered = true
+                end
+
+                if entity.ToBomb then
                     local bomb = entity:ToBomb()
                     if bomb and bomb.SetExplosionCountdown then
-                        exploded = pcall(function()
+                        pcall(function()
                             bomb:SetExplosionCountdown(0)
                         end)
                     end
                 end
-                if not exploded then
-                    pcall(function()
-                        Isaac.Explode(entity.Position, sourceEntity or Isaac.GetPlayer(0), 40)
-                    end)
+                pcall(function()
+                    Isaac.Explode(entity.Position, sourceEntity or Isaac.GetPlayer(0), 40)
+                end)
+                if entity:Exists() then
                     pcall(function()
                         entity:Remove()
                     end)
                 end
             elseif entity.Type == ENTITY_TYPE_FIREPLACE then
-                local killed = false
+                local eData = entity:GetData()
+                if eData and eData.__ConchDragonFireExtinguished then
+                    goto __continue_entity_scan
+                end
+                if eData then
+                    eData.__ConchDragonFireExtinguished = true
+                end
+
                 if entity.ToNPC then
                     local fireNpc = entity:ToNPC()
                     if fireNpc then
-                        killed = pcall(function()
+                        pcall(function()
                             fireNpc:TakeDamage(30, fireFlags, sourceRef, 0)
                         end)
                     end
                 end
-                if not killed then
+                if entity:Exists() then
                     pcall(function()
                         entity:Kill()
                     end)
                 end
+                if entity:Exists() then
+                    pcall(function()
+                        entity:Remove()
+                    end)
+                end
             end
         end
+        ::__continue_entity_scan::
     end
 end
 
