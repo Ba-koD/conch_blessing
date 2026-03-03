@@ -502,15 +502,17 @@ ConchBlessing.ItemData = {
             [{type = "collectible", name = "Dragon" }] = {
                 kr = {
                     "전기 구체가 소용돌이로 변합니다",
-                    "#소용돌이는 적을 끌어당기며 접촉 시 다단히트 데미지를 줍니다.",
-                    "#소멸 시 SOFLAM 방식으로 내 데미지의 20배 폭발을 일으킵니다.",
-                    "#드래곤 중첩마다 소용돌이 접촉 데미지가 +5%p 증가합니다.",
+                    "#소용돌이는 접촉 시 다단히트 데미지를 줍니다.",
+                    "#소용돌이가 멈추면 해당 위치에 Whirlpool이 생성되어 2초간 적을 끌어당기며 같은 접촉 데미지를 줍니다.",
+                    "#Whirlpool 소멸 시 SOFLAM 방식으로 내 데미지의 25배 폭발을 일으킵니다.",
+                    "#드래곤 중첩마다 소용돌이/Whirlpool 접촉 데미지가 +25%p 증가합니다.",
                 },
                 en = {
                     "Electric orbs become vortexes",
-                    "#Vortexes pull enemies and deal multi-hit touch damage.",
-                    "#On expiry, they trigger a SOFLAM-style explosion for 20x your damage.",
-                    "#Vortex touch damage gains +5 percentage points per Dragon stack.",
+                    "#Vortexes deal multi-hit touch damage.",
+                    "#When a vortex stops, it becomes a whirlpool that pulls enemies for 2 seconds and deals the same touch damage.",
+                    "#On whirlpool expiry, it triggers a SOFLAM-style explosion for 25x your damage.",
+                    "#Vortex/whirlpool touch damage gains +25 percentage points per Dragon stack.",
                 }
             },
         },
@@ -1182,7 +1184,9 @@ ConchBlessing.ItemData = {
         callbacks = {
             postPlayerUpdate = "icebreath.onPlayerUpdate",
             postEffectUpdate = "icebreath.onEffectUpdate",
-            fireTear = "icebreath.onFireTear"
+            fireTear = "icebreath.onFireTear",
+            tearUpdate = "icebreath.onTearUpdate",
+            tearCollision = "icebreath.onTearCollision"
         }
     },
     FIRE_BREATH = {
@@ -1225,7 +1229,9 @@ ConchBlessing.ItemData = {
         callbacks = {
             postPlayerUpdate = "firebreath.onPlayerUpdate",
             fireTear = "firebreath.onFireTear",
-            postEffectUpdate = "firebreath.onEffectUpdate"
+            postEffectUpdate = "firebreath.onEffectUpdate",
+            tearUpdate = "firebreath.onTearUpdate",
+            tearCollision = "firebreath.onTearCollision"
         }
     },
     SOFLAM = {

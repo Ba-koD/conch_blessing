@@ -74,6 +74,142 @@ local function getFreezeChance(player)
     return clamp(luck, 0, 100) / 100
 end
 
+local GRID_TILE_SIZE = 40
+local GRID_SCAN_RADIUS = 26
+local GRID_INTERACTION_TICK = 3
+
+local function resolveGridType(...)
+    local t = GridEntityType or {}
+    for _, rawName in ipairs({ ... }) do
+        local name = tostring(rawName)
+        local id = t["GRID_" .. name] or t[name]
+        if type(id) == "number" then
+            return id
+        end
+    end
+    return nil
+end
+
+local GRID_TYPE_TNT = resolveGridType("TNT") or 12
+local GRID_TYPE_FIREPLACE = resolveGridType("FIREPLACE") or 13
+local GRID_TYPE_POOP = resolveGridType("POOP") or 14
+
+local function isInteractableGridType(gridType)
+    return gridType == GRID_TYPE_TNT
+        or gridType == GRID_TYPE_FIREPLACE
+        or gridType == GRID_TYPE_POOP
+end
+
+local function destroyGridAt(room, gridIndex, sourceEntity)
+    local grid = room and room:GetGridEntity(gridIndex)
+    if not grid then
+        return false
+    end
+
+    local gridType = (grid.GetType and grid:GetType()) or -1
+    if gridType == GRID_TYPE_TNT then
+        local ok = false
+        if room.DestroyGrid then
+            ok = pcall(function()
+                room:DestroyGrid(gridIndex, true)
+            end)
+        end
+
+        local stillTnt = false
+        local after = room:GetGridEntity(gridIndex)
+        if after and after.GetType then
+            stillTnt = (after:GetType() == GRID_TYPE_TNT)
+        end
+        if stillTnt then
+            local pos = room:GetGridPosition(gridIndex)
+            if pos then
+                pcall(function()
+                    Isaac.Explode(pos, sourceEntity or Isaac.GetPlayer(0), 40)
+                end)
+            end
+            pcall(function()
+                room:RemoveGridEntity(gridIndex, 0, false)
+            end)
+            return true
+        end
+
+        return ok
+    end
+
+    if room.DestroyGrid then
+        local ok = pcall(function()
+            room:DestroyGrid(gridIndex, false)
+        end)
+        if ok then
+            return true
+        end
+    end
+
+    if room.RemoveGridEntity then
+        local ok = pcall(function()
+            room:RemoveGridEntity(gridIndex, 0, false)
+        end)
+        if ok then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function interactProjectileWithGrids(projectile, breathData)
+    local room = Game():GetRoom()
+    if not room then
+        return
+    end
+
+    breathData.gridTouchedAt = breathData.gridTouchedAt or {}
+    local touchedAt = breathData.gridTouchedAt
+    local now = Game():GetFrameCount()
+    local sourceEntity = breathData.source or projectile
+
+    local gridWidth = room:GetGridWidth() or 0
+    local gridSize = room:GetGridSize() or 0
+    if gridWidth <= 0 or gridSize <= 0 then
+        return
+    end
+
+    local probePositions = { projectile.Position }
+    local velocity = projectile.Velocity or Vector.Zero
+    if velocity:Length() > 0.1 then
+        probePositions[#probePositions + 1] = projectile.Position + velocity:Resized(14)
+    end
+
+    local gridRadius = math.max(1, math.ceil(GRID_SCAN_RADIUS / GRID_TILE_SIZE))
+    for _, probePos in ipairs(probePositions) do
+        local centerIndex = room:GetGridIndex(probePos)
+        if centerIndex and centerIndex >= 0 then
+            for dy = -gridRadius, gridRadius do
+                for dx = -gridRadius, gridRadius do
+                    local gridIndex = centerIndex + dx + (dy * gridWidth)
+                    if gridIndex >= 0 and gridIndex < gridSize then
+                        local last = touchedAt[gridIndex]
+                        if (not last) or (now - last >= GRID_INTERACTION_TICK) then
+                            local grid = room:GetGridEntity(gridIndex)
+                            if grid then
+                                local gridType = (grid.GetType and grid:GetType()) or -1
+                                if isInteractableGridType(gridType) then
+                                    local gridPos = room:GetGridPosition(gridIndex)
+                                    if gridPos and gridPos:Distance(probePos) <= (GRID_SCAN_RADIUS + GRID_TILE_SIZE * 0.55) then
+                                        if destroyGridAt(room, gridIndex, sourceEntity) then
+                                            touchedAt[gridIndex] = now
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
 local function makeMotionState(origin, direction, speed, maxDistance)
     local lingerFrames = ConchBlessing.icebreath.data.lingerFrames or 30
     local travelFrames = math.ceil(maxDistance / math.max(0.1, speed))
@@ -350,6 +486,7 @@ ConchBlessing.icebreath.onEffectUpdate = function(_, effect)
     end
     applyFadeColor(effect, breathData)
     applyProjectileScale(effect, breathData, false)
+    interactProjectileWithGrids(effect, breathData)
 
     local applyManualDamage = (breathData.projectileMode == "entity_effect")
     local entities = Isaac.GetRoomEntities()
@@ -384,8 +521,10 @@ ConchBlessing.icebreath.onTearUpdate = function(_, tear)
         tear:Remove()
         return
     end
-    applyFadeColor(tear, data.__ConchIceBreath)
-    applyProjectileScale(tear, data.__ConchIceBreath, true)
+    local breathData = data.__ConchIceBreath
+    applyFadeColor(tear, breathData)
+    applyProjectileScale(tear, breathData, true)
+    interactProjectileWithGrids(tear, breathData)
 end
 
 ConchBlessing.icebreath.onTearCollision = function(_, tear, collider, _)
