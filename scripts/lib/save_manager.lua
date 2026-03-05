@@ -39,6 +39,7 @@ local currentListIndex = 0
 local checkLastIndex = false
 local inRunButNotLoaded = true
 local retainFamiliarSaveOnFlip = false
+local runtimeQueuePrefix = "__CBQ__"
 local tLazInitPlayer
 local tLazInitSeeds
 local dupeTaggedPickups = {}
@@ -770,6 +771,25 @@ function SaveManager.TryHourglassRestore(slot)
 	end
 end
 
+local function stripRuntimeQueueLines(raw)
+	if type(raw) ~= "string" or raw == "" then
+		return "{}"
+	end
+
+	local lines = {}
+	for line in string.gmatch(raw, "[^\r\n]+") do
+		if string.sub(line, 1, #runtimeQueuePrefix) ~= runtimeQueuePrefix then
+			lines[#lines + 1] = line
+		end
+	end
+
+	local cleaned = table.concat(lines, "\n")
+	if cleaned == "" then
+		return "{}"
+	end
+	return cleaned
+end
+
 -- Loads save data from the file, overwriting what is already loaded.
 ---@param isLuamod? boolean
 function SaveManager.Load(isLuamod)
@@ -781,7 +801,8 @@ function SaveManager.Load(isLuamod)
 	local saveData = SaveManager.Utility.PatchSaveFile({}, SaveManager.DEFAULT_SAVE)
 
 	if modReference:HasData() then
-		local data = json.decode(modReference:LoadData())
+		local rawData = stripRuntimeQueueLines(modReference:LoadData())
+		local data = json.decode(rawData)
 		saveData = SaveManager.Utility.PatchSaveFile(data, SaveManager.DEFAULT_SAVE)
 	end
 
