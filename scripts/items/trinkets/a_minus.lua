@@ -157,19 +157,15 @@ function ConchBlessing.aminus.onEvaluateCache(_, player, cacheFlag)
 	local count = getCount(player, TID)
 	if count <= 0 then return end
 
-	local cfg = ConchBlessing.aminus.data.config or {}
+    local cfg = ConchBlessing.aminus.data.config or {}
     -- Read current unified total multiplier for scaling additions so that (base + add) * total holds
     local um = ConchBlessing.stats.unifiedMultipliers
     um:InitPlayer(player)
-    local pid = player:GetPlayerType()
     local statKey = (cacheFlag == CacheFlag.CACHE_DAMAGE and "Damage")
         or (cacheFlag == CacheFlag.CACHE_FIREDELAY and "Tears")
         or (cacheFlag == CacheFlag.CACHE_LUCK and "Luck")
         or nil
-    local total = 1.0
-    if statKey and um[pid] and um[pid].statMultipliers and um[pid].statMultipliers[statKey] and type(um[pid].statMultipliers[statKey].totalApply) == "number" then
-        total = um[pid].statMultipliers[statKey].totalApply
-    end
+    local total = ConchBlessing.getUnifiedStatTotal(player, statKey, 1.0, um)
 
     if cacheFlag == CacheFlag.CACHE_LUCK then
         local addLuck = (cfg.baseLuckAdd or 0) * count

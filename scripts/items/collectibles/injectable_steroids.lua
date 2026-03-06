@@ -57,7 +57,6 @@ end
 local function showInjectableRemovalDisplay(player, removedEntry)
     if not removedEntry then return end
     local um = ConchBlessing.stats.unifiedMultipliers
-    local playerID = player:GetPlayerType()
     local statMap = {
         Damage = "damage",
         Tears = "tears",
@@ -69,10 +68,7 @@ local function showInjectableRemovalDisplay(player, removedEntry)
         if type(mult) == "number" then
             local delta = mult - 1.0
             if math.abs(delta) > 0.00001 then
-                local total = 1.0
-                if um[playerID] and um[playerID].statMultipliers and um[playerID].statMultipliers[statType] then
-                    total = um[playerID].statMultipliers[statType].total or 1.0
-                end
+                local total = ConchBlessing.getUnifiedStatTotal(player, statType, 1.0, um)
                 ConchBlessing.stats.multiplierDisplay:ForceDisplay(player, statType, -delta, total, "remove_mult")
             end
         end

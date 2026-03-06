@@ -35,7 +35,6 @@ end
 local function showOralRemovalDisplay(player, removedEntry)
     if not removedEntry then return end
     local um = ConchBlessing.stats.unifiedMultipliers
-    local playerID = player:GetPlayerType()
     local statMap = {
         Damage = "damage",
         Tears = "tears",
@@ -47,10 +46,7 @@ local function showOralRemovalDisplay(player, removedEntry)
         if type(mult) == "number" then
             local delta = mult - 1.0
             if math.abs(delta) > 0.00001 then
-                local total = 1.0
-                if um[playerID] and um[playerID].statMultipliers and um[playerID].statMultipliers[statType] then
-                    total = um[playerID].statMultipliers[statType].total or 1.0
-                end
+                local total = ConchBlessing.getUnifiedStatTotal(player, statType, 1.0, um)
                 ConchBlessing.stats.multiplierDisplay:ForceDisplay(player, statType, -delta, total, "remove_mult")
             end
         end
@@ -164,7 +160,7 @@ ConchBlessing.oralsteroids.onEvaluateCache = function(_, player, cacheFlag)
             ConchBlessing.printDebug(string.format("Oral Steroids: Loaded %d multipliers from SaveManager in onEvaluateCache", storedCount))
             
             -- Check if unified system already has the data loaded
-            local unifiedData = ConchBlessing.stats.unifiedMultipliers[playerID]
+            local unifiedData = ConchBlessing.getUnifiedMultiplierState(player, ConchBlessing.stats.unifiedMultipliers)
             local alreadyLoaded = false
             if unifiedData and unifiedData.itemAdditiveMultipliers and unifiedData.itemAdditiveMultipliers[ORAL_STEROIDS_ID] then
                 local unifiedDamage = unifiedData.itemAdditiveMultipliers[ORAL_STEROIDS_ID]["Damage"]

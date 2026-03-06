@@ -1,9 +1,85 @@
+local mod = RegisterMod("Conch's Blessing", 1)
+
+local function hasStatUtilsDependency()
+    return type(_G.StatUtils) == "table"
+        and type(StatUtils.stats) == "table"
+        and type(StatUtils.stats.unifiedMultipliers) == "table"
+end
+
+if not hasStatUtilsDependency() then
+    local missingDepFont = Font()
+    local missingDepMessages = {
+        "Missing required mod: Stat Utils",
+        "Conch's Blessing is disabled.",
+    }
+    local missingDepScale = 1.1
+    local dependencyCheckInterval = 10
+    local dependencyCheckTimer = 0
+    local reloadIntervalFrames = 180
+    local reloadTimer = 0
+    local reloadAttempts = 0
+    local maxReloadAttempts = 0 -- 0 = infinite retries
+
+    missingDepFont:Load("font/pftempestasevencondensed.fnt")
+
+    local function drawCenteredMessage(text, y, color)
+        local width = missingDepFont:GetStringWidth(text) * missingDepScale
+        local x = (Isaac.GetScreenWidth() - width) * 0.5
+        missingDepFont:DrawStringScaledUTF8(text, x, y, missingDepScale, missingDepScale, color, 0, true)
+    end
+
+    local requestedReload = false
+
+    mod:AddCallback(ModCallbacks.MC_POST_RENDER, function()
+        local centerY = Isaac.GetScreenHeight() * 0.5
+        drawCenteredMessage(missingDepMessages[1], centerY - 12, KColor(1, 0.2, 0.2, 1))
+        drawCenteredMessage(missingDepMessages[2], centerY + 2, KColor(1, 1, 1, 1))
+    end)
+
+    mod:AddCallback(ModCallbacks.MC_POST_UPDATE, function()
+        if requestedReload then
+            return
+        end
+
+        dependencyCheckTimer = dependencyCheckTimer + 1
+        if dependencyCheckTimer >= dependencyCheckInterval then
+            dependencyCheckTimer = 0
+            if hasStatUtilsDependency() then
+                requestedReload = true
+                Isaac.ConsoleOutput("[ConchBlessing] Stat Utils detected late. Reloading Conch's Blessing...\n")
+                Isaac.ExecuteCommand("luamod conch_blessing")
+                Isaac.ExecuteCommand("luamod conch_blessing_3545334858")
+                return
+            end
+        end
+
+        reloadTimer = reloadTimer + 1
+        if reloadTimer < reloadIntervalFrames then
+            return
+        end
+        reloadTimer = 0
+
+        if maxReloadAttempts > 0 and reloadAttempts >= maxReloadAttempts then
+            return
+        end
+
+        reloadAttempts = reloadAttempts + 1
+        Isaac.ConsoleOutput("[ConchBlessing] Stat Utils missing. Auto-reload attempt #" .. tostring(reloadAttempts) .. "\n")
+        Isaac.ExecuteCommand("luamod stat_utils")
+        if reloadAttempts % 5 == 0 then
+            Isaac.ConsoleOutput("[ConchBlessing] Stat Utils still missing; continuing retry loop.\n")
+        end
+    end)
+
+    Isaac.ConsoleOutput("[ConchBlessing][ERROR] Required mod 'Stat Utils' not found. Initialization blocked.\n")
+    return
+end
+
 local ConchBlessing_Config = require("scripts.conch_blessing_config")
 local ConchBlessing_MCM = require("scripts.conch_blessing_mcm")
 local isc = require("scripts.lib.isaacscript-common")
 local SaveManager = require("scripts.lib.save_manager")
 
-local mod = RegisterMod("Conch's Blessing", 1)
 ConchBlessing = isc:upgradeMod(mod, {
     isc.ISCFeature.PLAYER_INVENTORY,
     isc.ISCFeature.ROOM_HISTORY,
@@ -293,6 +369,77 @@ local function consumeRuntimeQueue()
     return queue
 end
 
+function ConchBlessing.getUnifiedPlayerKey(player)
+    if not player then
+        return nil
+    end
+
+    if StatUtils and type(StatUtils.GetPlayerInstanceKey) == "function" then
+        return StatUtils:GetPlayerInstanceKey(player)
+    end
+
+    return player:GetPlayerType()
+end
+
+function ConchBlessing.getUnifiedMultiplierState(player, unifiedMultipliers)
+    if not player then
+        return nil
+    end
+
+    local um = unifiedMultipliers
+    if type(um) ~= "table" then
+        um = ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers or nil
+    end
+    if type(um) ~= "table" then
+        return nil
+    end
+
+    local playerKey = ConchBlessing.getUnifiedPlayerKey(player)
+    if playerKey ~= nil and um[playerKey] ~= nil then
+        return um[playerKey]
+    end
+
+    local legacyPlayerType = player:GetPlayerType()
+    if um[legacyPlayerType] ~= nil then
+        return um[legacyPlayerType]
+    end
+
+    if StatUtils and type(StatUtils.GetLegacyPlayerTypeKey) == "function" then
+        local legacyStringKey = StatUtils:GetLegacyPlayerTypeKey(player)
+        if legacyStringKey ~= nil and um[legacyStringKey] ~= nil then
+            return um[legacyStringKey]
+        end
+    end
+
+    return nil
+end
+
+function ConchBlessing.getUnifiedStatTotal(player, statType, fallbackTotal, unifiedMultipliers)
+    local total = fallbackTotal
+    if type(total) ~= "number" then
+        total = 1.0
+    end
+
+    if not player or type(statType) ~= "string" then
+        return total
+    end
+
+    local perPlayer = ConchBlessing.getUnifiedMultiplierState(player, unifiedMultipliers)
+    local statEntry = perPlayer and perPlayer.statMultipliers and perPlayer.statMultipliers[statType] or nil
+    if type(statEntry) ~= "table" then
+        return total
+    end
+
+    if type(statEntry.totalApply) == "number" then
+        return statEntry.totalApply
+    end
+    if type(statEntry.total) == "number" then
+        return statEntry.total
+    end
+
+    return total
+end
+
 -- Register callback for MCM config loading after game starts
 Isaac.ConsoleOutput("[Core] Registering MC_POST_GAME_STARTED callback\n")
 mod:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function(_, isContinued)
@@ -320,9 +467,9 @@ mod:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function(_, isContinued)
         for i = 0, (Game():GetNumPlayers() - 1) do
             local player = Isaac.GetPlayer(i)
             if player then
-                local pid = player:GetPlayerType()
-                if um[pid] then
-                    um[pid].pendingCache = {}
+                local perPlayer = ConchBlessing.getUnifiedMultiplierState(player, um)
+                if perPlayer then
+                    perPlayer.pendingCache = {}
                 end
             end
         end
@@ -471,24 +618,25 @@ HiddenItemManager:Init(mod)
 ConchBlessing.HiddenItemManager = HiddenItemManager
 ConchBlessing.print("HiddenItemManager initialized!")
 
--- load stats library first (before items and upgrade systems)
-local statsSuccess, statsErr = pcall(function()
-    require("scripts.lib.stats")
-end)
-if statsSuccess then
-    ConchBlessing.print("Stats library loaded successfully!")
-else
-    ConchBlessing.printError("Stats library load failed: " .. tostring(statsErr))
+-- Attach external Stat Utils tables only (Conch local stats libs removed).
+do
+    local sharedStatUtils = rawget(_G, "StatUtils")
+    if type(sharedStatUtils) == "table" and type(sharedStatUtils.stats) == "table" then
+        ConchBlessing.stats = sharedStatUtils.stats
+        ConchBlessing.VanillaMultipliers = sharedStatUtils.VanillaMultipliers
+        if type(sharedStatUtils.DamageUtils) == "table" then
+            ConchBlessing.DamageUtils = sharedStatUtils.DamageUtils
+        end
+    else
+        ConchBlessing.stats = nil
+        ConchBlessing.VanillaMultipliers = nil
+    end
 end
 
--- load vanilla multipliers table (for bonus damage calculation with vanilla item multipliers)
-local vanillaMultSuccess, vanillaMultErr = pcall(function()
-    require("scripts.lib.vanilla_multipliers")
-end)
-if vanillaMultSuccess then
-    ConchBlessing.print("Vanilla Multipliers table loaded successfully!")
+if ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers then
+    ConchBlessing.print("Stat Utils integration active.")
 else
-    ConchBlessing.printError("Vanilla Multipliers table load failed: " .. tostring(vanillaMultErr))
+    ConchBlessing.printError("Stat Utils integration failed: StatUtils not found or not ready.")
 end
 
 -- load items and management
