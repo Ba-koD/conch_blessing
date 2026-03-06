@@ -1,15 +1,15 @@
 local mod = RegisterMod("Conch's Blessing", 1)
 
-local function hasStatUtilsDependency()
-    return type(_G.StatUtils) == "table"
-        and type(StatUtils.stats) == "table"
-        and type(StatUtils.stats.unifiedMultipliers) == "table"
+local function hasStatsAPIDependency()
+    return type(_G.StatsAPI) == "table"
+        and type(StatsAPI.stats) == "table"
+        and type(StatsAPI.stats.unifiedMultipliers) == "table"
 end
 
-if not hasStatUtilsDependency() then
+if not hasStatsAPIDependency() then
     local missingDepFont = Font()
     local missingDepMessages = {
-        "Missing required mod: Stat Utils",
+        "Missing required mod: StatsAPI",
         "Conch's Blessing is disabled.",
     }
     local missingDepScale = 1.1
@@ -44,9 +44,9 @@ if not hasStatUtilsDependency() then
         dependencyCheckTimer = dependencyCheckTimer + 1
         if dependencyCheckTimer >= dependencyCheckInterval then
             dependencyCheckTimer = 0
-            if hasStatUtilsDependency() then
+            if hasStatsAPIDependency() then
                 requestedReload = true
-                Isaac.ConsoleOutput("[ConchBlessing] Stat Utils detected late. Reloading Conch's Blessing...\n")
+                Isaac.ConsoleOutput("[ConchBlessing] StatsAPI detected late. Reloading Conch's Blessing...\n")
                 Isaac.ExecuteCommand("luamod conch_blessing")
                 Isaac.ExecuteCommand("luamod conch_blessing_3545334858")
                 return
@@ -64,14 +64,14 @@ if not hasStatUtilsDependency() then
         end
 
         reloadAttempts = reloadAttempts + 1
-        Isaac.ConsoleOutput("[ConchBlessing] Stat Utils missing. Auto-reload attempt #" .. tostring(reloadAttempts) .. "\n")
-        Isaac.ExecuteCommand("luamod stat_utils")
+        Isaac.ConsoleOutput("[ConchBlessing] StatsAPI missing. Auto-reload attempt #" .. tostring(reloadAttempts) .. "\n")
+        Isaac.ExecuteCommand("luamod statsapi")
         if reloadAttempts % 5 == 0 then
-            Isaac.ConsoleOutput("[ConchBlessing] Stat Utils still missing; continuing retry loop.\n")
+            Isaac.ConsoleOutput("[ConchBlessing] StatsAPI still missing; continuing retry loop.\n")
         end
     end)
 
-    Isaac.ConsoleOutput("[ConchBlessing][ERROR] Required mod 'Stat Utils' not found. Initialization blocked.\n")
+    Isaac.ConsoleOutput("[ConchBlessing][ERROR] Required mod 'StatsAPI' not found. Initialization blocked.\n")
     return
 end
 
@@ -374,8 +374,8 @@ function ConchBlessing.getUnifiedPlayerKey(player)
         return nil
     end
 
-    if StatUtils and type(StatUtils.GetPlayerInstanceKey) == "function" then
-        return StatUtils:GetPlayerInstanceKey(player)
+    if StatsAPI and type(StatsAPI.GetPlayerInstanceKey) == "function" then
+        return StatsAPI:GetPlayerInstanceKey(player)
     end
 
     return player:GetPlayerType()
@@ -404,8 +404,8 @@ function ConchBlessing.getUnifiedMultiplierState(player, unifiedMultipliers)
         return um[legacyPlayerType]
     end
 
-    if StatUtils and type(StatUtils.GetLegacyPlayerTypeKey) == "function" then
-        local legacyStringKey = StatUtils:GetLegacyPlayerTypeKey(player)
+    if StatsAPI and type(StatsAPI.GetLegacyPlayerTypeKey) == "function" then
+        local legacyStringKey = StatsAPI:GetLegacyPlayerTypeKey(player)
         if legacyStringKey ~= nil and um[legacyStringKey] ~= nil then
             return um[legacyStringKey]
         end
@@ -618,14 +618,14 @@ HiddenItemManager:Init(mod)
 ConchBlessing.HiddenItemManager = HiddenItemManager
 ConchBlessing.print("HiddenItemManager initialized!")
 
--- Attach external Stat Utils tables only (Conch local stats libs removed).
+-- Attach external StatsAPI tables only (Conch local stats libs removed).
 do
-    local sharedStatUtils = rawget(_G, "StatUtils")
-    if type(sharedStatUtils) == "table" and type(sharedStatUtils.stats) == "table" then
-        ConchBlessing.stats = sharedStatUtils.stats
-        ConchBlessing.VanillaMultipliers = sharedStatUtils.VanillaMultipliers
-        if type(sharedStatUtils.DamageUtils) == "table" then
-            ConchBlessing.DamageUtils = sharedStatUtils.DamageUtils
+    local sharedStatsAPI = rawget(_G, "StatsAPI")
+    if type(sharedStatsAPI) == "table" and type(sharedStatsAPI.stats) == "table" then
+        ConchBlessing.stats = sharedStatsAPI.stats
+        ConchBlessing.VanillaMultipliers = sharedStatsAPI.VanillaMultipliers
+        if type(sharedStatsAPI.DamageUtils) == "table" then
+            ConchBlessing.DamageUtils = sharedStatsAPI.DamageUtils
         end
     else
         ConchBlessing.stats = nil
@@ -634,9 +634,9 @@ do
 end
 
 if ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers then
-    ConchBlessing.print("Stat Utils integration active.")
+    ConchBlessing.print("StatsAPI integration active.")
 else
-    ConchBlessing.printError("Stat Utils integration failed: StatUtils not found or not ready.")
+    ConchBlessing.printError("StatsAPI integration failed: StatsAPI not found or not ready.")
 end
 
 -- load items and management
