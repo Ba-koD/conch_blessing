@@ -77,6 +77,8 @@ Core subsystem map:
 - Commit body bullets must explain what and why in Korean, start with `- `, avoid blank lines between bullets, and end with a noun-style phrase such as `추가`, `수정`, `제거`, `전환`, `적용`, or `정리`.
 - Steam Workshop changenotes should match the existing workshop style: one or more English typed summary lines such as `Fix: Fix EID Bug`, then a blank line, then short Korean summary lines without `-` bullets.
 - Keep Steam changenotes concise and player-facing. Mention generated assets, upload automation, or tooling only when those changes affect the published mod package or release process.
+- For the `Steam Workshop Publish` GitHub Actions workflow, paste release notes into the manual `changenote` input. Leaving it empty uploads only `Version <metadata.xml version>`.
+- The Steam publish workflow should not generate or build mod content. It stages a copy of committed runtime files for SteamCMD; configure generated asset behavior in `generate_xml.py` defaults and commit generated files before publishing.
 
 ## Verification
 
