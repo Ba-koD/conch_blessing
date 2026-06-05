@@ -12,13 +12,13 @@ name: Steam Workshop Publish
         description: "Steam Workshop visibility for the uploaded item"
         required: true
         type: choice
-        default: private
+        default: public
         options:
+          - public
           - private
           - friends
-          - public
       changenote:
-        description: "Steam Workshop changenote text. Empty publishes Version from metadata.xml."
+        description: "Steam Workshop changenote text. Use \\n for line breaks. Empty publishes Version from metadata.xml."
         required: false
         type: string
 
