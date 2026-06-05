@@ -1,0 +1,20 @@
+Conch's Blessing
+
+Adds a polished Magic Conch upgrade system to The Binding of Isaac. Transform items with bespoke visuals, language-aware HUD/EID support, and flexible spawn/timing controls.
+
+Key Features:
+- Upgrade Sequence: Before -> Morph -> After
+- Multi-language: KR/EN HUD and EID text
+- Natural Spawn Toggle: Enable or disable mod item spawns via Mod Config Menu
+- Compatible with Mod Config Menu
+
+Required Item:
+- Magic Conch
+
+Recommended:
+- RGON
+
+Inspiration:
+- Visual style inspired by Lazy MattPack [RGON] by Mr. Headcrab.
+
+Item descriptions are available through the Workshop discussion or Steam guide.

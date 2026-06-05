@@ -1,0 +1,20 @@
+소라고둥의 축복
+
+아이작에 Magic Conch 기반 업그레이드 시스템을 추가합니다. 기존 아이템을 전용 연출과 함께 변환하고, 언어별 HUD/EID 안내와 스폰/타이밍 설정을 제공합니다.
+
+주요 기능:
+- 아이템 업그레이드 연출: Before -> Morph -> After
+- 다국어 지원: 한국어/영어 HUD 및 EID 텍스트
+- 자연 스폰 토글: Mod Config Menu에서 모드 아이템 자연 스폰 ON/OFF
+- Mod Config Menu 호환
+
+필수 아이템:
+- Magic Conch
+
+권장:
+- RGON
+
+영감:
+- Lazy MattPack [RGON] 모드에서 시각적 스타일 영감을 받았습니다.
+
+아이템 설명 가이드는 Workshop 토론 또는 Steam 가이드를 참고하세요.
