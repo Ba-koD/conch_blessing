@@ -3,11 +3,6 @@ name: Steam Workshop Publish
 "on":
   workflow_dispatch:
     inputs:
-      dry_run:
-        description: "Only stage the upload folder without publishing"
-        required: true
-        type: boolean
-        default: true
       visibility:
         description: "Steam Workshop visibility for the uploaded item"
         required: true
@@ -30,35 +25,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  package:
-    name: Stage upload content
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Stage Steam Workshop upload folder
-        run: |
-          python .github/scripts/prepare_steam_workshop_upload.py \
-            --visibility "${{ inputs.visibility }}" \
-            --changenote "${{ inputs.changenote }}"
-
-      - name: Upload package artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: steam-workshop-upload
-          path: dist/steam-workshop
-
   publish:
     name: Publish to Steam Workshop
-    if: ${{ inputs.dry_run == false && github.ref == 'refs/heads/main' }}
-    needs: package
+    if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: [self-hosted, Linux, X64, steam-workshop]
     environment: steam-workshop
 

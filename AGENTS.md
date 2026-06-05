@@ -78,7 +78,7 @@ Core subsystem map:
 - Steam Workshop changenotes should match the existing workshop style: one or more English typed summary lines such as `Fix: Fix EID Bug`, then a blank line, then short Korean summary lines without `-` bullets.
 - Keep Steam changenotes concise and player-facing. Mention generated assets, upload automation, or tooling only when those changes affect the published mod package or release process.
 - For the `Steam Workshop Publish` GitHub Actions workflow, paste release notes into the manual `changenote` input. Use literal `\n` for line breaks. Leaving it empty uploads only `Version <metadata.xml version>`.
-- The Steam publish workflow should not generate or build mod content. It stages a copy of committed runtime files for SteamCMD; configure generated asset behavior in `generate_xml.py` defaults and commit generated files before publishing.
+- The Steam publish workflow should not generate or build mod content. When run on `main`, it stages a copy of committed runtime files on the self-hosted runner and uploads it through SteamCMD. Configure generated asset behavior in `generate_xml.py` defaults and commit generated files before publishing.
 
 ## Verification
 
