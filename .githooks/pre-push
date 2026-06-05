@@ -21,32 +21,16 @@ fi
 run_generator() {
     log_file=$(mktemp "${TMPDIR:-/tmp}/conch-generate.XXXXXX")
 
-    if python3 -c "import PIL" >/dev/null 2>&1; then
-        echo "pre-push: running python3 generate_xml.py"
-        if ! python3 generate_xml.py >"$log_file" 2>&1; then
-            cat "$log_file" >&2
-            rm -f "$log_file"
-            exit 1
-        fi
+    echo "pre-push: running python3 generate_xml.py"
+    if ! python3 generate_xml.py >"$log_file" 2>&1; then
+        cat "$log_file" >&2
         rm -f "$log_file"
-        return
-    fi
-
-    if command -v uv >/dev/null 2>&1; then
-        echo "pre-push: running uv run --with pillow python3 generate_xml.py"
-        if ! uv run --with pillow python3 generate_xml.py >"$log_file" 2>&1; then
-            cat "$log_file" >&2
-            rm -f "$log_file"
-            exit 1
-        fi
-        rm -f "$log_file"
-        return
+        echo "pre-push: generator failed. Ensure python3 has Pillow installed." >&2
+        echo "pre-push: python3 -m pip install Pillow" >&2
+        exit 1
     fi
 
     rm -f "$log_file"
-    echo "pre-push: Pillow is not installed for python3 and uv was not found." >&2
-    echo "pre-push: install Pillow or run: uv run --with pillow python3 generate_xml.py" >&2
-    exit 1
 }
 
 if ! git diff --cached --quiet --; then
