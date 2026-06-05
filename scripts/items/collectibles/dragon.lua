@@ -34,6 +34,7 @@ ConchBlessing.dragon.data = {
 
 ConchBlessing.dragon._isInternalSpawn = false
 ConchBlessing.dragon._sfxCooldown = {}
+ConchBlessing.dragon._effectBySeed = {}
 
 -- Tech X ring texture is red-heavy, so use additive offsets to force a yellow tint.
 local TECHX_COLOR = Color(1.0, 1.0, 1.0, 1.0, 0.55, 1.75, -0.05)
@@ -175,15 +176,33 @@ local function findPlayerByInitSeed(initSeed)
     return nil
 end
 
+local function rememberEffect(effect)
+    if effect and effect.InitSeed then
+        ConchBlessing.dragon._effectBySeed = ConchBlessing.dragon._effectBySeed or {}
+        ConchBlessing.dragon._effectBySeed[effect.InitSeed] = effect
+    end
+end
+
 local function findEffectByInitSeed(initSeed, variant)
     if not initSeed then
         return nil
+    end
+
+    local cache = ConchBlessing.dragon._effectBySeed
+    local cached = cache and cache[initSeed] or nil
+    if cached and cached:Exists() then
+        if (not variant) or cached.Variant == variant then
+            return cached
+        end
+    elseif cache then
+        cache[initSeed] = nil
     end
 
     for _, entity in ipairs(Isaac.GetRoomEntities()) do
         local effect = entity:ToEffect()
         if effect and effect.InitSeed == initSeed then
             if (not variant) or effect.Variant == variant then
+                rememberEffect(effect)
                 return effect
             end
         end
@@ -212,6 +231,7 @@ local function spawnWhirlpoolParticle(position, spawner, scale, timeoutFrames)
     if timeoutFrames and particle.SetTimeout then
         particle:SetTimeout(timeoutFrames)
     end
+    rememberEffect(particle)
     return particle
 end
 
@@ -1115,6 +1135,7 @@ ConchBlessing.dragon.onPlayerUpdate = function(_, player)
 end
 
 ConchBlessing.dragon.onNewRoom = function()
+    ConchBlessing.dragon._effectBySeed = {}
     local numPlayers = Game():GetNumPlayers()
     for i = 0, numPlayers - 1 do
         local player = Isaac.GetPlayer(i)
@@ -1129,6 +1150,7 @@ end
 ConchBlessing.dragon.onGameStarted = function()
     ConchBlessing.dragon._isInternalSpawn = false
     ConchBlessing.dragon._sfxCooldown = {}
+    ConchBlessing.dragon._effectBySeed = {}
     local numPlayers = Game():GetNumPlayers()
     for i = 0, numPlayers - 1 do
         local player = Isaac.GetPlayer(i)

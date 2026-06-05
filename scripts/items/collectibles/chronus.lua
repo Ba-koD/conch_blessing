@@ -290,16 +290,34 @@ function ConchBlessing.chronus.addToBlacklist(familiarCollectibleId)
     ConchBlessing.chronus.data.blacklist[familiarCollectibleId] = true
 end
 
-local function countOwnedFamiliarCollectibles(player)
-    local counts = {}
+local function getFamiliarCollectibleIds()
+    local cached = ConchBlessing.chronus._familiarCollectibleIds
+    if cached then
+        return cached
+    end
+
+    local ids = {}
     local cfg = Isaac.GetItemConfig()
-    if not cfg then return counts end
+    if not cfg then
+        return ids
+    end
+
     for id = 1, CollectibleType.NUM_COLLECTIBLES - 1 do
         local okItem, item = pcall(function() return cfg:GetCollectible(id) end)
         if okItem and item and item.Type == ItemType.ITEM_FAMILIAR then
-            local okOwned, owned = pcall(function() return player:GetCollectibleNum(id, true) end)
-            if okOwned and owned and owned > 0 then counts[id] = owned end
+            ids[#ids + 1] = id
         end
+    end
+
+    ConchBlessing.chronus._familiarCollectibleIds = ids
+    return ids
+end
+
+local function countOwnedFamiliarCollectibles(player)
+    local counts = {}
+    for _, id in ipairs(getFamiliarCollectibleIds()) do
+        local okOwned, owned = pcall(function() return player:GetCollectibleNum(id, true) end)
+        if okOwned and owned and owned > 0 then counts[id] = owned end
     end
     return counts
 end

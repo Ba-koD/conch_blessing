@@ -3,6 +3,58 @@
 -- Supports positive, neutral, and negative upgrade types
 
 local Template = {}
+Template._activeAnimations = Template._activeAnimations or {}
+Template._centralUpdaterRegistered = Template._centralUpdaterRegistered or false
+
+local function ensureCentralUpdater()
+    if Template._centralUpdaterRegistered then
+        return
+    end
+    if ConchBlessing and ConchBlessing.AddCallback and ModCallbacks then
+        ConchBlessing:AddCallback(ModCallbacks.MC_POST_UPDATE, function()
+            if Template.updateAllAnimations then
+                Template.updateAllAnimations()
+            end
+        end)
+        Template._centralUpdaterRegistered = true
+    end
+end
+
+local function finishAnimation(anim, sprite)
+    if sprite then
+        sprite.Color = Color(1, 1, 1, 1, 0, 0, 0)
+    end
+    if anim and anim.soundId then
+        SFXManager():Stop(anim.soundId)
+        anim.soundId = nil
+    end
+    if anim and anim.ownerData and anim.ownerData.upgradeAnim == anim then
+        anim.ownerData.upgradeAnim = nil
+    end
+    return true
+end
+
+local function registerAnimation(ownerData, anim)
+    if not anim then
+        return
+    end
+    anim.ownerData = ownerData
+    anim.totalFrames = anim.frames or 60
+    anim._centralManaged = true
+    if ownerData then
+        ownerData.upgradeAnim = anim
+    end
+    local active = Template._activeAnimations
+    for i = #active, 1, -1 do
+        local existing = active[i]
+        if existing and anim.pickup and existing.pickup == anim.pickup then
+            finishAnimation(existing, nil)
+            table.remove(active, i)
+        end
+    end
+    table.insert(active, anim)
+    ensureCentralUpdater()
+end
 
 -- Positive upgrade animation (bright white fade with Holy Light)
 Template.positive = {}
@@ -29,10 +81,7 @@ Template.positive.onBeforeChange = function(upgradePos, pickup, itemData, soundI
     sfx:Stop(upgradeAnim.soundId)
     sfx:Play(upgradeAnim.soundId, 0.05, 0, false, 1.0, 0)
     
-    -- Store animation data in the item's data
-    if itemData then
-        itemData.upgradeAnim = upgradeAnim
-    end
+    registerAnimation(itemData, upgradeAnim)
     
     return 60
 end
@@ -68,10 +117,7 @@ Template.positive.onAfterChange = function(upgradePos, pickup, itemData, soundId
         type = "positive"
     }
     
-    -- Store animation data in the item's data
-    if itemData then
-        itemData.upgradeAnim = upgradeAnim
-    end
+    registerAnimation(itemData, upgradeAnim)
     
     -- ensure sprite starts at white after morph
     local sprite = pickup and pickup:GetSprite() or nil
@@ -105,10 +151,7 @@ Template.neutral.onBeforeChange = function(upgradePos, pickup, itemData, soundId
     sfx:Stop(upgradeAnim.soundId)
     sfx:Play(upgradeAnim.soundId, 0.03, 0, false, 1.0, 0)
     
-    -- Store animation data in the item's data
-    if itemData then
-        itemData.upgradeAnim = upgradeAnim
-    end
+    registerAnimation(itemData, upgradeAnim)
     
     return 60
 end
@@ -136,10 +179,7 @@ Template.neutral.onAfterChange = function(upgradePos, pickup, itemData, soundId)
         type = "neutral"
     }
     
-    -- Store animation data in the item's data
-    if itemData then
-        itemData.upgradeAnim = upgradeAnim
-    end
+    registerAnimation(itemData, upgradeAnim)
     
     -- ensure sprite starts at gray after morph (like positive does)
     local sprite = pickup and pickup:GetSprite() or nil
@@ -173,10 +213,7 @@ Template.negative.onBeforeChange = function(upgradePos, pickup, itemData, soundI
     sfx:Stop(upgradeAnim.soundId)
     sfx:Play(upgradeAnim.soundId, 0.04, 0, false, 1.0, 0)
     
-    -- Store animation data in the item's data
-    if itemData then
-        itemData.upgradeAnim = upgradeAnim
-    end
+    registerAnimation(itemData, upgradeAnim)
     
     return 60
 end
@@ -204,10 +241,7 @@ Template.negative.onAfterChange = function(upgradePos, pickup, itemData, soundId
         type = "negative"
     }
     
-    -- Store animation data in the item's data
-    if itemData then
-        itemData.upgradeAnim = upgradeAnim
-    end
+    registerAnimation(itemData, upgradeAnim)
     
     -- ensure sprite starts at dark after morph (like positive does)
     local sprite = pickup and pickup:GetSprite() or nil
@@ -216,8 +250,8 @@ Template.negative.onAfterChange = function(upgradePos, pickup, itemData, soundId
     end
 end
 
--- Update function for handling all upgrade animations
-Template.onUpdate = function(itemData)
+-- Legacy item-local updater kept as a fallback for non-central animations.
+Template._legacyItemLocalUpdate = function(itemData)
     local anim = itemData and itemData.upgradeAnim or nil
     if anim and anim.frames and anim.frames > 0 and anim.pickup and anim.pickup:Exists() then
         anim.frames = anim.frames - 1
@@ -326,6 +360,105 @@ Template.onUpdate = function(itemData)
     end
 end
 
+local function updateAnimation(anim)
+    if not (anim and anim.frames and anim.frames > 0 and anim.pickup and anim.pickup:Exists()) then
+        return finishAnimation(anim, nil)
+    end
+
+    anim.frames = anim.frames - 1
+    local base = tonumber(anim.totalFrames) or 60.0
+    if base <= 0 then
+        base = 60.0
+    end
+    local progress = 1.0 - (anim.frames / base)
+    local sprite = anim.pickup:GetSprite()
+
+    if ConchBlessing and ConchBlessing.printDebug then
+        ConchBlessing.printDebug(string.format("Template: %s phase, frames=%d, progress=%.2f",
+            anim.phase, anim.frames, progress))
+    end
+
+    if sprite then
+        if anim.type == "positive" then
+            if anim.phase == "before" then
+                local add = (anim.maxAdd or 0.8) * progress
+                local brightness = 1.0 + add * 0.5
+                local saturation = add * 0.3
+                sprite.Color = Color(brightness, brightness, brightness, 1.0, saturation, saturation, saturation)
+            elseif anim.phase == "after" then
+                local add = (anim.maxAdd or 0.8) * (1.0 - progress)
+                local brightness = 1.0 + add * 0.5
+                local saturation = add * 0.3
+                sprite.Color = Color(brightness, brightness, brightness, 1.0, saturation, saturation, saturation)
+            end
+        elseif anim.type == "neutral" then
+            if anim.phase == "before" then
+                local add = (anim.maxAdd or 0.6) * progress
+                local gray = 1.0 - add * 0.7
+                sprite.Color = Color(gray, gray, gray, 1.0, 0, 0, 0)
+            elseif anim.phase == "after" then
+                local add = (anim.maxAdd or 0.6) * progress
+                local brightness = 0.3 + add * 0.7
+                sprite.Color = Color(brightness, brightness, brightness, 1.0, 0, 0, 0)
+            end
+        elseif anim.type == "negative" then
+            if anim.phase == "before" then
+                local add = (anim.maxAdd or 0.7) * progress
+                local dark = 1.0 - add * 0.8
+                local redTint = add * 0.5
+                sprite.Color = Color(dark + redTint, dark, dark, 1.0, 0, 0, 0)
+            elseif anim.phase == "after" then
+                local add = (anim.maxAdd or 0.7) * progress
+                local brightness = 0.2 + add * 0.8
+                local redTint = add * 0.5
+                sprite.Color = Color(brightness + redTint, brightness, brightness, 1.0, 0, 0, 0)
+            end
+        end
+    end
+
+    if anim.soundId then
+        local vol = 0.0
+        if anim.phase == "before" then
+            vol = 0.03 + 0.47 * progress
+        else
+            vol = 0.5 * (1.0 - progress)
+        end
+        SFXManager():AdjustVolume(anim.soundId, vol)
+    end
+
+    if anim.frames <= 0 then
+        if ConchBlessing and ConchBlessing.printDebug then
+            ConchBlessing.printDebug(string.format("Template: %s phase animation completed", anim.phase))
+        end
+        return finishAnimation(anim, sprite)
+    end
+
+    return false
+end
+
+Template.updateAllAnimations = function()
+    local active = Template._activeAnimations
+    if not active or #active == 0 then
+        return
+    end
+
+    for i = #active, 1, -1 do
+        if updateAnimation(active[i]) then
+            table.remove(active, i)
+        end
+    end
+end
+
+Template.onUpdate = function(itemData)
+    local anim = itemData and itemData.upgradeAnim or nil
+    if not anim or anim._centralManaged then
+        return
+    end
+    if updateAnimation(anim) and itemData then
+        itemData.upgradeAnim = nil
+    end
+end
+
 -- Legacy functions for backward compatibility (default to positive)
 Template.onBeforeChange = function(upgradePos, pickup, itemData, soundId)
     return Template.positive.onBeforeChange(upgradePos, pickup, itemData, soundId)
@@ -335,4 +468,4 @@ Template.onAfterChange = function(upgradePos, pickup, itemData, soundId)
     Template.positive.onAfterChange(upgradePos, pickup, itemData, soundId)
 end
 
-return Template 
+return Template
