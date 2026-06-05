@@ -40,7 +40,7 @@ jobs:
 
       - name: Stage Steam Workshop upload folder
         run: |
-          python .github/scripts/prepare_steam_workshop_upload.py \
+          python3 .github/scripts/prepare_steam_workshop_upload.py \
             --visibility "${{ inputs.visibility }}" \
             --changenote "${{ inputs.changenote }}"
 
