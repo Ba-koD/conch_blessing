@@ -76,6 +76,8 @@ Core subsystem map:
 - Follow `https://git.intp.me/` for commit messages: `Type: English title` on the first line, one blank line, then Korean `- ` bullet body lines.
 - Commit titles must use one of the allowed capitalized types from the guideline, keep the English title near 25-30 characters, and omit a trailing period.
 - Commit body bullets must explain what and why in Korean, start with `- `, avoid blank lines between bullets, and end with a noun-style phrase such as `추가`, `수정`, `제거`, `전환`, `적용`, or `정리`.
+- When merging `dev` into `main`, check `metadata.xml` before the merge. If the version on `dev` is not already greater than `main`, increment only the patch version, for example `1.0.60` to `1.0.61`, commit that bump on `dev`, then merge to `main`.
+- Do not bump `metadata.xml` during ordinary dev commits unless preparing a `dev` to `main` release merge or the user explicitly requests a release version change.
 - Steam Workshop changenotes should match the existing workshop style: one or more English typed summary lines such as `Fix: Fix EID Bug`, then a blank line, then short Korean summary lines without `-` bullets.
 - Keep Steam changenotes concise and player-facing. Mention generated assets, upload automation, or tooling only when those changes affect the published mod package or release process.
 - For the `Steam Workshop Publish` GitHub Actions workflow, paste release notes into the manual `changenote` input. Use literal `\n` for line breaks. Leaving it empty uploads only `Version <metadata.xml version>`.
