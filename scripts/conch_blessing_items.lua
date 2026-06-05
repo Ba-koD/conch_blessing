@@ -664,7 +664,6 @@ ConchBlessing.ItemData = {
 		callbacks = {
 			pickup = "chronus.onPickup",
 			postPlayerUpdate = "chronus.onPlayerUpdate",
-            update = "chronus.onPostUpdate",
 			evaluateCache = "chronus.onEvaluateCache",
 			gameStarted = "chronus.onGameStarted",
             familiarUpdate = "chronus.onFamiliarUpdate",
