@@ -20,8 +20,12 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Prepare Steam Workshop upload files.")
     parser.add_argument("--repo-root", default=".", help="Repository root. Defaults to current directory.")
     parser.add_argument("--output-dir", default="dist/steam-workshop", help="Output directory.")
-    parser.add_argument("--visibility", choices=sorted(VISIBILITY), default="private")
-    parser.add_argument("--changenote", default="", help="Steam Workshop changenote.")
+    parser.add_argument("--visibility", choices=sorted(VISIBILITY), default="public")
+    parser.add_argument(
+        "--changenote",
+        default="",
+        help=r"Steam Workshop changenote. Use \n for line breaks.",
+    )
     return parser.parse_args()
 
 
@@ -76,9 +80,13 @@ def escape_vdf(value):
     )
 
 
+def normalize_changenote(value):
+    return value.replace("\\r\\n", "\n").replace("\\n", "\n").strip()
+
+
 def write_vdf(output_dir, metadata, content_dir, preview_file, visibility, changenote):
     vdf_path = output_dir / "workshop_item.vdf"
-    note = changenote.strip() or f"Version {metadata['version']}".strip()
+    note = normalize_changenote(changenote) or f"Version {metadata['version']}".strip()
 
     fields = {
         "appid": APP_ID,

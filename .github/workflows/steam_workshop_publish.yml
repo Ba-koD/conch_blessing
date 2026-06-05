@@ -12,31 +12,15 @@ name: Steam Workshop Publish
         description: "Steam Workshop visibility for the uploaded item"
         required: true
         type: choice
-        default: private
+        default: public
         options:
+          - public
           - private
           - friends
-          - public
       changenote:
-        description: "Steam Workshop change note. Defaults to metadata.xml version."
+        description: "Steam Workshop changenote text. Use \\n for line breaks. Empty publishes Version from metadata.xml."
         required: false
         type: string
-      death_palette:
-        description: "Death item icon palette mode"
-        required: true
-        type: choice
-        default: source_color
-        options:
-          - source_color
-          - vanilla
-      death_resize:
-        description: "Death item icon resize mode"
-        required: true
-        type: choice
-        default: trim_fit
-        options:
-          - trim_fit
-          - raw_resize
 
 permissions:
   contents: read
@@ -47,7 +31,7 @@ concurrency:
 
 jobs:
   package:
-    name: Package upload content
+    name: Stage upload content
     runs-on: ubuntu-latest
 
     steps:
@@ -59,32 +43,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install generator dependencies
+      - name: Stage Steam Workshop upload folder
         run: |
-          python3 -m venv .venv
-          . .venv/bin/activate
-          python -m pip install --upgrade pip
-          python -m pip install pillow
-
-      - name: Regenerate content files
-        run: |
-          . .venv/bin/activate
-          python generate_xml.py \
-            --death-palette "${{ inputs.death_palette }}" \
-            --death-resize "${{ inputs.death_resize }}"
-
-      - name: Verify generated files are committed
-        run: |
-          git diff --exit-code -- \
-            content/items.xml \
-            content/itempools.xml \
-            content/entities2.xml \
-            content/gfx/death_items.anm2 \
-            content/gfx/death_items.png
-
-      - name: Prepare Steam Workshop upload package
-        run: |
-          . .venv/bin/activate
           python .github/scripts/prepare_steam_workshop_upload.py \
             --visibility "${{ inputs.visibility }}" \
             --changenote "${{ inputs.changenote }}"
@@ -106,32 +66,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Install generator dependencies
-        run: |
-          python3 -m venv .venv
-          . .venv/bin/activate
-          python -m pip install --upgrade pip
-          python -m pip install pillow
+      - name: Verify Python
+        run: python3 --version
 
-      - name: Regenerate content files
+      - name: Stage Steam Workshop upload folder
         run: |
-          . .venv/bin/activate
-          python generate_xml.py \
-            --death-palette "${{ inputs.death_palette }}" \
-            --death-resize "${{ inputs.death_resize }}"
-
-      - name: Verify generated files are committed
-        run: |
-          git diff --exit-code -- \
-            content/items.xml \
-            content/itempools.xml \
-            content/entities2.xml \
-            content/gfx/death_items.anm2 \
-            content/gfx/death_items.png
-
-      - name: Prepare Steam Workshop upload package
-        run: |
-          . .venv/bin/activate
           python .github/scripts/prepare_steam_workshop_upload.py \
             --visibility "${{ inputs.visibility }}" \
             --changenote "${{ inputs.changenote }}"
