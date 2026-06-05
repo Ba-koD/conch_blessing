@@ -69,6 +69,7 @@ Core subsystem map:
 - After changing collectible or familiar item sprites under `resources/gfx/items/collectibles`, run `python3 generate_xml.py` in a Python environment with Pillow so generated death item spritesheets stay in sync.
 - `content/gfx/death_items.png` generation requires Pillow. By default it preserves resized source icon colors. Use `--death-palette vanilla` to generate the vanilla death-screen color style (`RGB(54, 47, 45)` with alpha levels).
 - Death item resizing defaults to trimming transparent source padding and fitting into the 16x16 death frame. Use `--death-resize raw_resize` for the original behavior: resize the full source image directly to 16x16 without trimming.
+- Local git hooks live in `.githooks`; enable them with `git config core.hooksPath .githooks`. The `pre-push` hook runs `python3 generate_xml.py` when Pillow is installed, or falls back to `uv run --with pillow python3 generate_xml.py`; it amends only generated content files into `HEAD` when they changed, then stops that push so the same push command can be run again with the amended commit.
 
 ## Commit And Changelog Style
 

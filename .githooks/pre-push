@@ -1,0 +1,80 @@
+#!/usr/bin/env sh
+set -eu
+
+if [ "${CONCH_SKIP_GENERATE_PRE_PUSH:-}" = "1" ]; then
+    echo "pre-push: skipping generated content check."
+    exit 0
+fi
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+if [ ! -f generate_xml.py ]; then
+    exit 0
+fi
+
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "pre-push: python3 not found; cannot run generate_xml.py." >&2
+    exit 1
+fi
+
+run_generator() {
+    if python3 -c "import PIL" >/dev/null 2>&1; then
+        echo "pre-push: running python3 generate_xml.py"
+        python3 generate_xml.py
+        return
+    fi
+
+    if command -v uv >/dev/null 2>&1; then
+        echo "pre-push: running uv run --with pillow python3 generate_xml.py"
+        uv run --with pillow python3 generate_xml.py
+        return
+    fi
+
+    echo "pre-push: Pillow is not installed for python3 and uv was not found." >&2
+    echo "pre-push: install Pillow or run: uv run --with pillow python3 generate_xml.py" >&2
+    exit 1
+}
+
+if ! git diff --cached --quiet --; then
+    echo "pre-push: staged changes already exist." >&2
+    echo "pre-push: commit or unstage them before pushing so only generated files can be amended." >&2
+    exit 1
+fi
+
+generated_paths="
+content/items.xml
+content/itempools.xml
+content/entities2.xml
+content/gfx/death_items.anm2
+content/gfx/death_items.png
+"
+
+before_head=$(git rev-parse HEAD)
+
+run_generator
+
+changed=$(git status --porcelain -- $generated_paths)
+if [ -z "$changed" ]; then
+    echo "pre-push: generated content is up to date."
+    exit 0
+fi
+
+echo "pre-push: generated content changed:"
+printf "%s\n" "$changed"
+
+git add -A -- $generated_paths
+
+if git diff --cached --quiet --; then
+    echo "pre-push: no generated changes to amend."
+    exit 0
+fi
+
+git commit --amend --no-edit >/dev/null
+after_head=$(git rev-parse HEAD)
+
+echo "pre-push: amended generated content into HEAD."
+echo "pre-push: $before_head -> $after_head"
+echo "pre-push: push stopped because Git had already selected the old commit."
+echo "pre-push: run the same git push command again."
+exit 1
