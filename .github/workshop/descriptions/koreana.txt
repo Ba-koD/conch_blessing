@@ -17,4 +17,4 @@
 영감:
 - Lazy MattPack [RGON] 모드에서 시각적 스타일 영감을 받았습니다.
 
-아이템 설명 가이드는 Workshop 토론 또는 Steam 가이드를 참고하세요.
+고정된 Workshop 토론: 아이템 설명 가이드를 참고하세요.
