@@ -8,7 +8,7 @@ from pathlib import Path
 
 APP_ID = "250900"
 INCLUDE_DIRS = ("content", "resources", "scripts")
-INCLUDE_FILES = ("main.lua", "metadata.xml", "Thumbnial.png")
+INCLUDE_FILES = ("main.lua", "metadata.xml", "Thumbnail.png")
 VISIBILITY = {
     "public": "0",
     "friends": "1",
@@ -112,9 +112,9 @@ def main():
 
     metadata = read_metadata(repo_root)
     content_dir = prepare_content(repo_root, output_dir, metadata["directory"])
-    preview_file = content_dir / "Thumbnial.png"
+    preview_file = content_dir / "Thumbnail.png"
     if not preview_file.exists():
-        raise FileNotFoundError("Preview file not found: Thumbnial.png")
+        raise FileNotFoundError("Preview file not found: Thumbnail.png")
 
     vdf_path = write_vdf(output_dir, metadata, content_dir, preview_file, args.visibility, args.changenote)
 
