@@ -81,7 +81,10 @@ jobs:
             login_args=(+login "${steam_username}" "${steam_password}")
           fi
 
-          timeout 300s "${steamcmd_path}" \
-            "${login_args[@]}" \
-            +workshop_build_item "${GITHUB_WORKSPACE}/dist/steam-workshop/workshop_item.vdf" \
-            +quit
+          steamcmd_args=("${login_args[@]}")
+          while IFS= read -r vdf_name; do
+            [ -n "${vdf_name}" ] || continue
+            steamcmd_args+=(+workshop_build_item "${GITHUB_WORKSPACE}/dist/steam-workshop/${vdf_name}")
+          done < "${GITHUB_WORKSPACE}/dist/steam-workshop/workshop_vdfs.txt"
+
+          timeout 300s "${steamcmd_path}" "${steamcmd_args[@]}" +quit
