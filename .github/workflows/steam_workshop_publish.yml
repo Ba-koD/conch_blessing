@@ -1,0 +1,179 @@
+name: Steam Workshop Publish
+
+"on":
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only build the upload package without publishing"
+        required: true
+        type: boolean
+        default: true
+      visibility:
+        description: "Steam Workshop visibility for the uploaded item"
+        required: true
+        type: choice
+        default: private
+        options:
+          - private
+          - friends
+          - public
+      changenote:
+        description: "Steam Workshop change note. Defaults to metadata.xml version."
+        required: false
+        type: string
+      death_palette:
+        description: "Death item icon palette mode"
+        required: true
+        type: choice
+        default: source_color
+        options:
+          - source_color
+          - vanilla
+      death_resize:
+        description: "Death item icon resize mode"
+        required: true
+        type: choice
+        default: trim_fit
+        options:
+          - trim_fit
+          - raw_resize
+
+permissions:
+  contents: read
+
+concurrency:
+  group: steam-workshop-publish
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Package upload content
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install generator dependencies
+        run: |
+          python3 -m venv .venv
+          . .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install pillow
+
+      - name: Regenerate content files
+        run: |
+          . .venv/bin/activate
+          python generate_xml.py \
+            --death-palette "${{ inputs.death_palette }}" \
+            --death-resize "${{ inputs.death_resize }}"
+
+      - name: Verify generated files are committed
+        run: |
+          git diff --exit-code -- \
+            content/items.xml \
+            content/itempools.xml \
+            content/entities2.xml \
+            content/gfx/death_items.anm2 \
+            content/gfx/death_items.png
+
+      - name: Prepare Steam Workshop upload package
+        run: |
+          . .venv/bin/activate
+          python .github/scripts/prepare_steam_workshop_upload.py \
+            --visibility "${{ inputs.visibility }}" \
+            --changenote "${{ inputs.changenote }}"
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: steam-workshop-upload
+          path: dist/steam-workshop
+
+  publish:
+    name: Publish to Steam Workshop
+    if: ${{ inputs.dry_run == false && github.ref == 'refs/heads/main' }}
+    needs: package
+    runs-on: [self-hosted, Linux, X64, steam-workshop]
+    environment: steam-workshop
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install generator dependencies
+        run: |
+          python3 -m venv .venv
+          . .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install pillow
+
+      - name: Regenerate content files
+        run: |
+          . .venv/bin/activate
+          python generate_xml.py \
+            --death-palette "${{ inputs.death_palette }}" \
+            --death-resize "${{ inputs.death_resize }}"
+
+      - name: Verify generated files are committed
+        run: |
+          git diff --exit-code -- \
+            content/items.xml \
+            content/itempools.xml \
+            content/entities2.xml \
+            content/gfx/death_items.anm2 \
+            content/gfx/death_items.png
+
+      - name: Prepare Steam Workshop upload package
+        run: |
+          . .venv/bin/activate
+          python .github/scripts/prepare_steam_workshop_upload.py \
+            --visibility "${{ inputs.visibility }}" \
+            --changenote "${{ inputs.changenote }}"
+
+      - name: Publish workshop item
+        env:
+          SECRET_STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
+          SECRET_STEAM_PASSWORD: ${{ secrets.STEAM_PASSWORD }}
+        run: |
+          if [ -r /runner-secrets/steam.env ]; then
+            set -a
+            . /runner-secrets/steam.env
+            set +a
+          fi
+
+          steam_username="${SECRET_STEAM_USERNAME:-${STEAM_USERNAME:-}}"
+          steam_password="${SECRET_STEAM_PASSWORD:-${STEAM_PASSWORD:-}}"
+          steamcmd_path="${STEAMCMD_PATH:-/opt/steamcmd/linux64/steamcmd}"
+
+          if [ -z "${steam_username}" ]; then
+            echo "::error::Missing STEAM_USERNAME. Set it in /runner-secrets/steam.env on the self-hosted runner or repository secrets."
+            exit 1
+          fi
+
+          if [ ! -x "${steamcmd_path}" ]; then
+            echo "::error::steamcmd not found or not executable: ${steamcmd_path}"
+            exit 1
+          fi
+
+          export CPU_MHZ="${CPU_MHZ:-3200}"
+          export LD_LIBRARY_PATH="/opt/steamcmd/linux64:/opt/steamcmd/package:${LD_LIBRARY_PATH:-}"
+
+          login_args=(+login "${steam_username}")
+          if [ "${STEAM_USE_PASSWORD_LOGIN:-false}" = "true" ]; then
+            if [ -z "${steam_password}" ]; then
+              echo "::error::STEAM_USE_PASSWORD_LOGIN=true requires STEAM_PASSWORD."
+              exit 1
+            fi
+            login_args=(+login "${steam_username}" "${steam_password}")
+          fi
+
+          timeout 300s "${steamcmd_path}" \
+            "${login_args[@]}" \
+            +workshop_build_item "${GITHUB_WORKSPACE}/dist/steam-workshop/workshop_item.vdf" \
+            +quit
