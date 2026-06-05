@@ -69,15 +69,11 @@ def prepare_content(repo_root, output_dir, directory_name):
     return content_dir
 
 
-def escape_vdf(value):
-    return (
-        str(value)
-        .replace("\\", "\\\\")
-        .replace('"', '\\"')
-        .replace("\r\n", "\\n")
-        .replace("\n", "\\n")
-        .replace("\t", "\\t")
-    )
+def escape_vdf(value, preserve_newlines=False):
+    text = str(value).replace("\\", "\\\\").replace('"', '\\"').replace("\t", "\\t")
+    if preserve_newlines:
+        return text.replace("\r\n", "\n").replace("\r", "\n")
+    return text.replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
 
 
 def normalize_changenote(value):
@@ -100,8 +96,9 @@ def write_vdf(output_dir, metadata, content_dir, preview_file, visibility, chang
     }
 
     lines = ['"workshopitem"', "{"]
+    multiline_keys = {"description", "changenote"}
     for key, value in fields.items():
-        lines.append(f'\t"{key}" "{escape_vdf(value)}"')
+        lines.append(f'\t"{key}" "{escape_vdf(value, preserve_newlines=key in multiline_keys)}"')
     lines.append("}")
     vdf_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return vdf_path
