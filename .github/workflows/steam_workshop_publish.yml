@@ -4,7 +4,7 @@ name: Steam Workshop Publish
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Only build the upload package without publishing"
+        description: "Only stage the upload folder without publishing"
         required: true
         type: boolean
         default: true
