@@ -91,8 +91,8 @@ Core subsystem map:
 - For the `Steam Workshop Publish` GitHub Actions workflow, paste release notes into the manual `changenote` input. Use literal `\n` for line breaks. Leaving it empty uploads only `Version <resolved metadata.xml version>`.
 - The Steam publish workflow should not generate or build mod content. When run on `main`, it stages a copy of committed runtime files on the self-hosted runner and uploads it through SteamCMD. Configure generated asset behavior in `generate_xml.py` defaults and commit generated files before publishing.
 - SteamCMD `workshop_build_item` must run once per publish with a single English base VDF. Do not upload separate `english` and `koreana` VDF files; SteamCMD can overwrite the default title/description with the last VDF instead of creating localized fields.
-- Workshop title and description localization is updated after SteamCMD upload through `.github/scripts/update_steam_workshop_localizations.py`, which requires `STEAM_WEB_API_KEY` from `/runner-secrets/steam.env` or repository secrets.
-- Workshop title and description localization is generated from `.github/workshop/descriptions/english.txt` and `.github/workshop/descriptions/koreana.txt`. Do not put raw external URLs in Workshop descriptions; use Steam-native Required Items, guides, or discussions for links to avoid Steam automated content review holds.
+- Workshop title and description localization must be maintained in the Steam Workshop web UI. General Steam Web API keys return `401 Unauthorized` for Workshop localization updates on this item, and this repo does not have Isaac publisher Web API authority.
+- Workshop title and description source drafts live in `.github/workshop/descriptions/english.txt` and `.github/workshop/descriptions/koreana.txt`. Do not put raw external URLs in Workshop descriptions; use Steam-native Required Items, guides, or discussions for links to avoid Steam automated content review holds.
 
 ## Verification
 
