@@ -1,4 +1,5 @@
 log.txt
+disable.it
 dist/
 .tmp/
 __pycache__/

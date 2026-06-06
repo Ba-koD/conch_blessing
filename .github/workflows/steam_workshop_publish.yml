@@ -17,7 +17,7 @@ name: Steam Workshop Publish
         required: false
         type: string
       version:
-        description: "Optional target version. Empty auto-bumps only when metadata.xml matches current Steam version."
+        description: "Optional target version. Empty uses metadata.xml after validating it is not lower than current Steam version."
         required: false
         type: string
 
@@ -171,3 +171,23 @@ jobs:
           done < "${GITHUB_WORKSPACE}/dist/steam-workshop/workshop_vdfs.txt"
 
           timeout 300s "${steamcmd_path}" "${steamcmd_args[@]}" +quit
+
+      - name: Update workshop localizations
+        env:
+          SECRET_STEAM_WEB_API_KEY: ${{ secrets.STEAM_WEB_API_KEY }}
+        run: |
+          if [ -r /runner-secrets/steam.env ]; then
+            set -a
+            . /runner-secrets/steam.env
+            set +a
+          fi
+
+          steam_web_api_key="${SECRET_STEAM_WEB_API_KEY:-${STEAM_WEB_API_KEY:-${STEAM_PUBLISHER_WEB_API_KEY:-}}}"
+          if [ -z "${steam_web_api_key}" ]; then
+            echo "::error::Missing STEAM_WEB_API_KEY. Set it in /runner-secrets/steam.env or repository secrets."
+            exit 1
+          fi
+
+          STEAM_WEB_API_KEY="${steam_web_api_key}" \
+            python3 .github/scripts/update_steam_workshop_localizations.py \
+              --languages english,koreana

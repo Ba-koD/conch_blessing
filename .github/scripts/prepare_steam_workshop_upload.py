@@ -46,7 +46,7 @@ def parse_args():
     parser.add_argument(
         "--version",
         default="",
-        help="Optional target release version. Empty auto-resolves from metadata.xml and --steam-version.",
+        help="Optional target release version. Empty uses metadata.xml after validating --steam-version.",
     )
     parser.add_argument(
         "--steam-version",
@@ -126,15 +126,6 @@ def parse_version(value):
     return tuple(int(part) for part in value.split("."))
 
 
-def format_version(version):
-    return ".".join(str(part) for part in version)
-
-
-def bump_patch(version):
-    major, minor, patch = version
-    return major, minor, patch + 1
-
-
 def write_metadata_version(repo_root, current_version, release_version):
     metadata_path = repo_root / "metadata.xml"
     original = metadata_path.read_text(encoding="utf-8")
@@ -173,7 +164,7 @@ def apply_release_version(repo_root, metadata, requested_version, steam_version)
             raise ValueError(
                 f"metadata.xml version {current_version} is lower than Steam Workshop version {steam_version}."
             )
-        release_version = format_version(bump_patch(current)) if current == steam else current_version
+        release_version = current_version
 
     if release_version != current_version:
         write_metadata_version(repo_root, current_version, release_version)
@@ -197,63 +188,35 @@ def write_vdf(vdf_path, fields):
     return vdf_path
 
 
-def build_vdf_fields(metadata, language, title, description, changenote):
+def build_upload_vdf_fields(metadata, repo_root, content_dir, preview_file, visibility, changenote):
+    localization = WORKSHOP_LOCALIZATIONS["english"]
     note = normalize_changenote(changenote) or f"Version {metadata['version']}".strip()
     return {
-        "appid": APP_ID,
-        "publishedfileid": metadata["publishedfileid"],
-        "language": language,
-        "title": title,
-        "description": description,
-        "changenote": note,
-    }
-
-
-def write_vdfs(output_dir, repo_root, metadata, content_dir, preview_file, visibility, changenote, languages):
-    vdf_paths = []
-    primary_language = languages[0]
-
-    for language in languages:
-        localization = WORKSHOP_LOCALIZATIONS[language]
-        fields = build_vdf_fields(
-            metadata,
-            language,
-            localization["title"],
-            read_workshop_description(repo_root, language),
-            changenote,
-        )
-
-        if language == primary_language:
-            fields = {
-                "appid": APP_ID,
-                "publishedfileid": metadata["publishedfileid"],
-                "contentfolder": str(content_dir.resolve()),
-                "previewfile": str(preview_file.resolve()),
-                "visibility": VISIBILITY[visibility],
-                **{key: value for key, value in fields.items() if key not in {"appid", "publishedfileid"}},
-            }
-
-        vdf_paths.append(write_vdf(output_dir / f"workshop_item_{language}.vdf", fields))
-
-    manifest_path = output_dir / "workshop_vdfs.txt"
-    manifest_path.write_text("\n".join(str(path.name) for path in vdf_paths) + "\n", encoding="utf-8")
-    return vdf_paths, manifest_path
-
-
-def write_legacy_vdf(output_dir, metadata, content_dir, preview_file, visibility, changenote):
-    note = normalize_changenote(changenote) or f"Version {metadata['version']}".strip()
-    fields = {
         "appid": APP_ID,
         "publishedfileid": metadata["publishedfileid"],
         "contentfolder": str(content_dir.resolve()),
         "previewfile": str(preview_file.resolve()),
         "visibility": VISIBILITY[visibility],
-        "title": metadata["title"],
-        "description": metadata["description"],
+        "title": localization["title"],
+        "description": read_workshop_description(repo_root, "english"),
         "changenote": note,
     }
 
-    return write_vdf(output_dir / "workshop_item.vdf", fields)
+
+def write_vdfs(output_dir, repo_root, metadata, content_dir, preview_file, visibility, changenote, languages):
+    fields = build_upload_vdf_fields(
+        metadata,
+        repo_root,
+        content_dir,
+        preview_file,
+        visibility,
+        changenote,
+    )
+    vdf_paths = [write_vdf(output_dir / "workshop_item.vdf", fields)]
+
+    manifest_path = output_dir / "workshop_vdfs.txt"
+    manifest_path.write_text("\n".join(str(path.name) for path in vdf_paths) + "\n", encoding="utf-8")
+    return vdf_paths, manifest_path
 
 
 def main():
@@ -269,7 +232,6 @@ def main():
     if not preview_file.exists():
         raise FileNotFoundError("Preview file not found: Thumbnail.png")
 
-    write_legacy_vdf(output_dir, metadata, content_dir, preview_file, args.visibility, args.changenote)
     vdf_paths, manifest_path = write_vdfs(
         output_dir,
         repo_root,
@@ -281,6 +243,8 @@ def main():
         languages,
     )
 
+    print(f"Resolved release version: {metadata['version']}")
+    print(f"Steam Workshop version before upload: {args.steam_version}")
     print(f"Prepared Steam Workshop content: {content_dir}")
     for vdf_path in vdf_paths:
         print(f"Prepared Steam Workshop VDF: {vdf_path}")
