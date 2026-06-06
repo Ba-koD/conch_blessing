@@ -1,2 +1,6 @@
 log.txt
+disable.it
 dist/
+.tmp/
+__pycache__/
+*.pyc

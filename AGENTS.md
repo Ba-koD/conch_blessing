@@ -76,13 +76,23 @@ Core subsystem map:
 - Follow `https://git.intp.me/` for commit messages: `Type: English title` on the first line, one blank line, then Korean `- ` bullet body lines.
 - Commit titles must use one of the allowed capitalized types from the guideline, keep the English title near 25-30 characters, and omit a trailing period.
 - Commit body bullets must explain what and why in Korean, start with `- `, avoid blank lines between bullets, and end with a noun-style phrase such as `추가`, `수정`, `제거`, `전환`, `적용`, or `정리`.
-- When merging `dev` into `main`, check `metadata.xml` before the merge. If the version on `dev` is not already greater than `main`, increment only the patch version, for example `1.0.60` to `1.0.61`, commit that bump on `dev`, then merge to `main`.
+- Before any `dev` to `main` merge, push, or release-version decision, run `git fetch origin` and compare against `origin/main` and `origin/dev`. Do not decide from stale local branch state.
+- When merging `dev` into `main`, compare `metadata.xml` versions on fetched `origin/main`, `origin/dev`, and the branch being merged. If the incoming release package is not already greater than `origin/main`, increment only the patch version, for example `1.0.60` to `1.0.61`, commit that bump on `dev`, then merge to `main`.
+- The Steam publish workflow has an optional manual `version` input. Empty `version` downloads the current Steam Workshop item, compares its `metadata.xml` version with the committed version, and uploads the committed version without auto-bumping.
+- A manual workflow `version` must be greater than both committed `metadata.xml` and the downloaded Steam Workshop version. Equal or lower input versions must fail.
+- The Steam publish workflow must never change repository version after Steam upload. Version reconciliation happens before staging and uploading the Workshop package.
+- If committed `metadata.xml` is greater than the downloaded Steam Workshop version and `version` is empty, upload the committed version without another bump.
+- If committed `metadata.xml` is lower than the downloaded Steam Workshop version, fail and reconcile the branch before publishing.
+- If Steam Workshop shows a newer version than the local branch, stop and fetch/reconcile the remote branch first instead of bumping locally.
 - Do not bump `metadata.xml` during ordinary dev commits unless preparing a `dev` to `main` release merge or the user explicitly requests a release version change.
 - Steam Workshop changenotes should match the existing workshop style: one or more English typed summary lines such as `Fix: Fix EID Bug`, then a blank line, then short Korean summary lines without `-` bullets.
 - Keep Steam changenotes concise and player-facing. Mention generated assets, upload automation, or tooling only when those changes affect the published mod package or release process.
-- For the `Steam Workshop Publish` GitHub Actions workflow, paste release notes into the manual `changenote` input. Use literal `\n` for line breaks. Leaving it empty uploads only `Version <metadata.xml version>`.
+- When asked for a changelog draft, either return the text directly in chat or create it under the ignored `.tmp/` directory. Do not leave changelog drafts as tracked files unless the user explicitly requests that.
+- For the `Steam Workshop Publish` GitHub Actions workflow, paste release notes into the manual `changenote` input. Use literal `\n` for line breaks. Leaving it empty uploads only `Version <resolved metadata.xml version>`.
 - The Steam publish workflow should not generate or build mod content. When run on `main`, it stages a copy of committed runtime files on the self-hosted runner and uploads it through SteamCMD. Configure generated asset behavior in `generate_xml.py` defaults and commit generated files before publishing.
-- Workshop title and description localization is generated from `.github/workshop/descriptions/english.txt` and `.github/workshop/descriptions/koreana.txt`. Do not put raw external URLs in Workshop descriptions; use Steam-native Required Items, guides, or discussions for links to avoid Steam automated content review holds.
+- SteamCMD `workshop_build_item` must run once per publish with a single English base VDF. Do not upload separate `english` and `koreana` VDF files; SteamCMD can overwrite the default title/description with the last VDF instead of creating localized fields.
+- Workshop title and description localization must be maintained in the Steam Workshop web UI. General Steam Web API keys return `401 Unauthorized` for Workshop localization updates on this item, and this repo does not have Isaac publisher Web API authority.
+- Workshop title and description source drafts live in `.github/workshop/descriptions/english.txt` and `.github/workshop/descriptions/koreana.txt`. Do not put raw external URLs in Workshop descriptions; use Steam-native Required Items, guides, or discussions for links to avoid Steam automated content review holds.
 
 ## Verification
 
