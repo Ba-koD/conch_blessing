@@ -1,2 +1,5 @@
 log.txt
 dist/
+.tmp/
+__pycache__/
+*.pyc
