@@ -16,9 +16,13 @@ name: Steam Workshop Publish
         description: "Steam Workshop changenote text. Use \\n for line breaks. Empty publishes Version from metadata.xml."
         required: false
         type: string
+      version:
+        description: "Optional target version. Empty auto-bumps only when metadata.xml matches current Steam version."
+        required: false
+        type: string
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: steam-workshop-publish
@@ -38,11 +42,90 @@ jobs:
       - name: Verify Python
         run: python3 --version
 
+      - name: Read current Steam Workshop version
+        id: steam-version
+        env:
+          SECRET_STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
+          SECRET_STEAM_PASSWORD: ${{ secrets.STEAM_PASSWORD }}
+        run: |
+          if [ -r /runner-secrets/steam.env ]; then
+            set -a
+            . /runner-secrets/steam.env
+            set +a
+          fi
+
+          steam_username="${SECRET_STEAM_USERNAME:-${STEAM_USERNAME:-}}"
+          steam_password="${SECRET_STEAM_PASSWORD:-${STEAM_PASSWORD:-}}"
+          steamcmd_path="${STEAMCMD_PATH:-/opt/steamcmd/linux64/steamcmd}"
+
+          if [ -z "${steam_username}" ]; then
+            echo "::error::Missing STEAM_USERNAME. Set it in /runner-secrets/steam.env on the self-hosted runner or repository secrets."
+            exit 1
+          fi
+
+          if [ ! -x "${steamcmd_path}" ]; then
+            echo "::error::steamcmd not found or not executable: ${steamcmd_path}"
+            exit 1
+          fi
+
+          export CPU_MHZ="${CPU_MHZ:-3200}"
+          export LD_LIBRARY_PATH="/opt/steamcmd/linux64:/opt/steamcmd/package:${LD_LIBRARY_PATH:-}"
+
+          login_args=(+login "${steam_username}")
+          if [ "${STEAM_USE_PASSWORD_LOGIN:-false}" = "true" ]; then
+            if [ -z "${steam_password}" ]; then
+              echo "::error::STEAM_USE_PASSWORD_LOGIN=true requires STEAM_PASSWORD."
+              exit 1
+            fi
+            login_args=(+login "${steam_username}" "${steam_password}")
+          fi
+
+          download_dir="${RUNNER_TEMP}/steam-workshop-current"
+          rm -rf "${download_dir}"
+          mkdir -p "${download_dir}"
+          timeout 300s "${steamcmd_path}" \
+            +force_install_dir "${download_dir}" \
+            "${login_args[@]}" \
+            +workshop_download_item 250900 3545334858 validate \
+            +quit
+
+          metadata_path="$(find "${download_dir}" -path "*/metadata.xml" -print | sort | head -n 1)"
+          if [ -z "${metadata_path}" ]; then
+            echo "::error::Could not find metadata.xml in downloaded Steam Workshop item."
+            exit 1
+          fi
+
+          version="$(python3 -c 'import sys, xml.etree.ElementTree as ET; print((ET.parse(sys.argv[1]).getroot().findtext("version") or "").strip())' "${metadata_path}")"
+          if [ -z "${version}" ]; then
+            echo "::error::Could not read version from ${metadata_path}."
+            exit 1
+          fi
+
+          echo "Steam Workshop version: ${version}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
       - name: Stage Steam Workshop upload folder
         run: |
           python3 .github/scripts/prepare_steam_workshop_upload.py \
             --visibility "${{ inputs.visibility }}" \
-            --changenote "${{ inputs.changenote }}"
+            --changenote "${{ inputs.changenote }}" \
+            --version "${{ inputs.version }}" \
+            --steam-version "${{ steps.steam-version.outputs.version }}"
+
+      - name: Commit resolved release version
+        run: |
+          if git diff --quiet -- metadata.xml; then
+            echo "metadata.xml version unchanged."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add metadata.xml
+          git commit \
+            -m "Chore: Update Workshop version tag" \
+            -m "- Steam Workshop 업로드 대상 버전 metadata.xml 반영"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
 
       - name: Publish workshop item
         env:

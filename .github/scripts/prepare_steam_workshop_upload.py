@@ -2,6 +2,7 @@
 """Prepare a Steam Workshop upload folder and VDF for SteamCMD."""
 
 import argparse
+import re
 import shutil
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -41,6 +42,16 @@ def parse_args():
         "--changenote",
         default="",
         help=r"Steam Workshop changenote. Use \n for line breaks.",
+    )
+    parser.add_argument(
+        "--version",
+        default="",
+        help="Optional target release version. Empty auto-resolves from metadata.xml and --steam-version.",
+    )
+    parser.add_argument(
+        "--steam-version",
+        default="",
+        help="Current Steam Workshop version read from the published package.",
     )
     return parser.parse_args()
 
@@ -107,6 +118,68 @@ def escape_vdf(value, preserve_newlines=False):
 
 def normalize_changenote(value):
     return value.replace("\\r\\n", "\n").replace("\\n", "\n").strip()
+
+
+def parse_version(value):
+    if not re.fullmatch(r"\d+\.\d+\.\d+", value):
+        raise ValueError(f"Invalid version: {value!r}. Expected MAJOR.MINOR.PATCH.")
+    return tuple(int(part) for part in value.split("."))
+
+
+def format_version(version):
+    return ".".join(str(part) for part in version)
+
+
+def bump_patch(version):
+    major, minor, patch = version
+    return major, minor, patch + 1
+
+
+def write_metadata_version(repo_root, current_version, release_version):
+    metadata_path = repo_root / "metadata.xml"
+    original = metadata_path.read_text(encoding="utf-8")
+    old = f"<version>{current_version}</version>"
+    new = f"<version>{release_version}</version>"
+
+    if old not in original:
+        raise ValueError(f"Could not find current metadata version tag: {old}")
+
+    metadata_path.write_text(original.replace(old, new, 1), encoding="utf-8")
+
+
+def apply_release_version(repo_root, metadata, requested_version, steam_version):
+    requested_version = requested_version.strip()
+    steam_version = steam_version.strip()
+    if not steam_version:
+        raise ValueError("Steam Workshop version is required for release version resolution.")
+
+    current_version = metadata["version"].strip()
+    current = parse_version(current_version)
+    steam = parse_version(steam_version)
+
+    if requested_version:
+        requested = parse_version(requested_version)
+        if requested <= current:
+            raise ValueError(
+                f"Requested release version {requested_version} must be greater than metadata.xml version {current_version}."
+            )
+        if requested <= steam:
+            raise ValueError(
+                f"Requested release version {requested_version} must be greater than Steam Workshop version {steam_version}."
+            )
+        release_version = requested_version
+    else:
+        if current < steam:
+            raise ValueError(
+                f"metadata.xml version {current_version} is lower than Steam Workshop version {steam_version}."
+            )
+        release_version = format_version(bump_patch(current)) if current == steam else current_version
+
+    if release_version != current_version:
+        write_metadata_version(repo_root, current_version, release_version)
+        metadata = read_metadata(repo_root)
+
+    return metadata
 
 
 def read_workshop_description(repo_root, language):
@@ -190,7 +263,7 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     languages = parse_languages(args.languages)
 
-    metadata = read_metadata(repo_root)
+    metadata = apply_release_version(repo_root, read_metadata(repo_root), args.version, args.steam_version)
     content_dir = prepare_content(repo_root, output_dir, metadata["directory"])
     preview_file = content_dir / "Thumbnail.png"
     if not preview_file.exists():
