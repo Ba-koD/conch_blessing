@@ -485,6 +485,9 @@ local function handleMagicConchResult(result)
             
             -- Enqueue staged job to ensure BEFORE completes before AFTER
             if pickup then
+                if ConchBlessing.UpgradeHighlight and ConchBlessing.UpgradeHighlight.StopForPickup then
+                    ConchBlessing.UpgradeHighlight.StopForPickup(pickup)
+                end
                 _enqueueUpgradeJob(pickup, upgradeData, {
                     price = originalPrice,
                     options = originalOptions,

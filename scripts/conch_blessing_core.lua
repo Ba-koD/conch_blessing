@@ -655,6 +655,13 @@ if not upgradeSuccess then
     ConchBlessing.printError("Upgrade system load failed: " .. tostring(upgradeErr))
 end
 
+local highlightSuccess, highlightErr = pcall(function()
+    require("scripts/conch_blessing_highlight")
+end)
+if not highlightSuccess then
+    ConchBlessing.printError("Upgrade highlight system load failed: " .. tostring(highlightErr))
+end
+
 -- Initialize stats system after everything is loaded
 if ConchBlessing.stats and ConchBlessing.stats.multiplierDisplay then
     ConchBlessing.stats.multiplierDisplay:Initialize()
