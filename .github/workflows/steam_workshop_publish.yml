@@ -80,10 +80,43 @@ jobs:
             login_args=(+login "${steam_username}" "${steam_password}")
           fi
 
+          run_steamcmd_with_retry() {
+            local status=0
+
+            set +e
+            timeout 300s "${steamcmd_path}" "$@"
+            status=$?
+            set -e
+
+            if [ "${status}" -eq 42 ]; then
+              echo "::warning::steamcmd exited with 42 after a self-update; retrying once."
+              set +e
+              timeout 300s "${steamcmd_path}" "$@"
+              status=$?
+              set -e
+            fi
+
+            if [ "${status}" -ne 0 ]; then
+              echo "::group::SteamCMD diagnostics"
+              for log_file in \
+                "${HOME}/Steam/logs/stderr.txt" \
+                "${HOME}/Steam/logs/bootstrap_log.txt" \
+                "${HOME}/Steam/logs/content_log.txt" \
+                "${HOME}/Steam/logs/workshop_log.txt"; do
+                if [ -f "${log_file}" ]; then
+                  echo "==> ${log_file}"
+                  tail -n 200 "${log_file}" || true
+                fi
+              done
+              echo "::endgroup::"
+              return "${status}"
+            fi
+          }
+
           download_dir="${RUNNER_TEMP}/steam-workshop-current"
           rm -rf "${download_dir}"
           mkdir -p "${download_dir}"
-          timeout 300s "${steamcmd_path}" \
+          run_steamcmd_with_retry \
             +force_install_dir "${download_dir}" \
             "${login_args[@]}" \
             +workshop_download_item 250900 3545334858 validate \
@@ -164,10 +197,43 @@ jobs:
             login_args=(+login "${steam_username}" "${steam_password}")
           fi
 
+          run_steamcmd_with_retry() {
+            local status=0
+
+            set +e
+            timeout 300s "${steamcmd_path}" "$@"
+            status=$?
+            set -e
+
+            if [ "${status}" -eq 42 ]; then
+              echo "::warning::steamcmd exited with 42 after a self-update; retrying once."
+              set +e
+              timeout 300s "${steamcmd_path}" "$@"
+              status=$?
+              set -e
+            fi
+
+            if [ "${status}" -ne 0 ]; then
+              echo "::group::SteamCMD diagnostics"
+              for log_file in \
+                "${HOME}/Steam/logs/stderr.txt" \
+                "${HOME}/Steam/logs/bootstrap_log.txt" \
+                "${HOME}/Steam/logs/content_log.txt" \
+                "${HOME}/Steam/logs/workshop_log.txt"; do
+                if [ -f "${log_file}" ]; then
+                  echo "==> ${log_file}"
+                  tail -n 200 "${log_file}" || true
+                fi
+              done
+              echo "::endgroup::"
+              return "${status}"
+            fi
+          }
+
           steamcmd_args=("${login_args[@]}")
           while IFS= read -r vdf_name; do
             [ -n "${vdf_name}" ] || continue
             steamcmd_args+=(+workshop_build_item "${GITHUB_WORKSPACE}/dist/steam-workshop/${vdf_name}")
           done < "${GITHUB_WORKSPACE}/dist/steam-workshop/workshop_vdfs.txt"
 
-          timeout 300s "${steamcmd_path}" "${steamcmd_args[@]}" +quit
+          run_steamcmd_with_retry "${steamcmd_args[@]}" +quit

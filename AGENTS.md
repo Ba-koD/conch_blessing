@@ -32,6 +32,7 @@ Core subsystem map:
 
 - Keep Lua changes small and local to the item or subsystem being modified.
 - Prefer existing patterns: add item definitions to `ConchBlessing.ItemData`, then register behavior through the `callbacks` table.
+- Keep `ConchBlessing.ItemData` grouped in this order: collectible items (`passive` and `active`) first, familiar items second, trinkets last. Append new items to the end of their group because generated `content/items.xml` IDs follow this registry order.
 - Keep one global table per item namespace, for example `ConchBlessing.dragon` or `ConchBlessing.chronus`.
 - Use `local` helpers and constants inside item files. Do not add globals unless they are part of the existing `ConchBlessing.*` API.
 - Use `ConchBlessing.printDebug` for optional logs and `ConchBlessing.printError` for real failures. Avoid unconditional `Isaac.ConsoleOutput` in normal paths.
@@ -65,7 +66,7 @@ Core subsystem map:
 
 ## Generated Content
 
-- After adding, removing, renaming, or changing metadata for items in `scripts/conch_blessing_items.lua`, run `python3 generate_xml.py` in a Python environment with Pillow to update `content/items.xml`, `content/itempools.xml`, `content/entities2.xml`, `content/gfx/death_items.anm2`, and `content/gfx/death_items.png`.
+- After creating an item or adding, removing, renaming, or changing metadata for items in `scripts/conch_blessing_items.lua`, run `uv run generate_xml` once to update `content/items.xml`, `content/itempools.xml`, `content/entities2.xml`, `content/gfx/death_items.anm2`, and `content/gfx/death_items.png`. If `uv` is unavailable, use `python3 generate_xml.py` in a Python environment with Pillow.
 - After changing collectible or familiar item sprites under `resources/gfx/items/collectibles`, run `python3 generate_xml.py` in a Python environment with Pillow so generated death item spritesheets stay in sync.
 - `content/gfx/death_items.png` generation requires Pillow. By default it preserves resized source icon colors. Use `--death-palette vanilla` to generate the vanilla death-screen color style (`RGB(54, 47, 45)` with alpha levels).
 - Death item resizing defaults to trimming transparent source padding and fitting into the 16x16 death frame. Use `--death-resize raw_resize` for the original behavior: resize the full source image directly to 16x16 without trimming.
