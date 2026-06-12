@@ -6,6 +6,7 @@ ConchBlessing.UpgradeHighlight = UpgradeHighlight
 local FLAG_ORDER = { "positive", "neutral", "negative" }
 local ROOM_SCAN_INTERVAL = 15
 local ITEM_PULSE_PERIOD = 34
+local ITEM_PULSE_ATTACK_FRAMES = 6
 local ITEM_PULSE_DECAY_FRAMES = 30
 local ITEM_PULSE_CYCLES = 5
 local ITEM_PULSE_FRAMES = ITEM_PULSE_PERIOD * ITEM_PULSE_CYCLES
@@ -134,6 +135,26 @@ local function getDecayPulse(frame, period, decayFrames)
     return 0.5 + 0.5 * math.cos(decayProgress * math.pi)
 end
 
+local function getItemPulseIntensity(elapsed)
+    local cycleFrame = elapsed % ITEM_PULSE_PERIOD
+    if cycleFrame >= ITEM_PULSE_DECAY_FRAMES then
+        return 0
+    end
+
+    if cycleFrame < ITEM_PULSE_ATTACK_FRAMES then
+        local attackProgress = cycleFrame / ITEM_PULSE_ATTACK_FRAMES
+        return 0.5 - (0.5 * math.cos(attackProgress * math.pi))
+    end
+
+    local decayFrames = ITEM_PULSE_DECAY_FRAMES - ITEM_PULSE_ATTACK_FRAMES
+    if decayFrames <= 0 then
+        return 0
+    end
+
+    local decayProgress = (cycleFrame - ITEM_PULSE_ATTACK_FRAMES) / decayFrames
+    return 0.5 + (0.5 * math.cos(decayProgress * math.pi))
+end
+
 local function getModeTargetColor(mode, targets)
     return (targets or ITEM_TARGET_COLORS)[mode]
         or (targets or ITEM_TARGET_COLORS).multiple
@@ -208,6 +229,30 @@ local function getPickupState(pickup)
     return data.__conchBlessingUpgradeHighlight
 end
 
+local function hasFinishedPulse(state, originKey)
+    if not state or not originKey then
+        return false
+    end
+    if state.doneOriginKey == originKey then
+        return true
+    end
+    return state.doneOriginKeys and state.doneOriginKeys[originKey] == true
+end
+
+local function markPulseFinished(pickup, originKey)
+    if not pickup or not originKey then
+        return
+    end
+
+    local state = getPickupState(pickup)
+    state.doneOriginKeys = state.doneOriginKeys or {}
+    state.doneOriginKeys[originKey] = true
+    state.doneOriginKey = originKey
+    if state.activeOriginKey == originKey then
+        state.activeOriginKey = nil
+    end
+end
+
 local function hasActivePulseForPickup(pickup)
     local key = getPickupHash(pickup)
     return UpgradeHighlight._activePickups and UpgradeHighlight._activePickups[key] ~= nil
@@ -219,7 +264,7 @@ local function startPickupPulse(pickup, info, frame)
     end
 
     local state = getPickupState(pickup)
-    if state.doneOriginKey == info.originKey then
+    if hasFinishedPulse(state, info.originKey) then
         return
     end
 
@@ -256,29 +301,18 @@ local function applyPickupPulse(pulse, frame)
     end
     if getPickupOriginKey(pickup) ~= pulse.originKey then
         resetPickupColor(pickup, pulse.baseColor)
+        markPulseFinished(pickup, pulse.originKey)
         return true
     end
 
     local elapsed = frame - pulse.startFrame
     if elapsed >= ITEM_PULSE_FRAMES then
         resetPickupColor(pickup, pulse.baseColor)
-        local state = getPickupState(pickup)
-        state.activeOriginKey = nil
-        state.doneOriginKey = pulse.originKey
+        markPulseFinished(pickup, pulse.originKey)
         return true
     end
 
-    local cycleFrame = elapsed % ITEM_PULSE_PERIOD
-    local decayProgress = cycleFrame / ITEM_PULSE_DECAY_FRAMES
-    if decayProgress > 1 then
-        decayProgress = 1
-    end
-
-    local intensity = 0
-    if cycleFrame < ITEM_PULSE_DECAY_FRAMES then
-        intensity = 0.5 + 0.5 * math.cos(decayProgress * math.pi)
-    end
-
+    local intensity = getItemPulseIntensity(elapsed)
     local base = pulse.baseColor or BASE_COLOR
     local target = getModeTargetColor(pulse.mode, ITEM_TARGET_COLORS)
     local color = lerpColorTable(base, target, intensity)

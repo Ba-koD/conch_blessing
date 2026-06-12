@@ -1,4 +1,4 @@
-Conch's Blessing
+[RGON] Conch's Blessing
 
 Adds a polished Magic Conch upgrade system to The Binding of Isaac. Transform items with bespoke visuals, language-aware HUD/EID support, and flexible spawn/timing controls.
 

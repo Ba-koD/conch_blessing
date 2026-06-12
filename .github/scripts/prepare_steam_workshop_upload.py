@@ -13,11 +13,11 @@ INCLUDE_FILES = ("main.lua", "metadata.xml", "Thumbnail.png")
 DEFAULT_LANGUAGES = ("english", "koreana")
 WORKSHOP_LOCALIZATIONS = {
     "english": {
-        "title": "Conch's Blessing",
+        "title": "[RGON] Conch's Blessing",
         "description": Path(".github/workshop/descriptions/english.txt"),
     },
     "koreana": {
-        "title": "소라고둥의 축복 (Conch's Blessing)",
+        "title": "[RGON] 소라고둥의 축복 (Conch's Blessing)",
         "description": Path(".github/workshop/descriptions/koreana.txt"),
     },
 }
@@ -65,7 +65,7 @@ def read_metadata(repo_root):
         return value if value is not None else default
 
     return {
-        "title": text("name", "Conch's Blessing"),
+        "title": text("name", "[RGON] Conch's Blessing"),
         "directory": text("directory", "conch_blessing"),
         "publishedfileid": text("id", "0"),
         "description": text("description", ""),
