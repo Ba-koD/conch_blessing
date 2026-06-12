@@ -923,6 +923,7 @@ ConchBlessing.ItemData = {
         flag = "neutral",
         script = "scripts/items/collectibles/appraisal_certificate",
         callbacks = {
+            preUseItem = "appraisal.onPreUseItem",
             use = "appraisal.onUseItem",
             postPickupInit = "appraisal.onPostPickupInit",
             prePickupCollision = "appraisal.onPrePickupCollision",
@@ -1361,6 +1362,122 @@ ConchBlessing.ItemData = {
         }
     },
 
+    SEVERED_OATH = {
+        type = "active",
+        id = Isaac.GetItemIdByName("Severed Oath"),
+        name = {
+            kr = "적사단지",
+            en = "Severed Oath"
+        },
+        description = {
+            kr = "이어진 운명을 끊다",
+            en = "Cut the thread of fate"
+        },
+        eid = {
+            kr = {
+                "사용 시 방 안의 순환 아이템 받침대를 각각의 독립된 아이템으로 분리합니다.",
+                "#원래 선택지로 묶여 있던 받침대들은 같은 순환 순번끼리 다시 선택지로 묶입니다.",
+                "#예: 1/2와 3/4가 선택지라면 1은 3과, 2는 4와 묶입니다.",
+                "#{{Warning}} REPENTOGON의 순환 아이템 API가 필요합니다."
+            },
+            en = {
+                "On use, separates cycling item pedestals in the room into individual items.",
+                "#Works on pedestals that rotate between multiple items, such as Glitched Crown or Isaac's Birthright.",
+                "#Pedestals that were option-linked stay linked by matching cycle position.",
+                "#Example: if 1/2 and 3/4 were options, 1 links with 3 and 2 links with 4.",
+                "#{{Warning}} Requires REPENTOGON's cycling item API."
+            }
+        },
+        pool = {
+            RoomType.ROOM_TREASURE,
+            RoomType.ROOM_SECRET,
+            RoomType.ROOM_SHOP
+        },
+        quality = 3,
+        tags = "utility",
+        hidden = false,
+        shopprice = 15,
+        devilprice = 2,
+        maxcharges = 4,
+        chargetype = "normal",
+        initcharge = 0,
+        gfx = "severed_oath.png",
+        origin = { id = CollectibleType.COLLECTIBLE_MEAT_CLEAVER, type = "collectible" },
+        flag = "positive",
+        script = "scripts/items/collectibles/severed_oath",
+        callbacks = {
+            use = "severedoath.onUseItem",
+            update = "severedoath.onUpdate"
+        },
+        onBeforeChange = "severedoath.onBeforeChange",
+        onAfterChange = "severedoath.onAfterChange",
+    },
+
+    -- Familiars
+    TIME_MONEY = {
+        type = "familiar",
+        id = Isaac.GetItemIdByName("Time = Money"),
+        script = "scripts/items/familiars/time_money",
+        uniquefamiliar = true,
+        -- Entities2.xml generation config
+        -- anm2: optional override for ANM2 path under gfx/ (default: "time_money.anm2")
+        anm2 = "time_money.anm2",
+        entity = { variant = 777, collisiondamage = 0, collisionmass = 3, collisionradius = 5, friction = 1, numgridcollisionpoints = 6, shadowsize = 13, tags = "cansacrifice", customtags = "" },
+        gibs = { amount = 0, blood = 0, bone = 0, eye = 0, gut = 0, large = 0 },
+        name = {
+            kr = "시간 = 돈",
+            en = "Time = Money"
+        },
+        description = {
+            kr = "시간은 돈이다",
+            en = "Time is money"
+        },
+        eid = {
+            kr = {
+                "동전 5개를 드랍합니다.",
+                "#60초마다 현재 소지중인 동전의 5% 개수만큼 동전을 드랍합니다. (최소 1개)",
+                "#이 패밀리어가 드랍하는 동전은 5% 확률로 5원, 2% 확률로 황금 동전, 2% 확률로 행운 동전, 1% 확률로 10원으로 대체됩니다.",
+                "#행운에 따라 위 확률이 (1+0.1×운{{Luck}})배로 4배까지 증가합니다.",
+                "#피격시 드랍되는 동전의 갯수가 1개 감소합니다."
+            },
+            en = {
+                "Drops 5 coins on pickup.",
+                "#Every 60 seconds, drops coins equal to 5% of current money (minimum 1).",
+                "#Coins dropped by this familiar are replaced with nickel 5% of the time, golden coin 2% of the time, lucky coin 2% of the time, and dime 1% of the time.",
+                "#The probability of the above is increased by (1+0.1×Luck{{Luck}}) times up to 4 times.",
+                "#When taking damage, the number of coins dropped is reduced by 1."
+            }
+        },
+        pool = {
+            RoomType.ROOM_DEVIL,
+            RoomType.ROOM_SHOP,
+            RoomType.ROOM_GREED_EXIT,
+            RoomType.ROOM_SECRET
+        },
+        quality = 4,
+        tags="baby summonable offensive",
+        shopprice = 30,
+        devilprice = 2,
+        origin = { id = CollectibleType.COLLECTIBLE_SACK_OF_PENNIES, type = "collectible" },
+        flag = "positive",
+        synergies = {
+            [{ id = CollectibleType.COLLECTIBLE_BFFS, type = "collectible" }] = {
+                kr = "동전 드랍 비율이 10%로 증가합니다.",
+                en = "Drop rate increases to 10%."
+            }
+        },
+        callbacks = {
+            familiarInit = "timemoney.onFamiliarInit",
+            familiarUpdate = "timemoney.onFamiliarUpdate",
+            postFamiliarRender = "timemoney.onFamiliarRender",
+            evaluateCache = "timemoney.onEvaluateCache",
+            gameStarted = "timemoney.onGameStarted",
+            postGetCollectible = "timemoney.onPostGetCollectible",
+            postPlayerUpdate = "timemoney.onPlayerUpdate",
+            entityTakeDmg = "timemoney.onEntityTakeDamage"
+        }
+    },
+
     -- Trinkets
     TIME_POWER = {
         type = "trinket",
@@ -1676,70 +1793,6 @@ ConchBlessing.ItemData = {
         }
     },
 
-    -- Familiars
-    TIME_MONEY = {
-        type = "familiar",
-        id = Isaac.GetItemIdByName("Time = Money"),
-        script = "scripts/items/familiars/time_money",
-        uniquefamiliar = true,
-        -- Entities2.xml generation config
-        -- anm2: optional override for ANM2 path under gfx/ (default: "time_money.anm2")
-        anm2 = "time_money.anm2",
-        entity = { variant = 777, collisiondamage = 0, collisionmass = 3, collisionradius = 5, friction = 1, numgridcollisionpoints = 6, shadowsize = 13, tags = "cansacrifice", customtags = "" },
-        gibs = { amount = 0, blood = 0, bone = 0, eye = 0, gut = 0, large = 0 },
-        name = {
-            kr = "시간 = 돈",
-            en = "Time = Money"
-        },
-        description = {
-            kr = "시간은 돈이다",
-            en = "Time is money"
-        },
-        eid = {
-            kr = {
-                "동전 5개를 드랍합니다.",
-                "#60초마다 현재 소지중인 동전의 5% 개수만큼 동전을 드랍합니다. (최소 1개)",
-                "#이 패밀리어가 드랍하는 동전은 5% 확률로 5원, 2% 확률로 황금 동전, 2% 확률로 행운 동전, 1% 확률로 10원으로 대체됩니다.",
-                "#행운에 따라 위 확률이 (1+0.1×운{{Luck}})배로 4배까지 증가합니다.",
-                "#피격시 드랍되는 동전의 갯수가 1개 감소합니다."
-            },
-            en = {
-                "Drops 5 coins on pickup.",
-                "#Every 60 seconds, drops coins equal to 5% of current money (minimum 1).",
-                "#Coins dropped by this familiar are replaced with nickel 5% of the time, golden coin 2% of the time, lucky coin 2% of the time, and dime 1% of the time.",
-                "#The probability of the above is increased by (1+0.1×Luck{{Luck}}) times up to 4 times.",
-                "#When taking damage, the number of coins dropped is reduced by 1."
-            }
-        },
-        pool = {
-            RoomType.ROOM_DEVIL,
-            RoomType.ROOM_SHOP,
-            RoomType.ROOM_GREED_EXIT,
-            RoomType.ROOM_SECRET
-        },
-        quality = 4,
-        tags="baby summonable offensive",
-        shopprice = 30,
-        devilprice = 2,
-        origin = { id = CollectibleType.COLLECTIBLE_SACK_OF_PENNIES, type = "collectible" },
-        flag = "positive",
-        synergies = {
-            [{ id = CollectibleType.COLLECTIBLE_BFFS, type = "collectible" }] = {
-                kr = "동전 드랍 비율이 10%로 증가합니다.",
-                en = "Drop rate increases to 10%."
-            }
-        },
-        callbacks = {
-            familiarInit = "timemoney.onFamiliarInit",
-            familiarUpdate = "timemoney.onFamiliarUpdate",
-            postFamiliarRender = "timemoney.onFamiliarRender",
-            evaluateCache = "timemoney.onEvaluateCache",
-            gameStarted = "timemoney.onGameStarted",
-            postGetCollectible = "timemoney.onPostGetCollectible",
-            postPlayerUpdate = "timemoney.onPlayerUpdate",
-            entityTakeDmg = "timemoney.onEntityTakeDamage"
-        }
-    }
 }
 
 --[[

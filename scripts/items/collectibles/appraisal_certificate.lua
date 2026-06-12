@@ -70,6 +70,36 @@ local function trinketExists(trinketId)
     return ok and trinket ~= nil
 end
 
+local function getUseBlockReason(player)
+    local currentDim = getCurrentDimension()
+    if currentDim == 2 then
+        return "death_certificate"
+    end
+
+    if not player or not player.GetNumCoins then
+        return "invalid_player"
+    end
+
+    local cost = M.config.costCoins or 30
+    if player:GetNumCoins() < cost then
+        return "coins", cost, player:GetNumCoins()
+    end
+
+    return nil
+end
+
+local function logBlockedUse(reason, cost, coins)
+    if not M.config.debug then return end
+
+    if reason == "death_certificate" then
+        ConchBlessing.print("[Appraisal] Cannot use inside Death Certificate dimension")
+    elseif reason == "coins" then
+        ConchBlessing.print(string.format("[Appraisal] Not enough coins (%d/%d)", coins or 0, cost or 30))
+    elseif reason == "invalid_player" then
+        ConchBlessing.print("[Appraisal] Invalid player during item use")
+    end
+end
+
 -- Convert all collectibles to trinkets in DC dimension
 local function convertAllCollectiblesInDC()
     if M.config.debug then
@@ -120,26 +150,15 @@ end
 function M.onUseItem(_, collectibleID, rng, player, useFlags, activeSlot, varData)
     local game = Game()
     local level = game:GetLevel()
+
+    local reason, cost, coins = getUseBlockReason(player)
+    if reason then
+        logBlockedUse(reason, cost, coins)
+        return { Discharge = false, Remove = false, ShowAnim = false }
+    end
+
     local currentDim = getCurrentDimension()
-    
-    -- Cannot use inside Death Certificate dimension
-    if currentDim == 2 then
-        if M.config.debug then
-            ConchBlessing.print("[Appraisal] Cannot use inside Death Certificate dimension")
-        end
-        return { Discharge = false, Remove = false, ShowAnim = false }
-    end
-    
-    -- Check if player has enough coins
-    local coins = player:GetNumCoins()
-    local cost = M.config.costCoins or 30
-    
-    if coins < cost then
-        if M.config.debug then
-            ConchBlessing.print(string.format("[Appraisal] Not enough coins (%d/%d)", coins, cost))
-        end
-        return { Discharge = false, Remove = false, ShowAnim = false }
-    end
+    cost = M.config.costCoins or 30
     
     -- Consume coins
     player:AddCoins(-cost)
@@ -178,6 +197,16 @@ function M.onUseItem(_, collectibleID, rng, player, useFlags, activeSlot, varDat
     end
     
     return { Discharge = false, Remove = false, ShowAnim = false }
+end
+
+function M.onPreUseItem(_, collectibleID, rng, player, useFlags, activeSlot, varData)
+    local reason, cost, coins = getUseBlockReason(player)
+    if not reason then
+        return nil
+    end
+
+    logBlockedUse(reason, cost, coins)
+    return true
 end
 
 -- Post New Room callback

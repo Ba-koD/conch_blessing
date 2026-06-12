@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <metadata>
-    <name>Conch's Blessing(소라고둥의 축복)</name>
+    <name>[RGON] Conch's Blessing(소라고둥의 축복)</name>
     <directory>conch_blessing</directory>
     <id>3545334858</id>
-    <description>🐚 소라고둥의 축복 (Conch’s Blessing)
+    <description>[RGON] 🐚 소라고둥의 축복 (Conch’s Blessing)
 
 아이작에 소라고둥의 축복 업그레이드 시스템을 추가합니다. 기존 아이템을 세련된 연출과 함께 변환하고, 언어/스폰/타이밍을 세밀하게 커스터마이징할 수 있습니다.
 
@@ -23,7 +23,7 @@ RGON 추천
 
 ---
 
-Conch’s Blessing
+[RGON] Conch’s Blessing
 
 See the pinned Workshop discussion: Item Description Guide.
 
