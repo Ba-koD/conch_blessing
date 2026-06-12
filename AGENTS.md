@@ -37,6 +37,16 @@ Core subsystem map:
 - Use `local` helpers and constants inside item files. Do not add globals unless they are part of the existing `ConchBlessing.*` API.
 - Use `ConchBlessing.printDebug` for optional logs and `ConchBlessing.printError` for real failures. Avoid unconditional `Isaac.ConsoleOutput` in normal paths.
 
+## Item Sprite Style
+
+- Treat item icons as native 32x32 pixel art. If an AI or high-resolution draft is used, always finish with direct 32x32 cleanup; do not rely on automatic downscaling for final edges, layer order, or readability.
+- For style references, prefer vanilla Isaac collectible sprites from `extracted_resources/resources/gfx/items/collectibles` and high-quality local mod references such as Epiphany, Astrobirth, and Auri only for general production traits. Do not copy, trace, or recreate another mod's specific item artwork.
+- Match the common Isaac item language: compact readable silhouette, slightly handmade asymmetry, transparent corners, near-black 1-2 px outline, top-left lighting, muted grimy shadow colors, and small clusters of bright highlight pixels.
+- Keep each material on a limited palette. A good default is outline, dark shadow, midtone, and one sparse highlight; use extra highlight colors only for the focal point.
+- Avoid muddy antialiasing, soft gradients, airbrushed glow, photorealistic detail, and thin hairline elements that disappear at 32px. Favor hard pixel clusters and clear shape separation.
+- Check layer order manually after scaling or cleanup. Foreground tools, blades, handles, knots, and cut points should visibly overlap in the intended order at 32px.
+- For AI sprite prompts, specify final native 32x32 readability, hard pixel edges, limited palette, transparent padding, no text/UI/frame/pedestal, and "reference style traits only, no copying" when using vanilla or mod art as inspiration.
+
 ## Callback Guidelines
 
 - Avoid adding `MC_POST_UPDATE`, `MC_POST_RENDER`, `MC_POST_PEFFECT_UPDATE`, or broad entity callbacks unless the item needs them continuously.
@@ -88,6 +98,7 @@ Core subsystem map:
 - Do not bump `metadata.xml` during ordinary dev commits unless preparing a `dev` to `main` release merge or the user explicitly requests a release version change.
 - Steam Workshop changenotes should match the existing workshop style: one or more English typed summary lines such as `Fix: Fix EID Bug`, then a blank line, then short Korean summary lines without `-` bullets.
 - Keep Steam changenotes concise and player-facing. Mention generated assets, upload automation, or tooling only when those changes affect the published mod package or release process.
+- When asked to prepare a `dev` to `main` merge request or release-merge request, include a Steam Workshop changenote draft in the response. Provide the GitHub Actions-ready `changenote` value with literal `\n` line breaks so it can be pasted directly into the manual workflow input.
 - When asked for a changelog draft, either return the text directly in chat or create it under the ignored `.tmp/` directory. Do not leave changelog drafts as tracked files unless the user explicitly requests that.
 - For the `Steam Workshop Publish` GitHub Actions workflow, paste release notes into the manual `changenote` input. Use literal `\n` for line breaks. Leaving it empty uploads only `Version <resolved metadata.xml version>`.
 - The Steam publish workflow should not generate or build mod content. When run on `main`, it stages a copy of committed runtime files on the self-hosted runner and uploads it through SteamCMD. Configure generated asset behavior in `generate_xml.py` defaults and commit generated files before publishing.

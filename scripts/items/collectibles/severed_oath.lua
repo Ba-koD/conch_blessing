@@ -43,12 +43,34 @@ local function getCycleItems(pickup)
 
     local ids = {}
     local seen = {}
-    for _, itemId in pairs(cycle) do
+    for _, itemId in ipairs(cycle) do
         addUniqueItem(ids, seen, itemId)
+    end
+    if #ids <= 0 then
+        for _, itemId in pairs(cycle) do
+            addUniqueItem(ids, seen, itemId)
+        end
     end
 
     addUniqueItem(ids, seen, pickup.SubType)
     return ids
+end
+
+local function getPickupOptionsIndex(pickup)
+    return math.max(0, tonumber(pickup and pickup.OptionsPickupIndex) or 0)
+end
+
+local function spawnCleaverSlashEffect(pos, player)
+    if not pos then
+        return
+    end
+
+    local variant = EffectVariant.CLEAVER_SLASH
+        or EffectVariant.SCYTHE_BREAK
+        or EffectVariant.POOF01
+        or EffectVariant.POOF_1
+        or 15
+    Isaac.Spawn(EntityType.ENTITY_EFFECT, variant, 0, pos, Vector.Zero, player)
 end
 
 local function savePickupState(pickup)
@@ -61,12 +83,12 @@ local function savePickupState(pickup)
     }
 end
 
-local function applyPickupState(pickup, state)
+local function applyPickupState(pickup, state, optionsPickupIndex)
     if not pickup or not state then
         return
     end
 
-    pickup.OptionsPickupIndex = 0
+    pickup.OptionsPickupIndex = tonumber(optionsPickupIndex) or 0
     if state.price ~= nil then
         pickup.Price = state.price
     end
@@ -105,7 +127,7 @@ local function getSplitPosition(room, basePos, index, count)
     return target
 end
 
-local function spawnSplitPickup(itemId, pos, state, player)
+local function spawnSplitPickup(itemId, pos, state, player, optionsPickupIndex)
     local entity = Isaac.Spawn(
         EntityType.ENTITY_PICKUP,
         PickupVariant.PICKUP_COLLECTIBLE,
@@ -122,49 +144,111 @@ local function spawnSplitPickup(itemId, pos, state, player)
     pcall(function()
         pickup:Morph(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_COLLECTIBLE, itemId, true, true, true)
     end)
-    applyPickupState(pickup, state)
+    applyPickupState(pickup, state, optionsPickupIndex)
     pickup:GetData().__conchBlessingSeveredOathSplit = true
     return pickup
 end
 
-local function splitPickup(pickup, player)
-    local cycleItems = getCycleItems(pickup)
-    if #cycleItems <= 1 then
-        return 0
-    end
-
+local function splitPickup(entry, player)
+    local pickup = entry.pickup
+    local cycleItems = entry.cycleItems
     local room = Game():GetRoom()
-    local basePos = pickup.Position
-    local state = savePickupState(pickup)
+    local basePos = entry.basePos
+    local state = entry.state
     local count = #cycleItems
 
+    spawnCleaverSlashEffect(basePos, player)
     pickup:Remove()
 
     for index, itemId in ipairs(cycleItems) do
         local pos = getSplitPosition(room, basePos, index, count)
-        spawnSplitPickup(itemId, pos, state, player)
+        local optionsPickupIndex = entry.splitOptions and entry.splitOptions[index] or 0
+        spawnSplitPickup(itemId, pos, state, player, optionsPickupIndex)
     end
 
-    local effectVariant = EffectVariant.SCYTHE_BREAK or EffectVariant.POOF_1
-    Isaac.Spawn(EntityType.ENTITY_EFFECT, effectVariant, 0, basePos, Vector.Zero, player)
     return count
 end
 
-local function splitRoomCycles(player)
-    local splitCount = 0
-    local spawnedCount = 0
+local function collectSplitEntries()
+    local entries = {}
+    local maxOptionsPickupIndex = 0
 
     for _, entity in ipairs(Isaac.GetRoomEntities()) do
         if entity.Type == EntityType.ENTITY_PICKUP
             and entity.Variant == PickupVariant.PICKUP_COLLECTIBLE then
             local pickup = entity:ToPickup()
-            if pickup and pickup:Exists() then
-                local count = splitPickup(pickup, player)
-                if count > 0 then
-                    splitCount = splitCount + 1
-                    spawnedCount = spawnedCount + count
+            if pickup and pickup:Exists() and not pickup:GetData().__conchBlessingSeveredOathSplit then
+                local optionsPickupIndex = getPickupOptionsIndex(pickup)
+                maxOptionsPickupIndex = math.max(maxOptionsPickupIndex, optionsPickupIndex)
+
+                local cycleItems = getCycleItems(pickup)
+                if #cycleItems > 1 then
+                    table.insert(entries, {
+                        pickup = pickup,
+                        basePos = pickup.Position,
+                        cycleItems = cycleItems,
+                        optionsPickupIndex = optionsPickupIndex,
+                        state = savePickupState(pickup),
+                        splitOptions = {},
+                    })
                 end
             end
+        end
+    end
+
+    return entries, maxOptionsPickupIndex
+end
+
+local function assignSplitOptions(entries, firstFreeOptionsPickupIndex)
+    local optionGroups = {}
+    for _, entry in ipairs(entries) do
+        if entry.optionsPickupIndex > 0 then
+            local key = entry.optionsPickupIndex
+            optionGroups[key] = optionGroups[key] or {}
+            table.insert(optionGroups[key], entry)
+        end
+    end
+
+    local nextOptionsPickupIndex = firstFreeOptionsPickupIndex
+    for _, group in pairs(optionGroups) do
+        if #group > 1 then
+            local maxCycleCount = 0
+            for _, entry in ipairs(group) do
+                maxCycleCount = math.max(maxCycleCount, #entry.cycleItems)
+            end
+
+            for cycleIndex = 1, maxCycleCount do
+                local linkedCount = 0
+                for _, entry in ipairs(group) do
+                    if entry.cycleItems[cycleIndex] then
+                        linkedCount = linkedCount + 1
+                    end
+                end
+
+                if linkedCount > 1 then
+                    for _, entry in ipairs(group) do
+                        if entry.cycleItems[cycleIndex] then
+                            entry.splitOptions[cycleIndex] = nextOptionsPickupIndex
+                        end
+                    end
+                    nextOptionsPickupIndex = nextOptionsPickupIndex + 1
+                end
+            end
+        end
+    end
+end
+
+local function splitRoomCycles(player)
+    local splitCount = 0
+    local spawnedCount = 0
+    local entries, maxOptionsPickupIndex = collectSplitEntries()
+    assignSplitOptions(entries, maxOptionsPickupIndex + 1)
+
+    for _, entry in ipairs(entries) do
+        if entry.pickup and entry.pickup:Exists() then
+            local count = splitPickup(entry, player)
+            splitCount = splitCount + 1
+            spawnedCount = spawnedCount + count
         end
     end
 
