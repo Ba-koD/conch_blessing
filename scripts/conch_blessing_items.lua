@@ -1375,17 +1375,12 @@ ConchBlessing.ItemData = {
         },
         eid = {
             kr = {
-                "사용 시 방 안의 순환 아이템 받침대를 각각의 독립된 아이템으로 분리합니다.",
-                "#원래 선택지로 묶여 있던 받침대들은 같은 순환 순번끼리 다시 선택지로 묶입니다.",
-                "#예: 1/2와 3/4가 선택지라면 1은 3과, 2는 4와 묶입니다.",
-                "#{{Warning}} REPENTOGON의 순환 아이템 API가 필요합니다."
+                "사용 시 방 안의 순환 아이템을 독립된 아이템으로 분리합니다.",
+                "#{{Warning}} REPENTOGON가 필요합니다!"
             },
             en = {
-                "On use, separates cycling item pedestals in the room into individual items.",
-                "#Works on pedestals that rotate between multiple items, such as Glitched Crown or Isaac's Birthright.",
-                "#Pedestals that were option-linked stay linked by matching cycle position.",
-                "#Example: if 1/2 and 3/4 were options, 1 links with 3 and 2 links with 4.",
-                "#{{Warning}} Requires REPENTOGON's cycling item API."
+                "On use, separates cycling items in the room into individual items.",
+                "#{{Warning}} Requires REPENTOGON!"
             }
         },
         pool = {
