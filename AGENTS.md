@@ -89,14 +89,12 @@ Core subsystem map:
 - Commit body bullets must explain what and why in Korean, start with `- `, avoid blank lines between bullets, and end with a noun-style phrase such as `추가`, `수정`, `제거`, `전환`, `적용`, or `정리`.
 - Before any `dev` to `main` merge, push, or release-version decision, run `git fetch origin` and compare against `origin/main` and `origin/dev`. Do not decide from stale local branch state.
 - Do not change `metadata.xml` versions during `dev` to `main` merges, release-merge requests, pushes, or ordinary dev commits unless the user explicitly requests a version change.
-- When preparing a `dev` to `main` merge, compare `metadata.xml` versions on fetched `origin/main`, `origin/dev`, and the branch being merged. If a version mismatch, stale version, or release-version decision is needed, stop and ask the user instead of bumping locally.
-- The Steam publish workflow has an optional manual `version` input. Empty `version` downloads the current Steam Workshop item, compares its `metadata.xml` version with the committed version, and uploads the committed version without auto-bumping.
-- A manual workflow `version` must be greater than both committed `metadata.xml` and the downloaded Steam Workshop version. Equal or lower input versions must fail.
-- The Steam publish workflow must never change repository version after Steam upload. Version reconciliation happens before staging and uploading the Workshop package.
-- If committed `metadata.xml` is greater than the downloaded Steam Workshop version and `version` is empty, upload the committed version without another bump.
-- If committed `metadata.xml` is lower than the downloaded Steam Workshop version, fail and reconcile the branch before publishing.
-- If Steam Workshop shows a newer version than the local branch, stop and fetch/reconcile the remote branch first instead of bumping locally.
-- Do not bump `metadata.xml` as part of release preparation unless the user explicitly requests a release version change.
+- When preparing a `dev` to `main` merge, compare `metadata.xml` versions on fetched `origin/main`, `origin/dev`, and the branch being merged. Do not manually bump versions for the merge; let the Steam publish workflow resolve the publish version unless the user explicitly requests a specific version change.
+- The Steam publish workflow has an optional manual `version` input. A manual `version` greater than the downloaded Steam Workshop version is used as the publish version, even when it differs from committed `metadata.xml`.
+- If a manual workflow `version` is equal to or lower than the downloaded Steam Workshop version, ignore that input and use the empty-version automatic resolution path.
+- With empty `version`, the Steam publish workflow downloads the current Steam Workshop item, compares its `metadata.xml` version with the committed version, and stages the committed version only when the committed version is greater than the Workshop version.
+- With empty `version`, if committed `metadata.xml` is equal to or lower than the downloaded Steam Workshop version, stage and upload the next patch version after the downloaded Workshop version.
+- The Steam publish workflow may edit `metadata.xml` in the workflow workspace before staging the upload package, but it must commit and push that resolved version only after SteamCMD upload succeeds.
 - Steam Workshop changenotes should match the existing workshop style: one or more English typed summary lines such as `Fix: Fix EID Bug`, then a blank line, then short Korean summary lines without `-` bullets.
 - Keep Steam changenotes concise and player-facing. Mention generated assets, upload automation, or tooling only when those changes affect the published mod package or release process.
 - When asked to prepare a `dev` to `main` merge request or release-merge request, include a Steam Workshop changenote draft in the response. Provide the GitHub Actions-ready `changenote` value with literal `\n` line breaks so it can be pasted directly into the manual workflow input.

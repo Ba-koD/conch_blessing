@@ -46,7 +46,7 @@ def parse_args():
     parser.add_argument(
         "--version",
         default="",
-        help="Optional target release version. Empty uses metadata.xml after validating --steam-version.",
+        help="Optional target release version. Empty auto-resolves the next publish version.",
     )
     parser.add_argument(
         "--steam-version",
@@ -126,6 +126,15 @@ def parse_version(value):
     return tuple(int(part) for part in value.split("."))
 
 
+def format_version(version):
+    return ".".join(str(part) for part in version)
+
+
+def bump_patch(version):
+    major, minor, patch = version
+    return major, minor, patch + 1
+
+
 def write_metadata_version(repo_root, current_version, release_version):
     metadata_path = repo_root / "metadata.xml"
     original = metadata_path.read_text(encoding="utf-8")
@@ -148,23 +157,22 @@ def apply_release_version(repo_root, metadata, requested_version, steam_version)
     current = parse_version(current_version)
     steam = parse_version(steam_version)
 
+    release_version = ""
     if requested_version:
         requested = parse_version(requested_version)
-        if requested <= current:
-            raise ValueError(
-                f"Requested release version {requested_version} must be greater than metadata.xml version {current_version}."
-            )
         if requested <= steam:
-            raise ValueError(
-                f"Requested release version {requested_version} must be greater than Steam Workshop version {steam_version}."
+            print(
+                f"Ignoring requested release version {requested_version}; "
+                f"it is not greater than Steam Workshop version {steam_version}."
             )
-        release_version = requested_version
-    else:
-        if current < steam:
-            raise ValueError(
-                f"metadata.xml version {current_version} is lower than Steam Workshop version {steam_version}."
-            )
-        release_version = current_version
+        else:
+            release_version = requested_version
+
+    if not release_version:
+        if current > steam:
+            release_version = current_version
+        else:
+            release_version = format_version(bump_patch(steam))
 
     if release_version != current_version:
         write_metadata_version(repo_root, current_version, release_version)

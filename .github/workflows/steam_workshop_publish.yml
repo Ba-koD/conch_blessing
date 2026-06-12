@@ -17,7 +17,7 @@ name: Steam Workshop Publish
         required: false
         type: string
       version:
-        description: "Optional target version. Empty uses metadata.xml after validating it is not lower than current Steam version."
+        description: "Optional target version. Empty auto-bumps when metadata.xml is not greater than current Steam version."
         required: false
         type: string
 
@@ -145,21 +145,6 @@ jobs:
             --version "${{ inputs.version }}" \
             --steam-version "${{ steps.steam-version.outputs.version }}"
 
-      - name: Commit resolved release version
-        run: |
-          if git diff --quiet -- metadata.xml; then
-            echo "metadata.xml version unchanged."
-            exit 0
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add metadata.xml
-          git commit \
-            -m "Chore: Update Workshop version tag" \
-            -m "- Steam Workshop 업로드 대상 버전 metadata.xml 반영"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
-
       - name: Publish workshop item
         env:
           SECRET_STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
@@ -237,3 +222,18 @@ jobs:
           done < "${GITHUB_WORKSPACE}/dist/steam-workshop/workshop_vdfs.txt"
 
           run_steamcmd_with_retry "${steamcmd_args[@]}" +quit
+
+      - name: Commit resolved release version
+        run: |
+          if git diff --quiet -- metadata.xml; then
+            echo "metadata.xml version unchanged."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add metadata.xml
+          git commit \
+            -m "Chore: Sync Workshop Version" \
+            -m "- 창작마당 업로드 후 확정된 버전을 metadata.xml에 반영"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
