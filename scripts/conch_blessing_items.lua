@@ -1402,7 +1402,12 @@ ConchBlessing.ItemData = {
         script = "scripts/items/collectibles/severed_oath",
         callbacks = {
             use = "severedoath.onUseItem",
-            update = "severedoath.onUpdate"
+            update = "severedoath.onUpdate",
+            gameStarted = "severedoath.onGameStarted",
+            postNewRoom = "severedoath.onPostNewRoom",
+            postPickupInit = "severedoath.onPostPickupInit",
+            postPickupUpdate = "severedoath.onPostPickupUpdate",
+            executeCmd = "severedoath.onExecuteCmd"
         },
         onBeforeChange = "severedoath.onBeforeChange",
         onAfterChange = "severedoath.onAfterChange",
