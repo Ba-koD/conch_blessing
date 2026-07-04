@@ -1325,6 +1325,7 @@ ConchBlessing.ItemData = {
         script = "scripts/items/collectibles/two_faced_penny",
         callbacks = {
             postPlayerUpdate = "twofacedpenny.onPlayerUpdate",
+            postAddCollectible = "twofacedpenny.onPostAddCollectible",
             entityTakeDmg = "twofacedpenny.onDamage",
             postNewLevel = "twofacedpenny.onNewFloor",
             gameStarted = "twofacedpenny.onGameStarted"

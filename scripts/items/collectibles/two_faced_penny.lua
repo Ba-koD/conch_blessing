@@ -3,7 +3,11 @@ local DamageUtils = ConchBlessing.DamageUtils or require("scripts.lib.damage_uti
 
 ConchBlessing.twofacedpenny = {}
 
+local M = ConchBlessing.twofacedpenny
 local TWO_FACED_PENNY_ID = Isaac.GetItemIdByName("Two Faced Penny")
+local HAS_POST_ADD_COLLECTIBLE = ModCallbacks and ModCallbacks.MC_POST_ADD_COLLECTIBLE ~= nil
+
+local collectibleScanIds = nil
 
 local function getFloorKey()
     local level = game:GetLevel()
@@ -18,143 +22,281 @@ local function getPlayerData(player)
         data.__twofacedpenny = {
             tookDamageThisFloor = false,
             currentFloorKey = nil,
-            lastPennyCount = 0,
+            lastPennyCount = nil,
             lastCollectibleCounts = nil,
-            slots = {}, -- 각 슬롯: { itemId = number, doubled = boolean }
+            suppress = {},
+            slots = {},
         }
     end
     return data.__twofacedpenny
 end
 
-local function ensureSuppressMap(pData)
-    if not pData.suppress then
-        pData.suppress = {}
-    end
-    return pData.suppress
+local function isValidCollectibleId(itemId)
+    return type(itemId) == "number" and itemId > 0
 end
 
-local function grantItem(player, itemId, count, pData)
-    if count <= 0 then return end
-    local suppress = ensureSuppressMap(pData)
-    suppress[itemId] = (suppress[itemId] or 0) + count
-    for _ = 1, count do
-        player:AddCollectible(itemId, 0, true)
+local function getPennyCount(player)
+    if not player or not isValidCollectibleId(TWO_FACED_PENNY_ID) then
+        return 0
     end
+
+    local ok, count = pcall(function()
+        return player:GetCollectibleNum(TWO_FACED_PENNY_ID, true)
+    end)
+    if ok and type(count) == "number" then
+        return count
+    end
+    return 0
+end
+
+local function addScanId(ids, seen, itemId)
+    itemId = tonumber(itemId)
+    if not isValidCollectibleId(itemId) or seen[itemId] then
+        return
+    end
+
+    seen[itemId] = true
+    table.insert(ids, itemId)
+end
+
+local function getCollectibleScanIds()
+    if collectibleScanIds then
+        return collectibleScanIds
+    end
+
+    local ids = {}
+    local seen = {}
+    local maxId = CollectibleType.NUM_COLLECTIBLES or 0
+    for itemId = 1, math.max(0, maxId - 1) do
+        addScanId(ids, seen, itemId)
+    end
+
+    for _, itemData in pairs(ConchBlessing.ItemData or {}) do
+        addScanId(ids, seen, itemData and itemData.id)
+    end
+
+    table.sort(ids)
+    collectibleScanIds = ids
+    return collectibleScanIds
 end
 
 local function buildCollectibleCounts(player)
     local counts = {}
-    local maxId = CollectibleType.NUM_COLLECTIBLES or 0
-    if maxId <= 0 then
-        return counts
-    end
-    for id = 1, maxId - 1 do
-        local ok, num = pcall(function() return player:GetCollectibleNum(id, true) end)
-        if ok and type(num) == "number" then
-            counts[id] = num
+    for _, itemId in ipairs(getCollectibleScanIds()) do
+        local ok, count = pcall(function()
+            return player:GetCollectibleNum(itemId, true)
+        end)
+        if ok and type(count) == "number" then
+            counts[itemId] = count
         end
     end
     return counts
 end
 
-local function detectNewCollectible(player, pData)
-    local counts = pData.lastCollectibleCounts or buildCollectibleCounts(player)
-    local maxId = CollectibleType.NUM_COLLECTIBLES or 0
-    local foundId = nil
-    local foundDelta = 0
-    if maxId > 0 then
-        for id = 1, maxId - 1 do
-            local ok, cur = pcall(function() return player:GetCollectibleNum(id, true) end)
-            if ok and type(cur) == "number" then
-                local prev = counts[id] or 0
-                if cur > prev and id ~= TWO_FACED_PENNY_ID and foundId == nil then
-                    foundId = id
-                    foundDelta = cur - prev
-                end
-                counts[id] = cur
-            end
-        end
-    end
-    pData.lastCollectibleCounts = counts
-    return foundId, foundDelta
+local function refreshCounts(player, pData)
+    pData.lastCollectibleCounts = buildCollectibleCounts(player)
 end
 
-ConchBlessing.twofacedpenny.onPlayerUpdate = function(_, player)
-    if not player then return end
-    if not TWO_FACED_PENNY_ID or TWO_FACED_PENNY_ID <= 0 then return end
+local function recordCollectibleCount(player, pData, itemId)
+    if not isValidCollectibleId(itemId) then
+        return
+    end
 
-    local moldCount = player:GetCollectibleNum(TWO_FACED_PENNY_ID, true)
-    local pData = getPlayerData(player)
+    pData.lastCollectibleCounts = pData.lastCollectibleCounts or {}
+    local ok, count = pcall(function()
+        return player:GetCollectibleNum(itemId, true)
+    end)
+    if ok and type(count) == "number" then
+        pData.lastCollectibleCounts[itemId] = count
+    end
+end
+
+local function detectNewCollectibles(player, pData)
+    if not pData.lastCollectibleCounts then
+        refreshCounts(player, pData)
+        return {}
+    end
+
+    local changes = {}
+    local counts = pData.lastCollectibleCounts
+    for _, itemId in ipairs(getCollectibleScanIds()) do
+        local ok, current = pcall(function()
+            return player:GetCollectibleNum(itemId, true)
+        end)
+        if ok and type(current) == "number" then
+            local previous = counts[itemId] or 0
+            if current > previous and itemId ~= TWO_FACED_PENNY_ID then
+                table.insert(changes, {
+                    itemId = itemId,
+                    delta = current - previous,
+                })
+            end
+            counts[itemId] = current
+        end
+    end
+
+    return changes
+end
+
+local function syncPennySlots(player, pData)
+    local pennyCount = getPennyCount(player)
     pData.slots = pData.slots or {}
 
     if pData.lastPennyCount == nil then
-        pData.lastPennyCount = moldCount
+        pData.lastPennyCount = pennyCount
+        return pennyCount
     end
 
-    if moldCount > (pData.lastPennyCount or 0) then
-        local diff = moldCount - (pData.lastPennyCount or 0)
-        for _ = 1, diff do
-            table.insert(pData.slots, { itemId = nil })
+    local previous = tonumber(pData.lastPennyCount) or 0
+    if pennyCount > previous then
+        for _ = 1, pennyCount - previous do
+            table.insert(pData.slots, { itemId = nil, doubled = false })
         end
-    elseif moldCount < (pData.lastPennyCount or 0) then
-        while #pData.slots > moldCount do
+    elseif pennyCount < previous then
+        while #pData.slots > pennyCount do
             table.remove(pData.slots)
         end
     end
 
-    if moldCount > 0 then
-        local foundId, foundDelta = detectNewCollectible(player, pData)
-        if foundId and foundId > 0 and foundDelta > 0 then
-            local suppress = pData.suppress
-            if suppress and suppress[foundId] and suppress[foundId] > 0 then
-                local skipped = math.min(suppress[foundId], foundDelta)
-                suppress[foundId] = suppress[foundId] - skipped
-                foundDelta = foundDelta - skipped
-            end
-            -- 모든 빈 슬롯이 새 아이템을 추적하도록 설정
-            local slots = pData.slots or {}
-            local emptySlots = {}
-            for i, slot in ipairs(slots) do
-                if not slot.itemId then
-                    table.insert(emptySlots, i)
-                end
-            end
-            
-            -- foundDelta만큼의 새 아이템 획득에 대해 처리
-            -- 각 획득마다 모든 빈 슬롯이 그 아이템을 바라봄
-            for _ = 1, foundDelta do
-                for _, slotIndex in ipairs(emptySlots) do
-                    slots[slotIndex].itemId = foundId
-                    slots[slotIndex].doubled = false
-                    pData.tookDamageThisFloor = false
-                end
-            end
-            
-            -- 이제 각 슬롯의 doubled 상태에 따라 두 배 지급
-            for _, slot in ipairs(slots) do
-                if slot.itemId == foundId and not slot.doubled then
-                    grantItem(player, foundId, 1, pData)
-                    slot.doubled = true
-                end
-            end
+    pData.lastPennyCount = pennyCount
+    return pennyCount
+end
+
+local function consumeSuppressedAdd(pData, itemId, count)
+    local suppress = pData.suppress
+    if not suppress or not suppress[itemId] or suppress[itemId] <= 0 then
+        return 0
+    end
+
+    local skipped = math.min(suppress[itemId], count or 1)
+    suppress[itemId] = suppress[itemId] - skipped
+    if suppress[itemId] <= 0 then
+        suppress[itemId] = nil
+    end
+    return skipped
+end
+
+local function grantItem(player, itemId, count, pData)
+    count = tonumber(count) or 0
+    if count <= 0 or not isValidCollectibleId(itemId) then
+        return
+    end
+
+    pData.suppress = pData.suppress or {}
+    pData.suppress[itemId] = (pData.suppress[itemId] or 0) + count
+    for _ = 1, count do
+        player:AddCollectible(itemId, 0, true)
+    end
+end
+
+local function claimNextCollectible(player, pData, itemId)
+    if not isValidCollectibleId(itemId) or itemId == TWO_FACED_PENNY_ID then
+        return false
+    end
+
+    local slots = pData.slots or {}
+    local claimed = 0
+    for _, slot in ipairs(slots) do
+        if not slot.itemId then
+            slot.itemId = itemId
+            slot.doubled = false
+            claimed = claimed + 1
         end
     end
-    pData.lastPennyCount = moldCount
+
+    if claimed <= 0 then
+        return false
+    end
+
+    local granted = 0
+    for _, slot in ipairs(slots) do
+        if slot.itemId == itemId and not slot.doubled then
+            grantItem(player, itemId, 1, pData)
+            slot.doubled = true
+            granted = granted + 1
+        end
+    end
+
+    pData.tookDamageThisFloor = false
+    ConchBlessing.printDebug(string.format(
+        "[Two Faced Penny] Claimed next collectible %d for %d slot(s), granted=%d.",
+        itemId,
+        claimed,
+        granted
+    ))
+    return granted > 0
+end
+
+local function processObservedCollectible(player, pData, itemId, count)
+    if not isValidCollectibleId(itemId) or itemId == TWO_FACED_PENNY_ID then
+        return false
+    end
+
+    local remaining = tonumber(count) or 1
+    remaining = remaining - consumeSuppressedAdd(pData, itemId, remaining)
+    if remaining <= 0 then
+        return false
+    end
+
+    if syncPennySlots(player, pData) <= 0 then
+        return false
+    end
+    return claimNextCollectible(player, pData, itemId)
+end
+
+function M.onPostAddCollectible(_, itemId, _charge, _firstTime, _slot, _varData, player)
+    if not player or not isValidCollectibleId(itemId) then
+        return
+    end
+    if not isValidCollectibleId(TWO_FACED_PENNY_ID) then
+        return
+    end
+
+    local pData = getPlayerData(player)
+    if itemId == TWO_FACED_PENNY_ID then
+        if pData.lastPennyCount == nil then
+            pData.lastPennyCount = math.max(0, getPennyCount(player) - 1)
+        end
+        syncPennySlots(player, pData)
+        recordCollectibleCount(player, pData, itemId)
+        return
+    end
+
+    processObservedCollectible(player, pData, itemId, 1)
+    recordCollectibleCount(player, pData, itemId)
+end
+
+function M.onPlayerUpdate(_, player)
+    if not player or not isValidCollectibleId(TWO_FACED_PENNY_ID) then
+        return
+    end
+
+    local pData = getPlayerData(player)
+    local pennyCount = syncPennySlots(player, pData)
+
+    if not HAS_POST_ADD_COLLECTIBLE and pennyCount > 0 then
+        for _, change in ipairs(detectNewCollectibles(player, pData)) do
+            processObservedCollectible(player, pData, change.itemId, change.delta)
+        end
+    end
+
     if pData.currentFloorKey == nil then
         pData.currentFloorKey = getFloorKey()
     end
 end
 
-ConchBlessing.twofacedpenny.onDamage = function(_, entity, amount, flags, source, countdown)
+function M.onDamage(_, entity, amount, flags, source, countdown)
     local player = entity:ToPlayer()
-    if not player or not player:HasCollectible(TWO_FACED_PENNY_ID) then return end
+    if not player or not player:HasCollectible(TWO_FACED_PENNY_ID) then
+        return
+    end
     if DamageUtils.isSelfInflictedDamage(flags, source) then
         return
     end
     getPlayerData(player).tookDamageThisFloor = true
 end
 
-ConchBlessing.twofacedpenny.onNewFloor = function(_)
+function M.onNewFloor(_)
     local floorKey = getFloorKey()
     for i = 0, game:GetNumPlayers() - 1 do
         local player = Isaac.GetPlayer(i)
@@ -162,44 +304,43 @@ ConchBlessing.twofacedpenny.onNewFloor = function(_)
             local pData = getPlayerData(player)
             if pData.currentFloorKey and pData.currentFloorKey ~= floorKey then
                 if not pData.tookDamageThisFloor then
-                    local slots = pData.slots or {}
                     local granted = false
-                    for _, slot in ipairs(slots) do
-                        if slot.itemId and slot.itemId > 0 then
+                    for _, slot in ipairs(pData.slots or {}) do
+                        if isValidCollectibleId(slot.itemId) then
                             grantItem(player, slot.itemId, 1, pData)
                             granted = true
                         end
                     end
                     if granted then
                         SFXManager():Play(SoundEffect.SOUND_POWERUP1, 1.0)
+                        refreshCounts(player, pData)
                     end
                 end
             end
             pData.tookDamageThisFloor = false
             pData.currentFloorKey = floorKey
+            pData.lastPennyCount = getPennyCount(player)
         end
     end
 end
 
-ConchBlessing.twofacedpenny.onGameStarted = function(_, isContinued)
-    if not isContinued then
-        for i = 0, game:GetNumPlayers() - 1 do
-            local player = Isaac.GetPlayer(i)
-            if player then
+function M.onGameStarted(_, isContinued)
+    for i = 0, game:GetNumPlayers() - 1 do
+        local player = Isaac.GetPlayer(i)
+        if player then
+            if not isContinued then
                 player:GetData().__twofacedpenny = nil
             end
-        end
-    else
-        for i = 0, game:GetNumPlayers() - 1 do
-            local player = Isaac.GetPlayer(i)
-            if player then
-                local pData = getPlayerData(player)
-                if pData.currentFloorKey == nil then
-                    pData.currentFloorKey = getFloorKey()
-                end
+            local pData = getPlayerData(player)
+            pData.currentFloorKey = getFloorKey()
+            pData.slots = pData.slots or {}
+            pData.lastPennyCount = math.min(#pData.slots, getPennyCount(player))
+            syncPennySlots(player, pData)
+            if not HAS_POST_ADD_COLLECTIBLE then
+                refreshCounts(player, pData)
             end
         end
     end
 end
 
-return ConchBlessing.twofacedpenny
+return M

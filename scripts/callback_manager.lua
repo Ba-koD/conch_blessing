@@ -178,6 +178,13 @@ ConchBlessing.CallbackManager.callbackMapping = {
     preModUnload = { callback = ModCallbacks.MC_PRE_MOD_UNLOAD, needsId = false }
 }
 
+if ModCallbacks.MC_POST_ADD_COLLECTIBLE then
+    ConchBlessing.CallbackManager.callbackMapping.postAddCollectible = {
+        callback = ModCallbacks.MC_POST_ADD_COLLECTIBLE,
+        needsId = false
+    }
+end
+
 -- Helper function to find functions by dot notation
 ConchBlessing.CallbackManager.getFunctionByPath = function(path)
     local parts = {}
@@ -287,4 +294,4 @@ end
 -- Auto-register when mod loads
 ConchBlessing:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function()
     ConchBlessing.CallbackManager.registerAllCallbacks()
-end) 
+end)
