@@ -1091,6 +1091,20 @@ local function anyoneHasCycleModifier()
     return false
 end
 
+-- Per-frame memoized wrapper: the modifier set only changes on pickup/drop, so the
+-- answer is stable within a frame. Used by hot per-pickup paths to avoid re-scanning
+-- every player's collectibles once per pedestal per frame.
+local function anyoneHasCycleModifierThisFrame()
+    local frame = Game():GetFrameCount()
+    local cache = M._cycleModifierCache
+    if cache and cache.frame == frame then
+        return cache.value
+    end
+    local value = anyoneHasCycleModifier()
+    M._cycleModifierCache = { frame = frame, value = value }
+    return value
+end
+
 local function getExtraCycleItem(pickup, data, excludedItems)
     local pool = Game():GetItemPool()
     if not pool then
@@ -1726,6 +1740,13 @@ local function reAddDroppedBonus(pickup, state)
     if pickup.SubType == state.bonusItem then
         return -- currently shown as the pedestal item, so it is present
     end
+    -- The only thing that drops our appended bonus is a cycle modifier (Glitched
+    -- Crown/Binge Eater/Birthright) rebuilding the pedestal every display step. With
+    -- no such modifier held, the bonus can never leave the cycle, so reading and
+    -- scanning the cycle every frame is pure waste -- skip the expensive path.
+    if not anyoneHasCycleModifierThisFrame() then
+        return
+    end
 
     local rawCycleItems = getRawCycleItems(pickup)
     for _, itemId in ipairs(rawCycleItems) do
@@ -1797,6 +1818,7 @@ function M.onGameStarted(_, isContinued)
     M._cyclePickupStates = {}
     M._cycleRoomKey = nil
     M._cycleRoomLoadFrame = Game():GetFrameCount()
+    M._cycleModifierCache = nil
     M._pendingPoolChecks = {}
     M._continuedRun = isContinued == true
     if isContinued then
