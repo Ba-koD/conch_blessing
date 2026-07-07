@@ -898,11 +898,13 @@ ConchBlessing.ItemData = {
                 "{{Coin}} 30원을 소비하여 현재 장신구를 흡수하고 모든 장신구 방(사망 증명서 공간)으로 이동합니다.",
                 "#하나를 선택하면 즉시 흡수하고 원래 방으로 돌아옵니다.",
                 "#{{Warning}} 사망 증명서 공간을 공유합니다.",
+                "#{{Warning}} REPENTOGON 권장",
             },
             en = {
                 "Consumes {{Coin}} 30 to absorb the current trinket and move to all trinket rooms (Death Certificate space).",
                 "#When one is selected, it is immediately absorbed and returns to the original room.",
                 "#{{Warning}} Shares Death Certificate space.",
+                "#{{Warning}} REPENTOGON recommended",
             },
         },
         pool = {
@@ -1248,13 +1250,15 @@ ConchBlessing.ItemData = {
                 "공격이 적을 관통합니다",
                 "#눈물이 적 적중 시 10% 확률로 타겟이 지정됩니다 ({{Luck}}운 x5% 추가)",
                 "#타겟으로 지정되면 1.5초 뒤 현재 멀티샷 수만큼 Epic Fetus 미사일이 1발씩 연속으로 떨어집니다",
-                "#미사일은 내 {{Damage}}공격력의 10배 데미지"
+                "#미사일은 내 {{Damage}}공격력의 10배 데미지",
+                "#{{Warning}} REPENTOGON 권장",
             },
             en = {
                 "Your tears pierce enemies",
                 "#On hit: 10% chance to designate the target (+{{Luck}}Luck x5%)",
                 "#After 1.5 seconds, Epic Fetus missiles strike one-by-one equal to your current multishot count",
-                "#Missile deals 10 times of your {{Damage}}Damage"
+                "#Missile deals 10 times of your {{Damage}}Damage",
+                "#{{Warning}} REPENTOGON recommended",
             }
         },
         pool = {

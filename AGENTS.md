@@ -67,6 +67,15 @@ Core subsystem map:
 - Debug output should go through `ConchBlessing.printDebug`, `ConchBlessing.print`, or `ConchBlessing.printError`, include relevant player/item/cache context, and avoid hardcoded magic values.
 - Upgrade visuals should use `Template.*.onBeforeChange` and `Template.*.onAfterChange` patterns; cosmetic effects should remain harmless.
 
+## REPENTOGON Dependency And EID
+
+- REPENTOGON is a script extender that adds Lua API absent from vanilla Repentance. Treat as REPENTOGON-only: reading/modifying a collectible pedestal's cycle (`EntityPickup:GetCollectibleCycle`, `AddCollectibleCycle`, `RemoveCollectibleCycle`, `TryInitOptionCycle`), plus API such as `Level:GetDimension`, `EntityPlayer:GetMultiShotParams`/`GetWeaponType`/`GetBombFlags`/`GetBombVariant`, and `EntityBomb:SetExplosionCountdown`. `EntityEffect:SetTimeout`/`.Timeout` and standard tear/stat/spawn/collectible API are vanilla.
+- Guard every REPENTOGON-only call with a `type(obj.Method) == "function"` check or `pcall`, and provide a vanilla fallback path whenever one is technically possible. Only treat an effect as REPENTOGON-required when no vanilla implementation exists (e.g. pedestal cycle read/write).
+- Any item that calls a REPENTOGON-only API must note it in the item's `eid` block with a short fixed phrase only. Do not add reasons, API names, or fallback details in the EID.
+  - No vanilla fallback: keep the required warning `#{{Warning}} REPENTOGON이 필요합니다!` (en `#{{Warning}} Requires REPENTOGON!`). Example: `severed_oath`.
+  - Has a vanilla fallback: use `#{{Warning}} REPENTOGON 권장` (en `#{{Warning}} REPENTOGON recommended`), nothing more. Examples: `appraisal_certificate`, `soflam`.
+- When adding or changing an item's REPENTOGON usage, update its EID note so the required-vs-fallback wording stays accurate. Items with no REPENTOGON call need no note.
+
 ## Save Data
 
 - Use `ConchBlessing.SaveManager` for persistent and run-scoped state.

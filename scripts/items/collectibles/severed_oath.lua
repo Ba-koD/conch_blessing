@@ -1348,8 +1348,12 @@ local function addHeldBonusCycle(pickup, data)
     end
 
     local rawCycleItems = getRawCycleItems(pickup)
-    local age = Game():GetFrameCount() - (tonumber(data and data[CYCLE_INIT_FRAME_MARKER]) or 0)
-    if #rawCycleItems <= 0 and anyoneHasCycleModifier() and age < 3 then
+    if anyoneHasCycleModifier() and #rawCycleItems <= 0 then
+        -- With a cycle modifier held (Glitched Crown/Binge Eater/Birthright), the
+        -- pedestal only becomes a rotating item once its native cycle exists. Add
+        -- our bonus once it is actually a cycle item; if a later native rebuild
+        -- drops the bonus, reAddDroppedBonus re-appends it every update, so this is
+        -- timing-independent (no frame counting needed).
         return nil, "waiting_for_native_cycle"
     end
 
@@ -1705,6 +1709,52 @@ function M.onUseItem(_, collectibleId, rng, player, useFlags, activeSlot, varDat
     return { Discharge = true, Remove = false, ShowAnim = true }
 end
 
+-- Self-heal: once we have committed a bonus item, keep it in the cycle every update.
+-- Glitched Crown re-initialises the pedestal on every display step, and can drop our
+-- appended item; re-append it whenever it goes missing. This is timing-independent, so
+-- even if the initial add lands at an unlucky frame the bonus is never permanently lost.
+local function reAddDroppedBonus(pickup, state)
+    if not (pickup and state and state.eligible and state.bonusItem) then
+        return
+    end
+    if not isValidCollectibleId(state.bonusItem) then
+        return
+    end
+    if pickup:GetData()[SPLIT_MARKER] then
+        return
+    end
+    if pickup.SubType == state.bonusItem then
+        return -- currently shown as the pedestal item, so it is present
+    end
+
+    local rawCycleItems = getRawCycleItems(pickup)
+    for _, itemId in ipairs(rawCycleItems) do
+        if itemId == state.bonusItem then
+            return -- still in the cycle
+        end
+    end
+
+    if #rawCycleItems >= MAX_COLLECTIBLE_CYCLE_ITEMS then
+        return
+    end
+    if type(pickup.AddCollectibleCycle) ~= "function" then
+        return
+    end
+
+    local ok = pcall(function()
+        return pickup:AddCollectibleCycle(state.bonusItem)
+    end)
+    if ok then
+        logVerify(string.format(
+            "bonus-reheal seed=%s subtype=%s bonus=%s raw=%d",
+            tostring(pickup.InitSeed),
+            tostring(pickup.SubType),
+            tostring(state.bonusItem),
+            #rawCycleItems
+        ))
+    end
+end
+
 function M.onPostPickupInit(_, pickup)
     markPickupCycleState(pickup)
 end
@@ -1721,6 +1771,7 @@ function M.onPostPickupUpdate(_, pickup)
     end
     updateBonusSeen(pickup, state)
     writeCycleStateToPickup(pickup, state)
+    reAddDroppedBonus(pickup, state)
 
     if state.done then
         return
