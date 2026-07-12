@@ -98,8 +98,6 @@ ConchBlessing.powertraining.removeLastUse = function(player, removeCount, applyC
         ConchBlessing.powertraining._lastUseCount = {}
     end
     ConchBlessing.powertraining._lastUseCount[player:GetPlayerType()] = -1
-    ConchBlessing.powertraining._lastProcessedFrame = nil
-    ConchBlessing.powertraining._lastProcessedPlayer = nil
     if applyCacheUpdate ~= false then
         player:AddCacheFlags(CacheFlag.CACHE_ALL)
         player:EvaluateItems()
@@ -224,33 +222,18 @@ ConchBlessing.powertraining.onUseItem = function(player, collectibleID, useFlags
 end
 
 ConchBlessing.powertraining.onEvaluateCache = function(_, player, cacheFlag)
-    -- Prevent duplicate processing in the same frame
-    local currentFrame = Game():GetFrameCount()
     local playerID = player:GetPlayerType()
-    
-    if ConchBlessing.powertraining._lastProcessedFrame == currentFrame and 
-       ConchBlessing.powertraining._lastProcessedPlayer == playerID then
-        return
-    end
-    
-    -- Only process if this is actually a stat change for Power Training
-    -- Don't process if this is just a cache refresh from other items
+
     if not ConchBlessing.powertraining._lastUseCount then
         ConchBlessing.powertraining._lastUseCount = {}
     end
-    if not ConchBlessing.powertraining._lastUseCount[playerID] then
+    if ConchBlessing.powertraining._lastUseCount[playerID] == nil then
         ConchBlessing.powertraining._lastUseCount[playerID] = 0
     end
-    
-    -- Get current use count from SaveManager
+
     local playerSave = SaveManager.GetRunSave(player)
     local currentUseCount = playerSave and playerSave.powerTraining and #playerSave.powerTraining or 0
-    
-    -- Only process if use count actually changed
-    if ConchBlessing.powertraining._lastUseCount[playerID] == currentUseCount then
-        ConchBlessing.printDebug("Power Training: Use count unchanged (" .. currentUseCount .. "), skipping cache refresh")
-        return
-    end
+    local useCountChanged = ConchBlessing.powertraining._lastUseCount[playerID] ~= currentUseCount
     
     if cacheFlag == CacheFlag.CACHE_DAMAGE then
         ConchBlessing.printDebug("=== Power Training onEvaluateCache START ===")
@@ -264,8 +247,6 @@ ConchBlessing.powertraining.onEvaluateCache = function(_, player, cacheFlag)
     if cacheFlag == CacheFlag.CACHE_DAMAGE then
         ConchBlessing.printDebug("Attempting to load from SaveManager...")
     end
-    local playerSave = SaveManager.GetRunSave(player)
-    
     if cacheFlag == CacheFlag.CACHE_DAMAGE then
         ConchBlessing.printDebug("SaveManager.GetRunSave result type: " .. type(playerSave))
         if playerSave then
@@ -276,9 +257,12 @@ ConchBlessing.powertraining.onEvaluateCache = function(_, player, cacheFlag)
         end
     end
     
-    if not playerSave.powerTraining then
+    if not playerSave or not playerSave.powerTraining then
         if cacheFlag == CacheFlag.CACHE_DAMAGE then
             ConchBlessing.printDebug("No powerTraining data in playerSave, returning")
+        end
+        if useCountChanged then
+            ConchBlessing.powertraining._lastUseCount[playerID] = currentUseCount
         end
         return
     end
@@ -287,6 +271,9 @@ ConchBlessing.powertraining.onEvaluateCache = function(_, player, cacheFlag)
     if useCount <= 0 then 
         if cacheFlag == CacheFlag.CACHE_DAMAGE then
             ConchBlessing.printDebug("useCount is 0, returning")
+        end
+        if useCountChanged then
+            ConchBlessing.powertraining._lastUseCount[playerID] = currentUseCount
         end
         return 
     end
@@ -349,12 +336,9 @@ ConchBlessing.powertraining.onEvaluateCache = function(_, player, cacheFlag)
     
     -- Display handled by unified system
     
-    -- Mark this frame as processed to prevent duplicate calls
-    ConchBlessing.powertraining._lastProcessedFrame = currentFrame
-    ConchBlessing.powertraining._lastProcessedPlayer = playerID
-    
-    -- Record the use count that was processed
-    ConchBlessing.powertraining._lastUseCount[playerID] = currentUseCount
+    if useCountChanged then
+        ConchBlessing.powertraining._lastUseCount[playerID] = currentUseCount
+    end
 end
 
 -- initialize data when game started
@@ -415,8 +399,8 @@ do
     local sm = SaveManager
     local mod = ConchBlessing and ConchBlessing.originalMod
     if sm and mod and mod.__SAVEMANAGER_UNIQUE_KEY and sm.SaveCallbacks then
-        local callbackKey = mod.__SAVEMANAGER_UNIQUE_KEY .. sm.SaveCallbacks.PRE_DATA_SAVE
-        mod:AddCallback(callbackKey, function(saveData)
+        local callbackKey = sm.SaveCallbacks.PRE_DATA_SAVE
+        mod:AddCallback(callbackKey, function(_, saveData)
             if saveData and saveData.game and saveData.game.run then
                 for _, playerRun in pairs(saveData.game.run) do
                     local arr = playerRun and playerRun.powerTraining
@@ -438,7 +422,6 @@ do
             if ConchBlessing and ConchBlessing.Config and ConchBlessing.Config.debugMode then
                 ConchBlessing.printDebug("[PowerTraining] PRE_DATA_SAVE sanitized powerTraining array")
             end
-            return saveData
         end)
     end
 end

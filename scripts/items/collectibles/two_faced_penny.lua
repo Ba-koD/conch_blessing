@@ -244,7 +244,7 @@ local function processObservedCollectible(player, pData, itemId, count)
     return claimNextCollectible(player, pData, itemId)
 end
 
-function M.onPostAddCollectible(_, itemId, _charge, _firstTime, _slot, _varData, player)
+function M.onPostAddCollectible(_, itemId, _charge, firstTime, _slot, _varData, player)
     if not player or not isValidCollectibleId(itemId) then
         return
     end
@@ -258,6 +258,11 @@ function M.onPostAddCollectible(_, itemId, _charge, _firstTime, _slot, _varData,
             pData.lastPennyCount = math.max(0, getPennyCount(player) - 1)
         end
         syncPennySlots(player, pData)
+        recordCollectibleCount(player, pData, itemId)
+        return
+    end
+
+    if firstTime ~= true then
         recordCollectibleCount(player, pData, itemId)
         return
     end
@@ -336,9 +341,7 @@ function M.onGameStarted(_, isContinued)
             pData.slots = pData.slots or {}
             pData.lastPennyCount = math.min(#pData.slots, getPennyCount(player))
             syncPennySlots(player, pData)
-            if not HAS_POST_ADD_COLLECTIBLE then
-                refreshCounts(player, pData)
-            end
+            refreshCounts(player, pData)
         end
     end
 end

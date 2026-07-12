@@ -35,6 +35,20 @@ local function getPlayerState(player)
 	return s.perPlayer[key]
 end
 
+local function getPauseFramesRemaining(ps, currentFrame)
+	local pausedUntilFrame = tonumber(ps and ps.pausedUntilFrame) or currentFrame
+	return math.max(0, math.floor(pausedUntilFrame - currentFrame))
+end
+
+local function getPauseDurationFrames()
+	return math.max(0, math.floor((tonumber(ConchBlessing.timeteartrinket.data.pauseSecondsOnHit) or 0) * 30))
+end
+
+local function writePauseTimerRecord(rec, ps, currentFrame)
+	rec.pauseFramesRemaining = math.min(getPauseDurationFrames(), getPauseFramesRemaining(ps, currentFrame))
+	rec.pausedUntilFrame = nil
+end
+
 local function getTrinketId()
 	return ConchBlessing.ItemData.TIME_TEAR and ConchBlessing.ItemData.TIME_TEAR.id
 end
@@ -48,18 +62,23 @@ local function loadFromSave(player)
 	save.timeTear = save.timeTear or {}
 	local key = getKey(player)
 	local ps = getPlayerState(player)
-	if save.timeTear[key] then
-		ps.spsBonus = tonumber(save.timeTear[key].spsBonus) or 0.0
-		ps.permanentBonus = tonumber(save.timeTear[key].permanentBonus) or 0.0
-		ps.pausedUntilFrame = tonumber(save.timeTear[key].pausedUntilFrame) or 0
-		ps.lastApplied = tonumber(save.timeTear[key].lastApplied) or 0.0
-		if save.timeTear[key].data then
-			local d = save.timeTear[key].data
+	local rec = save.timeTear[key]
+	if rec then
+		ps.spsBonus = tonumber(rec.spsBonus) or 0.0
+		ps.permanentBonus = tonumber(rec.permanentBonus) or 0.0
+		ps.lastApplied = tonumber(rec.lastApplied) or 0.0
+		if rec.data then
+			local d = rec.data
 			if type(d.increasePerSecond) == 'number' then ConchBlessing.timeteartrinket.data.increasePerSecond = d.increasePerSecond end
 			if type(d.pauseSecondsOnHit) == 'number' then ConchBlessing.timeteartrinket.data.pauseSecondsOnHit = d.pauseSecondsOnHit end
 			if type(d.keepOnDrop) == 'boolean' then ConchBlessing.timeteartrinket.data.keepOnDrop = d.keepOnDrop end
 			if type(d.framesPerSecond) == 'number' then ConchBlessing.timeteartrinket.data.framesPerSecond = d.framesPerSecond end
 		end
+		-- Legacy absolute frames cannot be related to a new gameplay session safely.
+		local remainingFrames = math.max(0, math.min(getPauseDurationFrames(), math.floor(tonumber(rec.pauseFramesRemaining) or 0)))
+		local currentFrame = Game():GetFrameCount()
+		ps.pausedUntilFrame = currentFrame + remainingFrames
+		writePauseTimerRecord(rec, ps, currentFrame)
 	end
 end
 
@@ -72,17 +91,38 @@ local function saveToSave(player)
 	local key = getKey(player)
 	local ps = getPlayerState(player)
 	save.timeTear[key] = save.timeTear[key] or {}
-	save.timeTear[key].spsBonus = ps.spsBonus
-	save.timeTear[key].permanentBonus = ps.permanentBonus
-	save.timeTear[key].pausedUntilFrame = ps.pausedUntilFrame
-	save.timeTear[key].data = {
+	local rec = save.timeTear[key]
+	rec.spsBonus = ps.spsBonus
+	rec.permanentBonus = ps.permanentBonus
+	writePauseTimerRecord(rec, ps, Game():GetFrameCount())
+	rec.data = {
 		increasePerSecond = ConchBlessing.timeteartrinket.data.increasePerSecond,
 		pauseSecondsOnHit = ConchBlessing.timeteartrinket.data.pauseSecondsOnHit,
 		keepOnDrop = ConchBlessing.timeteartrinket.data.keepOnDrop,
 		framesPerSecond = ConchBlessing.timeteartrinket.data.framesPerSecond,
 	}
-	save.timeTear[key].lastApplied = ps.lastApplied
+	rec.lastApplied = ps.lastApplied
 	SaveManager.Save()
+end
+
+do
+	local mod = ConchBlessing and ConchBlessing.originalMod
+	if mod and mod.__SAVEMANAGER_UNIQUE_KEY and SaveManager.SaveCallbacks then
+		local callbackKey = SaveManager.SaveCallbacks.PRE_DATA_SAVE
+		mod:AddCallback(callbackKey, function(_, saveData)
+			local runData = saveData and saveData.game and saveData.game.run
+			local perPlayer = ensureState().perPlayer
+			local currentFrame = Game():GetFrameCount()
+			for _, playerRun in pairs(runData or {}) do
+				for key, rec in pairs((playerRun and playerRun.timeTear) or {}) do
+					local ps = perPlayer[key]
+					if ps and type(rec) == "table" then
+						writePauseTimerRecord(rec, ps, currentFrame)
+					end
+				end
+			end
+		end)
+	end
 end
 
 -- Public: allow toggling drop reset behavior
@@ -185,7 +225,7 @@ function ConchBlessing.timeteartrinket.onEntityTakeDamage(_, entity, amount, fla
 	end
 	local ps = getPlayerState(player)
 	local frame = Game():GetFrameCount()
-	ps.pausedUntilFrame = math.max(ps.pausedUntilFrame or 0, frame + ((ConchBlessing.timeteartrinket.data.pauseSecondsOnHit or 0) * 30))
+	ps.pausedUntilFrame = math.max(ps.pausedUntilFrame or 0, frame + getPauseDurationFrames())
 	saveToSave(player)
 	return nil
 end

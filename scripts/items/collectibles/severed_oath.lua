@@ -6,12 +6,10 @@ local SPLIT_SPACING = 40
 local MIN_PICKUP_WAIT = 20
 local MAX_COLLECTIBLE_CYCLE_ITEMS = 8
 local EXTRA_CYCLE_PICK_ATTEMPTS = 12
-local CONTINUED_PICKUP_LOAD_SUPPRESS_FRAMES = 15
 local SPLIT_MARKER = "__conchBlessingSeveredOathSplit"
 local SPLIT_ITEM_MARKER = "__conchBlessingSeveredOathSplitItem"
 local CYCLE_ELIGIBLE_MARKER = "__conchBlessingSeveredOathCycleEligible"
 local CYCLE_DONE_MARKER = "__conchBlessingSeveredOathCycleDone"
-local CYCLE_INIT_FRAME_MARKER = "__conchBlessingSeveredOathCycleInitFrame"
 local CYCLE_POOL_MARKER = "__conchBlessingSeveredOathCyclePool"
 local SAVE_KEY = "severedOath"
 
@@ -31,10 +29,12 @@ local CYCLE_MODIFIER_ITEMS = {
 M.data = M.data or {}
 M._cyclePickupStates = M._cyclePickupStates or {}
 M._cycleRoomKey = M._cycleRoomKey or nil
-M._cycleRoomLoadFrame = M._cycleRoomLoadFrame or 0
 M._pendingPoolChecks = M._pendingPoolChecks or {}
-M._suppressContinuedPickupCyclesUntil = M._suppressContinuedPickupCyclesUntil or nil
 M._continuedRun = M._continuedRun or false
+M._continuedStartRoomKey = M._continuedStartRoomKey or nil
+M._continuedBaselinePickupKeys = M._continuedBaselinePickupKeys or {}
+M._cycleRoomSnapshotReady = false
+M._gameStartResolved = false
 
 local function isValidCollectibleId(itemId)
     if type(itemId) ~= "number" or itemId <= 0 then
@@ -128,6 +128,17 @@ local function getCurrentRoomKey()
     local game = Game()
     local level = game:GetLevel()
     local roomIndex = level and level:GetCurrentRoomIndex() or -1
+    local stage = level and level:GetStage() or -1
+    local stageType = level and level:GetStageType() or -1
+    local placementSeed = 0
+    if level and type(level.GetDungeonPlacementSeed) == "function" then
+        local ok, seed = pcall(function()
+            return level:GetDungeonPlacementSeed()
+        end)
+        if ok and type(seed) == "number" then
+            placementSeed = seed
+        end
+    end
     local dimension = 0
     if level and type(level.GetDimension) == "function" then
         local ok, currentDimension = pcall(function()
@@ -138,7 +149,13 @@ local function getCurrentRoomKey()
         end
     end
 
-    return tostring(roomIndex) .. ":" .. tostring(dimension)
+    return table.concat({
+        tostring(placementSeed),
+        tostring(stage),
+        tostring(stageType),
+        tostring(roomIndex),
+        tostring(dimension),
+    }, ":")
 end
 
 local function ensureCycleRoomState()
@@ -146,7 +163,8 @@ local function ensureCycleRoomState()
     if M._cycleRoomKey ~= roomKey then
         M._cyclePickupStates = {}
         M._cycleRoomKey = roomKey
-        M._cycleRoomLoadFrame = Game():GetFrameCount()
+        M._continuedBaselinePickupKeys = {}
+        M._cycleRoomSnapshotReady = false
     end
 end
 
@@ -163,6 +181,39 @@ local function getPickupCycleKey(pickup)
         return "ptr:" .. tostring(GetPtrHash(pickup))
     end
     return nil
+end
+
+local function captureRoomPickupSnapshot(baselineExisting)
+    ensureCycleRoomState()
+
+    local pickups = {}
+    local baselinePickupKeys = {}
+    local baselineCount = 0
+    for _, entity in ipairs(Isaac.GetRoomEntities()) do
+        if entity.Type == EntityType.ENTITY_PICKUP
+            and entity.Variant == PickupVariant.PICKUP_COLLECTIBLE then
+            local pickup = entity:ToPickup()
+            if pickup and pickup:Exists() then
+                table.insert(pickups, pickup)
+                if baselineExisting then
+                    local key = getPickupCycleKey(pickup)
+                    if key and not baselinePickupKeys[key] then
+                        baselinePickupKeys[key] = true
+                        baselineCount = baselineCount + 1
+                    end
+                end
+            end
+        end
+    end
+
+    M._continuedBaselinePickupKeys = baselinePickupKeys
+    M._cycleRoomSnapshotReady = true
+    return pickups, baselineCount
+end
+
+local function isContinuedBaselinePickup(pickup)
+    local key = getPickupCycleKey(pickup)
+    return key ~= nil and M._continuedBaselinePickupKeys[key] == true
 end
 
 local function getPickupSaveState(pickup, create)
@@ -241,28 +292,6 @@ local function getSavedBonusState(pickup)
     return save
 end
 
-local function isContinuedPickupLoadFrame()
-    local suppressUntil = tonumber(M._suppressContinuedPickupCyclesUntil)
-    if suppressUntil ~= nil and Game():GetFrameCount() <= suppressUntil then
-        return true
-    end
-
-    if M._continuedRun ~= true then
-        return false
-    end
-
-    local room = Game():GetRoom()
-    if not room or room:IsFirstVisit() then
-        return false
-    end
-
-    if Game():GetFrameCount() <= CONTINUED_PICKUP_LOAD_SUPPRESS_FRAMES then
-        return true
-    end
-
-    return Game():GetFrameCount() <= (tonumber(M._cycleRoomLoadFrame) or 0) + CONTINUED_PICKUP_LOAD_SUPPRESS_FRAMES
-end
-
 local function markSavedBonusState(pickup, state)
     if not (state and state.bonusItem) then
         return
@@ -288,7 +317,6 @@ local function writeCycleStateToPickup(pickup, state)
     local data = pickup:GetData()
     data[CYCLE_ELIGIBLE_MARKER] = state.eligible
     data[CYCLE_DONE_MARKER] = state.done
-    data[CYCLE_INIT_FRAME_MARKER] = state.initFrame
     data[CYCLE_POOL_MARKER] = state.poolType
 end
 
@@ -313,7 +341,7 @@ local function updateBonusSeen(pickup, state)
     if not (pickup and state and state.bonusItem) then
         return
     end
-    if pickup.SubType ~= state.bonusItem then
+    if state.bonusSeen or pickup.SubType ~= state.bonusItem then
         return
     end
 
@@ -1205,8 +1233,6 @@ local function getExtraCycleItem(pickup, data, excludedItems)
     return nil
 end
 
-local finishHeldBonusCycle
-
 local function markPickupCycleState(pickup)
     if not pickup or pickup.Variant ~= PickupVariant.PICKUP_COLLECTIBLE then
         return
@@ -1251,9 +1277,6 @@ local function markPickupCycleState(pickup)
         else
             updateBonusSeen(pickup, existingState)
             writeCycleStateToPickup(pickup, existingState)
-            if existingState.eligible and not existingState.done and finishHeldBonusCycle then
-                finishHeldBonusCycle(pickup, existingState)
-            end
             return
         end
     end
@@ -1268,7 +1291,6 @@ local function markPickupCycleState(pickup)
         setPickupCycleState(pickup, {
             eligible = false,
             done = true,
-            initFrame = Game():GetFrameCount(),
             poolType = getLastPoolType(),
             item = currentItem,
             splitItem = currentItem,
@@ -1298,7 +1320,6 @@ local function markPickupCycleState(pickup)
         local state = {
             eligible = true,
             done = true,
-            initFrame = Game():GetFrameCount(),
             poolType = tonumber(savedBonusState.poolType) or getLastPoolType(),
             item = currentItem,
             bonusItem = tonumber(savedBonusState.bonusItem),
@@ -1317,16 +1338,21 @@ local function markPickupCycleState(pickup)
         return
     end
 
-    if isContinuedPickupLoadFrame() then
+    -- Pickup init callbacks can run before the room boundary callback. Wait for
+    -- that boundary to classify the pedestals which already belonged to the room.
+    if M._cycleRoomSnapshotReady ~= true then
+        return
+    end
+
+    if isContinuedBaselinePickup(pickup) then
         setPickupCycleState(pickup, {
             eligible = false,
             done = true,
-            initFrame = Game():GetFrameCount(),
             poolType = getLastPoolType(),
             item = currentItem,
         })
         logVerify(string.format(
-            "cycle-skip continued load seed=%s subtype=%s raw=%d",
+            "cycle-skip continued baseline seed=%s subtype=%s raw=%d",
             tostring(pickup.InitSeed),
             tostring(pickup.SubType),
             #getRawCycleItems(pickup)
@@ -1338,16 +1364,12 @@ local function markPickupCycleState(pickup)
     local state = {
         eligible = eligible,
         done = not eligible,
-        initFrame = Game():GetFrameCount(),
         poolType = getLastPoolType(),
         item = currentItem,
         bonusItem = nil,
         bonusSeen = false,
     }
     setPickupCycleState(pickup, state)
-    if state.eligible and finishHeldBonusCycle then
-        finishHeldBonusCycle(pickup, state)
-    end
 end
 
 local function addHeldBonusCycle(pickup, data)
@@ -1394,7 +1416,7 @@ local function addHeldBonusCycle(pickup, data)
     return false, "add_failed"
 end
 
-finishHeldBonusCycle = function(pickup, state)
+local function finishHeldBonusCycle(pickup, state)
     if not pickup or not state or state.done then
         return
     end
@@ -1547,7 +1569,6 @@ local function spawnSplitPickup(itemId, pos, state, player, optionsPickupIndex)
     setPickupCycleState(pickup, {
         eligible = false,
         done = true,
-        initFrame = Game():GetFrameCount(),
         poolType = getLastPoolType(),
         item = itemId,
         splitItem = itemId,
@@ -1790,7 +1811,6 @@ function M.onPostPickupUpdate(_, pickup)
     if not state then
         return
     end
-    updateBonusSeen(pickup, state)
     writeCycleStateToPickup(pickup, state)
     reAddDroppedBonus(pickup, state)
 
@@ -1807,9 +1827,6 @@ function M.onPostPickupUpdate(_, pickup)
         writeCycleStateToPickup(pickup, state)
         return
     end
-    if Game():GetFrameCount() <= (tonumber(state.initFrame) or 0) then
-        return
-    end
 
     finishHeldBonusCycle(pickup, state)
 end
@@ -1817,19 +1834,21 @@ end
 function M.onGameStarted(_, isContinued)
     M._cyclePickupStates = {}
     M._cycleRoomKey = nil
-    M._cycleRoomLoadFrame = Game():GetFrameCount()
     M._cycleModifierCache = nil
     M._pendingPoolChecks = {}
     M._continuedRun = isContinued == true
-    if isContinued then
-        M._suppressContinuedPickupCyclesUntil = Game():GetFrameCount() + CONTINUED_PICKUP_LOAD_SUPPRESS_FRAMES
-    else
-        M._suppressContinuedPickupCyclesUntil = nil
+    M._continuedStartRoomKey = isContinued and getCurrentRoomKey() or nil
+    M._gameStartResolved = true
+
+    local pickups, baselineCount = captureRoomPickupSnapshot(isContinued == true)
+    for _, pickup in ipairs(pickups) do
+        markPickupCycleState(pickup)
     end
     logVerify(string.format(
-        "game-start continued=%s suppressUntil=%s",
+        "game-start continued=%s pickups=%d baseline=%d",
         tostring(isContinued == true),
-        tostring(M._suppressContinuedPickupCyclesUntil)
+        #pickups,
+        baselineCount
     ))
 
     local poolTypes = collectPoolTypesFromEntries({})
@@ -1838,13 +1857,30 @@ end
 
 function M.onPostNewRoom()
     ensureCycleRoomState()
-    if M._continuedRun == true and not Game():GetRoom():IsFirstVisit() then
-        logVerify(string.format(
-            "continued revisit room load frame=%s suppressUntil=%s",
-            tostring(M._cycleRoomLoadFrame),
-            tostring((tonumber(M._cycleRoomLoadFrame) or 0) + CONTINUED_PICKUP_LOAD_SUPPRESS_FRAMES)
-        ))
+    if M._gameStartResolved ~= true then
+        return
     end
+
+    local room = Game():GetRoom()
+    local roomKey = getCurrentRoomKey()
+    local isContinuedStartRoom = M._continuedStartRoomKey ~= nil
+        and roomKey == M._continuedStartRoomKey
+    if M._continuedStartRoomKey ~= nil and not isContinuedStartRoom then
+        M._continuedStartRoomKey = nil
+    end
+    local baselineExisting = M._continuedRun == true
+        and (isContinuedStartRoom or (room and not room:IsFirstVisit()))
+    local pickups, baselineCount = captureRoomPickupSnapshot(baselineExisting)
+    for _, pickup in ipairs(pickups) do
+        markPickupCycleState(pickup)
+    end
+    logVerify(string.format(
+        "room-snapshot continued=%s firstVisit=%s pickups=%d baseline=%d",
+        tostring(M._continuedRun == true),
+        tostring(room and room:IsFirstVisit()),
+        #pickups,
+        baselineCount
+    ))
 end
 
 function M.onExecuteCmd(_, command, params)

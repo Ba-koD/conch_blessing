@@ -1,5 +1,11 @@
 # AGENTS.md
 
+## Maintaining AGENTS.md
+
+- Read the nearest applicable `AGENTS.md` before repository work and treat it as active project memory, not a static reference.
+- When a user establishes a durable convention, architectural invariant, recurring workflow, wording rule, or verification requirement, update the appropriate `AGENTS.md` section during the same task. Do not record one-off feature requests, temporary debugging details, secrets, or volatile implementation values.
+- Before final verification, re-read the affected `AGENTS.md` sections so code, metadata, descriptions, and validation remain consistent with the recorded rules.
+
 ## Project Overview
 
 This repository is a The Binding of Isaac: Repentance/Rebirth mod named "Conch's Blessing".
@@ -56,6 +62,14 @@ Core subsystem map:
 - Cache static `ItemConfig` scans and repeated ID lists. Do not scan `CollectibleType.NUM_COLLECTIBLES` every frame.
 - Avoid repeated `Isaac.GetRoomEntities()` or `Isaac.FindByType()` in per-entity update callbacks. Cache per-frame data or store runtime references when safe.
 - Preserve multiplayer behavior by iterating `Game():GetNumPlayers()` when the effect can belong to any player.
+- Prefer semantic callbacks and explicit state transitions over frame numbers or fixed frame delays. Do not infer game initialization, pickup completion, room readiness, or session phase from `Game():GetFrameCount()` when an ownership, pickup, room, entity, or queue event can establish it directly.
+- If a frame delay is unavoidable because the engine exposes no readiness event, document the reason, bound the wait, and clear pending state when a game or room transition invalidates that work.
+
+## Choice Rooms And Pickup State
+
+- When disabling vanilla option linkage or return behavior in a choice room, preserve the one-choice invariant explicitly: scope pending state to the room or session, finalize only after confirmed acquisition, remove only the intended pickup class, and reset that state when a transition invalidates its scope.
+- Bind pending pickup and choice state to the selecting player's stable identity and block concurrent second selections while the first selection is unresolved. Do not assume `Isaac.GetPlayer(0)` in multiplayer-sensitive flows.
+- Shared special dimensions must distinguish the active session or mode and clear that state on any exit from the dimension, not only on the expected return-room transition.
 
 ## Stats, Config, And Debug
 
@@ -75,6 +89,7 @@ Core subsystem map:
   - No vanilla fallback: keep the required warning `#{{Warning}} REPENTOGON이 필요합니다!` (en `#{{Warning}} Requires REPENTOGON!`). Example: `severed_oath`.
   - Has a vanilla fallback: use `#{{Warning}} REPENTOGON 권장` (en `#{{Warning}} REPENTOGON recommended`), nothing more. Examples: `appraisal_certificate`, `soflam`.
 - When adding or changing an item's REPENTOGON usage, update its EID note so the required-vs-fallback wording stays accurate. Items with no REPENTOGON call need no note.
+- When player-visible behavior changes, update any affected EID or synergy entries in both Korean and English. Describe important cleanup and suppressed vanilla behavior, and keep multi-line Korean and English entries structurally parallel.
 
 ## Save Data
 

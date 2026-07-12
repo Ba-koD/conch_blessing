@@ -98,8 +98,6 @@ ConchBlessing.injectablsteroids.removeLastUse = function(player, removeCount, ap
         ConchBlessing.injectablsteroids._lastUseCount = {}
     end
     ConchBlessing.injectablsteroids._lastUseCount[player:GetPlayerType()] = -1
-    ConchBlessing.injectablsteroids._lastProcessedFrame = nil
-    ConchBlessing.injectablsteroids._lastProcessedPlayer = nil
     if applyCacheUpdate ~= false then
         player:AddCacheFlags(CacheFlag.CACHE_ALL)
         player:EvaluateItems()
@@ -263,12 +261,6 @@ ConchBlessing.injectablsteroids.onUseItem = function(player, collectibleID, useF
     
     ConchBlessing.printDebug("Injectable Steroids use effect completed! Use count: " .. newIndex)
     
-    -- Notify Oral Steroids that Injectable was just used
-    if ConchBlessing.oralsteroids then
-        ConchBlessing.oralsteroids._lastInjectableUseFrame = Game():GetFrameCount()
-        ConchBlessing.printDebug("Injectable Steroids: Notified Oral Steroids of recent use (frame " .. Game():GetFrameCount() .. ")")
-    end
-    
     -- Increment use count and death chance after successful use
     ConchBlessing.injectablsteroids.data.currentFloorUseCount = ConchBlessing.injectablsteroids.data.currentFloorUseCount + 1
     ConchBlessing.injectablsteroids.data.currentInstantDeathPercent = ConchBlessing.injectablsteroids.data.currentInstantDeathPercent + ConchBlessing.injectablsteroids.data.instantDeathPercentIncrement
@@ -281,33 +273,18 @@ end
 
 
 ConchBlessing.injectablsteroids.onEvaluateCache = function(_, player, cacheFlag)
-    -- Prevent duplicate processing in the same frame
-    local currentFrame = Game():GetFrameCount()
     local playerID = player:GetPlayerType()
-    
-    if ConchBlessing.injectablsteroids._lastProcessedFrame == currentFrame and 
-       ConchBlessing.injectablsteroids._lastProcessedPlayer == playerID then
-        return
-    end
-    
-    -- Only process if this is actually a stat change for Injectable Steroids
-    -- Don't process if this is just a cache refresh from other items
+
     if not ConchBlessing.injectablsteroids._lastUseCount then
         ConchBlessing.injectablsteroids._lastUseCount = {}
     end
-    if not ConchBlessing.injectablsteroids._lastUseCount[playerID] then
+    if ConchBlessing.injectablsteroids._lastUseCount[playerID] == nil then
         ConchBlessing.injectablsteroids._lastUseCount[playerID] = 0
     end
-    
-    -- Get current use count from SaveManager
+
     local playerSave = SaveManager.GetRunSave(player)
     local currentUseCount = playerSave and playerSave.injectableSteroids and #playerSave.injectableSteroids or 0
-    
-    -- Only process if use count actually changed
-    if ConchBlessing.injectablsteroids._lastUseCount[playerID] == currentUseCount then
-        ConchBlessing.printDebug("Injectable Steroids: Use count unchanged (" .. currentUseCount .. "), skipping cache refresh")
-        return
-    end
+    local useCountChanged = ConchBlessing.injectablsteroids._lastUseCount[playerID] ~= currentUseCount
     
     if cacheFlag == CacheFlag.CACHE_DAMAGE then
         ConchBlessing.printDebug("=== Injectable Steroids onEvaluateCache START ===")
@@ -321,8 +298,6 @@ ConchBlessing.injectablsteroids.onEvaluateCache = function(_, player, cacheFlag)
     if cacheFlag == CacheFlag.CACHE_DAMAGE then
         ConchBlessing.printDebug("Attempting to load from SaveManager...")
     end
-    local playerSave = SaveManager.GetRunSave(player)
-    
     if cacheFlag == CacheFlag.CACHE_DAMAGE then
         ConchBlessing.printDebug("SaveManager.GetRunSave result type: " .. type(playerSave))
         if playerSave then
@@ -333,9 +308,12 @@ ConchBlessing.injectablsteroids.onEvaluateCache = function(_, player, cacheFlag)
         end
     end
     
-    if not playerSave.injectableSteroids then
+    if not playerSave or not playerSave.injectableSteroids then
         if cacheFlag == CacheFlag.CACHE_DAMAGE then
             ConchBlessing.printDebug("No injectableSteroids data in playerSave, returning")
+        end
+        if useCountChanged then
+            ConchBlessing.injectablsteroids._lastUseCount[playerID] = currentUseCount
         end
         return
     end
@@ -344,6 +322,9 @@ ConchBlessing.injectablsteroids.onEvaluateCache = function(_, player, cacheFlag)
     if useCount <= 0 then 
         if cacheFlag == CacheFlag.CACHE_DAMAGE then
             ConchBlessing.printDebug("useCount is 0, returning")
+        end
+        if useCountChanged then
+            ConchBlessing.injectablsteroids._lastUseCount[playerID] = currentUseCount
         end
         return 
     end
@@ -404,12 +385,9 @@ ConchBlessing.injectablsteroids.onEvaluateCache = function(_, player, cacheFlag)
         -- unified system will apply via central handler
     end
     
-    -- Mark this frame as processed to prevent duplicate calls
-    ConchBlessing.injectablsteroids._lastProcessedFrame = currentFrame
-    ConchBlessing.injectablsteroids._lastProcessedPlayer = playerID
-    
-    -- Record the use count that was processed
-    ConchBlessing.injectablsteroids._lastUseCount[playerID] = currentUseCount
+    if useCountChanged then
+        ConchBlessing.injectablsteroids._lastUseCount[playerID] = currentUseCount
+    end
 end
 
 -- initialize data when game started
@@ -531,8 +509,8 @@ do
     local sm = SaveManager
     local mod = ConchBlessing and ConchBlessing.originalMod
     if sm and mod and mod.__SAVEMANAGER_UNIQUE_KEY and sm.SaveCallbacks then
-        local callbackKey = mod.__SAVEMANAGER_UNIQUE_KEY .. sm.SaveCallbacks.PRE_DATA_SAVE
-        mod:AddCallback(callbackKey, function(saveData)
+        local callbackKey = sm.SaveCallbacks.PRE_DATA_SAVE
+        mod:AddCallback(callbackKey, function(_, saveData)
             if saveData and saveData.game and saveData.game.run then
                 for _, playerRun in pairs(saveData.game.run) do
                     local arr = playerRun and playerRun.injectableSteroids
@@ -554,7 +532,6 @@ do
             if ConchBlessing and ConchBlessing.Config and ConchBlessing.Config.debugMode then
                 ConchBlessing.printDebug("[InjectableSteroids] PRE_DATA_SAVE sanitized injectableSteroids array")
             end
-            return saveData
         end)
     end
 end

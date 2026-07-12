@@ -16,7 +16,8 @@ ConchBlessing.chronus.data = ConchBlessing.chronus.data or {
     anchorDepthOffset = -10,
     angelicPrismOffset = 18,
     scanIntervalFrames = 1,
-    suspendWindowFrames = 120,
+    starOfBethlehemSpawnIntervalFrames = 300,
+    starOfBethlehemRetryIntervalFrames = 30,
     blacklist = {
         [CollectibleType.COLLECTIBLE_ONE_UP] = true,
         [CollectibleType.COLLECTIBLE_ISAACS_HEART] = true,
@@ -215,7 +216,7 @@ ConchBlessing.chronus.data = ConchBlessing.chronus.data or {
         end,
         [CollectibleType.COLLECTIBLE_STAR_OF_BETHLEHEM] = function(player, total, delta)
             ConchBlessing.printDebug(string.format("[Chronus] Star of Bethlehem absorbed: total=%d, delta=%d", tonumber(total) or 0, tonumber(delta) or 0))
-            ConchBlessing.chronus._ensureStarOfBethlehemStack(player)
+            ConchBlessing.chronus._ensureStarOfBethlehemStack(player, (tonumber(delta) or 0) > 0)
             ConchBlessing.chronus._updateStarOfBethlehemAnchors(player)
         end,
     },
@@ -262,12 +263,6 @@ local function getRunSave(player)
     return globalSave.chronus
 end
 
-local function isSuspended(player)
-    local pdata = player and player:GetData() or nil
-    local untilFrame = (pdata and pdata.__chronusSuspendUntil) or 0
-    return Game():GetFrameCount() <= (tonumber(untilFrame) or 0)
-end
-
 local function ownsAnyBlacklisted(player)
     local bl = (ConchBlessing.chronus.data and ConchBlessing.chronus.data.blacklist) or {}
     for id, v in pairs(bl) do
@@ -277,6 +272,44 @@ local function ownsAnyBlacklisted(player)
         end
     end
     return false
+end
+
+local function findChronusOwner()
+    local game = Game()
+    for i = 0, game:GetNumPlayers() - 1 do
+        local player = game:GetPlayer(i)
+        if player and player:HasCollectible(CHRONUS_ID) then
+            return player
+        end
+    end
+    return nil
+end
+
+local function clearChronusRuntime(player)
+    if not player then return end
+
+    local pdata = player:GetData()
+    local runtimeLists = {
+        "__chronusTwistedPairs",
+        "__chronusIncubi",
+        "__chronusSuccubi",
+        "__chronusCensers",
+        "__chronusStarsOfBethlehem",
+        "__chronusAngelicPrisms",
+    }
+    for _, key in ipairs(runtimeLists) do
+        for _, entity in ipairs(pdata[key] or {}) do
+            if entity and entity:Exists() then
+                entity:Remove()
+            end
+        end
+        pdata[key] = nil
+    end
+
+    pdata.__chronusNextStarOfBethlehemSpawnFrame = nil
+    pdata.__chronusNextStarOfBethlehemRetryFrame = nil
+    pdata.__chronusNextScan = nil
+    pdata.__chronusLastFireDir = nil
 end
 
 function ConchBlessing.chronus.registerAbsorbAction(familiarCollectibleId, fn)
@@ -376,7 +409,6 @@ end
 
 function ConchBlessing.chronus._detectAndAbsorb(player)
     if not player then return false end
-    if isSuspended(player) then return false end
 
     local rs = getRunSave(player)
     if not rs then return false end
@@ -537,6 +569,9 @@ function ConchBlessing.chronus._trackConvertedItemRemoval(player)
             ConchBlessing.SaveManager.Save()
             dbg(string.format("[Chronus] Detected %d item (ID:%d) removal, reduced familiar (ID:%d) count: %d -> %d (maxGrants=%d)", 
                 itemsRemoved, tonumber(itemId) or 0, tonumber(familiarId) or 0, absorbedCount, newAbsorbedCount, maxGrants))
+            if familiarId == CollectibleType.COLLECTIBLE_STAR_OF_BETHLEHEM then
+                ConchBlessing.chronus._ensureStarOfBethlehemStack(player, true)
+            end
         end
         
         ::continue::
@@ -979,7 +1014,7 @@ local function spawnInvisibleStarOfBethlehem(player)
     return fam
 end
 
-function ConchBlessing.chronus._ensureStarOfBethlehemStack(player)
+function ConchBlessing.chronus._ensureStarOfBethlehemStack(player, forceRespawn)
     if not player then return end
     local absorbed = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_STAR_OF_BETHLEHEM)
     local target = math.max(0, absorbed)
@@ -995,12 +1030,50 @@ function ConchBlessing.chronus._ensureStarOfBethlehemStack(player)
     end
     pdata.__chronusStarsOfBethlehem = kept
 
+    if target <= 0 then
+        for _, fam in ipairs(pdata.__chronusStarsOfBethlehem) do
+            if fam and fam:Exists() then fam:Remove() end
+        end
+        pdata.__chronusStarsOfBethlehem = {}
+        pdata.__chronusNextStarOfBethlehemSpawnFrame = nil
+        pdata.__chronusNextStarOfBethlehemRetryFrame = nil
+        return
+    end
+
+    local frame = Game():GetFrameCount()
+    local interval = math.max(1, math.floor(tonumber(ConchBlessing.chronus.data.starOfBethlehemSpawnIntervalFrames) or 300))
+    local retryInterval = math.max(1, math.floor(tonumber(ConchBlessing.chronus.data.starOfBethlehemRetryIntervalFrames) or 30))
+    local nextSpawnFrame = tonumber(pdata.__chronusNextStarOfBethlehemSpawnFrame)
+    local nextRetryFrame = tonumber(pdata.__chronusNextStarOfBethlehemRetryFrame)
+    local countMismatch = #pdata.__chronusStarsOfBethlehem ~= target
+    local shouldRespawn = forceRespawn == true
+        or nextSpawnFrame == nil
+        or frame >= nextSpawnFrame
+        or (countMismatch and (nextRetryFrame == nil or frame >= nextRetryFrame))
+    if not shouldRespawn then return end
+
+    for _, fam in ipairs(pdata.__chronusStarsOfBethlehem) do
+        if fam and fam:Exists() then fam:Remove() end
+    end
+    pdata.__chronusStarsOfBethlehem = {}
+
     while #pdata.__chronusStarsOfBethlehem < target do
         local fam = spawnInvisibleStarOfBethlehem(player)
         if not fam then break end
         table.insert(pdata.__chronusStarsOfBethlehem, fam)
     end
-    dbg(string.format("[Chronus] Ensured %d Stars of Bethlehem (target: %d)", #pdata.__chronusStarsOfBethlehem, target))
+    pdata.__chronusNextStarOfBethlehemSpawnFrame = frame + interval
+    if #pdata.__chronusStarsOfBethlehem ~= target then
+        pdata.__chronusNextStarOfBethlehemRetryFrame = frame + retryInterval
+    else
+        pdata.__chronusNextStarOfBethlehemRetryFrame = nil
+    end
+    dbg(string.format(
+        "[Chronus] Respawned %d Stars of Bethlehem (target: %d, next: %d)",
+        #pdata.__chronusStarsOfBethlehem,
+        target,
+        pdata.__chronusNextStarOfBethlehemSpawnFrame
+    ))
 end
 
 function ConchBlessing.chronus._updateStarOfBethlehemAnchors(player)
@@ -1019,43 +1092,52 @@ end
 
 ConchBlessing.chronus.onPickup = function(_, player, collectibleType)
     if collectibleType ~= CHRONUS_ID then return end
+    player:GetData().__chronusHadCollectible = true
     dbg("Picked up - initial sweep")
     local changed = ConchBlessing.chronus._detectAndAbsorb(player)
     if changed then ConchBlessing.chronus._finalizeAbsorb(player) end
 end
 
-ConchBlessing.chronus.onPlayerUpdate = function(_)
-    local frame = Game():GetFrameCount()
-    local n = Game():GetNumPlayers()
-    for i = 0, n - 1 do
-        local player = Isaac.GetPlayer(i)
-        if player then
-            local pdata = player:GetData()
-            if player:HasCollectible(CHRONUS_ID) then
-                pdata.__chronusNextScan = pdata.__chronusNextScan or 0
-                local interval = tonumber(ConchBlessing.chronus.data.scanIntervalFrames) or 15
-                if frame >= pdata.__chronusNextScan then
-                    pdata.__chronusNextScan = frame + interval
-                    local ok, changed = pcall(function() return ConchBlessing.chronus._detectAndAbsorb(player) end)
-                    if ok and changed then ConchBlessing.chronus._finalizeAbsorb(player) end
-                end
+ConchBlessing.chronus.onPlayerUpdate = function(_, player)
+    if not player then return end
 
-                -- Track converted item removal (all familiar->item conversions)
-                ConchBlessing.chronus._trackConvertedItemRemoval(player)
-                
-                -- Auto-execute absorbActions for all absorbed familiars
-                local absorbActions = ConchBlessing.chronus.data.absorbActions
-                if absorbActions then
-                    for familiarId, action in pairs(absorbActions) do
-                        local count = ConchBlessing.chronus._getAbsorbedCount(player, familiarId)
-                        if count > 0 and type(action) == "function" then
-                            action(player, count, 0)
-                        end
-                    end
+    local frame = Game():GetFrameCount()
+    local pdata = player:GetData()
+    if player:HasCollectible(CHRONUS_ID) then
+        pdata.__chronusHadCollectible = true
+        pdata.__chronusNextScan = pdata.__chronusNextScan or 0
+        local interval = tonumber(ConchBlessing.chronus.data.scanIntervalFrames) or 15
+        if frame >= pdata.__chronusNextScan then
+            pdata.__chronusNextScan = frame + interval
+            local ok, changed = pcall(function() return ConchBlessing.chronus._detectAndAbsorb(player) end)
+            if ok and changed then ConchBlessing.chronus._finalizeAbsorb(player) end
+        end
+
+        -- Track converted item removal (all familiar->item conversions)
+        ConchBlessing.chronus._trackConvertedItemRemoval(player)
+
+        -- Auto-execute absorbActions for all absorbed familiars
+        local absorbActions = ConchBlessing.chronus.data.absorbActions
+        if absorbActions then
+            for familiarId, action in pairs(absorbActions) do
+                local count = ConchBlessing.chronus._getAbsorbedCount(player, familiarId)
+                if count > 0 and type(action) == "function" then
+                    action(player, count, 0)
                 end
-            else
-                ConchBlessing.chronus._revertAll(player)
             end
+        end
+    elseif pdata.__chronusHadCollectible then
+        pdata.__chronusHadCollectible = false
+        clearChronusRuntime(player)
+        local um = ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers
+        if um and um.RemoveItemAddition then
+            um:RemoveItemAddition(player, CHRONUS_ID, "Damage")
+            um:QueueCacheUpdate(player, "Damage")
+        end
+        player:AddCacheFlags(CacheFlag.CACHE_DAMAGE | CacheFlag.CACHE_FLYING | CacheFlag.CACHE_FIREDELAY | CacheFlag.CACHE_SPEED)
+        player:EvaluateItems()
+        if not findChronusOwner() then
+            ConchBlessing.chronus._revertAll(player)
         end
     end
 end
@@ -1101,8 +1183,15 @@ ConchBlessing.chronus.onEvaluateCache = function(_, player, cacheFlag)
 end
 
 ConchBlessing.chronus.onGameStarted = function(_)
-    local player = Isaac.GetPlayer(0)
-    if not player or not player:HasCollectible(CHRONUS_ID) then return end
+    local player = findChronusOwner()
+    if not player then
+        local firstPlayer = Isaac.GetPlayer(0)
+        if firstPlayer then
+            ConchBlessing.chronus._revertAll(firstPlayer)
+        end
+        return
+    end
+    player:GetData().__chronusHadCollectible = true
     local rs = getRunSave(player)
     if rs then
         dbg(string.format("Loaded: total=%d, kinds=%d", tonumber(rs.totalAbsorbed or 0), rs.absorbed and (function(t) local c=0 for _ in pairs(t) do c=c+1 end return c end)(rs.absorbed) or 0))
@@ -1174,54 +1263,10 @@ ConchBlessing.chronus.onGameStarted = function(_)
 end
 
 function ConchBlessing.chronus._revertAll(player)
+    clearChronusRuntime(player)
     local rs = getRunSave(player)
     if not rs or not rs.absorbed then return false end
     local hadAny = false
-    do
-        local pdata = player and player:GetData() or {}
-        -- Remove Twisted Pair
-        if pdata.__chronusTwistedPairs then
-            for _, f in ipairs(pdata.__chronusTwistedPairs) do
-                if f and f:Exists() then f:Remove() end
-            end
-            pdata.__chronusTwistedPairs = nil
-        end
-        -- Remove Incubus
-        if pdata.__chronusIncubi then
-            for _, f in ipairs(pdata.__chronusIncubi) do
-                if f and f:Exists() then f:Remove() end
-            end
-            pdata.__chronusIncubi = nil
-        end
-        -- Remove Succubi
-        if pdata.__chronusSuccubi then
-            for _, f in ipairs(pdata.__chronusSuccubi) do
-                if f and f:Exists() then f:Remove() end
-            end
-            pdata.__chronusSuccubi = nil
-        end
-        -- Remove Censers
-        if pdata.__chronusCensers then
-            for _, f in ipairs(pdata.__chronusCensers) do
-                if f and f:Exists() then f:Remove() end
-            end
-            pdata.__chronusCensers = nil
-        end
-        -- Remove Stars of Bethlehem
-        if pdata.__chronusStarsOfBethlehem then
-            for _, f in ipairs(pdata.__chronusStarsOfBethlehem) do
-                if f and f:Exists() then f:Remove() end
-            end
-            pdata.__chronusStarsOfBethlehem = nil
-        end
-        -- Remove Angelic Prisms
-        if pdata.__chronusAngelicPrisms then
-            for _, f in ipairs(pdata.__chronusAngelicPrisms) do
-                if f and f:Exists() then f:Remove() end
-            end
-            pdata.__chronusAngelicPrisms = nil
-        end
-    end
     local familiarToItemMap = ConchBlessing.chronus.data.familiarToItemMap or {}
     
     for key, entry in pairs(rs.absorbed) do
@@ -1518,7 +1563,6 @@ ConchBlessing.chronus.onFireTear = function(_, tear)
     local pdata = player:GetData()
     if pdata and tear.Velocity and tear.Velocity:Length() > 0 then
         pdata.__chronusLastFireDir = tear.Velocity:Normalized()
-        pdata.__chronusLastTearFrame = Game():GetFrameCount()
     end
     
     -- Seraphim: homing + spectral

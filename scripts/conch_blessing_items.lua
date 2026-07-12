@@ -930,16 +930,23 @@ ConchBlessing.ItemData = {
             postPickupInit = "appraisal.onPostPickupInit",
             prePickupCollision = "appraisal.onPrePickupCollision",
             postNewRoom = "appraisal.onPostNewRoom",
+            gameStarted = "appraisal.onGameStarted",
             update = "appraisal.onUpdate",
         },
         onBeforeChange = "appraisal.onBeforeChange",
         onAfterChange = "appraisal.onAfterChange",
         synergies = {
             [{ type = "trinket", name = "Atropos" }] = {
-                kr = {"감정서 시작 방에서 바보 카드를 드랍합니다.",
-                        "장신구를 흡수하지 않습니다."},
-                en = {"Drops a Fool card in the AC start room.",
-                        "#Trinkets are not smelted."}
+                kr = {
+                    "감정 평가서를 사용해 이동한 첫 방에 바보 카드를 드랍합니다.",
+                    "#장신구 하나를 획득하면 해당 방에 남은 장신구가 모두 사라집니다.",
+                    "#획득한 장신구는 흡수되지 않으며, 원래 방으로 돌아가지 않습니다."
+                },
+                en = {
+                    "Drops a Fool card in the first room entered after using Appraisal Certificate.",
+                    "#After picking up a trinket, all other trinkets in that room disappear.",
+                    "#The picked-up trinket is not smelted, and you do not return to the original room."
+                }
             }
         },
     },
@@ -1381,7 +1388,7 @@ ConchBlessing.ItemData = {
         eid = {
             kr = {
                 "사용 시 방 안의 순환 아이템을 독립된 아이템으로 분리합니다.",
-                "#{{Warning}} REPENTOGON가 필요합니다!"
+                "#{{Warning}} REPENTOGON이 필요합니다!"
             },
             en = {
                 "On use, separates cycling items in the room into individual items.",
@@ -1788,12 +1795,20 @@ ConchBlessing.ItemData = {
         script = "scripts/items/trinkets/atropos",
         callbacks = {
             postUpdate = "atropos.onPostUpdate",
-            postNewRoom = "atropos.onPostNewRoom"
+            postNewRoom = "atropos.onPostNewRoom",
+            gameStarted = "atropos.onGameStarted",
+            prePickupCollision = "atropos.onPrePickupCollision"
         },
         synergies = {
             [{ id = CollectibleType.COLLECTIBLE_DEATH_CERTIFICATE, type = "collectible" }] = {
-                kr = "사망 증명서 방에서 바보 카드를 드랍합니다.",
-                en = "Drops a Fool card in Death Certificate rooms."
+                kr = {
+                    "사망 증명서 공간의 첫 방에 바보 카드를 드랍합니다.",
+                    "#아이템 하나를 획득하면 해당 방에 남은 아이템이 모두 사라지며, 원래 방으로 돌아가지 않습니다."
+                },
+                en = {
+                    "Drops a Fool card in the first room of the Death Certificate dimension.",
+                    "#After picking up an item, all other items in that room disappear, and you do not return to the original room."
+                }
             }
         }
     },

@@ -59,6 +59,31 @@ local function getPlayerState(player)
 	return s.perPlayer[key]
 end
 
+local function getDropIntervalFrames()
+	local fps = tonumber(ConchBlessing.timemoney.data.framesPerSecond) or 30
+	if fps <= 0 then fps = 30 end
+	return math.max(0, math.floor((tonumber(ConchBlessing.timemoney.data.dropIntervalSeconds) or 0) * fps))
+end
+
+local function getDropFramesRemaining(ps, currentFrame)
+	local intervalFrames = getDropIntervalFrames()
+	if intervalFrames <= 0 then return 0 end
+	local lastDropFrame = tonumber(ps and ps.lastDropFrame) or currentFrame
+	local elapsedFrames = math.max(0, currentFrame - lastDropFrame)
+	return math.max(0, intervalFrames - elapsedFrames)
+end
+
+local function rebaseDropTimer(ps, remainingFrames, currentFrame)
+	local intervalFrames = getDropIntervalFrames()
+	remainingFrames = math.max(0, math.min(intervalFrames, math.floor(tonumber(remainingFrames) or intervalFrames)))
+	ps.lastDropFrame = currentFrame - (intervalFrames - remainingFrames)
+end
+
+local function writeDropTimerRecord(rec, ps, currentFrame)
+	rec.dropFramesRemaining = getDropFramesRemaining(ps, currentFrame)
+	rec.lastDropFrame = nil
+end
+
 local function getItemId()
 	return ConchBlessing.ItemData.TIME_MONEY and ConchBlessing.ItemData.TIME_MONEY.id
 end
@@ -76,8 +101,6 @@ local function loadFromSave(player)
 	local ps = getPlayerState(player)
 	local rec = save.timeMoney[key]
 	if rec then
-		ps.lastDropFrame = tonumber(rec.lastDropFrame) or 0
-		ps.lastItemCount = tonumber(rec.lastItemCount) or 0
 		local d = rec.data
 		if d then
 			if type(d.framesPerSecond) == 'number' then ConchBlessing.timemoney.data.framesPerSecond = d.framesPerSecond end
@@ -90,6 +113,16 @@ local function loadFromSave(player)
 			if type(d.luckMultiplierPerPoint) == 'number' then ConchBlessing.timemoney.data.luckMultiplierPerPoint = d.luckMultiplierPerPoint end
 			if type(d.luckMultiplierCap) == 'number' then ConchBlessing.timemoney.data.luckMultiplierCap = d.luckMultiplierCap end
 		end
+		ps.lastItemCount = tonumber(rec.lastItemCount) or 0
+		local remainingFrames = tonumber(rec.dropFramesRemaining)
+		if remainingFrames == nil then
+			-- Legacy saves only contain a session-local absolute frame. Restart a full
+			-- interval instead of carrying that unrelated frame into this session.
+			remainingFrames = getDropIntervalFrames()
+		end
+		local currentFrame = Game():GetFrameCount()
+		rebaseDropTimer(ps, remainingFrames, currentFrame)
+		writeDropTimerRecord(rec, ps, currentFrame)
 	end
 end
 
@@ -101,7 +134,7 @@ local function saveToSave(player)
 	local ps = getPlayerState(player)
 	save.timeMoney[key] = save.timeMoney[key] or {}
 	local rec = save.timeMoney[key]
-	rec.lastDropFrame = ps.lastDropFrame
+	writeDropTimerRecord(rec, ps, Game():GetFrameCount())
 	rec.lastItemCount = ps.lastItemCount
 	rec.data = {
 		framesPerSecond = ConchBlessing.timemoney.data.framesPerSecond,
@@ -116,6 +149,26 @@ local function saveToSave(player)
 		luckMultiplierCap = ConchBlessing.timemoney.data.luckMultiplierCap
 	}
 	SaveManager.Save()
+end
+
+do
+	local mod = ConchBlessing and ConchBlessing.originalMod
+	if mod and mod.__SAVEMANAGER_UNIQUE_KEY and SaveManager.SaveCallbacks then
+		local callbackKey = SaveManager.SaveCallbacks.PRE_DATA_SAVE
+		mod:AddCallback(callbackKey, function(_, saveData)
+			local runData = saveData and saveData.game and saveData.game.run
+			local perPlayer = ensureState().perPlayer
+			local currentFrame = Game():GetFrameCount()
+			for _, playerRun in pairs(runData or {}) do
+				for key, rec in pairs((playerRun and playerRun.timeMoney) or {}) do
+					local ps = perPlayer[key]
+					if ps and type(rec) == "table" then
+						writeDropTimerRecord(rec, ps, currentFrame)
+					end
+				end
+			end
+		end)
+	end
 end
 
 -- Utility: resolve coin subtype with weighted replacement odds and synergy
@@ -209,9 +262,7 @@ local function tryPeriodicDrop(player)
 	local game = Game()
 	local frame = game:GetFrameCount()
 	local ps = getPlayerState(player)
-	local fps = ConchBlessing.timemoney.data.framesPerSecond or 30
-	if fps <= 0 then fps = 30 end
-	local intervalFrames = math.floor((ConchBlessing.timemoney.data.dropIntervalSeconds or 0) * fps)
+	local intervalFrames = getDropIntervalFrames()
 	if intervalFrames <= 0 then return end
 	if frame - (ps.lastDropFrame or 0) < intervalFrames then return end
 	local coins = player:GetNumCoins()
@@ -360,7 +411,7 @@ function ConchBlessing.timemoney.onGameStarted(_, isContinued)
 			loadFromSave(p)
 		else
 			local ps = getPlayerState(p)
-			ps.lastDropFrame = 0
+			ps.lastDropFrame = game:GetFrameCount()
 			ps.lastItemCount = p:GetCollectibleNum(getItemId() or 0)
 			saveToSave(p)
 		end

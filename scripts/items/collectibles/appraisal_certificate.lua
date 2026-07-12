@@ -2,12 +2,12 @@ local isc = require("scripts.lib.isaacscript-common")
 
 ConchBlessing.appraisal = ConchBlessing.appraisal or {}
 local M = ConchBlessing.appraisal
+local GOLDEN_TRINKET_FLAG = 32768
 
 -- Configuration
 M.config = M.config or {
     costCoins = 30,
     debug = true,
-    conversionDelayFrames = 15, -- Delay before converting items after entering DC
 }
 
 -- State
@@ -15,12 +15,21 @@ M.state = M.state or {
     active = false,
     prevRoomIndex = nil,
     prevDimension = nil,
-    conversionScheduledFrame = nil,
     conversionCompleted = false,
     pendingTrinketId = nil,
-    pendingPlayerSeed = nil,
-    allowedPickupHash = nil,
+    pendingPlayerIndex = nil,
+    choiceCandidate = nil,
 }
+
+local function resetState()
+    M.state.active = false
+    M.state.prevRoomIndex = nil
+    M.state.prevDimension = nil
+    M.state.conversionCompleted = false
+    M.state.pendingTrinketId = nil
+    M.state.pendingPlayerIndex = nil
+    M.state.choiceCandidate = nil
+end
 
 -- Get current dimension (0 = normal, 1 = ???, 2 = Death Certificate)
 local function getCurrentDimension()
@@ -46,6 +55,18 @@ local function getCurrentDimension()
     return nil
 end
 
+local function getCurrentRoomKey()
+    local level = Game():GetLevel()
+    if not level then return nil end
+
+    return table.concat({
+        tostring(level:GetStage()),
+        tostring(level:GetStageType()),
+        tostring(level:GetCurrentRoomIndex()),
+        tostring(getCurrentDimension()),
+    }, ":")
+end
+
 -- Check if anyone has Atropos trinket (prevents auto-pickup)
 local function anyoneHasAtropos()
     local id = ConchBlessing.ItemData and ConchBlessing.ItemData.ATROPOS and ConchBlessing.ItemData.ATROPOS.id
@@ -59,6 +80,31 @@ local function anyoneHasAtropos()
         end
     end
     return false
+end
+
+local function normalizeTrinketId(trinketId)
+    local id = tonumber(trinketId)
+    if not id then return nil end
+    if id >= GOLDEN_TRINKET_FLAG then
+        return id - GOLDEN_TRINKET_FLAG
+    end
+    return id
+end
+
+local function canStartChoice(player, pickup)
+    if (tonumber(pickup.Wait) or 0) > 0 then return false end
+    if type(player.IsItemQueueEmpty) == "function" and not player:IsItemQueueEmpty() then
+        return false
+    end
+
+    if type(player.CanPickupItem) == "function" then
+        local ok, canPickup = pcall(function()
+            return player:CanPickupItem()
+        end)
+        if ok and canPickup == false then return false end
+    end
+
+    return true
 end
 
 -- Check if trinket with given ID exists
@@ -183,11 +229,10 @@ function M.onUseItem(_, collectibleID, rng, player, useFlags, activeSlot, varDat
     M.state.active = true
     M.state.prevRoomIndex = level:GetCurrentRoomIndex()
     M.state.prevDimension = currentDim
-    M.state.conversionScheduledFrame = nil
     M.state.conversionCompleted = false
     M.state.pendingTrinketId = nil
-    M.state.pendingPlayerSeed = nil
-    M.state.allowedPickupHash = nil
+    M.state.pendingPlayerIndex = nil
+    M.state.choiceCandidate = nil
     
     -- Use Death Certificate
     player:UseActiveItem(CollectibleType.COLLECTIBLE_DEATH_CERTIFICATE, UseFlag.USE_NOANIM, 0)
@@ -213,37 +258,21 @@ end
 function M.onPostNewRoom()
     if not M.state.active then return end
     
-    local game = Game()
-    local level = game:GetLevel()
     local currentDim = getCurrentDimension()
-    local currentRoomIndex = level:GetCurrentRoomIndex()
+    M.state.choiceCandidate = nil
     
     -- Check if we entered Death Certificate dimension
     if currentDim == 2 and not M.state.conversionCompleted then
-        -- Schedule conversion after a few frames to ensure all items are spawned
-        local delayFrames = M.config.conversionDelayFrames or 15
-        M.state.conversionScheduledFrame = game:GetFrameCount() + delayFrames
-        
-        if M.config.debug then
-            ConchBlessing.print(string.format("[Appraisal] Entered DC dimension, scheduling conversion in %d frames", delayFrames))
-        end
+        convertAllCollectiblesInDC()
     end
     
-    -- Check if we returned to original room
-    if M.state.prevRoomIndex and currentRoomIndex == M.state.prevRoomIndex and currentDim ~= 2 then
+    -- Any exit from the shared DC dimension ends this Appraisal session.
+    if currentDim ~= 2 then
         if M.config.debug then
-            ConchBlessing.print("[Appraisal] Returned to original room, cleaning up")
+            ConchBlessing.print("[Appraisal] Left Death Certificate dimension, cleaning up")
         end
-        
-        -- Clean up state
-        M.state.active = false
-        M.state.prevRoomIndex = nil
-        M.state.prevDimension = nil
-        M.state.conversionScheduledFrame = nil
-        M.state.conversionCompleted = false
-        M.state.pendingTrinketId = nil
-        M.state.pendingPlayerSeed = nil
-        M.state.allowedPickupHash = nil
+
+        resetState()
     end
 end
 
@@ -274,51 +303,88 @@ function M.onPostPickupInit(_, pickup)
     end
 end
 
--- Pre Pickup Collision callback (handle trinket pickup)
+-- Reserve one physical choice; acquisition is confirmed by POST_ITEM_PICKUP.
 function M.onPrePickupCollision(_, pickup, collider, low)
     if not M.state.active then return end
+    if getCurrentDimension() ~= 2 or not M.state.conversionCompleted then return end
     if pickup.Variant ~= PickupVariant.PICKUP_TRINKET then return end
     
     local player = collider and collider:ToPlayer() or nil
     if not player then return end
     
-    local trinketId = pickup.SubType
+    local trinketId = normalizeTrinketId(pickup.SubType)
     if not trinketId or trinketId <= 0 then return end
-    
-    -- Block other trinkets if one is already being picked up
-    local ph = GetPtrHash(pickup)
-    if M.state.allowedPickupHash == nil then
-        M.state.allowedPickupHash = ph
-    elseif M.state.allowedPickupHash ~= ph then
-        return true -- Block this pickup
-    end
-    
-    -- If player has Atropos, don't auto-smelt
+
+    -- Atropos keeps the selected trinket instead of smelting and returning.
     if anyoneHasAtropos() then return end
-    
-    -- Store pending trinket for smelting
-    M.state.pendingTrinketId = trinketId
-    M.state.pendingPlayerSeed = player.InitSeed
-    
-    if M.config.debug then
-        ConchBlessing.print(string.format("[Appraisal] Picked up T:%d, will smelt and return", trinketId))
+
+    local playerIndex = isc.getPlayerIndex(nil, player)
+    local pickupHash = GetPtrHash(pickup)
+    local roomKey = getCurrentRoomKey()
+    local candidate = M.state.choiceCandidate
+    if candidate and candidate.roomKey ~= roomKey then
+        M.state.choiceCandidate = nil
+        candidate = nil
     end
-    
-    -- Remove all other trinkets
-    local pickedHash = GetPtrHash(pickup)
+
+    if candidate then
+        if candidate.playerIndex == playerIndex and candidate.pickupHash == pickupHash then
+            return
+        end
+        return true
+    end
+
+    if not canStartChoice(player, pickup) then return end
+
+    M.state.choiceCandidate = {
+        playerIndex = playerIndex,
+        pickupHash = pickupHash,
+        roomKey = roomKey,
+        trinketId = trinketId,
+    }
+end
+
+function M.onPostItemPickup(_, player, pickingUpItem)
+    if not M.state.active or getCurrentDimension() ~= 2 then return end
+    if not player or not pickingUpItem then return end
+    if not isc.isPickingUpItemTrinket(nil, pickingUpItem) then return end
+
+    local candidate = M.state.choiceCandidate
+    local playerIndex = isc.getPlayerIndex(nil, player)
+    local pickedTrinketId = normalizeTrinketId(pickingUpItem.subType or pickingUpItem.SubType)
+    if not candidate
+        or candidate.playerIndex ~= playerIndex
+        or candidate.roomKey ~= getCurrentRoomKey()
+        or candidate.trinketId ~= pickedTrinketId
+    then
+        return
+    end
+
+    M.state.choiceCandidate = nil
+    M.state.pendingTrinketId = candidate.trinketId
+    M.state.pendingPlayerIndex = candidate.playerIndex
+
     local trinkets = Isaac.FindByType(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_TRINKET, -1, false, false)
     for _, e in ipairs(trinkets) do
-        if GetPtrHash(e) ~= pickedHash then
-            local p = e:ToPickup()
-            if p then p:Remove() end
-        end
+        local remainingPickup = e:ToPickup()
+        if remainingPickup then remainingPickup:Remove() end
     end
-    
-    -- Play sound
+
+    if M.config.debug then
+        ConchBlessing.print(string.format(
+            "[Appraisal] Confirmed T:%d pickup, will smelt and return",
+            candidate.trinketId
+        ))
+    end
+
     pcall(function()
         local sfx = SFXManager()
         sfx:Play(SoundEffect.SOUND_HOLY, 1.0, 0, false, 1.0)
     end)
+end
+
+function M.onGameStarted()
+    resetState()
 end
 
 -- Update callback
@@ -326,22 +392,22 @@ function M.onUpdate()
     if not M.state.active then return end
     
     local game = Game()
-    local currentFrame = game:GetFrameCount()
-    local currentDim = getCurrentDimension()
-    
-    -- Execute scheduled conversion
-    if M.state.conversionScheduledFrame and currentFrame >= M.state.conversionScheduledFrame then
-        M.state.conversionScheduledFrame = nil
-        
-        if currentDim == 2 and not M.state.conversionCompleted then
-            convertAllCollectiblesInDC()
+
+    local candidate = M.state.choiceCandidate
+    if candidate then
+        local candidatePlayer = isc.getPlayerFromIndex(nil, candidate.playerIndex)
+        if candidate.roomKey ~= getCurrentRoomKey()
+            or not candidatePlayer
+            or candidatePlayer:IsItemQueueEmpty()
+        then
+            M.state.choiceCandidate = nil
         end
     end
-    
+
     -- Handle trinket smelting and return
     if M.state.pendingTrinketId then
-        local player = Isaac.GetPlayer(0)
-        if not player or (M.state.pendingPlayerSeed and player.InitSeed ~= M.state.pendingPlayerSeed) then
+        local player = isc.getPlayerFromIndex(nil, M.state.pendingPlayerIndex)
+        if not player then
             return
         end
         
@@ -387,8 +453,8 @@ function M.onUpdate()
             end
             
             M.state.pendingTrinketId = nil
-            M.state.pendingPlayerSeed = nil
-            M.state.allowedPickupHash = nil
+            M.state.pendingPlayerIndex = nil
+            M.state.choiceCandidate = nil
         end
     end
 end
@@ -406,5 +472,10 @@ function M.onAfterChange(upgradePos, pickup, itemData)
         ConchBlessing.print("[Appraisal] onAfterChange called")
     end
 end
+
+ConchBlessing:AddCallbackCustom(
+    isc.ModCallbackCustom.POST_ITEM_PICKUP,
+    M.onPostItemPickup
+)
 
 return M

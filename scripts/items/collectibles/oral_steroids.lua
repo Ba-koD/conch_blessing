@@ -82,8 +82,6 @@ ConchBlessing.oralsteroids.removeLastStack = function(player, removeCount, apply
         ConchBlessing.oralsteroids._lastItemCount = {}
     end
     ConchBlessing.oralsteroids._lastItemCount[playerID] = target
-    ConchBlessing.oralsteroids._lastProcessedFrame = nil
-    ConchBlessing.oralsteroids._lastProcessedItemNum = nil
     if applyCacheUpdate ~= false then
         player:AddCacheFlags(CacheFlag.CACHE_ALL)
         player:EvaluateItems()
@@ -116,13 +114,6 @@ ConchBlessing.oralsteroids.onEvaluateCache = function(_, player, cacheFlag)
     local itemNum = player:GetCollectibleNum(ORAL_STEROIDS_ID)
     
     if itemNum <= 0 then return end
-    
-    -- Prevent duplicate processing in the same frame for the same item count
-    if ConchBlessing.oralsteroids._lastProcessedFrame == Game():GetFrameCount() and 
-       ConchBlessing.oralsteroids._lastProcessedPlayer == playerID and
-       ConchBlessing.oralsteroids._lastProcessedItemNum == itemNum then
-        return
-    end
     
     -- Track item count for comparison
     if not ConchBlessing.oralsteroids._lastItemCount then
@@ -234,6 +225,7 @@ ConchBlessing.oralsteroids.onEvaluateCache = function(_, player, cacheFlag)
             SaveManager.Save()
             ConchBlessing.printDebug("Oral Steroids: Data saved to SaveManager!")
         end
+        rebuildOralUnified(player, playerID)
     elseif storedCount > 0 and storedCount < itemNum then
         ConchBlessing.printDebug(string.format("Oral Steroids: Warning - storedCount (%d) < itemNum (%d), this shouldn't happen", storedCount, itemNum))
     end
@@ -270,21 +262,6 @@ ConchBlessing.oralsteroids.onEvaluateCache = function(_, player, cacheFlag)
     
     -- No direct stat application here; unified system will handle totals
     
-    -- Update unified multipliers ONLY when item count changed (to prevent duplicate application on game load)
-    if itemCountChanged and #storedMultipliers > 0 then
-        local lastIndividualMultipliers = storedMultipliers[#storedMultipliers]
-        -- Always treat as additive multiplier stacking
-        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, ORAL_STEROIDS_ID, "Tears", lastIndividualMultipliers.tears, "Oral Steroids #" .. #storedMultipliers)
-        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, ORAL_STEROIDS_ID, "Damage", lastIndividualMultipliers.damage, "Oral Steroids #" .. #storedMultipliers)
-        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, ORAL_STEROIDS_ID, "Range", lastIndividualMultipliers.range, "Oral Steroids #" .. #storedMultipliers)
-        ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, ORAL_STEROIDS_ID, "Luck", lastIndividualMultipliers.luck, "Oral Steroids #" .. #storedMultipliers)
-        ConchBlessing.printDebug(string.format("Oral Steroids: Applied unified multipliers for item #%d", #storedMultipliers))
-    elseif not itemCountChanged then
-        ConchBlessing.printDebug("Oral Steroids: Skipped unified multiplier application (item count unchanged, unified system already loaded)")
-    elseif #storedMultipliers == 0 then
-        ConchBlessing.printDebug("Oral Steroids: Warning - storedMultipliers is empty, cannot apply unified multipliers")
-    end
-    
     if cacheFlag == CacheFlag.CACHE_SPEED then
         local speedDecrease = ConchBlessing.oralsteroids.data.speedDecrease * itemNum
         ConchBlessing.stats.speed.applyAddition(player, -speedDecrease, ConchBlessing.oralsteroids.STATS.MIN_MULTIPLIER)
@@ -294,13 +271,9 @@ ConchBlessing.oralsteroids.onEvaluateCache = function(_, player, cacheFlag)
     
     -- No-op for LUCK; unified system will render/apply on its own
     
-    -- Mark this frame as processed to prevent duplicate calls
-    ConchBlessing.oralsteroids._lastProcessedFrame = Game():GetFrameCount()
-    ConchBlessing.oralsteroids._lastProcessedPlayer = playerID
-    ConchBlessing.oralsteroids._lastProcessedItemNum = itemNum
-    
-    -- Record the item count that was processed
-    ConchBlessing.oralsteroids._lastItemCount[playerID] = itemNum
+    if itemCountChanged then
+        ConchBlessing.oralsteroids._lastItemCount[playerID] = itemNum
+    end
 end
 
 -- initialize data when game started
@@ -382,8 +355,8 @@ do
     local sm = SaveManager
     local mod = ConchBlessing and ConchBlessing.originalMod
     if sm and mod and mod.__SAVEMANAGER_UNIQUE_KEY and sm.SaveCallbacks then
-        local callbackKey = mod.__SAVEMANAGER_UNIQUE_KEY .. sm.SaveCallbacks.PRE_DATA_SAVE
-        mod:AddCallback(callbackKey, function(saveData)
+        local callbackKey = sm.SaveCallbacks.PRE_DATA_SAVE
+        mod:AddCallback(callbackKey, function(_, saveData)
             if saveData and saveData.game and saveData.game.run then
                 for _, playerRun in pairs(saveData.game.run) do
                     local arr = playerRun and playerRun.oralSteroids
@@ -405,7 +378,6 @@ do
             if ConchBlessing and ConchBlessing.Config and ConchBlessing.Config.debugMode then
                 ConchBlessing.printDebug("[OralSteroids] PRE_DATA_SAVE sanitized oralSteroids array")
             end
-            return saveData
         end)
     end
 end

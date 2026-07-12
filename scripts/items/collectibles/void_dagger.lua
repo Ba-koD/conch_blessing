@@ -8,10 +8,9 @@ ConchBlessing.voiddagger.data = {
 
 local VOID_DAGGER_ID = Isaac.GetItemIdByName("Void Dagger")
 
--- runtime guard map to avoid multi-trigger spam on the same enemy within a short window
-ConchBlessing.voiddagger._lastProcFrameByNpc = {}
-ConchBlessing.voiddagger._lastGlobalSpawnFrame = -999
 ConchBlessing.voiddagger._upgradeAnim = nil
+
+local LAST_PROC_FRAME_KEY = "__conchVoidDaggerLastProcFrame"
 
 -- shots per second (SPS): S ≈ 30 / (MaxFireDelay + 1)
 local function getShotsPerSecond(player)
@@ -62,12 +61,13 @@ end
 local function shouldProcForNpc(npc)
     if not npc then return false end
     local now = Game():GetFrameCount()
-    local last = ConchBlessing.voiddagger._lastProcFrameByNpc[npc.InitSeed or npc.Index]
+    local npcData = npc:GetData()
+    local last = tonumber(npcData[LAST_PROC_FRAME_KEY])
     local lockF = ConchBlessing.voiddagger.data.targetLockoutF or 20
-    if last and now - last < lockF then -- per-target lockout
+    if last and now >= last and now - last < lockF then -- per-target lockout
         return false
     end
-    ConchBlessing.voiddagger._lastProcFrameByNpc[npc.InitSeed or npc.Index] = now
+    npcData[LAST_PROC_FRAME_KEY] = now
     return true
 end
 
