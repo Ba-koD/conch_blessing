@@ -82,6 +82,16 @@
 ConchBlessing.CallbackManager = {}
 ConchBlessing.CallbackManager._didRegisterThisRun = false
 
+local function getRepentogonCallback(callbackName)
+    local repentogon = rawget(_G, "REPENTOGON")
+    if type(repentogon) ~= "table" or repentogon.Real ~= true then
+        return nil
+    end
+
+    local callback = ModCallbacks[callbackName]
+    return type(callback) == "number" and callback or nil
+end
+
 -- Callback mapping table
 -- Left side: callback abbreviation in ItemData
 -- Right side: actual ModCallbacks enum and function path
@@ -94,6 +104,11 @@ ConchBlessing.CallbackManager.callbackMapping = {
     tearInit = { callback = ModCallbacks.MC_POST_TEAR_INIT, needsId = false },
     tearUpdate = { callback = ModCallbacks.MC_POST_TEAR_UPDATE, needsId = false },
     fireTear = { callback = ModCallbacks.MC_POST_FIRE_TEAR, needsId = false },
+    weaponFired = {
+        callback = getRepentogonCallback("MC_POST_TRIGGER_WEAPON_FIRED"),
+        needsId = false,
+        requires = "REPENTOGON"
+    },
     tearCollision = { callback = ModCallbacks.MC_PRE_TEAR_COLLISION, needsId = false },
     tearRemoved = { callback = ModCallbacks.MC_POST_ENTITY_REMOVE, needsId = false },
     gameStarted = { callback = ModCallbacks.MC_POST_GAME_STARTED, needsId = false },
@@ -112,6 +127,12 @@ ConchBlessing.CallbackManager.callbackMapping = {
     postPlayerInit = { callback = ModCallbacks.MC_POST_PLAYER_INIT, needsId = false },
     usePill = { callback = ModCallbacks.MC_USE_PILL, needsId = false },
     entityTakeDmg = { callback = ModCallbacks.MC_ENTITY_TAKE_DMG, needsId = false },
+    postEntityTakeDmg = {
+        callback = getRepentogonCallback("MC_POST_ENTITY_TAKE_DMG"),
+        needsId = false,
+        requires = "REPENTOGON",
+        optional = true
+    },
     postCurseEval = { callback = ModCallbacks.MC_POST_CURSE_EVAL, needsId = false },
     inputAction = { callback = ModCallbacks.MC_INPUT_ACTION, needsId = false },
     levelGenerator = { callback = ModCallbacks.MC_LEVEL_GENERATOR, needsId = false },
@@ -230,6 +251,17 @@ ConchBlessing.CallbackManager.registerItemCallbacks = function(itemKey, itemData
         
         if not callbackInfo then
             ConchBlessing.printError("  Warning: Unknown callback type '" .. callbackKey .. "' for " .. itemKey)
+            goto continue
+        end
+
+        if type(callbackInfo.callback) ~= "number" then
+            local requirement = callbackInfo.requires and ("; requires " .. callbackInfo.requires) or ""
+            local message = "Callback type '" .. callbackKey .. "' is unavailable for " .. itemKey .. requirement
+            if callbackInfo.optional then
+                ConchBlessing.printDebug("  Skipping optional " .. message)
+            else
+                ConchBlessing.printError("  Warning: " .. message)
+            end
             goto continue
         end
         

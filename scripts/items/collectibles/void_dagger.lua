@@ -1,5 +1,8 @@
 ConchBlessing.voiddagger = {}
 
+local DamageProvenance = require("scripts.lib.damage_provenance")
+DamageProvenance.registerCallbacks(ConchBlessing)
+
 -- config
 ConchBlessing.voiddagger.data = {
     targetLockoutF = 20, -- per-target lockout frames
@@ -58,16 +61,22 @@ local function applyLuckBonus(p, luck)
     return out, factor, L
 end
 
-local function shouldProcForNpc(npc)
-    if not npc then return false end
+local function shouldProcForNpc(npc, player)
+    if not (npc and player) then return false end
     local now = Game():GetFrameCount()
     local npcData = npc:GetData()
-    local last = tonumber(npcData[LAST_PROC_FRAME_KEY])
+    local lastByPlayer = npcData[LAST_PROC_FRAME_KEY]
+    if type(lastByPlayer) ~= "table" then
+        lastByPlayer = {}
+        npcData[LAST_PROC_FRAME_KEY] = lastByPlayer
+    end
+    local playerKey = tostring(player.InitSeed or player.Index or 0)
+    local last = tonumber(lastByPlayer[playerKey])
     local lockF = ConchBlessing.voiddagger.data.targetLockoutF or 20
     if last and now >= last and now - last < lockF then -- per-target lockout
         return false
     end
-    npcData[LAST_PROC_FRAME_KEY] = now
+    lastByPlayer[playerKey] = now
     return true
 end
 
@@ -79,6 +88,8 @@ local function spawnVoidRingAt(player, pos)
     if not ring then return end
     local laser = ring:ToLaser()
     if not laser then return end
+
+    DamageProvenance.markSecondaryAttack(laser, "void_dagger_void_ring")
 
     -- set timeout by player's damage
     local timeoutF = computeTimeoutFromDamage(player.Damage)
@@ -105,25 +116,14 @@ local function spawnVoidRingAt(player, pos)
     end
 end
 
--- Handle tear collision to trigger ring on hit
-ConchBlessing.voiddagger.onTearCollision = function(_, tear, collider, _)
-    if not (tear and collider) then return nil end
-    local parent = tear.Parent
-    if not (parent and parent:ToPlayer()) then return nil end
-
-    local player = parent:ToPlayer()
+local function tryProcFromTear(player, tear, npc)
     if not (player and VOID_DAGGER_ID ~= -1 and player:HasCollectible(VOID_DAGGER_ID)) then
-        return nil
-    end
-
-    local npc = collider:ToNPC()
-    if not (npc and npc:Exists() and npc:IsVulnerableEnemy() and not npc:HasEntityFlags(EntityFlag.FLAG_FRIENDLY)) then
-        return nil
+        return
     end
 
     -- Per-target brief lockout to avoid multi-proc spam on multi-hit frames
-    if not shouldProcForNpc(npc) then
-        return nil
+    if not shouldProcForNpc(npc, player) then
+        return
     end
 
     -- compute proc chance
@@ -138,7 +138,7 @@ ConchBlessing.voiddagger.onTearCollision = function(_, tear, collider, _)
     rng:SetSeed(tear.InitSeed or player.InitSeed, 35)
     local roll = rng:RandomFloat()
     if roll < p then
-        local hitPos = collider.Position
+        local hitPos = npc.Position
         spawnVoidRingAt(player, hitPos)
         if ConchBlessing and ConchBlessing.printDebug then
             ConchBlessing.printDebug(string.format(
@@ -147,7 +147,36 @@ ConchBlessing.voiddagger.onTearCollision = function(_, tear, collider, _)
             ))
         end
     end
+end
 
+-- REPENTOGON path: trigger only after direct tear damage is actually applied.
+ConchBlessing.voiddagger.onPostEntityTakeDamage = function(_, entity, amount, _flags, source, _countdown, extraSource)
+    if not entity or (tonumber(amount) or 0) <= 0 then return end
+
+    local npc = entity:ToNPC()
+    if not (npc and npc:Exists() and npc:IsVulnerableEnemy() and not npc:HasEntityFlags(EntityFlag.FLAG_FRIENDLY)) then
+        return
+    end
+
+    local tear = DamageProvenance.getEligibleDirectTear(source, extraSource)
+    if not tear then return end
+
+    local player = DamageProvenance.getDirectPlayerOwner(tear)
+    tryProcFromTear(player, tear, npc)
+end
+
+-- Base-game fallback: use collision only without the applied-damage callback.
+ConchBlessing.voiddagger.onTearCollision = function(_, tear, collider, _low)
+    if DamageProvenance.hasAppliedDamageCallback() then return nil end
+    if not (tear and DamageProvenance.isHitProcEligible(tear)) then return nil end
+
+    local npc = collider and collider:ToNPC() or nil
+    if not (npc and npc:Exists() and npc:IsVulnerableEnemy() and not npc:HasEntityFlags(EntityFlag.FLAG_FRIENDLY)) then
+        return nil
+    end
+
+    local player = DamageProvenance.getDirectPlayerOwner(tear)
+    tryProcFromTear(player, tear, npc)
     return nil
 end
 

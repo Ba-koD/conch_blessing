@@ -12,7 +12,7 @@
 --   weight: number - item weight in pool (higher number means more frequent appearance)
 --   DecreaseBy: number - weight decrease when item is selected from pool
 --   RemoveOn: number - probability of item being removed from pool (0.0-1.0)
---   quality: number - item quality (0-5, 5 is highest quality)
+--   quality: number - item quality (0-4, 4 is highest quality)
 --   tags: "tag1 tag2" - item tags (multiple tags must be separated with a space)
 --     possible tags (from IsaacDocs items.xml):
 --       dead - Dead things (for the Parasite unlock)
@@ -183,18 +183,22 @@ ConchBlessing.ItemData = {
         },
         eid = {
             kr = {
-                "#눈물이 적에게 명중 시 확률로 그 위치에 내 데미지의 보이드 링을 소환합니다.",
+                "#눈물로 적에게 피해를 주면 확률로 그 위치에 내 데미지의 보이드 링을 소환합니다.",
                 "#확률은 (30 - {{Tears}}연사)%로 5%보다 작아지지 않습니다",
                 "#위 확률은 {{Luck}}운에 따라 (1+0.1×{{Luck}}운) 배수로 증가합니다. (최대 100%)",
                 "#지속시간은 {{Damage}}데미지에 따라 증가하며 데미지 10당 5단계로 증가합니다.",
-                "#{{BlackHeart}}블랙하트는 드랍되지 않습니다."
+                "#{{BlackHeart}}블랙하트는 드랍되지 않습니다.",
+                "#직접 눈물 피해만 발동하며 공허 링과 SOFLAM 미사일 피해는 제외됩니다.",
+                "#{{Warning}} REPENTOGON 권장"
             },
             en = {
-                "#On hit, has a chance to spawn a void ring at the impact that deals your damage",
+                "#When a tear damages an enemy, has a chance to spawn a void ring at the impact that deals your damage",
                 "#Chance is (30 − {{Tears}}Tears)% guaranteed 5%",
                 "#chance is increased by (1+0.1×{{Luck}}Luck) (up to 100%)",
                 "#Duration increases by 10 frames per 10 {{Damage}}Damage by 5 steps",
-                "#{{BlackHeart}}No black heart drops"
+                "#{{BlackHeart}}No black heart drops",
+                "#Only direct tear damage can trigger it; void rings and SOFLAM missiles are excluded",
+                "#{{Warning}} REPENTOGON recommended"
             }
         },
         pool = {
@@ -212,6 +216,7 @@ ConchBlessing.ItemData = {
         script = "scripts/items/collectibles/void_dagger",
         callbacks = {
             tearCollision = "voiddagger.onTearCollision",
+            postEntityTakeDmg = "voiddagger.onPostEntityTakeDamage",
             update = "voiddagger.onUpdate",
             postPlayerUpdate = "voiddagger.onPlayerUpdate"
         },
@@ -380,6 +385,7 @@ ConchBlessing.ItemData = {
                 "#중첩시 합연산으로 증가합니다.",
                 "#{{Warning}} 몸이 점점 노래집니다...",
                 "#{{Warning}} 기본 1% 확률로 즉사합니다.",
+                "#{{Warning}} 즉사는 보호막과 무적을 무시하지만 추가 목숨은 정상 발동합니다.",
                 "#{{Warning}} 사용시 즉사 확률이 3%씩 증가하고 층마다 초기화됩니다.",
                 "#방 클리어시마다 즉사확률이 0.25% 감소합니다."
             },
@@ -389,6 +395,7 @@ ConchBlessing.ItemData = {
                 "#When stacked, increases by addition",
                 "#{{Warning}}Your body is gradually turning yellow...",
                 "#{{Warning}}Base 1% chance of instant death when used",
+                "#{{Warning}}Instant death ignores shields and invincibility; extra lives still activate",
                 "#{{Warning}}Death chance increases by 3% each use, resets each floor.",
                 "#Each room clear decreases death chance by 0.25%."
             }
@@ -488,10 +495,12 @@ ConchBlessing.ItemData = {
             kr = {
                 "공중과 지형관통을 얻습니다.",
                 "#5번 공격마다 랜덤한 방향으로 번개구체를 5발 발사합니다",
+                "#{{Warning}} REPENTOGON이 필요합니다!",
             },
             en = {
                 "Gain flight and Spectral tears.",
-                "#Every 5th attack, fires 5 lightning shots in random directions."
+                "#Every 5th attack, fires 5 lightning shots in random directions.",
+                "#{{Warning}} Requires REPENTOGON!",
             }
         },
         pool = {
@@ -525,10 +534,7 @@ ConchBlessing.ItemData = {
         script = "scripts/items/collectibles/dragon",
         callbacks = {
             evaluateCache = "dragon.onEvaluateCache",
-            fireTear = "dragon.onFireTear",
-            postLaserInit = "dragon.onPostLaserInit",
-            postKnifeInit = "dragon.onPostKnifeInit",
-            postBombInit = "dragon.onPostBombInit",
+            weaponFired = "dragon.onWeaponFired",
             postLaserUpdate = "dragon.onPostLaserUpdate",
             postEffectUpdate = "dragon.onPostEffectUpdate",
             postPlayerUpdate = "dragon.onPlayerUpdate",
@@ -696,6 +702,10 @@ ConchBlessing.ItemData = {
             [{ id = CollectibleType.COLLECTIBLE_ROBO_BABY, type = "collectible" }] = {
                 kr = "테크를 얻습니다.",
                 en = "Gains Technology."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_ROBO_BABY_2, type = "collectible" }] = {
+                kr = "테크 2를 얻습니다.",
+                en = "Gains Technology 2."
             },
             [{ id = CollectibleType.COLLECTIBLE_BLUE_BABYS_ONLY_FRIEND, type = "collectible" }] = {
                 kr = "루도비코를 얻습니다. (최초 1회)",
@@ -1164,16 +1174,18 @@ ConchBlessing.ItemData = {
         },
         eid = {
             kr = {
-                "(15-{{Luck}}운)발마다 얼음 불꽃 발사",
+                "(15-{{Luck}}운)번 공격마다 얼음 불꽃 발사",
                 "#한 번에 최대 {{Tears}}연사 수치만큼 발사 (최소 1개)",
                 "#얼음 불꽃은 내 {{Damage}}데미지의 20%",
-                "#적중 시 {{Luck}}운% 확률로 빙결 (최대 100%)"
+                "#적중 시 {{Luck}}운% 확률로 빙결 (최대 100%)",
+                "#{{Warning}} REPENTOGON이 필요합니다!"
             },
             en = {
-                "Fires ice flames every (15-{{Luck}}Luck) tears",
+                "After every (15-{{Luck}}Luck) attacks, fires ice flames",
                 "#Fires up to {{Tears}} count per burst (minimum 1)",
                 "#Ice flames deal 20% of your {{Damage}}Damage",
-                "#On hit: {{Luck}}% chance to freeze (max 100%)"
+                "#On hit: {{Luck}}% chance to freeze (max 100%)",
+                "#{{Warning}} Requires REPENTOGON!"
             }
         },
         pool = {
@@ -1191,7 +1203,7 @@ ConchBlessing.ItemData = {
         callbacks = {
             postPlayerUpdate = "icebreath.onPlayerUpdate",
             postEffectUpdate = "icebreath.onEffectUpdate",
-            fireTear = "icebreath.onFireTear",
+            weaponFired = "icebreath.onWeaponFired",
             tearUpdate = "icebreath.onTearUpdate",
             tearCollision = "icebreath.onTearCollision"
         }
@@ -1209,16 +1221,18 @@ ConchBlessing.ItemData = {
         },
         eid = {
             kr = {
-                "(15-{{Luck}}운)발마다 불꽃 발사",
+                "(15-{{Luck}}운)번 공격마다 불꽃 발사",
                 "#한 번에 최대 {{Tears}}연사 수치만큼 발사 (최소 1개)",
                 "#불꽃은 내 {{Damage}}데미지의 30%",
-                "#적중 시 ({{Luck}}운 x5)% 확률로 화상 (최대 100%)"
+                "#적중 시 ({{Luck}}운 x5)% 확률로 화상 (최대 100%)",
+                "#{{Warning}} REPENTOGON이 필요합니다!"
             },
             en = {
-                "Fires flames every (15-{{Luck}}Luck) tears",
+                "After every (15-{{Luck}}Luck) attacks, fires flames",
                 "#Fires up to {{Tears}} count per burst (minimum 1)",
                 "#Flames deal 30% of your {{Damage}}Damage",
-                "#On hit: ({{Luck}} x5)% chance to burn (max 100%)"
+                "#On hit: ({{Luck}} x5)% chance to burn (max 100%)",
+                "#{{Warning}} Requires REPENTOGON!"
             }
         },
         pool = {
@@ -1235,7 +1249,7 @@ ConchBlessing.ItemData = {
         script = "scripts/items/collectibles/fire_breath",
         callbacks = {
             postPlayerUpdate = "firebreath.onPlayerUpdate",
-            fireTear = "firebreath.onFireTear",
+            weaponFired = "firebreath.onWeaponFired",
             postEffectUpdate = "firebreath.onEffectUpdate",
             tearUpdate = "firebreath.onTearUpdate",
             tearCollision = "firebreath.onTearCollision"
@@ -1255,16 +1269,18 @@ ConchBlessing.ItemData = {
         eid = {
             kr = {
                 "공격이 적을 관통합니다",
-                "#눈물이 적 적중 시 10% 확률로 타겟이 지정됩니다 ({{Luck}}운 x5% 추가)",
+                "#눈물로 적에게 피해를 주면 10% 확률로 타겟이 지정됩니다 ({{Luck}}운 x5% 추가)",
                 "#타겟으로 지정되면 1.5초 뒤 현재 멀티샷 수만큼 Epic Fetus 미사일이 1발씩 연속으로 떨어집니다",
                 "#미사일은 내 {{Damage}}공격력의 10배 데미지",
+                "#직접 눈물 피해만 발동하며 SOFLAM 미사일과 공허 링 피해는 제외됩니다.",
                 "#{{Warning}} REPENTOGON 권장",
             },
             en = {
                 "Your tears pierce enemies",
-                "#On hit: 10% chance to designate the target (+{{Luck}}Luck x5%)",
+                "#When a tear damages an enemy: 10% chance to designate the target (+{{Luck}}Luck x5%)",
                 "#After 1.5 seconds, Epic Fetus missiles strike one-by-one equal to your current multishot count",
                 "#Missile deals 10 times of your {{Damage}}Damage",
+                "#Only direct tear damage can trigger it; SOFLAM missiles and void rings are excluded",
                 "#{{Warning}} REPENTOGON recommended",
             }
         },
@@ -1285,6 +1301,7 @@ ConchBlessing.ItemData = {
             evaluateCache = "soflam.onEvaluateCache",
             fireTear = "soflam.onFireTear",
             tearCollision = "soflam.onTearCollision",
+            postEntityTakeDmg = "soflam.onPostEntityTakeDamage",
             update = "soflam.onUpdate",
             postNewRoom = "soflam.onNewRoom",
             gameStarted = "soflam.onGameStarted"

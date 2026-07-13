@@ -35,6 +35,10 @@ ConchBlessing.chronus.data = ConchBlessing.chronus.data or {
             itemId = CollectibleType.COLLECTIBLE_TECHNOLOGY,
             maxGrants = 0,  -- Unlimited: each Robo Baby grants Technology
         },
+        [CollectibleType.COLLECTIBLE_ROBO_BABY_2] = {  -- Robo-Baby 2.0 -> Technology 2
+            itemId = CollectibleType.COLLECTIBLE_TECHNOLOGY_2,
+            maxGrants = 0,  -- Unlimited: each Robo-Baby 2.0 grants Technology 2
+        },
         [CollectibleType.COLLECTIBLE_BLUE_BABYS_ONLY_FRIEND] = {  -- Blue Baby's Only Friend -> Ludovico Technique
             itemId = CollectibleType.COLLECTIBLE_LUDOVICO_TECHNIQUE,
             maxGrants = 1,  -- Only first one grants Ludovico Technique
@@ -235,10 +239,12 @@ local function getRunSave(player)
     if not sm then return nil end
     local globalSave = sm.GetRunSave(nil)
     if not globalSave then return nil end
-    globalSave.chronus = globalSave.chronus or { 
-        absorbed = {}, 
+    globalSave.chronus = globalSave.chronus or {
+        absorbed = {},
         totalAbsorbed = 0,
         itemGrants = {},  -- Track how many items granted per familiar: ["fam_95"] = 3
+        itemGrantTotals = {}, -- Lifetime grants for maxGrants limits
+        itemGrantBaselines = {}, -- Preserve non-Chronus copies of converted items
     }
 
     if player then
@@ -247,11 +253,25 @@ local function getRunSave(player)
             dbg("Migrating per-player chronus data to global store")
             local g = globalSave.chronus
             g.absorbed = g.absorbed or {}
+            g.itemGrants = g.itemGrants or {}
+            g.itemGrantTotals = g.itemGrantTotals or {}
+            g.itemGrantBaselines = g.itemGrantBaselines or {}
             for cid, entry in pairs(per.chronus.absorbed or {}) do
                 local prev = (g.absorbed[cid] and g.absorbed[cid].count) or 0
                 local add = (entry and entry.count) or 0
                 if add > 0 then
                     g.absorbed[cid] = { count = prev + add }
+                end
+            end
+            for key, count in pairs(per.chronus.itemGrants or {}) do
+                g.itemGrants[key] = math.max(tonumber(g.itemGrants[key]) or 0, tonumber(count) or 0)
+            end
+            for key, count in pairs(per.chronus.itemGrantTotals or per.chronus.itemGrants or {}) do
+                g.itemGrantTotals[key] = math.max(tonumber(g.itemGrantTotals[key]) or 0, tonumber(count) or 0)
+            end
+            for key, count in pairs(per.chronus.itemGrantBaselines or {}) do
+                if g.itemGrantBaselines[key] == nil then
+                    g.itemGrantBaselines[key] = math.max(0, tonumber(count) or 0)
                 end
             end
             g.totalAbsorbed = (g.totalAbsorbed or 0) + (per.chronus.totalAbsorbed or 0)
@@ -375,24 +395,41 @@ function ConchBlessing.chronus._handleFamiliarToItemConversion(player, familiarI
     
     local maxGrants = conversionData.maxGrants or 0
     local key = "fam_" .. tostring(familiarId)
-    local currentGrants = (rs.itemGrants and rs.itemGrants[key]) or 0
+    rs.itemGrants = rs.itemGrants or {}
+    rs.itemGrantTotals = rs.itemGrantTotals or {}
+    rs.itemGrantBaselines = rs.itemGrantBaselines or {}
+    local currentGrants = math.max(0, math.floor(tonumber(rs.itemGrants[key]) or 0))
+    local storedTotalGrants = math.max(0, math.floor(tonumber(rs.itemGrantTotals[key]) or 0))
+    local totalGrants = math.max(currentGrants, storedTotalGrants)
+    local totalCreated = false
+    if totalGrants > storedTotalGrants then
+        rs.itemGrantTotals[key] = totalGrants
+        totalCreated = true
+    end
     local itemsToGrant = 0
     
     if maxGrants == 0 then
         -- Unlimited: grant for each absorbed
         itemsToGrant = delta
     else
-        -- Limited: grant only up to maxGrants total
-        itemsToGrant = math.max(0, math.min(delta, maxGrants - currentGrants))
+        -- Limited: grant only up to maxGrants over this Chronus ownership.
+        itemsToGrant = math.max(0, math.min(delta, maxGrants - totalGrants))
     end
     
+    local baselineCreated = false
+    if (currentGrants > 0 or itemsToGrant > 0) and rs.itemGrantBaselines[key] == nil then
+        local currentItemCount = player:GetCollectibleNum(conversionData.itemId, true)
+        rs.itemGrantBaselines[key] = math.max(0, currentItemCount - currentGrants)
+        baselineCreated = true
+    end
+
     if itemsToGrant > 0 then
         for i = 1, itemsToGrant do
             player:AddCollectible(conversionData.itemId, 0, true)
         end
-        -- Update granted count
-        rs.itemGrants = rs.itemGrants or {}
+        -- Update only the Chronus-owned contribution; baseline copies stay player-owned.
         rs.itemGrants[key] = currentGrants + itemsToGrant
+        rs.itemGrantTotals[key] = totalGrants + itemsToGrant
         ConchBlessing.SaveManager.Save()
         
         -- Update cache for item effects
@@ -402,7 +439,10 @@ function ConchBlessing.chronus._handleFamiliarToItemConversion(player, familiarI
         dbg(string.format("[Chronus] Familiar ID=%d -> Granted %d item(s) (ID=%d) (total granted: %d, maxGrants: %d)", 
             tonumber(familiarId) or 0, itemsToGrant, tonumber(conversionData.itemId) or 0, rs.itemGrants[key], maxGrants))
     elseif delta > 0 then
-        dbg(string.format("[Chronus] Familiar ID=%d absorbed but no items granted (max %d already granted)", 
+        if baselineCreated or totalCreated then
+            ConchBlessing.SaveManager.Save()
+        end
+        dbg(string.format("[Chronus] Familiar ID=%d absorbed but no items granted (max %d already granted)",
             tonumber(familiarId) or 0, maxGrants))
     end
 end
@@ -514,6 +554,9 @@ function ConchBlessing.chronus._trackConvertedItemRemoval(player)
     
     local familiarToItemMap = ConchBlessing.chronus.data.familiarToItemMap or {}
     rs.itemGrants = rs.itemGrants or {}
+    rs.itemGrantTotals = rs.itemGrantTotals or {}
+    rs.itemGrantBaselines = rs.itemGrantBaselines or {}
+    local saveChanged = false
     
     -- Check each familiar->item conversion
     for familiarId, conversionData in pairs(familiarToItemMap) do
@@ -529,15 +572,46 @@ function ConchBlessing.chronus._trackConvertedItemRemoval(player)
         if absorbedCount <= 0 then goto continue end
         
         local key = "fam_" .. tostring(familiarId)
-        local grantedCount = rs.itemGrants[key] or 0
-        if grantedCount <= 0 then goto continue end
-        
-        -- Get actual converted item count
+        local grantedCount = math.max(0, math.floor(tonumber(rs.itemGrants[key]) or 0))
+        if grantedCount <= 0 then
+            if rs.itemGrantBaselines[key] ~= nil then
+                rs.itemGrantBaselines[key] = nil
+                saveChanged = true
+            end
+            goto continue
+        end
+        if (tonumber(rs.itemGrantTotals[key]) or 0) < grantedCount then
+            rs.itemGrantTotals[key] = grantedCount
+            saveChanged = true
+        end
+
         local currentItemCount = player:GetCollectibleNum(itemId, true)
-        
-        -- Calculate how many granted items were removed
-        local itemsRemoved = math.max(0, grantedCount - currentItemCount)
-        
+        local baseline = rs.itemGrantBaselines[key]
+        if baseline == nil then
+            baseline = math.max(0, currentItemCount - grantedCount)
+            rs.itemGrantBaselines[key] = baseline
+            saveChanged = true
+        else
+            baseline = math.max(0, math.floor(tonumber(baseline) or 0))
+        end
+
+        local inferredBaseline = math.max(0, currentItemCount - grantedCount)
+        if inferredBaseline > baseline then
+            baseline = inferredBaseline
+            rs.itemGrantBaselines[key] = baseline
+            saveChanged = true
+        end
+
+        -- Counts at or below the baseline belong to the player, not Chronus.
+        -- Any missing copies above it are consumed from the conversion grant.
+        local presentConvertedItems = math.max(0, currentItemCount - baseline)
+        local itemsRemoved = math.max(0, grantedCount - presentConvertedItems)
+
+        if currentItemCount < baseline then
+            rs.itemGrantBaselines[key] = currentItemCount
+            saveChanged = true
+        end
+
         if itemsRemoved > 0 then
             -- Reduce absorbed familiar count by items removed (up to maxGrants limit)
             local maxGrants = conversionData.maxGrants or 0
@@ -559,15 +633,19 @@ function ConchBlessing.chronus._trackConvertedItemRemoval(player)
                 rs.absorbed[key] = nil
             end
             
-            -- Update granted count
-            rs.itemGrants[key] = math.max(0, currentItemCount)
+            -- Update only the Chronus-owned contribution.
+            local remainingGrants = math.max(0, grantedCount - itemsRemoved)
+            rs.itemGrants[key] = remainingGrants
+            if remainingGrants == 0 then
+                rs.itemGrantBaselines[key] = nil
+            end
             
             -- Update total absorbed
             rs.totalAbsorbed = (rs.totalAbsorbed or 0) - familiarReduction
             if rs.totalAbsorbed < 0 then rs.totalAbsorbed = 0 end
             
-            ConchBlessing.SaveManager.Save()
-            dbg(string.format("[Chronus] Detected %d item (ID:%d) removal, reduced familiar (ID:%d) count: %d -> %d (maxGrants=%d)", 
+            saveChanged = true
+            dbg(string.format("[Chronus] Detected %d item (ID:%d) removal, reduced familiar (ID:%d) count: %d -> %d (maxGrants=%d)",
                 itemsRemoved, tonumber(itemId) or 0, tonumber(familiarId) or 0, absorbedCount, newAbsorbedCount, maxGrants))
             if familiarId == CollectibleType.COLLECTIBLE_STAR_OF_BETHLEHEM then
                 ConchBlessing.chronus._ensureStarOfBethlehemStack(player, true)
@@ -575,6 +653,10 @@ function ConchBlessing.chronus._trackConvertedItemRemoval(player)
         end
         
         ::continue::
+    end
+
+    if saveChanged then
+        ConchBlessing.SaveManager.Save()
     end
 end
 
@@ -1216,10 +1298,14 @@ ConchBlessing.chronus.onGameStarted = function(_)
         local seraphimCount = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_SERAPHIM)
         dbg(string.format("Found %d absorbed Seraphim on game start", tonumber(seraphimCount) or 0))
         
-        -- Restore converted items for all familiar->item conversions
+        -- Reconcile conversion grants without re-adding collectibles already persisted
+        -- by the run. This also grants items introduced by a newly added mapping.
         local familiarToItemMap = ConchBlessing.chronus.data.familiarToItemMap or {}
         rs.itemGrants = rs.itemGrants or {}
-        
+        rs.itemGrantTotals = rs.itemGrantTotals or {}
+        rs.itemGrantBaselines = rs.itemGrantBaselines or {}
+        local grantsChanged = false
+
         for familiarId, conversionData in pairs(familiarToItemMap) do
             if type(conversionData) ~= "table" then
                 conversionData = { itemId = conversionData, maxGrants = 0 }
@@ -1229,32 +1315,51 @@ ConchBlessing.chronus.onGameStarted = function(_)
             if not itemId then goto continue_restore end  -- Skip if no item
             
             local familiarCount = ConchBlessing.chronus._getAbsorbedCount(player, familiarId)
-            if familiarCount > 0 then
-                local maxGrants = conversionData.maxGrants or 0
-                local itemsToGrant
-                
-                if maxGrants == 0 then
-                    -- Unlimited: grant for each familiar
-                    itemsToGrant = familiarCount
-                else
-                    -- Limited: grant only up to maxGrants
-                    itemsToGrant = math.min(familiarCount, maxGrants)
-                end
-                
-                if itemsToGrant > 0 then
-                    for i = 1, itemsToGrant do
-                        player:AddCollectible(itemId, 0, true)
-                    end
-                    -- Track granted count
-                    local key = "fam_" .. tostring(familiarId)
-                    rs.itemGrants[key] = itemsToGrant
-                    ConchBlessing.SaveManager.Save()
-                    dbg(string.format("Restored %d item(s) (ID:%d) from %d absorbed familiar (ID:%d, maxGrants=%d)", 
-                        itemsToGrant, tonumber(itemId) or 0, familiarCount, tonumber(familiarId) or 0, maxGrants))
-                end
+            local maxGrants = conversionData.maxGrants or 0
+            local desiredGrants = maxGrants == 0
+                and familiarCount
+                or math.min(familiarCount, maxGrants)
+            local key = "fam_" .. tostring(familiarId)
+            local trackedGrants = math.max(0, math.floor(tonumber(rs.itemGrants[key]) or 0))
+            local storedTotalGrants = math.max(0, math.floor(tonumber(rs.itemGrantTotals[key]) or 0))
+            local totalGrants = math.max(trackedGrants, storedTotalGrants)
+            if totalGrants > storedTotalGrants then
+                rs.itemGrantTotals[key] = totalGrants
+                grantsChanged = true
             end
-            
+
+            local missingGrants
+            if maxGrants == 0 then
+                missingGrants = math.max(0, desiredGrants - trackedGrants)
+            else
+                missingGrants = math.max(0, desiredGrants - totalGrants)
+            end
+
+            if (trackedGrants > 0 or missingGrants > 0) and rs.itemGrantBaselines[key] == nil then
+                local currentItemCount = player:GetCollectibleNum(itemId, true)
+                rs.itemGrantBaselines[key] = math.max(0, currentItemCount - trackedGrants)
+                grantsChanged = true
+            elseif trackedGrants == 0 and missingGrants == 0 and rs.itemGrantBaselines[key] ~= nil then
+                rs.itemGrantBaselines[key] = nil
+                grantsChanged = true
+            end
+
+            if missingGrants > 0 then
+                for _ = 1, missingGrants do
+                    player:AddCollectible(itemId, 0, true)
+                end
+                rs.itemGrants[key] = trackedGrants + missingGrants
+                rs.itemGrantTotals[key] = totalGrants + missingGrants
+                grantsChanged = true
+                dbg(string.format("Reconciled %d missing item grant(s) (ID:%d) from %d absorbed familiar (ID:%d, maxGrants=%d)",
+                    missingGrants, tonumber(itemId) or 0, familiarCount, tonumber(familiarId) or 0, maxGrants))
+            end
+
             ::continue_restore::
+        end
+
+        if grantsChanged then
+            ConchBlessing.SaveManager.Save()
         end
         
         player:AddCacheFlags(CacheFlag.CACHE_DAMAGE | CacheFlag.CACHE_FLYING | CacheFlag.CACHE_TEARFLAG | CacheFlag.CACHE_FIREDELAY)
@@ -1276,23 +1381,11 @@ function ConchBlessing.chronus._revertAll(player)
             -- Extract actual ID from entry or key
             local famId = entry.id or tonumber(key:match("fam_(%d+)"))
             
-            -- Check if this familiar has item conversion mapping
-            local conversionData = famId and familiarToItemMap[famId]
-            if type(conversionData) ~= "table" and conversionData then
-                conversionData = { itemId = conversionData, maxGrants = 0 }
-            end
-            
-            if famId and not conversionData then
-                -- Normal familiar restoration (no item conversion)
+            if famId then
                 for _ = 1, count do
                     player:AddCollectible(famId, 0, false)
                 end
                 dbg(string.format("[Chronus] Restored familiar: key=%s, ID=%d, count=%d", tostring(key), tonumber(famId) or 0, count))
-            elseif conversionData then
-                -- Familiar with item conversion - will be handled via converted item removal below
-                local itemId = conversionData.itemId or "none"
-                dbg(string.format("[Chronus] Skipping familiar ID=%d restoration (has item conversion to ID=%s): count=%d", 
-                    tonumber(famId) or 0, tostring(itemId), count))
             end
         end
     end
@@ -1308,8 +1401,9 @@ function ConchBlessing.chronus._revertAll(player)
             player:EvaluateItems()
         end
         
-        -- Remove converted items and restore familiars (for all familiar->item conversions)
+        -- Remove only the converted-item contribution; all familiars were restored above.
         rs.itemGrants = rs.itemGrants or {}
+        rs.itemGrantBaselines = rs.itemGrantBaselines or {}
         
         for familiarId, conversionData in pairs(familiarToItemMap) do
             if type(conversionData) ~= "table" then
@@ -1322,42 +1416,24 @@ function ConchBlessing.chronus._revertAll(player)
             local familiarCount = ConchBlessing.chronus._getAbsorbedCount(player, familiarId)
             if familiarCount > 0 then
                 local key = "fam_" .. tostring(familiarId)
-                local grantedCount = rs.itemGrants[key] or 0
+                local grantedCount = math.max(0, math.floor(tonumber(rs.itemGrants[key]) or 0))
                 local currentItemCount = player:GetCollectibleNum(itemId, true)
-                
-                -- Remove granted items (only what's present)
-                local itemsToRemove = math.min(currentItemCount, grantedCount)
-                for i = 1, itemsToRemove do
+                local baseline = rs.itemGrantBaselines[key]
+                if baseline == nil then
+                    baseline = math.max(0, currentItemCount - grantedCount)
+                else
+                    baseline = math.max(0, math.floor(tonumber(baseline) or 0))
+                end
+
+                -- Never remove the player's pre-existing copies of the same item.
+                local presentConvertedItems = math.max(0, currentItemCount - baseline)
+                local itemsToRemove = math.min(presentConvertedItems, grantedCount)
+                for _ = 1, itemsToRemove do
                     player:RemoveCollectible(itemId)
                 end
-                
-                -- Calculate how many familiars to restore
-                -- Based on removed items, but capped by maxGrants logic
-                local maxGrants = conversionData.maxGrants or 0
-                local familiarsToRestore
-                
-                if maxGrants == 0 then
-                    -- Unlimited: restore 1 familiar per removed item
-                    familiarsToRestore = itemsToRemove
-                else
-                    -- Limited: restore based on how many were actually granted
-                    -- If maxGrants=1 and we remove 1 item, restore min(familiarCount, amount we can restore)
-                    familiarsToRestore = math.min(itemsToRemove, familiarCount)
-                end
-                
-                -- Restore familiars
-                for i = 1, familiarsToRestore do
-                    player:AddCollectible(familiarId, 0, false)
-                end
-                
-                if familiarsToRestore < familiarCount then
-                    dbg(string.format("[Chronus] Removed %d item (ID:%d) and restored %d familiar (ID:%d). %d familiar lost (granted:%d, maxGrants=%d)", 
-                        itemsToRemove, tonumber(itemId) or 0, familiarsToRestore, tonumber(familiarId) or 0, 
-                        familiarCount - familiarsToRestore, grantedCount, maxGrants))
-                else
-                    dbg(string.format("[Chronus] Removed %d item (ID:%d) and restored %d familiar (ID:%d) (granted:%d, maxGrants=%d)", 
-                        itemsToRemove, tonumber(itemId) or 0, familiarsToRestore, tonumber(familiarId) or 0, grantedCount, maxGrants))
-                end
+
+                dbg(string.format("[Chronus] Removed %d converted item(s) (ID:%d); restored familiar ID=%d count=%d (granted:%d, baseline:%d)",
+                    itemsToRemove, tonumber(itemId) or 0, tonumber(familiarId) or 0, familiarCount, grantedCount, baseline))
             end
             
             ::continue_revert::
@@ -1366,12 +1442,27 @@ function ConchBlessing.chronus._revertAll(player)
         rs.absorbed = {}
         rs.totalAbsorbed = 0
         rs.itemGrants = {}  -- Clear granted item counts
+        rs.itemGrantTotals = {}
+        rs.itemGrantBaselines = {}
         -- Legacy fields cleanup (unified system manages these now)
         rs.absorbedBonusDamage = nil
         rs.absorbActionBonusDamage = nil
+        ConchBlessing.SaveManager.Save()
         dbg("Reverted all Chronus effects and restored familiars")
         return true
     end
+
+    local hadGrantState = next(rs.itemGrants or {}) ~= nil
+        or next(rs.itemGrantTotals or {}) ~= nil
+        or next(rs.itemGrantBaselines or {}) ~= nil
+    if hadGrantState then
+        rs.itemGrants = {}
+        rs.itemGrantTotals = {}
+        rs.itemGrantBaselines = {}
+        ConchBlessing.SaveManager.Save()
+        return true
+    end
+
     return false
 end
 

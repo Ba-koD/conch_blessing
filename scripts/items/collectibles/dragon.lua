@@ -1,5 +1,6 @@
 ConchBlessing.dragon = {}
 
+local WeaponAttackTracker = require("scripts.lib.weapon_attack_tracker")
 local DRAGON_ID = Isaac.GetItemIdByName("Dragon")
 local VORTEX_VARIANT = (EffectVariant and EffectVariant.BRIMSTONE_BALL) or 113
 local WHIRLPOOL_VARIANT = (EffectVariant and EffectVariant.WHIRLPOOL) or 142
@@ -32,7 +33,6 @@ ConchBlessing.dragon.data = {
     vortexWallMode = "pierce", -- "pierce" | "stick"
 }
 
-ConchBlessing.dragon._isInternalSpawn = false
 ConchBlessing.dragon._sfxCooldown = {}
 ConchBlessing.dragon._effectBySeed = {}
 
@@ -155,7 +155,6 @@ local function getPlayerData(player)
     if not data.__ConchDragon then
         data.__ConchDragon = {
             attackCount = 0,
-            lastAttackFrame = -1,
         }
     end
     return data.__ConchDragon
@@ -233,28 +232,6 @@ local function spawnWhirlpoolParticle(position, spawner, scale, timeoutFrames)
     end
     rememberEffect(particle)
     return particle
-end
-
-local function getPlayerFromEntity(entity)
-    if not entity then
-        return nil
-    end
-
-    local spawner = entity.SpawnerEntity
-    if spawner and spawner:ToPlayer() then
-        return spawner:ToPlayer()
-    end
-
-    local parent = entity.Parent
-    if parent and parent:ToPlayer() then
-        return parent:ToPlayer()
-    end
-
-    if parent and parent.SpawnerEntity and parent.SpawnerEntity:ToPlayer() then
-        return parent.SpawnerEntity:ToPlayer()
-    end
-
-    return nil
 end
 
 local function getRandomDirection(player)
@@ -350,7 +327,6 @@ local function spawnTechX(player, velocity, damage)
     applyDragonLaserFlags(laser, player)
 
     local lData = laser:GetData()
-    lData.__ConchDragonInternal = true
     lData.__ConchDragonTechX = {
         ownerInitSeed = player.InitSeed,
         direction = velocity:Normalized(),
@@ -472,8 +448,6 @@ local function spawnDragonProjectiles(player)
     local speed = ConchBlessing.dragon.data.projectileSpeed or 6.3
     local spawnCount = ConchBlessing.dragon.data.spawnCount or 5
 
-    ConchBlessing.dragon._isInternalSpawn = true
-
     for _ = 1, spawnCount do
         local direction = getRandomDirection(player)
         local velocity = direction:Resized(speed)
@@ -489,27 +463,6 @@ local function spawnDragonProjectiles(player)
         end
     end
 
-    ConchBlessing.dragon._isInternalSpawn = false
-end
-
-local function incrementAttackCount(player)
-    if not hasDragon(player) then
-        return
-    end
-
-    local pData = getPlayerData(player)
-    local nowFrame = Game():GetFrameCount()
-    if pData.lastAttackFrame == nowFrame then
-        return
-    end
-    pData.lastAttackFrame = nowFrame
-    pData.attackCount = (pData.attackCount or 0) + 1
-
-    local trigger = ConchBlessing.dragon.data.attacksPerTrigger or 5
-    if pData.attackCount >= trigger then
-        pData.attackCount = 0
-        spawnDragonProjectiles(player)
-    end
 end
 
 local function isDamageableEnemy(npc)
@@ -950,50 +903,18 @@ ConchBlessing.dragon.onEvaluateCache = function(_, player, cacheFlag)
     end
 end
 
-ConchBlessing.dragon.onFireTear = function(_, tear)
-    if not tear or ConchBlessing.dragon._isInternalSpawn then
+ConchBlessing.dragon.onWeaponFired = function(_, _fireDirection, _fireAmount, owner, _weapon)
+    local player = WeaponAttackTracker.getDirectPlayerOwner(owner)
+    if not player or not hasDragon(player) then
         return
     end
 
-    local tData = tear:GetData()
-    if tData and tData.__ConchDragonInternal then
-        return
+    local pData = getPlayerData(player)
+    local trigger = ConchBlessing.dragon.data.attacksPerTrigger or 5
+    local triggered = WeaponAttackTracker.advance(pData, trigger)
+    if triggered then
+        spawnDragonProjectiles(player)
     end
-
-    local player = getPlayerFromEntity(tear)
-    incrementAttackCount(player)
-end
-
-ConchBlessing.dragon.onPostLaserInit = function(_, laser)
-    if not laser or ConchBlessing.dragon._isInternalSpawn then
-        return
-    end
-
-    local lData = laser:GetData()
-    if lData and lData.__ConchDragonInternal then
-        return
-    end
-
-    local player = getPlayerFromEntity(laser)
-    incrementAttackCount(player)
-end
-
-ConchBlessing.dragon.onPostKnifeInit = function(_, knife)
-    if not knife or ConchBlessing.dragon._isInternalSpawn then
-        return
-    end
-
-    local player = getPlayerFromEntity(knife)
-    incrementAttackCount(player)
-end
-
-ConchBlessing.dragon.onPostBombInit = function(_, bomb)
-    if not bomb or ConchBlessing.dragon._isInternalSpawn then
-        return
-    end
-
-    local player = getPlayerFromEntity(bomb)
-    incrementAttackCount(player)
 end
 
 ConchBlessing.dragon.onPostLaserUpdate = function(_, laser)
@@ -1129,8 +1050,7 @@ ConchBlessing.dragon.onPlayerUpdate = function(_, player)
 
     local pData = getPlayerData(player)
     if not hasDragon(player) then
-        pData.attackCount = 0
-        pData.lastAttackFrame = -1
+        WeaponAttackTracker.reset(pData)
     end
 end
 
@@ -1141,14 +1061,12 @@ ConchBlessing.dragon.onNewRoom = function()
         local player = Isaac.GetPlayer(i)
         if player then
             local pData = getPlayerData(player)
-            pData.attackCount = 0
-            pData.lastAttackFrame = -1
+            WeaponAttackTracker.reset(pData)
         end
     end
 end
 
 ConchBlessing.dragon.onGameStarted = function()
-    ConchBlessing.dragon._isInternalSpawn = false
     ConchBlessing.dragon._sfxCooldown = {}
     ConchBlessing.dragon._effectBySeed = {}
     local numPlayers = Game():GetNumPlayers()
@@ -1156,8 +1074,7 @@ ConchBlessing.dragon.onGameStarted = function()
         local player = Isaac.GetPlayer(i)
         if player then
             local pData = getPlayerData(player)
-            pData.attackCount = 0
-            pData.lastAttackFrame = -1
+            WeaponAttackTracker.reset(pData)
         end
     end
 end

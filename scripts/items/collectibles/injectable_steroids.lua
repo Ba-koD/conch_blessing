@@ -107,7 +107,7 @@ ConchBlessing.injectablsteroids.removeLastUse = function(player, removeCount, ap
     end
 end
 
-ConchBlessing.injectablsteroids.onUseItem = function(player, collectibleID, useFlags, activeSlot, customVarData)
+ConchBlessing.injectablsteroids.onUseItem = function(_, collectibleID, _rng, player, useFlags, activeSlot, customVarData)
     ConchBlessing.printDebug("=== Injectable Steroids onUseItem START ===")
     ConchBlessing.printDebug("collectibleID: " .. tostring(collectibleID))
     ConchBlessing.printDebug("INJECTABLE_STEROIDS_ID: " .. tostring(INJECTABLE_STEROIDS_ID))
@@ -118,12 +118,8 @@ ConchBlessing.injectablsteroids.onUseItem = function(player, collectibleID, useF
     end
     
     if not player or not player.Position or not player.GetPlayerType then
-        ConchBlessing.printDebug("Invalid player, getting player 0")
-        player = Isaac.GetPlayer(0)
-        if not player then
-            ConchBlessing.printDebug("Failed to get player 0")
-            return
-        end
+        ConchBlessing.printError("Injectable Steroids: MC_USE_ITEM received an invalid player")
+        return
     end
     
     ConchBlessing.printDebug("Player found, animating collectible")
@@ -138,13 +134,13 @@ ConchBlessing.injectablsteroids.onUseItem = function(player, collectibleID, useF
         ConchBlessing.printDebug("Death roll: " .. tostring(deathRoll) .. " (need <= " .. tostring(instantDeathChance) .. " for death)")
         
         if deathRoll <= instantDeathChance then
-            ConchBlessing.printDebug("INSTANT DEATH TRIGGERED! Player dies from Injectable Steroids overdose")
-            player:TakeDamage(999, DamageFlag.DAMAGE_NO_PENALTIES, EntityRef(player), 0)
-            
-            -- Increment use count and death chance even on death
+            -- Commit the use before entering the normal death/revival flow.
             ConchBlessing.injectablsteroids.data.currentFloorUseCount = ConchBlessing.injectablsteroids.data.currentFloorUseCount + 1
             ConchBlessing.injectablsteroids.data.currentInstantDeathPercent = ConchBlessing.injectablsteroids.data.currentInstantDeathPercent + ConchBlessing.injectablsteroids.data.instantDeathPercentIncrement
-            ConchBlessing.printDebug("Player died! Death chance increased to " .. tostring(ConchBlessing.injectablsteroids.data.currentInstantDeathPercent) .. "% for next use")
+            ConchBlessing.printDebug("INSTANT DEATH TRIGGERED! Death chance increased to " .. tostring(ConchBlessing.injectablsteroids.data.currentInstantDeathPercent) .. "% for next use")
+
+            -- Enter the engine death path directly; defenses and revivals remain engine-owned.
+            player:Kill()
             
             return { Discharge = true, Remove = false, ShowAnim = true }
         else

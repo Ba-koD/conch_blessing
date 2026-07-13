@@ -1,5 +1,6 @@
 ConchBlessing.firebreath = {}
 
+local WeaponAttackTracker = require("scripts.lib.weapon_attack_tracker")
 local FIRE_BREATH_ID = Isaac.GetItemIdByName("Fire Breath")
 
 -- API refs checked:
@@ -19,15 +20,13 @@ ConchBlessing.firebreath.data = {
     endScale = 1.0, -- 이동하며 커지는 불꽃 크기
 }
 
-ConchBlessing.firebreath._isSpawningInternal = false
-
 local FIRE_BASE_COLOR = { r = 1.0, g = 0.82, b = 0.45, ro = 0.03, go = 0.01, bo = 0.0 }
 
 local function getPlayerData(player)
     local data = player:GetData()
     if not data.__ConchFireBreath then
         data.__ConchFireBreath = {
-            tearCount = 0,
+            attackCount = 0,
         }
     end
     return data.__ConchFireBreath
@@ -405,12 +404,6 @@ local function spawnFireProjectiles(player, direction)
     local targetDistance = getFlameTravelDistance(player)
     local mode = getProjectileMode()
 
-    local spawningTearMode = (mode == "tear_flame")
-    if spawningTearMode then
-        ConchBlessing.firebreath._isSpawningInternal = true
-        ConchBlessing.__ConchBreathSpawning = true
-    end
-
     for _ = 1, flameCount do
         local spreadAngle = (math.random() - 0.5) * 0.8
         local cosA = math.cos(spreadAngle)
@@ -431,37 +424,20 @@ local function spawnFireProjectiles(player, direction)
         end
     end
 
-    if spawningTearMode then
-        ConchBlessing.firebreath._isSpawningInternal = false
-        ConchBlessing.__ConchBreathSpawning = false
-    end
-
     SFXManager():Play(SoundEffect.SOUND_FLAMETHROWER_END, 1.0, 0, false, 0.8)
 end
 
-ConchBlessing.firebreath.onFireTear = function(_, tear)
-    if ConchBlessing.firebreath._isSpawningInternal or ConchBlessing.__ConchBreathSpawning then
-        return
-    end
-
-    local tearData = tear:GetData()
-    if tearData and tearData.__ConchFireBreath then
-        return
-    end
-
-    local player = tear.SpawnerEntity and tear.SpawnerEntity:ToPlayer()
+ConchBlessing.firebreath.onWeaponFired = function(_, fireDirection, _fireAmount, owner, weapon)
+    local player = WeaponAttackTracker.getDirectPlayerOwner(owner)
     if not player or not player:HasCollectible(FIRE_BREATH_ID) then return end
+
+    local direction = WeaponAttackTracker.resolveDirection(fireDirection, weapon, player)
+    if not direction then return end
 
     local pData = getPlayerData(player)
     local interval = getFireInterval(player.Luck or 0)
-    pData.tearCount = (pData.tearCount or 0) + 1
-
-    if pData.tearCount >= interval then
-        pData.tearCount = 0
-        local direction = tear.Velocity:Normalized()
-        if direction:Length() < 0.1 then
-            direction = Vector(1, 0)
-        end
+    local triggered = WeaponAttackTracker.advance(pData, interval)
+    if triggered then
         spawnFireProjectiles(player, direction)
     end
 end
@@ -470,7 +446,7 @@ ConchBlessing.firebreath.onPlayerUpdate = function(_, player)
     if not player then return end
     if not player:HasCollectible(FIRE_BREATH_ID) then
         local pData = getPlayerData(player)
-        pData.tearCount = 0
+        WeaponAttackTracker.reset(pData)
     end
 end
 

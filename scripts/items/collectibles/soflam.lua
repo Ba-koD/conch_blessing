@@ -1,5 +1,8 @@
 ConchBlessing.soflam = {}
 
+local DamageProvenance = require("scripts.lib.damage_provenance")
+DamageProvenance.registerCallbacks(ConchBlessing)
+
 local SOFLAM_ID = Isaac.GetItemIdByName("SOFLAM")
 local MR_MEGA_ID = (CollectibleType and (CollectibleType.COLLECTIBLE_MR_MEGA or CollectibleType.MR_MEGA)) or 106
 
@@ -28,19 +31,6 @@ local function clamp(value, minVal, maxVal)
     if value < minVal then return minVal end
     if value > maxVal then return maxVal end
     return value
-end
-
-local function getPlayerFromTear(tear)
-    if not tear then return nil end
-    local spawner = tear.SpawnerEntity
-    if spawner and spawner:ToPlayer() then
-        return spawner:ToPlayer()
-    end
-    local parent = tear.Parent
-    if parent and parent:ToPlayer() then
-        return parent:ToPlayer()
-    end
-    return nil
 end
 
 local function getCollectibleCount(player, collectibleId)
@@ -181,6 +171,7 @@ local function spawnRocketEffect(position, spawner)
     ):ToEffect()
 
     if rocket then
+        DamageProvenance.markSecondaryAttack(rocket, "soflam_missile")
         rocket.DepthOffset = 200
         local timeout = (ConchBlessing.soflam.data.rocketTravelFrames or 20) + 5
         rocket.Timeout = timeout
@@ -241,6 +232,8 @@ local function detonateAtPosition(player, position)
     ):ToBomb()
 
     if bomb then
+        DamageProvenance.markSecondaryAttack(bomb, "soflam_missile")
+
         local okSetFlags = pcall(function()
             bomb.Flags = bombFlags
         end)
@@ -271,32 +264,36 @@ local function detonateAtPosition(player, position)
             if customRadius > 0 then
                 customScale = naturalRadius / customRadius
             end
+            DamageProvenance.withSecondarySource(player, "soflam_missile", function()
+                game:BombExplosionEffects(
+                    position,
+                    damage,
+                    bombFlags,
+                    Color.Default,
+                    player,
+                    customScale,
+                    true,
+                    true,
+                    DamageFlag.DAMAGE_EXPLOSION
+                )
+            end)
+            bomb:Remove()
+        end
+    else
+        -- Fallback to manual explosion if spawning a bomb fails.
+        DamageProvenance.withSecondarySource(player, "soflam_missile", function()
             game:BombExplosionEffects(
                 position,
                 damage,
                 bombFlags,
                 Color.Default,
                 player,
-                customScale,
+                1,
                 true,
                 true,
                 DamageFlag.DAMAGE_EXPLOSION
             )
-            bomb:Remove()
-        end
-    else
-        -- Fallback to manual explosion if spawning a bomb fails.
-        game:BombExplosionEffects(
-            position,
-            damage,
-            bombFlags,
-            Color.Default,
-            player,
-            1,
-            true,
-            true,
-            DamageFlag.DAMAGE_EXPLOSION
-        )
+        end)
     end
 
     -- Add extra screen shake for impact.
@@ -381,7 +378,7 @@ end
 ConchBlessing.soflam.onFireTear = function(_, tear)
     if not tear then return end
 
-    local player = getPlayerFromTear(tear)
+    local player = DamageProvenance.getDirectPlayerOwner(tear)
     if not (player and player:HasCollectible(SOFLAM_ID)) then
         return
     end
@@ -393,35 +390,21 @@ ConchBlessing.soflam.onFireTear = function(_, tear)
     end
 end
 
---- On tear hitting an enemy: roll for lock-on
-ConchBlessing.soflam.onTearCollision = function(_, tear, collider, _)
-    if not (tear and collider) then return nil end
-
-    local player = getPlayerFromTear(tear)
-    if not (player and player:HasCollectible(SOFLAM_ID)) then
-        return nil
-    end
-
-    local npc = collider:ToNPC()
-    if not (npc and npc:Exists() and npc:IsVulnerableEnemy() and not npc:IsDead()) then
-        return nil
-    end
-    if npc:HasEntityFlags(EntityFlag.FLAG_FRIENDLY) then
-        return nil
-    end
+local function tryProcFromTear(player, tear, npc)
+    if not (player and tear and npc and player:HasCollectible(SOFLAM_ID)) then return end
 
     -- Prevent duplicate proc from the same tear on the same enemy
     local tearData = tear:GetData()
     tearData.__ConchSoflamHit = tearData.__ConchSoflamHit or {}
     local npcKey = npc.InitSeed or npc.Index
     if tearData.__ConchSoflamHit[npcKey] then
-        return nil
+        return
     end
     tearData.__ConchSoflamHit[npcKey] = true
 
     -- Roll proc chance
     local chance = getProcChance(player)
-    if chance <= 0 then return nil end
+    if chance <= 0 then return end
 
     local rng = RNG()
     local seed = (tear.InitSeed or player.InitSeed or 0) + (npc.InitSeed or npc.Index or 0)
@@ -430,7 +413,39 @@ ConchBlessing.soflam.onTearCollision = function(_, tear, collider, _)
     if rng:RandomFloat() <= chance then
         queueStrike(player, npc)
     end
+end
 
+--- REPENTOGON path: roll only after direct tear damage was actually applied.
+ConchBlessing.soflam.onPostEntityTakeDamage = function(_, entity, amount, _flags, source, _countdown, extraSource)
+    if not entity or (tonumber(amount) or 0) <= 0 then return end
+
+    local npc = entity:ToNPC()
+    if not (npc and npc:Exists() and npc:IsVulnerableEnemy()) then
+        return
+    end
+    if npc:HasEntityFlags(EntityFlag.FLAG_FRIENDLY) then
+        return
+    end
+
+    local tear = DamageProvenance.getEligibleDirectTear(source, extraSource)
+    if not tear then return end
+
+    local player = DamageProvenance.getDirectPlayerOwner(tear)
+    tryProcFromTear(player, tear, npc)
+end
+
+--- Base-game fallback: collision is weaker than confirmed damage, so disable it when
+--- the applied-damage callback is available and reject marked secondary attacks.
+ConchBlessing.soflam.onTearCollision = function(_, tear, collider, _low)
+    if DamageProvenance.hasAppliedDamageCallback() then return nil end
+    if not (tear and DamageProvenance.isHitProcEligible(tear)) then return nil end
+
+    local npc = collider and collider:ToNPC() or nil
+    if not (npc and npc:Exists() and npc:IsVulnerableEnemy()) then return nil end
+    if npc:HasEntityFlags(EntityFlag.FLAG_FRIENDLY) then return nil end
+
+    local player = DamageProvenance.getDirectPlayerOwner(tear)
+    tryProcFromTear(player, tear, npc)
     return nil
 end
 
