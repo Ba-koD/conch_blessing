@@ -4,6 +4,11 @@ local DamageProvenance = require("scripts.lib.damage_provenance")
 DamageProvenance.registerCallbacks(ConchBlessing)
 
 local SOFLAM_ID = Isaac.GetItemIdByName("SOFLAM")
+local PROC_KEY = "soflam"
+local PROC_ORIGIN = "soflam_missile"
+local DEFAULT_TEAR_WEAPON_TYPE = WeaponType and WeaponType.WEAPON_TEARS or nil
+local TECHNOLOGY_WEAPON_TYPE = WeaponType and WeaponType.WEAPON_LASER or nil
+local WEAPON_CACHE_FLAG = CacheFlag and CacheFlag.CACHE_WEAPON or nil
 local MR_MEGA_ID = (CollectibleType and (CollectibleType.COLLECTIBLE_MR_MEGA or CollectibleType.MR_MEGA)) or 106
 
 -- ===================================================================
@@ -110,17 +115,6 @@ local function findPlayerByInitSeed(initSeed)
     return nil
 end
 
-local function findNpcByInitSeed(initSeed)
-    if not initSeed then return nil end
-    for _, entity in ipairs(Isaac.GetRoomEntities()) do
-        local npc = entity:ToNPC()
-        if npc and npc.InitSeed == initSeed and npc:Exists() then
-            return npc
-        end
-    end
-    return nil
-end
-
 -- Matches the game's internal explosion-radius buckets.
 local function getBombRadiusFromDamage(damage)
     if damage > 175 then
@@ -135,7 +129,7 @@ end
 -- ===================================================================
 -- Visual: spawn Epic Fetus-style crosshair target on the enemy
 -- ===================================================================
-local function spawnTargetCrosshair(position, spawner)
+local function spawnTargetCrosshair(position, spawner, inheritedProvenance)
     local target = Isaac.Spawn(
         EntityType.ENTITY_EFFECT,
         EffectVariant.TARGET,   -- 30: the authentic crosshair
@@ -146,6 +140,7 @@ local function spawnTargetCrosshair(position, spawner)
     ):ToEffect()
 
     if target then
+        DamageProvenance.markTriggeredAttack(target, PROC_KEY, inheritedProvenance, PROC_ORIGIN)
         target.DepthOffset = 100
         -- Ensure it stays alive long enough for our lock-on phase
         local timeout = (ConchBlessing.soflam.data.lockOnDelayFrames or 45) + 10
@@ -160,7 +155,7 @@ end
 -- ===================================================================
 -- Visual: spawn Epic Fetus-style rocket falling from the sky
 -- ===================================================================
-local function spawnRocketEffect(position, spawner)
+local function spawnRocketEffect(position, spawner, inheritedProvenance)
     local rocket = Isaac.Spawn(
         EntityType.ENTITY_EFFECT,
         EffectVariant.ROCKET,   -- 31: the falling rocket effect
@@ -171,7 +166,7 @@ local function spawnRocketEffect(position, spawner)
     ):ToEffect()
 
     if rocket then
-        DamageProvenance.markSecondaryAttack(rocket, "soflam_missile")
+        DamageProvenance.markTriggeredAttack(rocket, PROC_KEY, inheritedProvenance, PROC_ORIGIN)
         rocket.DepthOffset = 200
         local timeout = (ConchBlessing.soflam.data.rocketTravelFrames or 20) + 5
         rocket.Timeout = timeout
@@ -185,7 +180,7 @@ end
 -- ===================================================================
 -- Detonation: Epic Fetus-style explosion (base 10x damage, Mr. Mega synergy supported)
 -- ===================================================================
-local function detonateAtPosition(player, position)
+local function detonateAtPosition(player, position, inheritedProvenance)
     local damage = (player.Damage or 3.5) * (ConchBlessing.soflam.data.bombDamageMultiplier or 10)
     local game = Game()
     local mrMegaCount = getCollectibleCount(player, MR_MEGA_ID)
@@ -232,7 +227,7 @@ local function detonateAtPosition(player, position)
     ):ToBomb()
 
     if bomb then
-        DamageProvenance.markSecondaryAttack(bomb, "soflam_missile")
+        DamageProvenance.markTriggeredAttack(bomb, PROC_KEY, inheritedProvenance, PROC_ORIGIN)
 
         local okSetFlags = pcall(function()
             bomb.Flags = bombFlags
@@ -264,7 +259,7 @@ local function detonateAtPosition(player, position)
             if customRadius > 0 then
                 customScale = naturalRadius / customRadius
             end
-            DamageProvenance.withSecondarySource(player, "soflam_missile", function()
+            DamageProvenance.withTriggeredSource(player, PROC_KEY, inheritedProvenance, PROC_ORIGIN, function()
                 game:BombExplosionEffects(
                     position,
                     damage,
@@ -281,7 +276,7 @@ local function detonateAtPosition(player, position)
         end
     else
         -- Fallback to manual explosion if spawning a bomb fails.
-        DamageProvenance.withSecondarySource(player, "soflam_missile", function()
+        DamageProvenance.withTriggeredSource(player, PROC_KEY, inheritedProvenance, PROC_ORIGIN, function()
             game:BombExplosionEffects(
                 position,
                 damage,
@@ -303,7 +298,7 @@ end
 -- ===================================================================
 -- Queue a new lock-on strike against an enemy
 -- ===================================================================
-local function queueStrike(player, npc)
+local function queueStrike(player, npc, inheritedProvenance)
     if not (player and npc) then return end
 
     local position = Vector(npc.Position.X, npc.Position.Y)
@@ -311,7 +306,7 @@ local function queueStrike(player, npc)
     local rocketCount = getRocketCountFromMultishot(player)
 
     -- Spawn the target crosshair for 2 seconds
-    local crosshair = spawnTargetCrosshair(position, player)
+    local crosshair = spawnTargetCrosshair(position, player, inheritedProvenance)
     
     local sfx = SFXManager()
     sfx:Play(SoundEffect.SOUND_BIRD_FLAP, 0.6, 0, false, 1.5)
@@ -320,19 +315,21 @@ local function queueStrike(player, npc)
         phase             = "lockon",
         playerInitSeed    = player.InitSeed,
         npcInitSeed       = npc.InitSeed,
+        npcEntity         = npc,
         roomIndex         = roomIndex,
         countdown         = ConchBlessing.soflam.data.lockOnDelayFrames or 120,
         lastKnownPosition = position,
         crosshairEffect   = crosshair,
         rocketEffect      = nil,
         remainingRockets  = rocketCount,
+        inheritedProvenance = inheritedProvenance,
     })
 end
 
 local function startRocketFall(strike, player)
     strike.phase = "rocket"
     strike.countdown = ConchBlessing.soflam.data.rocketTravelFrames or 15
-    strike.rocketEffect = spawnRocketEffect(strike.lastKnownPosition, player)
+    strike.rocketEffect = spawnRocketEffect(strike.lastKnownPosition, player, strike.inheritedProvenance)
 end
 
 -- ===================================================================
@@ -359,63 +356,54 @@ end
 -- Callbacks
 -- ===================================================================
 
-ConchBlessing.soflam.onPickup = function(_, player, _, _)
-    if not player then return end
-    player:AddCacheFlags(CacheFlag.CACHE_TEARFLAG)
-    player:EvaluateItems()
+local function enableTechnologyWeapon(player)
+    local repentogon = rawget(_G, "REPENTOGON")
+    if type(repentogon) ~= "table" or repentogon.Real ~= true then
+        return false
+    end
+    if not player
+        or type(player.EnableWeaponType) ~= "function"
+        or type(DEFAULT_TEAR_WEAPON_TYPE) ~= "number"
+        or type(TECHNOLOGY_WEAPON_TYPE) ~= "number"
+    then
+        return false
+    end
+
+    -- Replace the default tear weapon during this cache rebuild, just like a
+    -- Technology-style primary weapon. Removal performs a fresh weapon-cache
+    -- rebuild, so never issue a separate cleanup-time false call.
+    player:EnableWeaponType(DEFAULT_TEAR_WEAPON_TYPE, false)
+    player:EnableWeaponType(TECHNOLOGY_WEAPON_TYPE, true)
+    return true
 end
 
 ConchBlessing.soflam.onEvaluateCache = function(_, player, cacheFlag)
-    if cacheFlag ~= CacheFlag.CACHE_TEARFLAG then
+    if WEAPON_CACHE_FLAG == nil or cacheFlag ~= WEAPON_CACHE_FLAG then
         return
     end
     if player and player:HasCollectible(SOFLAM_ID) then
-        player.TearFlags = player.TearFlags | TearFlags.TEAR_PIERCING
+        enableTechnologyWeapon(player)
     end
 end
 
--- Hard-apply piercing to fired tears to avoid cache/order edge cases.
-ConchBlessing.soflam.onFireTear = function(_, tear)
-    if not tear then return end
+local function tryProcFromAttack(player, attackEntity, npc, inheritedProvenance)
+    if not (player and attackEntity and npc and player:HasCollectible(SOFLAM_ID)) then return end
 
-    local player = DamageProvenance.getDirectPlayerOwner(tear)
-    if not (player and player:HasCollectible(SOFLAM_ID)) then
-        return
-    end
+    -- One physical attack gets exactly one SOFLAM roll. Claim before RNG so a
+    -- failed Tech X/Brimstone/piercing hit cannot reroll on later damage ticks.
+    if not DamageProvenance.tryClaimAttackProc(attackEntity, PROC_KEY) then return end
 
-    if tear.AddTearFlags then
-        tear:AddTearFlags(TearFlags.TEAR_PIERCING)
-    else
-        tear.TearFlags = tear.TearFlags | TearFlags.TEAR_PIERCING
-    end
-end
-
-local function tryProcFromTear(player, tear, npc)
-    if not (player and tear and npc and player:HasCollectible(SOFLAM_ID)) then return end
-
-    -- Prevent duplicate proc from the same tear on the same enemy
-    local tearData = tear:GetData()
-    tearData.__ConchSoflamHit = tearData.__ConchSoflamHit or {}
-    local npcKey = npc.InitSeed or npc.Index
-    if tearData.__ConchSoflamHit[npcKey] then
-        return
-    end
-    tearData.__ConchSoflamHit[npcKey] = true
-
-    -- Roll proc chance
+    -- Consume one deterministic item-owned roll for this attack instance.
     local chance = getProcChance(player)
     if chance <= 0 then return end
 
-    local rng = RNG()
-    local seed = (tear.InitSeed or player.InitSeed or 0) + (npc.InitSeed or npc.Index or 0)
-    rng:SetSeed(seed, 35)
-
+    local rng = player:GetCollectibleRNG(SOFLAM_ID)
     if rng:RandomFloat() <= chance then
-        queueStrike(player, npc)
+        queueStrike(player, npc, inheritedProvenance)
     end
 end
 
---- REPENTOGON path: roll only after direct tear damage was actually applied.
+--- REPENTOGON path: roll only after eligible player-owned attack damage was applied.
 ConchBlessing.soflam.onPostEntityTakeDamage = function(_, entity, amount, _flags, source, _countdown, extraSource)
     if not entity or (tonumber(amount) or 0) <= 0 then return end
 
@@ -427,25 +415,25 @@ ConchBlessing.soflam.onPostEntityTakeDamage = function(_, entity, amount, _flags
         return
     end
 
-    local tear = DamageProvenance.getEligibleDirectTear(source, extraSource)
-    if not tear then return end
+    local attackEntity, player, provenance = DamageProvenance.getEligiblePlayerAttack(source, extraSource, PROC_KEY)
+    if not (attackEntity and player) then return end
 
-    local player = DamageProvenance.getDirectPlayerOwner(tear)
-    tryProcFromTear(player, tear, npc)
+    tryProcFromAttack(player, attackEntity, npc, provenance)
 end
 
 --- Base-game fallback: collision is weaker than confirmed damage, so disable it when
---- the applied-damage callback is available and reject marked secondary attacks.
+--- the applied-damage callback is available and reject lineages that already ran SOFLAM.
 ConchBlessing.soflam.onTearCollision = function(_, tear, collider, _low)
     if DamageProvenance.hasAppliedDamageCallback() then return nil end
-    if not (tear and DamageProvenance.isHitProcEligible(tear)) then return nil end
+    if not (tear and DamageProvenance.isHitProcEligible(tear, PROC_KEY)) then return nil end
 
     local npc = collider and collider:ToNPC() or nil
     if not (npc and npc:Exists() and npc:IsVulnerableEnemy()) then return nil end
     if npc:HasEntityFlags(EntityFlag.FLAG_FRIENDLY) then return nil end
 
-    local player = DamageProvenance.getDirectPlayerOwner(tear)
-    tryProcFromTear(player, tear, npc)
+    local player = DamageProvenance.getPlayerOwner(tear)
+    local provenance = DamageProvenance.getSnapshot(tear)
+    tryProcFromAttack(player, tear, npc, provenance)
     return nil
 end
 
@@ -475,8 +463,12 @@ ConchBlessing.soflam.onUpdate = function(_)
         end
 
         -- Track enemy position if still alive
-        local npc = findNpcByInitSeed(strike.npcInitSeed)
-        if npc and npc:Exists() and not npc:IsDead() then
+        local npc = strike.npcEntity
+        if npc
+            and npc:Exists()
+            and not npc:IsDead()
+            and (not strike.npcInitSeed or npc.InitSeed == strike.npcInitSeed)
+        then
             strike.lastKnownPosition = Vector(npc.Position.X, npc.Position.Y)
         end
 
@@ -495,7 +487,7 @@ ConchBlessing.soflam.onUpdate = function(_)
                 -- Remove the effect before manual detonation to prevent duplicate native ROCKET impact.
                 strike.rocketEffect:Remove()
                 strike.rocketEffect = nil
-                detonateAtPosition(player, strike.lastKnownPosition)
+                detonateAtPosition(player, strike.lastKnownPosition, strike.inheritedProvenance)
                 strike.remainingRockets = (strike.remainingRockets or 1) - 1
                 if strike.remainingRockets > 0 then
                     strike.phase = "rocket_interval"
@@ -507,7 +499,7 @@ ConchBlessing.soflam.onUpdate = function(_)
             end
         elseif strike.phase == "rocket" then
             -- Failsafe: if the effect was removed by the game engine, trigger explosion
-            detonateAtPosition(player, strike.lastKnownPosition)
+            detonateAtPosition(player, strike.lastKnownPosition, strike.inheritedProvenance)
             strike.remainingRockets = (strike.remainingRockets or 1) - 1
             if strike.remainingRockets > 0 then
                 strike.phase = "rocket_interval"
@@ -551,8 +543,10 @@ ConchBlessing.soflam.onGameStarted = function(_)
     for i = 0, numPlayers - 1 do
         local player = Isaac.GetPlayer(i)
         if player and player:HasCollectible(SOFLAM_ID) then
-            player:AddCacheFlags(CacheFlag.CACHE_TEARFLAG)
-            player:EvaluateItems()
+            if WEAPON_CACHE_FLAG ~= nil then
+                player:AddCacheFlags(WEAPON_CACHE_FLAG)
+                player:EvaluateItems()
+            end
         end
     end
 end

@@ -323,7 +323,8 @@ ConchBlessing.CallbackManager.registerAllCallbacks = function()
     ConchBlessing.printDebug("All callbacks registered successfully!")
 end
 
--- Auto-register when mod loads
+-- Fallback for unusual load ordering. The normal item loader registers all
+-- ItemData callbacks immediately after every behavior module has loaded.
 ConchBlessing:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function()
     ConchBlessing.CallbackManager.registerAllCallbacks()
 end)

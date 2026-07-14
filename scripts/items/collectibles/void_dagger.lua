@@ -5,15 +5,14 @@ DamageProvenance.registerCallbacks(ConchBlessing)
 
 -- config
 ConchBlessing.voiddagger.data = {
-    targetLockoutF = 20, -- per-target lockout frames
     Radius = 15,         -- ring radius
 }
 
 local VOID_DAGGER_ID = Isaac.GetItemIdByName("Void Dagger")
+local PROC_KEY = "void_dagger"
+local PROC_ORIGIN = "void_dagger_void_ring"
 
 ConchBlessing.voiddagger._upgradeAnim = nil
-
-local LAST_PROC_FRAME_KEY = "__conchVoidDaggerLastProcFrame"
 
 -- shots per second (SPS): S ≈ 30 / (MaxFireDelay + 1)
 local function getShotsPerSecond(player)
@@ -61,27 +60,8 @@ local function applyLuckBonus(p, luck)
     return out, factor, L
 end
 
-local function shouldProcForNpc(npc, player)
-    if not (npc and player) then return false end
-    local now = Game():GetFrameCount()
-    local npcData = npc:GetData()
-    local lastByPlayer = npcData[LAST_PROC_FRAME_KEY]
-    if type(lastByPlayer) ~= "table" then
-        lastByPlayer = {}
-        npcData[LAST_PROC_FRAME_KEY] = lastByPlayer
-    end
-    local playerKey = tostring(player.InitSeed or player.Index or 0)
-    local last = tonumber(lastByPlayer[playerKey])
-    local lockF = ConchBlessing.voiddagger.data.targetLockoutF or 20
-    if last and now >= last and now - last < lockF then -- per-target lockout
-        return false
-    end
-    lastByPlayer[playerKey] = now
-    return true
-end
-
 -- Spawn a Maw of Void ring at position with fixed lifetime and no black heart drops
-local function spawnVoidRingAt(player, pos)
+local function spawnVoidRingAt(player, pos, inheritedProvenance)
     -- Per request: use EntityPlayer:SpawnMawOfVoid
     -- First parameter is numeric (angle or mode). Use 0 and pin the laser at impact.
     local ring = player:SpawnMawOfVoid(0)
@@ -89,7 +69,7 @@ local function spawnVoidRingAt(player, pos)
     local laser = ring:ToLaser()
     if not laser then return end
 
-    DamageProvenance.markSecondaryAttack(laser, "void_dagger_void_ring")
+    DamageProvenance.markTriggeredAttack(laser, PROC_KEY, inheritedProvenance, PROC_ORIGIN)
 
     -- set timeout by player's damage
     local timeoutF = computeTimeoutFromDamage(player.Damage)
@@ -116,15 +96,14 @@ local function spawnVoidRingAt(player, pos)
     end
 end
 
-local function tryProcFromTear(player, tear, npc)
-    if not (player and VOID_DAGGER_ID ~= -1 and player:HasCollectible(VOID_DAGGER_ID)) then
+local function tryProcFromAttack(player, attackEntity, npc, inheritedProvenance)
+    if not (player and attackEntity and npc and VOID_DAGGER_ID ~= -1 and player:HasCollectible(VOID_DAGGER_ID)) then
         return
     end
 
-    -- Per-target brief lockout to avoid multi-proc spam on multi-hit frames
-    if not shouldProcForNpc(npc, player) then
-        return
-    end
+    -- One physical attack gets exactly one Void Dagger roll. Claim before RNG
+    -- so a failed multi-hit attack cannot reroll on a later damage tick/target.
+    if not DamageProvenance.tryClaimAttackProc(attackEntity, PROC_KEY) then return end
 
     -- compute proc chance
     local shotsPerSecond = getShotsPerSecond(player)          -- S ≈ 30/(MaxFireDelay+1)
@@ -133,13 +112,13 @@ local function tryProcFromTear(player, tear, npc)
     local R = getDisplayRange(player)                         -- R = TearRange/40
     local dbgRadius = computeRingRadiusFromRange(player)      -- Radius
     local D = player.MaxFireDelay or 0                        -- current MaxFireDelay(frames)
-    -- Deterministic RNG per-tear
-    local rng = RNG()
-    rng:SetSeed(tear.InitSeed or player.InitSeed, 35)
+    -- One deterministic item-owned roll for this attack instance. No frame
+    -- lockout is needed: attack claims handle multi-hit and lineage handles recursion.
+    local rng = player:GetCollectibleRNG(VOID_DAGGER_ID)
     local roll = rng:RandomFloat()
     if roll < p then
         local hitPos = npc.Position
-        spawnVoidRingAt(player, hitPos)
+        spawnVoidRingAt(player, hitPos, inheritedProvenance)
         if ConchBlessing and ConchBlessing.printDebug then
             ConchBlessing.printDebug(string.format(
                 "Void Dagger PROC: base=%.2f%% final=%.2f%% (luck x%.1f @Luck=%.1f) roll=%.3f S=%.2f D=%.2f R=%.2f radius=%.2f pos=(%.1f,%.1f) npcSeed=%s",
@@ -149,7 +128,7 @@ local function tryProcFromTear(player, tear, npc)
     end
 end
 
--- REPENTOGON path: trigger only after direct tear damage is actually applied.
+-- REPENTOGON path: trigger only after eligible player-owned attack damage is applied.
 ConchBlessing.voiddagger.onPostEntityTakeDamage = function(_, entity, amount, _flags, source, _countdown, extraSource)
     if not entity or (tonumber(amount) or 0) <= 0 then return end
 
@@ -158,25 +137,25 @@ ConchBlessing.voiddagger.onPostEntityTakeDamage = function(_, entity, amount, _f
         return
     end
 
-    local tear = DamageProvenance.getEligibleDirectTear(source, extraSource)
-    if not tear then return end
+    local attackEntity, player, provenance = DamageProvenance.getEligiblePlayerAttack(source, extraSource, PROC_KEY)
+    if not (attackEntity and player) then return end
 
-    local player = DamageProvenance.getDirectPlayerOwner(tear)
-    tryProcFromTear(player, tear, npc)
+    tryProcFromAttack(player, attackEntity, npc, provenance)
 end
 
 -- Base-game fallback: use collision only without the applied-damage callback.
 ConchBlessing.voiddagger.onTearCollision = function(_, tear, collider, _low)
     if DamageProvenance.hasAppliedDamageCallback() then return nil end
-    if not (tear and DamageProvenance.isHitProcEligible(tear)) then return nil end
+    if not (tear and DamageProvenance.isHitProcEligible(tear, PROC_KEY)) then return nil end
 
     local npc = collider and collider:ToNPC() or nil
     if not (npc and npc:Exists() and npc:IsVulnerableEnemy() and not npc:HasEntityFlags(EntityFlag.FLAG_FRIENDLY)) then
         return nil
     end
 
-    local player = DamageProvenance.getDirectPlayerOwner(tear)
-    tryProcFromTear(player, tear, npc)
+    local player = DamageProvenance.getPlayerOwner(tear)
+    local provenance = DamageProvenance.getSnapshot(tear)
+    tryProcFromAttack(player, tear, npc, provenance)
     return nil
 end
 

@@ -60,7 +60,7 @@
 --   soulhearts: number - soul heart count
 --   script: "script path" - item effect script file path (default path is used if omitted)
 --   callbacks: { callback functions } - callback functions to automatically register
---     pickup: "function name" - called when item is picked up
+--     pickup: legacy MC_POST_PICKUP_INIT alias; not a collectible-acquisition event
 --     use: "function name" - called when item is used
 --     evaluateCache: "function name" - called when cache is calculated
 --     tearHit: "function name" - called when tear hits
@@ -183,21 +183,23 @@ ConchBlessing.ItemData = {
         },
         eid = {
             kr = {
-                "#눈물로 적에게 피해를 주면 확률로 그 위치에 내 데미지의 보이드 링을 소환합니다.",
+                "#내 공격으로 적에게 피해를 주면 확률로 그 위치에 내 데미지의 보이드 링을 소환합니다.",
                 "#확률은 (30 - {{Tears}}연사)%로 5%보다 작아지지 않습니다",
                 "#위 확률은 {{Luck}}운에 따라 (1+0.1×{{Luck}}운) 배수로 증가합니다. (최대 100%)",
+                "#한 공격이 여러 번 피해를 줘도 최초 피해에서 발동 확률은 한 번만 판정됩니다.",
                 "#지속시간은 {{Damage}}데미지에 따라 증가하며 데미지 10당 5단계로 증가합니다.",
                 "#{{BlackHeart}}블랙하트는 드랍되지 않습니다.",
-                "#직접 눈물 피해만 발동하며 공허 링과 SOFLAM 미사일 피해는 제외됩니다.",
+                "#Void Dagger가 만든 공격과 그 파생 공격으로는 다시 발동하지 않습니다.",
                 "#{{Warning}} REPENTOGON 권장"
             },
             en = {
-                "#When a tear damages an enemy, has a chance to spawn a void ring at the impact that deals your damage",
+                "#When your attack damages an enemy, has a chance to spawn a void ring at the impact that deals your damage",
                 "#Chance is (30 − {{Tears}}Tears)% guaranteed 5%",
                 "#chance is increased by (1+0.1×{{Luck}}Luck) (up to 100%)",
+                "#Each attack gets only one activation roll when it first deals damage, even if it hits multiple times",
                 "#Duration increases by 10 frames per 10 {{Damage}}Damage by 5 steps",
                 "#{{BlackHeart}}No black heart drops",
-                "#Only direct tear damage can trigger it; void rings and SOFLAM missiles are excluded",
+                "#Attacks created by Void Dagger and their descendants cannot retrigger it",
                 "#{{Warning}} REPENTOGON recommended"
             }
         },
@@ -1268,20 +1270,18 @@ ConchBlessing.ItemData = {
         },
         eid = {
             kr = {
-                "공격이 적을 관통합니다",
-                "#눈물로 적에게 피해를 주면 10% 확률로 타겟이 지정됩니다 ({{Luck}}운 x5% 추가)",
+                "기본 눈물이 레이저로 대체됩니다",
+                "#내 공격으로 적에게 피해를 주면 10% 확률로 타겟이 지정됩니다 ({{Luck}}운 x5% 추가)",
                 "#타겟으로 지정되면 1.5초 뒤 현재 멀티샷 수만큼 Epic Fetus 미사일이 1발씩 연속으로 떨어집니다",
                 "#미사일은 내 {{Damage}}공격력의 10배 데미지",
-                "#직접 눈물 피해만 발동하며 SOFLAM 미사일과 공허 링 피해는 제외됩니다.",
-                "#{{Warning}} REPENTOGON 권장",
+                "#{{Warning}} REPENTOGON이 필요합니다!",
             },
             en = {
-                "Your tears pierce enemies",
-                "#When a tear damages an enemy: 10% chance to designate the target (+{{Luck}}Luck x5%)",
+                "Replaces your tears with lasers",
+                "#When your attack damages an enemy: 10% chance to designate the target (+{{Luck}}Luck x5%)",
                 "#After 1.5 seconds, Epic Fetus missiles strike one-by-one equal to your current multishot count",
                 "#Missile deals 10 times of your {{Damage}}Damage",
-                "#Only direct tear damage can trigger it; SOFLAM missiles and void rings are excluded",
-                "#{{Warning}} REPENTOGON recommended",
+                "#{{Warning}} Requires REPENTOGON!",
             }
         },
         pool = {
@@ -1289,7 +1289,7 @@ ConchBlessing.ItemData = {
         },
         quality = 4,
         tags = "offensive",
-        cache = "tearflag",
+        cache = "weapon",
         hidden = false,
         shopprice = 25,
         devilprice = 2,
@@ -1297,9 +1297,7 @@ ConchBlessing.ItemData = {
         flag = "positive",
         script = "scripts/items/collectibles/soflam",
         callbacks = {
-            pickup = "soflam.onPickup",
             evaluateCache = "soflam.onEvaluateCache",
-            fireTear = "soflam.onFireTear",
             tearCollision = "soflam.onTearCollision",
             postEntityTakeDmg = "soflam.onPostEntityTakeDamage",
             update = "soflam.onUpdate",
@@ -2519,6 +2517,17 @@ local function loadAllItems()
 end
 
 loadAllItems()
+
+-- All behavior modules now exist, so register their callbacks before the first
+-- MC_POST_GAME_STARTED dispatch. The manager keeps its game-start hook only as
+-- a fallback for unusual load ordering.
+if ConchBlessing.CallbackManager
+    and type(ConchBlessing.CallbackManager.registerAllCallbacks) == "function"
+then
+    ConchBlessing.CallbackManager.registerAllCallbacks()
+else
+    ConchBlessing.printError("CallbackManager unavailable after item script loading")
+end
 
 -- Signal that ItemData is fully loaded and ready
 ConchBlessing.ItemDataReady = true

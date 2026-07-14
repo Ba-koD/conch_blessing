@@ -15,7 +15,7 @@
     <passive id="12" name="Tyrfing" gfx="tyrfing.png" quality="4" tags="offensive" cache="damage" hidden="true" shopprice="30" devilprice="2"/>
     <passive id="13" name="Ice Breath" gfx="ice_breath.png" quality="4" tags="offensive" shopprice="30" devilprice="2"/>
     <passive id="14" name="Fire Breath" gfx="fire_breath.png" quality="4" tags="offensive" shopprice="30" devilprice="2"/>
-    <passive id="15" name="SOFLAM" gfx="soflam.png" quality="4" tags="offensive" cache="tearflag" shopprice="25" devilprice="2"/>
+    <passive id="15" name="SOFLAM" gfx="soflam.png" quality="4" tags="offensive" cache="weapon" shopprice="25" devilprice="2"/>
     <passive id="16" name="Two Faced Penny" gfx="two_faced_penny.png" quality="4" tags="utility" shopprice="15"/>
     <active id="17" name="Inf D6" gfx="inf_d6.png" quality="0" tags="utility" hidden="true" shopprice="999" chargetype="normal"/>
     <active id="18" name="Severed Oath" gfx="severed_oath.png" quality="3" tags="utility" shopprice="15" devilprice="2" maxcharges="4" chargetype="normal" initcharge="0"/>
