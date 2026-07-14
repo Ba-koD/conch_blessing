@@ -45,6 +45,60 @@ local function _resolveFunction(path)
     return current
 end
 
+local VALID_UPGRADE_FLAGS = {
+    positive = true,
+    neutral = true,
+    negative = true,
+}
+
+local PENDING_UPGRADE_DATA_KEY = "__ConchBlessingUpgradeJob"
+local PICKUP_LOCK_DATA_KEY = "__ConchBlessingUpgradePickupLock"
+
+local function _callUpgradeFunction(label, fn, ...)
+    if type(fn) ~= "function" then
+        return 0
+    end
+
+    local ok, result = pcall(fn, ...)
+    if not ok then
+        ConchBlessing.printError("[Upgrade] " .. label .. " failed: " .. tostring(result))
+        return 0
+    end
+
+    return tonumber(result) or 0
+end
+
+local function _callConfiguredHook(path, label, ...)
+    if path == nil then
+        return 0
+    end
+
+    local fn = _resolveFunction(path)
+    if type(fn) ~= "function" then
+        ConchBlessing.printError("[Upgrade] " .. label .. " is not callable: " .. tostring(path))
+        return 0
+    end
+
+    return _callUpgradeFunction(label, fn, ...)
+end
+
+local function _getUpgradeTemplate(flag)
+    if not VALID_UPGRADE_FLAGS[flag] then
+        return nil
+    end
+
+    local templateRoot = ConchBlessing.template
+    local template = templateRoot and templateRoot[flag] or nil
+    if type(template) ~= "table"
+        or type(template.onBeforeChange) ~= "function"
+        or type(template.onAfterChange) ~= "function" then
+        ConchBlessing.printError("[Upgrade] Missing template for flag: " .. tostring(flag))
+        return nil
+    end
+
+    return template
+end
+
 -- Normalize origin declaration (number | string | table) to numeric id and trinket/collectible type
 local function _resolveOriginAny(originDecl, fallbackItemType)
     local explicitType = nil
@@ -179,104 +233,244 @@ local function _spawnEffects(list, pos)
     end
 end
 
+local function _isPickupPending(pickup)
+    if not pickup then
+        return false
+    end
+
+    local data = pickup:GetData()
+    if data and data[PENDING_UPGRADE_DATA_KEY] ~= nil then
+        return true
+    end
+
+    for _, job in ipairs(ConchBlessing._upgradeJobs) do
+        if job.pickup == pickup and (job.phase == 0 or job.phase == 1) then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function _clearPendingMarker(job)
+    local pickup = job and job.pickup and job.pickup:ToPickup() or nil
+    if not pickup then
+        return
+    end
+
+    local data = pickup:GetData()
+    if data and data[PENDING_UPGRADE_DATA_KEY] == job.token then
+        data[PENDING_UPGRADE_DATA_KEY] = nil
+    end
+    if data and data[PICKUP_LOCK_DATA_KEY] == job.token then
+        data[PICKUP_LOCK_DATA_KEY] = nil
+    end
+end
+
+local function _removeUpgradeJob(index, job, cancelAnimation)
+    if cancelAnimation
+        and ConchBlessing.template
+        and type(ConchBlessing.template.cancelForPickup) == "function" then
+        ConchBlessing.template.cancelForPickup(job and job.pickup or nil)
+    end
+    _clearPendingMarker(job)
+    table.remove(ConchBlessing._upgradeJobs, index)
+end
+
 local function _enqueueUpgradeJob(entityPickup, upgradeData, savedFields)
+    if not entityPickup or _isPickupPending(entityPickup) then
+        return false
+    end
+
     local itemData = upgradeData.itemData or {}
-    -- Frames to wait; will be set dynamically from callbacks or itemData
-    local beforeFrames = 0
-    local afterFrames = 0
-    -- Determine target pickup variant by item type (collectible/trinket)
     local targetVariant = PickupVariant.PICKUP_COLLECTIBLE
-    if type(itemData.type) == "string" and string.lower(itemData.type) == "trinket" then
+    if itemData.type == "trinket" then
         targetVariant = PickupVariant.PICKUP_TRINKET
     end
-    table.insert(ConchBlessing._upgradeJobs, {
+
+    local job = {
         pickup = entityPickup,
         pos = Vector(entityPickup.Position.X, entityPickup.Position.Y),
+        sourceVariant = entityPickup.Variant,
+        sourceSubType = entityPickup.SubType,
+        sourceInitSeed = entityPickup.InitSeed,
         upgradeId = upgradeData.upgradeId,
+        itemKey = upgradeData.itemKey,
         itemData = itemData,
         saved = savedFields or {},
-        phase = 0,           -- 0: run BEFORE, 1: wait BEFORE frames, 2: morph+run AFTER, 3: wait AFTER frames
+        phase = 0,
         counter = 0,
-        beforeFrames = beforeFrames,
-        afterFrames = afterFrames,
+        beforeFrames = math.max(0, tonumber(itemData.beforeFrames) or 0),
+        afterFrames = math.max(0, tonumber(itemData.afterFrames) or 0),
         targetVariant = targetVariant,
-    })
+        templateState = {},
+        token = {},
+    }
+
+    local data = entityPickup:GetData()
+    data[PENDING_UPGRADE_DATA_KEY] = job.token
+    data[PICKUP_LOCK_DATA_KEY] = job.token
+    table.insert(ConchBlessing._upgradeJobs, job)
+    return true
+end
+
+local function _sourceStillMatches(job, pickup)
+    return pickup
+        and pickup:Exists()
+        and pickup.Variant == job.sourceVariant
+        and pickup.SubType == job.sourceSubType
+        and pickup.InitSeed == job.sourceInitSeed
+end
+
+local function _preventPendingUpgradePickup(_, pickup, collider)
+    if not pickup or not collider or not collider:ToPlayer() then
+        return
+    end
+
+    local data = pickup:GetData()
+    if data and data[PICKUP_LOCK_DATA_KEY] ~= nil then
+        return true
+    end
+end
+
+local function _restorePickupFields(pickup, saved)
+    local fields = {
+        { "Price", "price" },
+        { "OptionsPickupIndex", "options" },
+        { "Wait", "wait" },
+        { "Timeout", "timeout" },
+        { "Touched", "touched" },
+        { "ShopItemId", "shopId" },
+        { "State", "state" },
+    }
+
+    for _, field in ipairs(fields) do
+        local savedValue = saved[field[2]]
+        if savedValue ~= nil then
+            pickup[field[1]] = savedValue
+        end
+    end
 end
 
 local function _processUpgradeJobs()
-    if #ConchBlessing._upgradeJobs == 0 then return end
+    if #ConchBlessing._upgradeJobs == 0 then
+        return
+    end
+
     for i = #ConchBlessing._upgradeJobs, 1, -1 do
         local job = ConchBlessing._upgradeJobs[i]
         local pickup = job.pickup and job.pickup:ToPickup() or nil
         if not pickup or not pickup:Exists() then
-            table.remove(ConchBlessing._upgradeJobs, i)
+            _removeUpgradeJob(i, job, true)
             goto continue
         end
+        if (job.phase == 0 or job.phase == 1) and not _sourceStillMatches(job, pickup) then
+            ConchBlessing.printDebug("[Upgrade] Source pickup changed; cancelling " .. tostring(job.itemKey or job.upgradeId))
+            _removeUpgradeJob(i, job, true)
+            goto continue
+        end
+
         local advanced = true
         while advanced do
             advanced = false
+
             if job.phase == 0 then
-            -- BEFORE hooks/effects
                 _spawnEffects(job.itemData.upgradeEffectsBefore, job.pos)
-                local fnBefore = _resolveFunction(job.itemData.onBeforeChange)
-            local beforeRet = nil
-            if type(fnBefore) == "function" then
-                local ok, ret = pcall(fnBefore, job.pos, pickup, job.itemData)
-                if ok then beforeRet = ret end
-            end
-            -- derive delay solely from callback return (frames)
-            local derivedBefore = tonumber(beforeRet) or 0
-            job.counter = (job.beforeFrames and job.beforeFrames > 0) and job.beforeFrames or derivedBefore
+
+                job.template = _getUpgradeTemplate(job.itemData.flag)
+                local templateDelay = 0
+                if job.template then
+                    templateDelay = _callUpgradeFunction(
+                        "template." .. job.itemData.flag .. ".onBeforeChange",
+                        job.template.onBeforeChange,
+                        job.pos,
+                        pickup,
+                        job.templateState
+                    )
+                end
+
+                local hookDelay = _callConfiguredHook(
+                    job.itemData.onBeforeChange,
+                    tostring(job.itemKey or job.upgradeId) .. ".onBeforeChange",
+                    job.pos,
+                    pickup,
+                    job.itemData
+                )
+
+                job.counter = math.max(job.beforeFrames, templateDelay, hookDelay)
                 job.phase = 1
                 advanced = (job.counter <= 0)
+
             elseif job.phase == 1 then
                 job.counter = job.counter - 1
                 if job.counter <= 0 then
-                    -- Morph while preserving pedestal/shop fields
-                    local variantToUse = job.targetVariant or PickupVariant.PICKUP_COLLECTIBLE
-                    local morphId = job.upgradeId
-                    if variantToUse == PickupVariant.PICKUP_TRINKET and job.saved and job.saved.wasGoldenTrinket then
-                        morphId = morphId + 32768 -- preserve golden trinket flag
+                    if not _sourceStillMatches(job, pickup) then
+                        ConchBlessing.printDebug("[Upgrade] Source pickup changed before morph; cancelling " .. tostring(job.itemKey or job.upgradeId))
+                        _removeUpgradeJob(i, job, true)
+                        goto continue
                     end
+
+                    if ConchBlessing.template and type(ConchBlessing.template.cancelForPickup) == "function" then
+                        ConchBlessing.template.cancelForPickup(pickup)
+                    end
+
+                    local variantToUse = job.targetVariant
+                    local morphId = job.upgradeId
+                    if variantToUse == PickupVariant.PICKUP_TRINKET and job.saved.wasGoldenTrinket then
+                        morphId = morphId + 32768
+                    end
+
                     ConchBlessing.printDebug("[Upgrade] Morphing pickup to variant=" .. tostring(variantToUse) .. ", id=" .. tostring(morphId))
-                    pickup:Morph(EntityType.ENTITY_PICKUP, variantToUse, morphId, true, true, true)
-                    local s = job.saved or {}
-                    pickup.Price = s.price or pickup.Price
-                    pickup.OptionsPickupIndex = s.options or pickup.OptionsPickupIndex
-                    pickup.Wait = s.wait or pickup.Wait
-                    pickup.Timeout = s.timeout or pickup.Timeout
-                    pickup.Touched = s.touched or pickup.Touched
-                    pickup.ShopItemId = s.shopId or pickup.ShopItemId
-                    pickup.State = s.state or pickup.State
-                                -- AFTER hooks/effects
-            _spawnEffects(job.itemData.upgradeEffectsAfter or job.itemData.upgradeEffects, job.pos)
-            local fnAfter = _resolveFunction(job.itemData.onAfterChange or job.itemData.onUpgrade)
-            ConchBlessing.printDebug("  onAfterChange function resolved: " .. tostring(fnAfter))
-            local afterRet = nil
-            if type(fnAfter) == "function" then
-                ConchBlessing.printDebug("  Calling onAfterChange function...")
-                local ok, ret = pcall(fnAfter, job.pos, pickup, job.itemData)
-                if ok then 
-                    afterRet = ret 
-                    ConchBlessing.printDebug("  onAfterChange returned: " .. tostring(ret))
-                else
-                    ConchBlessing.printError("  onAfterChange error: " .. tostring(ret))
-                end
-            else
-                ConchBlessing.printError("  onAfterChange is not a function! Type: " .. type(fnAfter))
-            end
-                    local derivedAfter = tonumber(afterRet) or 0
-                    job.counter = (job.afterFrames and job.afterFrames > 0) and job.afterFrames or derivedAfter
+                    local morphOk, morphError = pcall(function()
+                        pickup:Morph(EntityType.ENTITY_PICKUP, variantToUse, morphId, true, true, true)
+                    end)
+                    if not morphOk then
+                        ConchBlessing.printError("[Upgrade] Morph failed for " .. tostring(job.itemKey or job.upgradeId) .. ": " .. tostring(morphError))
+                        _removeUpgradeJob(i, job, true)
+                        goto continue
+                    end
+                    if pickup.Variant ~= variantToUse or pickup.SubType ~= morphId then
+                        ConchBlessing.printError("[Upgrade] Morph result mismatch for " .. tostring(job.itemKey or job.upgradeId))
+                        _removeUpgradeJob(i, job, true)
+                        goto continue
+                    end
+
+                    _restorePickupFields(pickup, job.saved)
+                    _clearPendingMarker(job)
+                    _spawnEffects(job.itemData.upgradeEffectsAfter or job.itemData.upgradeEffects, job.pos)
+
+                    local templateDelay = 0
+                    if job.template then
+                        templateDelay = _callUpgradeFunction(
+                            "template." .. job.itemData.flag .. ".onAfterChange",
+                            job.template.onAfterChange,
+                            job.pos,
+                            pickup,
+                            job.templateState
+                        )
+                    end
+
+                    local hookDelay = _callConfiguredHook(
+                        job.itemData.onAfterChange or job.itemData.onUpgrade,
+                        tostring(job.itemKey or job.upgradeId) .. ".onAfterChange",
+                        job.pos,
+                        pickup,
+                        job.itemData
+                    )
+
+                    job.counter = math.max(job.afterFrames, templateDelay, hookDelay)
                     job.phase = 3
                     advanced = (job.counter <= 0)
                 end
+
             elseif job.phase == 3 then
                 job.counter = job.counter - 1
                 if job.counter <= 0 then
-                    table.remove(ConchBlessing._upgradeJobs, i)
+                    _removeUpgradeJob(i, job, false)
                 end
             end
         end
+
         ::continue::
     end
 end
@@ -289,6 +483,14 @@ end
 
 -- Define item conversion map (generated from ItemData)
 ConchBlessing.ItemMaps = {}
+ConchBlessing._itemMapsReady = false
+
+local function _getConfiguredItem(itemConfig, itemId, isTrinket)
+    if isTrinket then
+        return itemConfig:GetTrinket(itemId)
+    end
+    return itemConfig:GetCollectible(itemId)
+end
 
 -- Automatically generate conversion map based on ItemData
 local function generateItemMaps()
@@ -298,36 +500,108 @@ local function generateItemMaps()
         ConchBlessing.printDebug("ConchBlessing.ItemData not ready yet (ItemData: " .. tostring(ConchBlessing.ItemData ~= nil) .. ", ItemDataReady: " .. tostring(ConchBlessing.ItemDataReady) .. "), skipping conversion map generation")
         return false
     end
-    
-    for itemKey, itemData in pairs(ConchBlessing.ItemData) do
-        if itemData.origin and itemData.flag then
-            -- Resolve origin declaration to numeric id and type
-            local originId, originIsTrinket = _resolveOriginAny(itemData.origin, itemData.type)
-            if not originId then
-                ConchBlessing.printError("Upgrade item has unresolved origin: " .. tostring(itemKey) .. " (origin= " .. tostring(itemData.origin) .. ")")
-            else
-                ConchBlessing.printDebug("Upgrade item found: " .. itemKey .. " (resolved originId=" .. tostring(originId) .. ", isTrinket=" .. tostring(originIsTrinket) .. ", flag=" .. tostring(itemData.flag) .. ")")
+
+    local itemConfig = Isaac.GetItemConfig()
+    if not itemConfig then
+        ConchBlessing.printError("[Upgrade] ItemConfig is unavailable; conversion map was not built")
+        ConchBlessing.ItemMaps = {}
+        ConchBlessing._itemMapsReady = false
+        return false
+    end
+
+    local newMaps = {}
+    local invalidSlots = {}
+    local hasErrors = false
+
+    local function addMapping(itemKey, itemData)
+        if itemData.origin ~= nil or itemData.flag ~= nil then
+            if itemData.origin == nil or not VALID_UPGRADE_FLAGS[itemData.flag] then
+                ConchBlessing.printError("[Upgrade] Invalid origin/flag declaration for " .. tostring(itemKey))
+                return false
             end
-            if not originId then goto continue_origin end
-            -- Map by resolved type and id
+
+            local originId, originIsTrinket = _resolveOriginAny(itemData.origin, itemData.type)
+            if type(originId) ~= "number" or originId <= 0 or originIsTrinket == nil then
+                ConchBlessing.printError("[Upgrade] Unresolved origin for " .. tostring(itemKey) .. ": " .. tostring(itemData.origin))
+                return false
+            end
+
+            if not _getConfiguredItem(itemConfig, originId, originIsTrinket) then
+                ConchBlessing.printError("[Upgrade] Origin ItemConfig entry is missing for " .. tostring(itemKey) .. ": " .. tostring(originId))
+                return false
+            end
+
+            local targetIsTrinket = itemData.type == "trinket"
+            if itemData.type ~= "active"
+                and itemData.type ~= "passive"
+                and itemData.type ~= "familiar"
+                and not targetIsTrinket then
+                ConchBlessing.printError("[Upgrade] Unsupported target item type for " .. tostring(itemKey) .. ": " .. tostring(itemData.type))
+                return false
+            end
+
+            if type(itemData.id) ~= "number" or itemData.id <= 0
+                or not _getConfiguredItem(itemConfig, itemData.id, targetIsTrinket) then
+                ConchBlessing.printError("[Upgrade] Target ItemConfig entry is missing for " .. tostring(itemKey) .. ": " .. tostring(itemData.id))
+                return false
+            end
+
+            if not _getUpgradeTemplate(itemData.flag) then
+                return false
+            end
+
             local originKeyPrefix = (originIsTrinket == true) and "T:" or "C:"
             local originKey = originKeyPrefix .. tostring(originId)
-            if not ConchBlessing.ItemMaps[originKey] then
-                ConchBlessing.ItemMaps[originKey] = {}
+            local slotKey = originKey .. ":" .. itemData.flag
+            if not newMaps[originKey] then
+                newMaps[originKey] = {}
             end
-            
-            ConchBlessing.ItemMaps[originKey][itemData.flag] = {
+
+            if invalidSlots[slotKey] or newMaps[originKey][itemData.flag] then
+                local previous = newMaps[originKey][itemData.flag]
+                ConchBlessing.printError(
+                    "[Upgrade] Duplicate origin/flag mapping: "
+                        .. slotKey
+                        .. " ("
+                        .. tostring(previous and previous.itemKey or "duplicate")
+                        .. ", "
+                        .. tostring(itemKey)
+                        .. ")"
+                )
+                newMaps[originKey][itemData.flag] = nil
+                invalidSlots[slotKey] = true
+                return false
+            end
+
+            newMaps[originKey][itemData.flag] = {
                 upgradeId = itemData.id,
                 flag = itemData.flag,
-                itemData = itemData -- reference to full item data
+                itemKey = itemKey,
+                itemData = itemData,
             }
-            
+
             ConchBlessing.printDebug("  Added to conversion map: " .. originKey .. "[" .. itemData.flag .. "] -> " .. tostring(itemData.id))
-            ::continue_origin::
+        end
+
+        return true
+    end
+
+    for itemKey, itemData in pairs(ConchBlessing.ItemData) do
+        if not addMapping(itemKey, itemData) then
+            hasErrors = true
         end
     end
-    
-    ConchBlessing.printDebug("Conversion map created! Total " .. ConchBlessing.tableLength(ConchBlessing.ItemMaps) .. " origin mappings created.")
+
+    if hasErrors then
+        ConchBlessing.ItemMaps = {}
+        ConchBlessing._itemMapsReady = false
+        ConchBlessing.printError("[Upgrade] Conversion map validation failed; transformations remain disabled")
+        return false
+    end
+
+    ConchBlessing.ItemMaps = newMaps
+    ConchBlessing._itemMapsReady = true
+    ConchBlessing.printDebug("Conversion map created! Total " .. ConchBlessing.tableLength(newMaps) .. " origin mappings created.")
     return true
 end
 
@@ -366,16 +640,20 @@ end
 
 -- Magic Conch result handling function
 local function handleMagicConchResult(result)
-    ConchBlessing.printDebug("Magic Conch result received: " .. result.text .. " (type: " .. result.type .. ")")
-    
-    local player = Isaac.GetPlayer(0)
-    if not player then
-        ConchBlessing.printError("Player not found!")
+    if type(result) ~= "table" or not VALID_UPGRADE_FLAGS[result.type] then
+        ConchBlessing.printError("[Upgrade] Ignoring invalid Magic Conch result")
         return
     end
-    
+
+    if not ConchBlessing._itemMapsReady and not generateItemMaps() then
+        ConchBlessing.printError("[Upgrade] Ignoring Magic Conch result because the conversion map is unavailable")
+        return
+    end
+
+    local resultType = result.type
+    ConchBlessing.printDebug("Magic Conch result received: " .. tostring(result.text) .. " (type: " .. resultType .. ")")
+
     -- Check all entities in the current room (field items)
-    local room = Game():GetRoom()
     local entities = Isaac.GetRoomEntities()
     local transformed = false
     local upgradeCount = 0
@@ -393,7 +671,9 @@ local function handleMagicConchResult(result)
     
     for _, entity in ipairs(entities) do
         -- check if it's a pickup (collectible or trinket)
-        if entity.Type == EntityType.ENTITY_PICKUP and (entity.Variant == PickupVariant.PICKUP_COLLECTIBLE or entity.Variant == PickupVariant.PICKUP_TRINKET) then
+        if entity.Type == EntityType.ENTITY_PICKUP
+            and (entity.Variant == PickupVariant.PICKUP_COLLECTIBLE or entity.Variant == PickupVariant.PICKUP_TRINKET)
+            and not _isPickupPending(entity:ToPickup()) then
             local rawId = entity.SubType
             local isTrinketPickup = (entity.Variant == PickupVariant.PICKUP_TRINKET)
             local baseId = rawId
@@ -418,13 +698,13 @@ local function handleMagicConchResult(result)
                     table.insert(availableFlags, flag)
                 end
                 ConchBlessing.printDebug("  Available flags: " .. table.concat(availableFlags, ", "))
-                ConchBlessing.printDebug("  Current result type: " .. result.type)
+                ConchBlessing.printDebug("  Current result type: " .. resultType)
 
-                local upgradeData = originMappings[result.type]
+                local upgradeData = originMappings[resultType]
                 if upgradeData then
                     -- Flag matches - perform upgrade
                     ConchBlessing.printDebug("Flag matches! Item conversion: id=" .. tostring(baseId) .. " -> " .. tostring(upgradeData.upgradeId))
-                    ConchBlessing.printDebug("  Flag type: " .. upgradeData.flag .. ", Result type: " .. result.type)
+                    ConchBlessing.printDebug("  Flag type: " .. upgradeData.flag .. ", Result type: " .. resultType)
 
                     -- Queue upgrade info
                     table.insert(upgradeableItems, {
@@ -444,7 +724,7 @@ local function handleMagicConchResult(result)
             else
                 -- This item has NO evolution possibilities in ConchBlessing
                 -- If Delete Mode is on and result is "negative", delete the item
-                if deleteModeActive and result.type == "negative" then
+                if deleteModeActive and resultType == "negative" then
                     ConchBlessing.printDebug("Delete Mode: Item has no evolution and result is negative. Marking for deletion.")
                     table.insert(deleteableItems, entity)
                 end
@@ -459,52 +739,38 @@ local function handleMagicConchResult(result)
         for _, itemInfo in ipairs(upgradeableItems) do
             local entity = itemInfo.entity
             local upgradeData = itemInfo.upgradeData
-            
+
             -- Save original item properties (including pedestal)
             local pickup = entity:ToPickup()
 
-            if pickup == nil then
-                ConchBlessing.printError("Pickup is nil!")
-                goto continue
-            end
-            
-            -- Only perform conversion (no purchase handling)
-            ConchBlessing.printDebug("Item conversion in progress for item " .. tostring(entity.SubType))
-            
-            local originalPrice = pickup.Price
-            local originalOptions = pickup.OptionsPickupIndex
-            local originalWait = pickup.Wait
-            local originalTimeout = pickup.Timeout
-            local originalTouched = pickup.Touched
-            local originalShopItemId = pickup.ShopItemId
-            local originalState = pickup.State
-            
-            -- add conversion effect immediately (sound)
-            local sfxManager = SFXManager()
-            sfxManager:Play(SoundEffect.SOUND_POWERUP_SPEWER, 0.5)
-            
-            -- Enqueue staged job to ensure BEFORE completes before AFTER
             if pickup then
-                if ConchBlessing.UpgradeHighlight and ConchBlessing.UpgradeHighlight.StopForPickup then
-                    ConchBlessing.UpgradeHighlight.StopForPickup(pickup)
-                end
-                _enqueueUpgradeJob(pickup, upgradeData, {
-                    price = originalPrice,
-                    options = originalOptions,
-                    wait = originalWait,
-                    timeout = originalTimeout,
-                    touched = originalTouched,
-                    shopId = originalShopItemId,
-                    state = originalState,
+                local queued = _enqueueUpgradeJob(pickup, upgradeData, {
+                    price = pickup.Price,
+                    options = pickup.OptionsPickupIndex,
+                    wait = pickup.Wait,
+                    timeout = pickup.Timeout,
+                    touched = pickup.Touched,
+                    shopId = pickup.ShopItemId,
+                    state = pickup.State,
                     wasGoldenTrinket = itemInfo.wasGoldenTrinket,
                 })
+
+                if queued then
+                    SFXManager():Play(SoundEffect.SOUND_POWERUP_SPEWER, 0.5)
+                    ConchBlessing.printDebug("Item conversion in progress for item " .. tostring(entity.SubType))
+
+                    if ConchBlessing.UpgradeHighlight and ConchBlessing.UpgradeHighlight.StopForPickup then
+                        ConchBlessing.UpgradeHighlight.StopForPickup(pickup)
+                    end
+
+                    upgradeCount = upgradeCount + 1
+                    transformed = true
+
+                    ConchBlessing.printDebug("Item conversion queued for item " .. tostring(entity.SubType))
+                end
+            else
+                ConchBlessing.printError("[Upgrade] Queued entity is no longer a pickup")
             end
-            
-            upgradeCount = upgradeCount + 1
-            transformed = true
-            ConchBlessing.printDebug("Item conversion queued for item " .. tostring(entity.SubType))
-            
-            ::continue::
         end
         
         ConchBlessing.printDebug("Total " .. upgradeCount .. " items queued for upgrade!")
@@ -526,111 +792,156 @@ local function handleMagicConchResult(result)
 end
 
 -- Register Magic Conch API
-local function registerMagicConchAPI()
-    ConchBlessing.printDebug("Registering Magic Conch API callbacks...")
-    ConchBlessing.printDebug("handleMagicConchResult function exists: " .. tostring(handleMagicConchResult ~= nil))
-    
-    local success = MagicConch.API.RegisterCallback(handleMagicConchResult, "Conch's Blessing")
-    ConchBlessing.printDebug("RegisterCallback return value: " .. tostring(success))
-    
-    if success then
-        ConchBlessing.printDebug("Magic Conch API callback registration successful!")
-    else
-        ConchBlessing.printError("Magic Conch API callback registration failed!")
-    end
-end
+local MAGIC_CONCH_CALLBACK_NAME = "Conch's Blessing"
+local apiCheckTimer = 0
+local maxRetries = 60
+local retryCount = 0
+local retryExhausted = false
+
+ConchBlessing.magicConchApiRegistered = false
 
 -- Check if Magic Conch API is ready
 local function isMagicConchAPIReady()
-    return MagicConch and 
-           MagicConch.API and 
-           type(MagicConch.API) == "table" and
-           MagicConch.API.RegisterCallback and 
-           type(MagicConch.API.RegisterCallback) == "function" and
-           MagicConch.API.IsReady and 
-           type(MagicConch.API.IsReady) == "function" and
-           MagicConch.API.IsReady()
+    if not MagicConch
+        or type(MagicConch.API) ~= "table"
+        or type(MagicConch.API.RegisterCallback) ~= "function"
+        or type(MagicConch.API.IsReady) ~= "function" then
+        return false
+    end
+
+    local ok, ready = pcall(MagicConch.API.IsReady)
+    return ok and ready == true
 end
 
--- Generate conversion map on game start
-ConchBlessing:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function()
-    generateItemMaps()
-end)
-
--- Initialize Magic Conch on new floor start
-ConchBlessing:AddCallback(ModCallbacks.MC_POST_NEW_LEVEL, function()
-    -- Initialize Magic Conch API when ready
-    if isMagicConchAPIReady() and MagicConch.API.ResetAllAttempts then
-        MagicConch.API.ResetAllAttempts()
-        ConchBlessing.printDebug("New floor start: Magic Conch reset all attempts")
-    elseif MagicConch and MagicConch.ResetAllAttempts then
-        -- Alternative method: direct function call
-        MagicConch.ResetAllAttempts()
-        ConchBlessing.printDebug("New floor start: Magic Conch reset all attempts (direct call)")
-    else
-        ConchBlessing.printDebug("New floor start: Magic Conch initialization function not found")
+local function registerMagicConchAPI()
+    if not ConchBlessing._itemMapsReady or not isMagicConchAPIReady() then
+        return false
     end
-end)
 
--- Safe API Registration System
-local apiCheckTimer = 0
-local maxRetries = 60 -- 10 seconds (60 * 1/6 seconds)
-local retryCount = 0
+    ConchBlessing.printDebug("Registering Magic Conch API callbacks...")
+    local callOk, registered = pcall(
+        MagicConch.API.RegisterCallback,
+        handleMagicConchResult,
+        MAGIC_CONCH_CALLBACK_NAME
+    )
+    local success = callOk and registered == true
+
+    if success then
+        ConchBlessing.magicConchApiRegistered = true
+        retryExhausted = false
+        ConchBlessing.printDebug("Magic Conch API callback registration successful!")
+    else
+        ConchBlessing.magicConchApiRegistered = false
+        ConchBlessing.printError("Magic Conch API callback registration failed: " .. tostring(registered))
+    end
+
+    return success
+end
+
+local function unregisterMagicConchAPI()
+    local api = MagicConch and MagicConch.API or nil
+    if type(api) ~= "table" or type(api.UnregisterCallback) ~= "function" then
+        ConchBlessing.magicConchApiRegistered = false
+        return false
+    end
+
+    local callOk, unregistered = pcall(api.UnregisterCallback, MAGIC_CONCH_CALLBACK_NAME)
+    ConchBlessing.magicConchApiRegistered = false
+    if not callOk then
+        ConchBlessing.printError("[Upgrade] Magic Conch callback cleanup failed: " .. tostring(unregistered))
+        return false
+    end
+
+    return unregistered == true
+end
+
+local function resetRegistrationAttempts()
+    apiCheckTimer = 0
+    retryCount = 0
+    retryExhausted = false
+end
+
+local function clearUpgradeJobs()
+    for i = #ConchBlessing._upgradeJobs, 1, -1 do
+        _removeUpgradeJob(i, ConchBlessing._upgradeJobs[i], true)
+    end
+end
 
 -- API Registration Callback
 local function apiRegistrationCallback()
-    -- Use flag to ensure only one execution
-    if not ConchBlessing.apiRegistered then
-        apiCheckTimer = apiCheckTimer + 1
-        
-        -- Check API readiness every 1/6 second
-        if apiCheckTimer >= 10 then -- 10 frames = approximately 1/6 second
-            apiCheckTimer = 0
-            retryCount = retryCount + 1
-            
-            ConchBlessing.printDebug("Checking API readiness... (attempt " .. retryCount .. "/" .. maxRetries .. ")")
-            
-            if isMagicConchAPIReady() then
-                ConchBlessing.printDebug("=== Magic Conch API ready! ===")
-                ConchBlessing.printDebug("MagicConch exists: " .. tostring(MagicConch ~= nil))
-                ConchBlessing.printDebug("MagicConch.API exists: " .. tostring(MagicConch.API ~= nil))
-                ConchBlessing.printDebug("RegisterCallback function exists: " .. tostring(MagicConch.API.RegisterCallback ~= nil))
-                
-                ConchBlessing.printDebug("Attempting API registration...")
-                registerMagicConchAPI()
-                ConchBlessing.apiRegistered = true
-                ConchBlessing.printDebug("API registration complete!")
-                ConchBlessing.printDebug("=== Initialization complete ===")
-            elseif retryCount >= maxRetries then
-                ConchBlessing.printError("=== Warning: Magic Conch API initialization failed ===")
-                ConchBlessing.printError("Maximum retry count reached.")
-                ConchBlessing.printError("MagicConch exists: " .. tostring(MagicConch ~= nil))
-                if MagicConch then
-                    ConchBlessing.printDebug("MagicConch.API exists: " .. tostring(MagicConch.API ~= nil))
-                    if MagicConch.API then
-                        ConchBlessing.printDebug("RegisterCallback function exists: " .. tostring(MagicConch.API.RegisterCallback ~= nil))
-                    end
-                end
-                ConchBlessing.printDebug("Upgrade system disabled.")
-                ConchBlessing.apiRegistered = true -- don't try again
-            end
-        end
+    if ConchBlessing.magicConchApiRegistered or retryExhausted then
+        return
+    end
+
+    apiCheckTimer = apiCheckTimer + 1
+    if apiCheckTimer < 10 then
+        return
+    end
+
+    apiCheckTimer = 0
+    retryCount = retryCount + 1
+    ConchBlessing.printDebug("Checking Magic Conch API readiness (attempt " .. retryCount .. "/" .. maxRetries .. ")")
+
+    if not ConchBlessing._itemMapsReady and not generateItemMaps() then
+        unregisterMagicConchAPI()
+    end
+    if ConchBlessing._itemMapsReady and isMagicConchAPIReady() then
+        registerMagicConchAPI()
+    end
+
+    if not ConchBlessing.magicConchApiRegistered and retryCount >= maxRetries then
+        retryExhausted = true
+        ConchBlessing.printError("[Upgrade] Magic Conch API registration retries exhausted; will retry on the next game or floor")
     end
 end
+
+local function onGameStarted()
+    clearUpgradeJobs()
+    ConchBlessing.magicConchApiRegistered = false
+    resetRegistrationAttempts()
+
+    if not generateItemMaps() then
+        unregisterMagicConchAPI()
+        return
+    end
+
+    if isMagicConchAPIReady() then
+        registerMagicConchAPI()
+    end
+end
+
+local function onNewLevel()
+    if ConchBlessing.magicConchApiRegistered then
+        return
+    end
+
+    resetRegistrationAttempts()
+    if not ConchBlessing._itemMapsReady and not generateItemMaps() then
+        unregisterMagicConchAPI()
+        return
+    end
+    if ConchBlessing._itemMapsReady and isMagicConchAPIReady() then
+        registerMagicConchAPI()
+    end
+end
+
+ConchBlessing:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, onGameStarted)
 
 ConchBlessing:AddCallback(ModCallbacks.MC_POST_UPDATE, function()
     apiRegistrationCallback()
     _processUpgradeJobs()
 end)
 
--- New Level Callback
-local function newLevelCallback()
-    if isMagicConchAPIReady() and not ConchBlessing.apiRegistered then
-        ConchBlessing.printDebug("Attempting API registration on new level...")
-        registerMagicConchAPI()
-        ConchBlessing.apiRegistered = true
-    end
-end
-
--- Register API on new level (just in case)
-ConchBlessing:AddCallback(ModCallbacks.MC_POST_NEW_LEVEL, newLevelCallback)
+ConchBlessing:AddCallback(ModCallbacks.MC_POST_NEW_LEVEL, onNewLevel)
+ConchBlessing:AddCallback(
+    ModCallbacks.MC_PRE_PICKUP_COLLISION,
+    _preventPendingUpgradePickup,
+    PickupVariant.PICKUP_COLLECTIBLE
+)
+ConchBlessing:AddCallback(
+    ModCallbacks.MC_PRE_PICKUP_COLLISION,
+    _preventPendingUpgradePickup,
+    PickupVariant.PICKUP_TRINKET
+)
+ConchBlessing:AddCallback(ModCallbacks.MC_POST_NEW_ROOM, clearUpgradeJobs)
+ConchBlessing:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, clearUpgradeJobs)

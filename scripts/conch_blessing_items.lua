@@ -148,12 +148,6 @@ ConchBlessing.ItemData = {
         origin = { id = CollectibleType.COLLECTIBLE_DEAD_EYE, type = "collectible" }, -- original item information
         flag = "positive", -- match Magic Conch result type
         script = "scripts/items/collectibles/live_eye",
-        -- optional functions/effects around morph
-        -- onBeforeChange / upgradeEffectsBefore: run BEFORE morph
-        -- onAfterChange / upgradeEffectsAfter: run AFTER morph
-        -- Back-compat: onUpgrade / upgradeEffects act as AFTER
-        onBeforeChange = "liveeye.onBeforeChange",
-        onAfterChange = "liveeye.onAfterChange",
         callbacks = {
             pickup = "liveeye.onPickup",
             evaluateCache = "liveeye.onEvaluateCache",
@@ -161,7 +155,6 @@ ConchBlessing.ItemData = {
             tearCollision = "liveeye.onTearCollision",
             tearRemoved = "liveeye.onTearRemoved",
             gameStarted = "liveeye.onGameStarted",
-            update = "liveeye.onUpdate"
         },
         synergies = {
             [{ id = CollectibleType.COLLECTIBLE_ROCK_BOTTOM, type = "collectible" }] = {
@@ -219,12 +212,8 @@ ConchBlessing.ItemData = {
         callbacks = {
             tearCollision = "voiddagger.onTearCollision",
             postEntityTakeDmg = "voiddagger.onPostEntityTakeDamage",
-            update = "voiddagger.onUpdate",
             postPlayerUpdate = "voiddagger.onPlayerUpdate"
         },
-        -- Upgrade visuals (Neutral flavor)
-        onBeforeChange = "voiddagger.onBeforeChange",
-        onAfterChange = "voiddagger.onAfterChange",
     },
     ETERNAL_FLAME = {
         type = "passive",
@@ -271,8 +260,6 @@ ConchBlessing.ItemData = {
             update = "eternalflame.onUpdate",
             gameStarted = "eternalflame.onGameStarted"
         },
-        onBeforeChange = "eternalflame.onBeforeChange",
-        onAfterChange = "eternalflame.onAfterChange",
     },
     POWER_TRAINING = {
         type = "active",
@@ -318,10 +305,7 @@ ConchBlessing.ItemData = {
             use = "powertraining.onUseItem",
             evaluateCache = "powertraining.onEvaluateCache",
             gameStarted = "powertraining.onGameStarted",
-            update = "powertraining.onUpdate"
         },
-        onBeforeChange = "powertraining.onBeforeChange",
-        onAfterChange = "powertraining.onAfterChange",
     },
     ORAL_STEROIDS = {
         type = "passive",
@@ -364,10 +348,7 @@ ConchBlessing.ItemData = {
             evaluateCache = "oralsteroids.onEvaluateCache",
             postPlayerUpdate = "oralsteroids.onPlayerUpdate",
             gameStarted = "oralsteroids.onGameStarted",
-            update = "oralsteroids.onUpdate"
         },
-        onBeforeChange = "oralsteroids.onBeforeChange",
-        onAfterChange = "oralsteroids.onAfterChange",
     },
     INJECTABLE_STEROIDS = {
         type = "active",
@@ -427,8 +408,6 @@ ConchBlessing.ItemData = {
             update = "injectablsteroids.onUpdate",
             postRoomClear = "injectablsteroids.onRoomClear"
         },
-        onBeforeChange = "injectablsteroids.onBeforeChange",
-        onAfterChange = "injectablsteroids.onAfterChange",
     },
     RAT = {
         WorkingNow = true,
@@ -543,8 +522,6 @@ ConchBlessing.ItemData = {
             postNewRoom = "dragon.onNewRoom",
             gameStarted = "dragon.onGameStarted"
         },
-        onBeforeChange = "dragon.onBeforeChange",
-        onAfterChange = "dragon.onAfterChange",
     },
     SNAKE = {
         WorkingNow = true,
@@ -945,8 +922,6 @@ ConchBlessing.ItemData = {
             gameStarted = "appraisal.onGameStarted",
             update = "appraisal.onUpdate",
         },
-        onBeforeChange = "appraisal.onBeforeChange",
-        onAfterChange = "appraisal.onAfterChange",
         synergies = {
             [{ type = "trinket", name = "Atropos" }] = {
                 kr = {
@@ -1039,10 +1014,7 @@ ConchBlessing.ItemData = {
             postPlayerUpdate = "utilitybelt.onPlayerUpdate",
             gameStarted = "utilitybelt.onGameStarted",
             newLevel = "utilitybelt.onNewLevel",
-            update = "utilitybelt.onUpdate"
         },
-        onBeforeChange = "utilitybelt.onBeforeChange",
-        onAfterChange = "utilitybelt.onAfterChange",
         synergies = {
             [{ id = CollectibleType.COLLECTIBLE_BOOK_OF_VIRTUES, type = "collectible" }] = {
                 kr = "{{Warning}} 해당 액티브는 포켓 슬롯으로 이동되지 않습니다",
@@ -1113,10 +1085,7 @@ ConchBlessing.ItemData = {
             evaluateCache = "sealeddemonsword.onEvaluateCache",
             postNPCDeath = "sealeddemonsword.onNPCDeath",
             gameStarted = "sealeddemonsword.onGameStarted",
-            update = "sealeddemonsword.onUpdate"
         },
-        onBeforeChange = "sealeddemonsword.onBeforeChange",
-        onAfterChange = "sealeddemonsword.onAfterChange",
         synergies = {}
     },
     TYRFING = {
@@ -1157,10 +1126,7 @@ ConchBlessing.ItemData = {
             entityTakeDmg = "tyrfing.onEntityTakeDamage",
             postNPCDeath = "tyrfing.onNPCDeath",
             gameStarted = "tyrfing.onGameStarted",
-            update = "tyrfing.onUpdate"
         },
-        onBeforeChange = "tyrfing.onBeforeChange",
-        onAfterChange = "tyrfing.onAfterChange",
         synergies = {}
     },
     ICE_BREATH = {
@@ -1436,8 +1402,6 @@ ConchBlessing.ItemData = {
             postPickupUpdate = "severedoath.onPostPickupUpdate",
             executeCmd = "severedoath.onExecuteCmd"
         },
-        onBeforeChange = "severedoath.onBeforeChange",
-        onAfterChange = "severedoath.onAfterChange",
     },
 
     -- Familiars
@@ -1499,7 +1463,6 @@ ConchBlessing.ItemData = {
             postFamiliarRender = "timemoney.onFamiliarRender",
             evaluateCache = "timemoney.onEvaluateCache",
             gameStarted = "timemoney.onGameStarted",
-            postGetCollectible = "timemoney.onPostGetCollectible",
             postPlayerUpdate = "timemoney.onPlayerUpdate",
             entityTakeDmg = "timemoney.onEntityTakeDamage"
         }
@@ -1540,9 +1503,7 @@ ConchBlessing.ItemData = {
             evaluateCache = "timepowertrinket.onEvaluateCache",
             gameStarted = "timepowertrinket.onGameStarted",
             update = "timepowertrinket.onUpdate",
-            entityTakeDmg = "timepowertrinket.onEntityTakeDamage",
-            onBeforeChange = "timepowertrinket.onBeforeChange",
-            onAfterChange = "timepowertrinket.onAfterChange"
+            entityTakeDmg = "timepowertrinket.onEntityTakeDamage"
         },
         synergies = {}
     },
@@ -1580,9 +1541,7 @@ ConchBlessing.ItemData = {
             evaluateCache = "timeteartrinket.onEvaluateCache",
             gameStarted = "timeteartrinket.onGameStarted",
             update = "timeteartrinket.onUpdate",
-            entityTakeDmg = "timeteartrinket.onEntityTakeDamage",
-            onBeforeChange = "timeteartrinket.onBeforeChange",
-            onAfterChange = "timeteartrinket.onAfterChange"
+            entityTakeDmg = "timeteartrinket.onEntityTakeDamage"
         },
         synergies = {}
     },
@@ -1620,9 +1579,7 @@ ConchBlessing.ItemData = {
             evaluateCache = "timelucktrinket.onEvaluateCache",
             gameStarted = "timelucktrinket.onGameStarted",
             update = "timelucktrinket.onUpdate",
-            entityTakeDmg = "timelucktrinket.onEntityTakeDamage",
-            onBeforeChange = "timelucktrinket.onBeforeChange",
-            onAfterChange = "timelucktrinket.onAfterChange"
+            entityTakeDmg = "timelucktrinket.onEntityTakeDamage"
         },
         synergies = {}
     },
@@ -1657,8 +1614,6 @@ ConchBlessing.ItemData = {
         shopprice=15,
         script = "scripts/items/trinkets/f_minus",
         specials = { normal = 5 },
-        callbacks = {
-        },
         synergies = {}
     },
     C_MINUS = {
@@ -1694,8 +1649,6 @@ ConchBlessing.ItemData = {
         shopprice=15,
         script = "scripts/items/trinkets/c_minus",
         specials = { normal = {4, 2.0} },
-        callbacks = {
-        },
         synergies = {}
     },
     B_MINUS = {
@@ -1733,8 +1686,6 @@ ConchBlessing.ItemData = {
         shopprice=15,
         script = "scripts/items/trinkets/b_minus",
         specials = { normal = {3, 3.0} },
-        callbacks = {
-        },
         synergies = {}
     },
     A_MINUS = {

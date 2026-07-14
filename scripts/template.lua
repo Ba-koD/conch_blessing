@@ -20,9 +20,18 @@ local function ensureCentralUpdater()
     end
 end
 
+local function getPickupColor(pickup)
+    if not pickup or not pickup:Exists() then
+        return nil
+    end
+
+    local sprite = pickup:GetSprite()
+    return sprite and sprite.Color or nil
+end
+
 local function finishAnimation(anim, sprite)
     if sprite then
-        sprite.Color = Color(1, 1, 1, 1, 0, 0, 0)
+        sprite.Color = (anim and anim.originalColor) or Color(1, 1, 1, 1, 0, 0, 0)
     end
     if anim and anim.soundId then
         SFXManager():Stop(anim.soundId)
@@ -56,6 +65,22 @@ local function registerAnimation(ownerData, anim)
     ensureCentralUpdater()
 end
 
+Template.cancelForPickup = function(pickup)
+    if not pickup then
+        return
+    end
+
+    local active = Template._activeAnimations
+    for i = #active, 1, -1 do
+        local anim = active[i]
+        if anim and anim.pickup == pickup then
+            local sprite = pickup:Exists() and pickup:GetSprite() or nil
+            finishAnimation(anim, sprite)
+            table.remove(active, i)
+        end
+    end
+end
+
 -- Positive upgrade animation (bright white fade with Holy Light)
 Template.positive = {}
 
@@ -73,7 +98,8 @@ Template.positive.onBeforeChange = function(upgradePos, pickup, itemData, soundI
         phase = "before",
         maxAdd = 0.8,
         soundId = soundId or SoundEffect.SOUND_HOLY,
-        type = "positive"
+        type = "positive",
+        originalColor = getPickupColor(pickup),
     }
     
     -- start charging sound at low volume (no loop)
@@ -94,14 +120,11 @@ Template.positive.onAfterChange = function(upgradePos, pickup, itemData, soundId
     
     -- single Holy Light strike at the pedestal to finalize (안전한 enum 처리)
     local crackTheSkyVariant = EffectVariant.CRACK_THE_SKY or 0
-    -- Spawn owned effect so damage is attributed to player and can be tuned
-    local player = Game():GetNearestPlayer(upgradePos)
-    local eff = Isaac.Spawn(EntityType.ENTITY_EFFECT, crackTheSkyVariant, 0, upgradePos, Vector.Zero, player)
+    -- Keep the strike cosmetic and unowned so it cannot enter player attack chains.
+    local eff = Isaac.Spawn(EntityType.ENTITY_EFFECT, crackTheSkyVariant, 0, upgradePos, Vector.Zero, nil)
     local efx = eff and eff:ToEffect() or nil
     if efx then
-        -- Remove damage by making it a cosmetic only if supported; otherwise set harmless flags
         pcall(function()
-            efx:SetDamageSource(EntityRef(player))
             efx.CollisionDamage = 0
         end)
     end
@@ -114,7 +137,8 @@ Template.positive.onAfterChange = function(upgradePos, pickup, itemData, soundId
         phase = "after",
         maxAdd = 0.8,
         soundId = soundId or SoundEffect.SOUND_HOLY,
-        type = "positive"
+        type = "positive",
+        originalColor = getPickupColor(pickup),
     }
     
     registerAnimation(itemData, upgradeAnim)
@@ -124,6 +148,8 @@ Template.positive.onAfterChange = function(upgradePos, pickup, itemData, soundId
     if sprite then
         sprite.Color = Color(1, 1, 1, 1, upgradeAnim.maxAdd, upgradeAnim.maxAdd, upgradeAnim.maxAdd)
     end
+
+    return upgradeAnim.frames
 end
 
 -- Neutral upgrade animation (subtle gray tone)
@@ -143,7 +169,8 @@ Template.neutral.onBeforeChange = function(upgradePos, pickup, itemData, soundId
         phase = "before",
         maxAdd = 0.6,  -- 더 큰 값으로 회색 효과 강화
         soundId = soundId or SoundEffect.SOUND_POWERUP_SPEWER,
-        type = "neutral"
+        type = "neutral",
+        originalColor = getPickupColor(pickup),
     }
     
     -- start subtle sound at low volume (no loop)
@@ -176,7 +203,8 @@ Template.neutral.onAfterChange = function(upgradePos, pickup, itemData, soundId)
         phase = "after",
         maxAdd = 0.6,  -- 더 큰 값으로 회색 효과 강화
         soundId = soundId or SoundEffect.SOUND_POWERUP_SPEWER,
-        type = "neutral"
+        type = "neutral",
+        originalColor = getPickupColor(pickup),
     }
     
     registerAnimation(itemData, upgradeAnim)
@@ -186,6 +214,8 @@ Template.neutral.onAfterChange = function(upgradePos, pickup, itemData, soundId)
     if sprite then
         sprite.Color = Color(0.3, 0.3, 0.3, 1.0, upgradeAnim.maxAdd * 0.5, upgradeAnim.maxAdd * 0.5, upgradeAnim.maxAdd * 0.5)
     end
+
+    return upgradeAnim.frames
 end
 
 -- Negative upgrade animation (dark black with dust gathering effect)
@@ -205,7 +235,8 @@ Template.negative.onBeforeChange = function(upgradePos, pickup, itemData, soundI
         phase = "before",
         maxAdd = 0.7,
         soundId = soundId or SoundEffect.SOUND_POWERUP_SPEWER,
-        type = "negative"
+        type = "negative",
+        originalColor = getPickupColor(pickup),
     }
     
     -- start ominous sound at low volume (no loop)
@@ -238,7 +269,8 @@ Template.negative.onAfterChange = function(upgradePos, pickup, itemData, soundId
         phase = "after",
         maxAdd = 0.7,
         soundId = soundId or SoundEffect.SOUND_POWERUP_SPEWER,
-        type = "negative"
+        type = "negative",
+        originalColor = getPickupColor(pickup),
     }
     
     registerAnimation(itemData, upgradeAnim)
@@ -248,6 +280,8 @@ Template.negative.onAfterChange = function(upgradePos, pickup, itemData, soundId
     if sprite then
         sprite.Color = Color(0.2, 0.2, 0.2, 1.0, upgradeAnim.maxAdd * 0.6, 0, 0)
     end
+
+    return upgradeAnim.frames
 end
 
 -- Legacy item-local updater kept as a fallback for non-central animations.

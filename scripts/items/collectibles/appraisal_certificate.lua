@@ -459,20 +459,6 @@ function M.onUpdate()
     end
 end
 
--- Required by item system
-function M.onBeforeChange(upgradePos, pickup, itemData)
-    if M.config.debug then
-        ConchBlessing.print("[Appraisal] onBeforeChange called")
-    end
-    return true
-end
-
-function M.onAfterChange(upgradePos, pickup, itemData)
-    if M.config.debug then
-        ConchBlessing.print("[Appraisal] onAfterChange called")
-    end
-end
-
 ConchBlessing:AddCallbackCustom(
     isc.ModCallbackCustom.POST_ITEM_PICKUP,
     M.onPostItemPickup

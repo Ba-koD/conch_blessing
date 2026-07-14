@@ -113,46 +113,6 @@ ConchBlessing.sealeddemonsword.onGameStarted = function(_)
     end
 end
 
--- Update callback
-ConchBlessing.sealeddemonsword.onUpdate = function(_)
-    -- Handle template update if needed
-    if ConchBlessing.template and ConchBlessing.template.onUpdate then
-        ConchBlessing.template.onUpdate(ConchBlessing.sealeddemonsword.data)
-    end
-end
-
--- Upgrade related functions (for Magic Conch positive enhancement)
-ConchBlessing.sealeddemonsword.onBeforeChange = function(upgradePos, pickup, itemData)
-    if ConchBlessing.template and ConchBlessing.template.positive then
-        return ConchBlessing.template.positive.onBeforeChange(upgradePos, pickup, ConchBlessing.sealeddemonsword.data)
-    end
-    return 0
-end
-
-ConchBlessing.sealeddemonsword.onAfterChange = function(upgradePos, pickup, itemData)
-    -- When upgraded via Magic Conch, initialize Tyrfing data
-    local player = Isaac.GetPlayer(0)
-    if player then
-        local playerSave = SaveManager.GetRunSave(player)
-        
-        -- Initialize Tyrfing data
-        playerSave.tyrfing = playerSave.tyrfing or {}
-        playerSave.tyrfing.accumulatedDamage = 0 -- Tyrfing starts fresh
-        playerSave.tyrfing.deathChance = 10 -- Base death chance
-        
-        -- Clear sealed demon sword data
-        playerSave.sealedDemonSword = nil
-        
-        SaveManager.Save()
-        ConchBlessing.printDebug("[SealedDemonSword] Upgraded to Tyrfing via Magic Conch")
-    end
-    
-    if ConchBlessing.template and ConchBlessing.template.positive then
-        return ConchBlessing.template.positive.onAfterChange(upgradePos, pickup, ConchBlessing.sealeddemonsword.data)
-    end
-    return 0
-end
-
 -- EID dynamic description modifier to show remaining kills
 if EID then
     EID:addDescriptionModifier("Sealed Demon Sword Remaining Kills", function(descObj)

@@ -468,18 +468,7 @@ ConchBlessing.injectablsteroids.onNewLevel = function(_)
     ConchBlessing.printDebug("Injectable Steroids: New floor! Death chance reset to " .. tostring(ConchBlessing.injectablsteroids.data.currentInstantDeathPercent) .. "%")
 end
 
--- upgrade related functions
-ConchBlessing.injectablsteroids.onBeforeChange = function(upgradePos, pickup, itemData)
-    return ConchBlessing.template.negative.onBeforeChange(upgradePos, pickup, ConchBlessing.injectablsteroids.data)
-end
-
-ConchBlessing.injectablsteroids.onAfterChange = function(upgradePos, pickup, itemData)
-    return ConchBlessing.template.negative.onAfterChange(upgradePos, pickup, ConchBlessing.injectablsteroids.data)
-end
-
 ConchBlessing.injectablsteroids.onUpdate = function(_)
-    ConchBlessing.template.onUpdate(ConchBlessing.injectablsteroids.data)
-    
     if ConchBlessing.injectablsteroids._yellowIntensity and ConchBlessing.injectablsteroids._yellowIntensity > 0 then
         local player = Isaac.GetPlayer(0)
         if player then

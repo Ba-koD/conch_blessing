@@ -150,29 +150,6 @@ ConchBlessing.tyrfing.onGameStarted = function(_)
     end
 end
 
--- Update callback
-ConchBlessing.tyrfing.onUpdate = function(_)
-    -- Handle template update if needed
-    if ConchBlessing.template and ConchBlessing.template.onUpdate then
-        ConchBlessing.template.onUpdate(ConchBlessing.tyrfing.data)
-    end
-end
-
--- Upgrade related functions (for display effects)
-ConchBlessing.tyrfing.onBeforeChange = function(upgradePos, pickup, itemData)
-    if ConchBlessing.template and ConchBlessing.template.positive then
-        return ConchBlessing.template.positive.onBeforeChange(upgradePos, pickup, ConchBlessing.tyrfing.data)
-    end
-    return 0
-end
-
-ConchBlessing.tyrfing.onAfterChange = function(upgradePos, pickup, itemData)
-    if ConchBlessing.template and ConchBlessing.template.positive then
-        return ConchBlessing.template.positive.onAfterChange(upgradePos, pickup, ConchBlessing.tyrfing.data)
-    end
-    return 0
-end
-
 -- EID dynamic description modifier to show accumulated damage
 if EID then
     EID:addDescriptionModifier("Tyrfing Accumulated Damage", function(descObj)

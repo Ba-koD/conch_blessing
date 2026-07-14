@@ -248,15 +248,3 @@ ConchBlessing.liveeye.onGameStarted = function(_)
         player:EvaluateItems()
     end
 end
-
-ConchBlessing.liveeye.onBeforeChange = function(upgradePos, pickup, itemData)
-    return ConchBlessing.template.positive.onBeforeChange(upgradePos, pickup, ConchBlessing.liveeye.data)
-end
-
-ConchBlessing.liveeye.onAfterChange = function(upgradePos, pickup, itemData)
-    ConchBlessing.template.positive.onAfterChange(upgradePos, pickup, ConchBlessing.liveeye.data)
-end
-
-ConchBlessing.liveeye.onUpdate = function(_)
-    ConchBlessing.template.onUpdate(ConchBlessing.liveeye.data)
-end

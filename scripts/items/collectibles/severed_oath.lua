@@ -1915,16 +1915,7 @@ function M.onExecuteCmd(_, command, params)
     dumpPool(poolType, secondArg == "all" or args[1] == "all")
 end
 
-function M.onBeforeChange(upgradePos, pickup, _)
-    return ConchBlessing.template.positive.onBeforeChange(upgradePos, pickup, M.data)
-end
-
-function M.onAfterChange(upgradePos, pickup, _)
-    ConchBlessing.template.positive.onAfterChange(upgradePos, pickup, M.data)
-end
-
 function M.onUpdate()
     ensureCycleRoomState()
     processPendingPoolChecks()
-    ConchBlessing.template.onUpdate(M.data)
 end

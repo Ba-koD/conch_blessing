@@ -167,20 +167,6 @@ ConchBlessing.utilitybelt.onNewLevel = function(_)
     ConchBlessing.printDebug("Utility Belt: New level")
 end
 
--- Upgrade visuals
-ConchBlessing.utilitybelt.onBeforeChange = function(upgradePos, pickup, _)
-    return ConchBlessing.template.positive.onBeforeChange(upgradePos, pickup, ConchBlessing.utilitybelt.data)
-end
-
-ConchBlessing.utilitybelt.onAfterChange = function(upgradePos, pickup, _)
-    ConchBlessing.template.positive.onAfterChange(upgradePos, pickup, ConchBlessing.utilitybelt.data)
-end
-
--- Update callback
-ConchBlessing.utilitybelt.onUpdate = function(_)
-    ConchBlessing.template.onUpdate(ConchBlessing.utilitybelt.data)
-end
-
 -- EID description modifier
 if EID and UTILITY_BELT_ID and UTILITY_BELT_ID > 0 then
     EID:addDescriptionModifier("Utility Belt Active Info", function(descObj)

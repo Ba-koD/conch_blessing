@@ -31,6 +31,7 @@ Core subsystem map:
 
 - `scripts/callback_manager.lua` owns callback-key to `ModCallbacks` registration.
 - `scripts/template.lua` owns upgrade morph visuals before/after item conversion.
+- `scripts/conch_blessing_upgrade.lua` owns validated Magic Conch origin/flag mappings, callback registration, and per-pedestal conversion transactions.
 - `scripts/conch_blessing_config.lua` owns language/debug/spawn settings.
 - `scripts/conch_blessing_mcm.lua` owns MCM UI and setting persistence.
 - `scripts/lib/weapon_attack_tracker.lua` owns reusable direct-player weapon-trigger counting and direction resolution; item modules own and reset their own counter state.
@@ -53,6 +54,7 @@ Core subsystem map:
 
 - `scripts/lib/isaacscript-common.lua` is vendored and very large. Do not edit it unless the task explicitly requires a vendor patch.
 - `scripts/lib/save_manager.lua` and `scripts/lib/hidden_item_manager.lua` are shared support libraries. Prefer changing call sites first.
+- `scripts/items/dragon copy.lua` is a legacy, unrequired duplicate and is not the runtime Dragon implementation; `scripts/items/collectibles/dragon.lua` is the loaded source of truth. Do not implement or validate runtime behavior against the copy.
 - `content/items.xml`, `content/itempools.xml`, `content/entities2.xml`, `content/gfx/death_items.anm2`, and `content/gfx/death_items.png` are generator-owned outputs. Do not hand-edit them unless the generation workflow is intentionally being changed.
 - `generate_xml.py` currently rebuilds all of `content/entities2.xml` from familiar entries in `ConchBlessing.ItemData`, forces entity type `3`, and does not preserve manual non-familiar entries. Before adding a monster, NPC, custom effect, or other non-familiar entity, first extend the source schema/generator or replace it with a documented merge/manual source-of-truth workflow.
 - `metadata.xml` is hand-authored release metadata. Do not conflate it with generated content or change its version unless the version rules below authorize it.
@@ -162,7 +164,10 @@ Core subsystem map:
 - Use player/item-based RNG such as `InitSeed` or collectible RNG where deterministic behavior matters.
 - Resolve language through `ConchBlessing_Config.GetCurrentLanguage`; MCM language changes should re-register EID descriptions when needed.
 - Debug output should go through `ConchBlessing.printDebug`, `ConchBlessing.print`, or `ConchBlessing.printError`, include relevant player/item/cache context, and avoid hardcoded magic values.
-- Upgrade visuals should use `Template.*.onBeforeChange` and `Template.*.onAfterChange` patterns; cosmetic effects should remain harmless.
+- Every Magic Conch conversion must declare exactly one `origin` and one exact `flag` (`positive`, `neutral`, or `negative`). The conversion map must fail closed on unresolved origin/target IDs, type mismatches, missing templates, or duplicate `(origin type, origin ID, flag)` slots; never let `pairs` order silently select a winner.
+- `scripts/conch_blessing_upgrade.lua` selects `Template.positive`, `Template.neutral`, or `Template.negative` centrally from `ItemData.flag` for every conversion. Do not repeat template proxy hooks in item modules or place conversion hooks inside `ItemData.callbacks`. Optional top-level `onBeforeChange` / `onAfterChange` hooks are additive semantic lifecycle work only and must not select or call a template; cosmetic template effects must remain harmless.
+- Treat a delayed pedestal morph as one transaction: keep per-job visual state, prevent duplicate pre-morph jobs for the same pickup, preserve shop/option fields, and cancel rather than overwrite if the source entity identity changes. Lock both collectible and trinket acquisition through a filtered `MC_PRE_PICKUP_COLLISION` guard while the pre-morph phase is pending; `EntityPickup.Wait` is not the cross-pickup transaction lock. Release the acquisition/dedupe guard after a successful morph so a later Magic Conch result can continue a conversion chain while the cosmetic after-animation finishes, and clear pending jobs/animations on room and game transitions. A pedestal morph is not item acquisition and must not mutate a guessed player's inventory or save data.
+- Magic Conch result callbacks provide a global result with `type` equal to `positive`, `neutral`, or `negative`; the installed provider does not identify a triggering player. This integration transforms matching collectible/trinket pedestals in the current room, including active/familiar collectible pedestals, not already-owned inventory or spawned familiar entities. Validate the result before use, and mark API registration complete only when the provider's `RegisterCallback` call actually succeeds; retry bounded failures on a later game/floor lifecycle event.
 
 ## REPENTOGON Dependency And EID
 

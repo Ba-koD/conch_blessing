@@ -381,19 +381,6 @@ ConchBlessing.powertraining.onGameStarted = function(_)
     ConchBlessing.printDebug("=== Power Training onGameStarted END ===")
 end
 
--- upgrade related functions
-ConchBlessing.powertraining.onBeforeChange = function(upgradePos, pickup, itemData)
-    return ConchBlessing.template.positive.onBeforeChange(upgradePos, pickup, ConchBlessing.powertraining.data)
-end
-
-ConchBlessing.powertraining.onAfterChange = function(upgradePos, pickup, itemData)
-    return ConchBlessing.template.positive.onAfterChange(upgradePos, pickup, ConchBlessing.powertraining.data)
-end
-
-ConchBlessing.powertraining.onUpdate = function(_)
-    ConchBlessing.template.onUpdate(ConchBlessing.powertraining.data)
-end 
-
 -- Register PRE_DATA_SAVE sanitizer for this item's run data only
 do
     local sm = SaveManager

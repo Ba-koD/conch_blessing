@@ -1079,12 +1079,4 @@ ConchBlessing.dragon.onGameStarted = function()
     end
 end
 
-ConchBlessing.dragon.onBeforeChange = function(upgradePos, pickup, _)
-    return ConchBlessing.template.positive.onBeforeChange(upgradePos, pickup, ConchBlessing.dragon.data)
-end
-
-ConchBlessing.dragon.onAfterChange = function(upgradePos, pickup, _)
-    ConchBlessing.template.positive.onAfterChange(upgradePos, pickup, ConchBlessing.dragon.data)
-end
-
 return ConchBlessing.dragon

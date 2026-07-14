@@ -185,20 +185,6 @@ ConchBlessing.voiddagger.onPlayerUpdate = function(_, player)
 end
 
 
--- Optional cleanup each room to keep map light
-ConchBlessing.voiddagger.onUpdate = function(_)
-    ConchBlessing.template.onUpdate(ConchBlessing.voiddagger.data)
-end
-
--- upgrade visuals
-ConchBlessing.voiddagger.onBeforeChange = function(upgradePos, pickup, _)
-    return ConchBlessing.template.neutral.onBeforeChange(upgradePos, pickup, ConchBlessing.voiddagger.data)
-end
-
-ConchBlessing.voiddagger.onAfterChange = function(upgradePos, pickup, _)
-    ConchBlessing.template.neutral.onAfterChange(upgradePos, pickup, ConchBlessing.voiddagger.data)
-end
-
 -- EID dynamic description modifier to show current proc chance
 if EID then
     EID:addDescriptionModifier("Void Dagger Proc Chance", function(descObj)

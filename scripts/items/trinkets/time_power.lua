@@ -267,11 +267,3 @@ function ConchBlessing.timepowertrinket.onGameStarted(_, isContinued)
         p:EvaluateItems()
     end
 end
-
-ConchBlessing.timepowertrinket.onBeforeChange = function(upgradePos, pickup, itemData)
-    return ConchBlessing.template.positive.onBeforeChange(upgradePos, pickup, ConchBlessing.timepowertrinket.data)
-end
-
-ConchBlessing.timepowertrinket.onAfterChange = function(upgradePos, pickup, itemData)
-    ConchBlessing.template.positive.onAfterChange(upgradePos, pickup, ConchBlessing.timepowertrinket.data)
-end

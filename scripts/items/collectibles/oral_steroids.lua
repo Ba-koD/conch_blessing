@@ -336,20 +336,6 @@ ConchBlessing.oralsteroids.onGameStarted = function(_)
     ConchBlessing.printDebug("storedMultipliers table created!")
 end
 
--- upgrade related functions
-ConchBlessing.oralsteroids.onBeforeChange = function(upgradePos, pickup, itemData)
-    return ConchBlessing.template.neutral.onBeforeChange(upgradePos, pickup, ConchBlessing.oralsteroids.data)
-end
-
-ConchBlessing.oralsteroids.onAfterChange = function(upgradePos, pickup, itemData)
-    return ConchBlessing.template.neutral.onAfterChange(upgradePos, pickup, ConchBlessing.oralsteroids.data)
-end
-
--- subtle effect when stats are applied
-ConchBlessing.oralsteroids.onUpdate = function(_)
-    ConchBlessing.template.onUpdate(ConchBlessing.oralsteroids.data)
-end
-
 -- Register PRE_DATA_SAVE sanitizer for this item's run data only
 do
     local sm = SaveManager

@@ -251,7 +251,6 @@ end
 
 -- Main update loop for curse management and effects
 function ConchBlessing.eternalflame.onUpdate(_)
-    ConchBlessing.template.onUpdate(ConchBlessing.eternalflame.data)
     local player = Isaac.GetPlayer(0)
     if not player or not player:HasCollectible(ETERNAL_FLAME_ID) then return end
     
@@ -296,15 +295,6 @@ function ConchBlessing.eternalflame.onUpdate(_)
             end
         end
     end
-end
-
--- Optional custom upgrade handlers (called by upgrade system)
-ConchBlessing.eternalflame.onBeforeChange = function(upgradePos, pickup, itemData)
-    return ConchBlessing.template.positive.onBeforeChange(upgradePos, pickup, ConchBlessing.eternalflame.data)
-end
-
-ConchBlessing.eternalflame.onAfterChange = function(upgradePos, pickup, itemData)
-    ConchBlessing.template.positive.onAfterChange(upgradePos, pickup, ConchBlessing.eternalflame.data)
 end
 
 -- Player update handler for callback registration

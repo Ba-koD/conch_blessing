@@ -256,11 +256,3 @@ function ConchBlessing.timelucktrinket.onGameStarted(_, isContinued)
 	end
 end
 
-ConchBlessing.timelucktrinket.onBeforeChange = function(upgradePos, pickup, itemData)
-	return ConchBlessing.template.positive.onBeforeChange(upgradePos, pickup, ConchBlessing.timelucktrinket.data)
-end
-
-ConchBlessing.timelucktrinket.onAfterChange = function(upgradePos, pickup, itemData)
-	ConchBlessing.template.positive.onAfterChange(upgradePos, pickup, ConchBlessing.timelucktrinket.data)
-end
-
