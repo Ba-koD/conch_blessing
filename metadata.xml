@@ -17,7 +17,9 @@
 
 영감: Lazy MattPack [RGON] 모드에서 스타일적 영감을 받았습니다.
 
-Magic Conch 모드 필수
+필수 의존 모드: Magic Conch
+감정 평가서 기능: REPENTOGON 필수
+감정 평가서의 아트로포스 귀환문: StageAPI 필수
 
 RGON 추천
 
@@ -38,6 +40,8 @@ Key Features:
 Inspiration: Style inspired by &amp;quot;Lazy MattPack [RGON]&amp;quot; by Mr. Headcrab.
 
 Required Mod: Magic Conch
+Appraisal Certificate: REPENTOGON required
+Appraisal Certificate's Atropos return door: StageAPI required
 
 RGON Recommended</description>
     <version>1.0.68</version>

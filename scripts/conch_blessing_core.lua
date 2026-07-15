@@ -102,11 +102,14 @@ Isaac.ConsoleOutput("[Core] SaveManager.Init() completed\n")
 
 -- Register SaveManager PRE_DATA_SAVE callback to clean EntityEffect objects
 Isaac.ConsoleOutput("[Core] Registering SaveManager PRE_DATA_SAVE callback\n")
-local callbackKey = mod.__SAVEMANAGER_UNIQUE_KEY .. SaveManager.SaveCallbacks.PRE_DATA_SAVE
-mod:AddCallback(callbackKey, function(saveData)
+local callbackKey = SaveManager.SaveCallbacks.PRE_DATA_SAVE
+mod:AddCallback(callbackKey, function(_, saveData)
     -- Clean dragon EntityEffect objects before saving
     if ConchBlessing.dragon and ConchBlessing.dragon.onPreDataSave then
-        return ConchBlessing.dragon.onPreDataSave(saveData)
+        local sanitizedData = ConchBlessing.dragon.onPreDataSave(saveData)
+        if type(sanitizedData) == "table" then
+            return sanitizedData
+        end
     end
     return saveData
 end)
@@ -585,7 +588,9 @@ ConchBlessing.printDebug = function(text)
 end
 
 ConchBlessing.printError = function(text)
-    Isaac.ConsoleOutput("[ConchBlessing][ERROR] " .. tostring(text) .. "\n")
+    local message = "[ConchBlessing][ERROR] " .. tostring(text)
+    Isaac.DebugString(message)
+    Isaac.ConsoleOutput(message .. "\n")
 end
 
 ConchBlessing.print = function(text)
@@ -637,6 +642,14 @@ if ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers then
     ConchBlessing.print("StatsAPI integration active.")
 else
     ConchBlessing.printError("StatsAPI integration failed: StatsAPI not found or not ready.")
+end
+
+-- Load non-item room systems after shared managers and before item behavior.
+local roomsSuccess, roomsErr = pcall(function()
+    require("scripts/rooms/init")
+end)
+if not roomsSuccess then
+    ConchBlessing.printError("Room system load failed: " .. tostring(roomsErr))
 end
 
 -- load items and management

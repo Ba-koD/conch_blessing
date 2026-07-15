@@ -884,16 +884,12 @@ ConchBlessing.ItemData = {
         },
         eid = {
             kr = {
-                "{{Coin}} 30원을 소비하여 현재 장신구를 흡수하고 모든 장신구 방(사망 증명서 공간)으로 이동합니다.",
-                "#하나를 선택하면 즉시 흡수하고 원래 방으로 돌아옵니다.",
-                "#{{Warning}} 사망 증명서 공간을 공유합니다.",
-                "#{{Warning}} REPENTOGON 권장",
+                "{{Coin}} 30원을 소비하여 현재 들고 있는 장신구를 모두 흡수하고 사용 가능한 모든 장신구가 진열된 전용 방으로 이동합니다.",
+                "#해당 차원 안에서는 빛나는 모래시계를 사용할 수 없습니다.",
             },
             en = {
-                "Consumes {{Coin}} 30 to absorb the current trinket and move to all trinket rooms (Death Certificate space).",
-                "#When one is selected, it is immediately absorbed and returns to the original room.",
-                "#{{Warning}} Shares Death Certificate space.",
-                "#{{Warning}} REPENTOGON recommended",
+                "Consumes {{Coin}} 30 to absorb all currently held trinkets and enter a dedicated room containing every available trinket.",
+                "#Glowing Hourglass cannot be used inside the dimension.",
             },
         },
         pool = {
@@ -907,32 +903,24 @@ ConchBlessing.ItemData = {
         shopprice = 20,
         devilprice = 2,
         maxcharges = 0,
-        chargetype = "normal",
         gfx = "appraisal_certificate.png",
-        initcharge = 0,
         origin = { id = CollectibleType.COLLECTIBLE_DEATH_CERTIFICATE, type = "collectible" },
         flag = "neutral",
         script = "scripts/items/collectibles/appraisal_certificate",
         callbacks = {
-            preUseItem = "appraisal.onPreUseItem",
             use = "appraisal.onUseItem",
-            postPickupInit = "appraisal.onPostPickupInit",
-            prePickupCollision = "appraisal.onPrePickupCollision",
-            postNewRoom = "appraisal.onPostNewRoom",
-            gameStarted = "appraisal.onGameStarted",
-            update = "appraisal.onUpdate",
         },
         synergies = {
             [{ type = "trinket", name = "Atropos" }] = {
                 kr = {
-                    "감정 평가서를 사용해 이동한 첫 방에 바보 카드를 드랍합니다.",
-                    "#장신구 하나를 획득하면 해당 방에 남은 장신구가 모두 사라집니다.",
-                    "#획득한 장신구는 흡수되지 않으며, 원래 방으로 돌아가지 않습니다."
+                    "첫 번째 방에 원래 방으로 돌아가는 문이 생성됩니다.",
+                    "#각 방에서 장신구 하나를 획득하면 그 방에 남은 장신구만 사라집니다.",
+                    "#획득한 장신구는 흡수되며, 다른 방에서도 하나씩 고를 수 있습니다."
                 },
                 en = {
-                    "Drops a Fool card in the first room entered after using Appraisal Certificate.",
-                    "#After picking up a trinket, all other trinkets in that room disappear.",
-                    "#The picked-up trinket is not smelted, and you do not return to the original room."
+                    "Creates a door back to the original room in the first room.",
+                    "#After taking one trinket in a room, only the remaining trinkets in that room disappear.",
+                    "#The acquired trinket is absorbed, and you can choose one from each of the other rooms."
                 }
             }
         },
@@ -1747,9 +1735,11 @@ ConchBlessing.ItemData = {
         eid = {
             kr = {
                 "모든 선택지 아이템을 획득할 수 있게 합니다.",
+                "#{{Warning}} REPENTOGON 권장",
             },
             en = {
-                "Allows picking all optioned items"
+                "Allows picking all optioned items",
+                "#{{Warning}} REPENTOGON recommended",
             }
         },
         gfx = "atropos.png",

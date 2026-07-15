@@ -11,6 +11,10 @@ Key Features:
 Required Item:
 - Magic Conch
 
+Feature Requirements:
+- REPENTOGON (Appraisal Certificate)
+- StageAPI (Appraisal Certificate's Atropos return door)
+
 Recommended:
 - RGON
 

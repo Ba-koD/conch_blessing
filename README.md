@@ -28,4 +28,6 @@ Adds a polished "Conch’s Blessing" upgrade system. Transform items with bespok
 --------------------------------------------------
 - 영감 (Inspiration): [Lazy MattPack [RGON]](https://steamcommunity.com/sharedfiles/filedetails/?id=3408993906)
 - 필수 모드 (Essential mod): [Magic Conch](https://steamcommunity.com/sharedfiles/filedetails/?id=3540206030)
+- 감정 평가서 기능 필수 (Required for Appraisal Certificate): REPENTOGON
+- 감정 평가서의 아트로포스 귀환문 필수 (Required for Appraisal Certificate's Atropos return door): [StageAPI](https://steamcommunity.com/sharedfiles/filedetails/?id=1348031964)
 - RGON 추천 (RGON Recommended)
