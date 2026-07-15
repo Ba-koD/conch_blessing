@@ -884,12 +884,14 @@ ConchBlessing.ItemData = {
         },
         eid = {
             kr = {
-                "{{Coin}} 30원을 소비하여 현재 들고 있는 장신구를 모두 흡수하고 사용 가능한 모든 장신구가 진열된 전용 방으로 이동합니다.",
-                "#해당 차원 안에서는 빛나는 모래시계를 사용할 수 없습니다.",
+                "{{Coin}} 30원을 소비하여 현재 들고 있는 장신구를 모두 흡수하고 사용 가능한 모든 장신구가 진열된, 사망 증명서와 분리된 전용 공간으로 이동합니다.",
+                "#첫 번째 방의 왼쪽에는 원래 방으로 돌아가는 문이 항상 열려 있습니다.",
+                "#전용 공간 안에서는 빛나는 모래시계를 사용할 수 없습니다.",
             },
             en = {
-                "Consumes {{Coin}} 30 to absorb all currently held trinkets and enter a dedicated room containing every available trinket.",
-                "#Glowing Hourglass cannot be used inside the dimension.",
+                "Consumes {{Coin}} 30 to absorb all currently held trinkets and enter a dedicated space separate from the Death Certificate dimension, containing every available trinket.",
+                "#An always-open door back to the original room is on the left side of the first room.",
+                "#Glowing Hourglass cannot be used inside the dedicated space.",
             },
         },
         pool = {
@@ -913,13 +915,11 @@ ConchBlessing.ItemData = {
         synergies = {
             [{ type = "trinket", name = "Atropos" }] = {
                 kr = {
-                    "첫 번째 방에 원래 방으로 돌아가는 문이 생성됩니다.",
-                    "#각 방에서 장신구 하나를 획득하면 그 방에 남은 장신구만 사라집니다.",
+                    "각 방에서 장신구 하나를 획득하면 그 방에 남은 장신구만 사라집니다.",
                     "#획득한 장신구는 흡수되며, 다른 방에서도 하나씩 고를 수 있습니다."
                 },
                 en = {
-                    "Creates a door back to the original room in the first room.",
-                    "#After taking one trinket in a room, only the remaining trinkets in that room disappear.",
+                    "After taking one trinket in a room, only the remaining trinkets in that room disappear.",
                     "#The acquired trinket is absorbed, and you can choose one from each of the other rooms."
                 }
             }
@@ -1758,12 +1758,14 @@ ConchBlessing.ItemData = {
         synergies = {
             [{ id = CollectibleType.COLLECTIBLE_DEATH_CERTIFICATE, type = "collectible" }] = {
                 kr = {
-                    "사망 증명서 공간의 첫 방에 바보 카드를 드랍합니다.",
-                    "#아이템 하나를 획득하면 해당 방에 남은 아이템이 모두 사라지며, 원래 방으로 돌아가지 않습니다."
+                    "사망 증명서 공간의 첫 방 왼쪽에 원래 방으로 돌아가는 문이 열립니다.",
+                    "#첫 방에 바보 카드를 드랍합니다.",
+                    "#아이템 하나를 획득하면 해당 방에 남은 아이템이 모두 사라지지만, 자동으로 원래 방으로 돌아가지는 않습니다."
                 },
                 en = {
-                    "Drops a Fool card in the first room of the Death Certificate dimension.",
-                    "#After picking up an item, all other items in that room disappear, and you do not return to the original room."
+                    "A door back to the original room opens on the left side of the first room in the Death Certificate dimension.",
+                    "#Drops a Fool card in the first room.",
+                    "#After picking up an item, all other items in that room disappear, but you do not automatically return to the original room."
                 }
             }
         }

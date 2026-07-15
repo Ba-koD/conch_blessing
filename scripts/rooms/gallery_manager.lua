@@ -1,5 +1,5 @@
 local isc = require("scripts.lib.isaacscript-common")
-local NativeGalleryRooms = require("scripts.rooms.native_gallery_rooms")
+local StageAPIGalleryRooms = require("scripts.rooms.stageapi_gallery_rooms")
 
 -- CallbackPriority is an engine/REPENTOGON global. The vendored IsaacScript
 -- Common root does not re-export this enum even though its internal modules
@@ -17,24 +17,31 @@ local M = ConchBlessing.GalleryManager
 
 local SAVE_KEY = "appraisalGallerySession"
 local SEQUENCE_KEY = "appraisalGallerySequence"
-local SESSION_VERSION = 8
-local MODE_APPRAISAL = "appraisal_trinkets_native"
-local DC_DIMENSION = 2
+local SESSION_VERSION = 9
+local MODE_APPRAISAL = "appraisal_trinkets_stageapi"
 local GOLDEN_TRINKET_FLAG = 32768
 local MAX_RETURN_MISDIRECTIONS = 1
-local RETURN_TRANSITION = RoomTransitionAnim.FADE
 local GALLERY_MUSIC = type(Music) == "table" and Music.MUSIC_DARK_CLOSET or nil
 local SMELTER_SWALLOW_SOUND = type(SoundEffect) == "table"
     and SoundEffect.SOUND_SMELTER_SWALLOW
     or nil
 local STOCK_DATA_KEY = "__ConchBlessingAppraisalStock"
 local RETURN_DOOR_NAME = "ConchBlessingGalleryReturn"
+local ATROPOS_DC_DETOUR_KIND = "appraisal_stageapi"
+local ATROPOS_DC_DETOUR_VERSION = 1
+local DEATH_CERTIFICATE_ENTRANCE_INDEX = 80
+local DEATH_CERTIFICATE_ROOM_SUBTYPE = 33
 
 M._confirmedSaveRevision = tonumber(M._confirmedSaveRevision) or 0
 M._durableChoiceClosures = M._durableChoiceClosures or {}
 M._durableSmeltAttempts = M._durableSmeltAttempts or {}
 M._removedChoiceStock = M._removedChoiceStock or {}
 M._returnTransitionIssued = M._returnTransitionIssued or {}
+M._stockInitSeeds = M._stockInitSeeds or {}
+-- StageAPI door types retain their callback closure across a Lua hot reload.
+-- Force this module revision to replace that closure during bootstrap.
+M._initializedStageAPI = nil
+M._doorOpenFailureReported = nil
 -- Diagnostic-only state is process-local and may be discarded on Lua reload;
 -- it must never become part of the gallery transaction.
 M._debugStockAudit = nil
@@ -123,44 +130,15 @@ local function getCurrentDimension()
     local roomIndex = level:GetCurrentRoomIndex()
     local current = level:GetRoomByIdx(roomIndex, -1)
     if not current then return nil end
-    for dimension = 0, DC_DIMENSION do
+    -- The native dimension domain is fixed. This helper only records and
+    -- validates the native room that launched the independent StageAPI map.
+    for dimension = 0, 2 do
         local descriptor = level:GetRoomByIdx(roomIndex, dimension)
         if descriptor and GetPtrHash(descriptor) == GetPtrHash(current) then
             return dimension
         end
     end
     return nil
-end
-
-local function getRoomTransitionMode()
-    local roomTransition = rawget(_G, "RoomTransition")
-    if type(roomTransition) ~= "table"
-        or type(roomTransition.GetTransitionMode) ~= "function"
-    then
-        return nil
-    end
-    local ok, mode = pcall(roomTransition.GetTransitionMode)
-    if ok and type(mode) == "number" then return mode end
-    return nil
-end
-
-local function getDeathCertificateUseFlags()
-    local useFlag = rawget(_G, "UseFlag")
-    if type(useFlag) ~= "table" then return nil end
-    local required = {
-        "USE_NOANIM",
-        "USE_NOCOSTUME",
-        "USE_NOANNOUNCER",
-        "USE_NOHUD",
-        "USE_ALLOWNONMAIN",
-    }
-    local flags = 0
-    for _, key in ipairs(required) do
-        local value = tonumber(useFlag[key])
-        if value == nil then return nil end
-        flags = flags | value
-    end
-    return flags
 end
 
 local function getMusicManager()
@@ -451,10 +429,11 @@ local function debugAuditGraph(session)
             end
         end
         debugPrint(string.format(
-            "graph room=%s layout=%s listIndex=%s catalogStart=%d slots=%d ids=%s",
+            "graph room=%s layout=%s mapID=%s roomID=%s catalogStart=%d slots=%d ids=%s",
             tostring(manifest.key or roomIndex),
             layoutKey,
-            tostring(manifest.listIndex),
+            tostring(manifest.mapID),
+            tostring(manifest.roomID),
             start,
             count,
             formatNumberRanges(roomIds)
@@ -784,7 +763,7 @@ local function getRuntime(session)
     if type(M._runtime) == "table" and M._runtimeToken == session.token then
         return M._runtime
     end
-    local runtime, reason = NativeGalleryRooms.rebind(session.graph)
+    local runtime, reason = StageAPIGalleryRooms.rebind(session.graph)
     if not runtime then
         invalidateRuntime()
         return nil, reason or "graph_restore_failed"
@@ -797,23 +776,32 @@ end
 local function getCurrentGalleryContext(session)
     if M._runLifecycleReady ~= true then return nil end
     if not session or not sessionMatchesCurrentFloor(session) then return nil end
-    if getCurrentDimension() ~= DC_DIMENSION then return nil end
     local runtime = getRuntime(session)
     if not runtime then return nil end
-    local manifest, descriptor = NativeGalleryRooms.getCurrentManifest(
+    if StageAPIGalleryRooms.isCurrentRoom(session.graph, runtime) ~= true then
+        return nil
+    end
+    local manifest, levelRoom = StageAPIGalleryRooms.getCurrentManifest(
         session.graph,
         runtime
     )
-    if not manifest or not descriptor then return nil end
+    if not manifest or not levelRoom then return nil end
     return {
         runtime = runtime,
         manifest = manifest,
-        descriptor = descriptor,
+        levelRoom = levelRoom,
     }
 end
 
 function M.isCurrentGalleryRoom()
     return getCurrentGalleryContext(getSession()) ~= nil
+end
+
+function M.getCurrentGalleryOriginDimension()
+    local session = getSession()
+    if getCurrentGalleryContext(session) == nil then return nil end
+    local origin = session and session.origin or nil
+    return type(origin) == "table" and tonumber(origin.dimension) or nil
 end
 
 function M.isVisitActive()
@@ -847,22 +835,34 @@ local function expectedTrinket(session, manifest, slot)
     return session.catalog[start + slot - 1]
 end
 
-local function getSourceSeed(session, manifest, slot)
-    manifest.sourceSeeds = manifest.sourceSeeds or {}
-    local saved = tonumber(manifest.sourceSeeds[slot])
-    if saved and saved ~= 0 then return saved end
-    local graphIndex = tonumber(manifest.graphIndex) or tonumber(manifest.listIndex) or 1
-    local value = (
+local function getSpawnSeed(session, manifest, slot)
+    local graphIndex = tonumber(manifest.graphIndex) or tonumber(manifest.mapID) or 1
+    return (
         math.abs(tonumber(session.seed) or 1)
         + graphIndex * 104729
         + slot * 8191
     ) % 2147483646 + 1
-    manifest.sourceSeeds[slot] = value
-    return value
+end
+
+local function getPersistentIndex(manifest, slot)
+    local indices = type(manifest) == "table" and manifest.persistentIndices or nil
+    return type(indices) == "table" and tonumber(indices[slot]) or nil
+end
+
+local function getStockSeedKey(session, manifest, slot)
+    return tostring(session.token) .. ":" .. tostring(manifest.key) .. ":" .. tostring(slot)
+end
+
+local function rememberCurrentStockSeed(session, manifest, slot, pickup)
+    local seed = pickup and pickup:Exists() and tonumber(pickup.InitSeed) or nil
+    if seed then
+        M._stockInitSeeds[getStockSeedKey(session, manifest, slot)] = seed
+    end
+    return seed
 end
 
 local function indexCurrentRoomTrinkets()
-    local bySeed = {}
+    local byPersistentIndex = {}
     for _, entity in ipairs(Isaac.FindByType(
         EntityType.ENTITY_PICKUP,
         PickupVariant.PICKUP_TRINKET,
@@ -871,32 +871,42 @@ local function indexCurrentRoomTrinkets()
         false
     )) do
         local pickup = entity:ToPickup()
-        local seed = pickup and pickup:Exists() and tonumber(pickup.InitSeed) or nil
-        if seed then
-            -- InitSeed is the durable manager identity. A duplicate is
-            -- ambiguous and must not be adopted as manager stock.
-            bySeed[seed] = bySeed[seed] == nil and pickup or false
+        local persistentIndex = pickup
+            and pickup:Exists()
+            and StageAPIGalleryRooms.getPickupPersistentIndex(pickup)
+            or nil
+        if persistentIndex then
+            -- StageAPI's room-local PersistentIndex is the durable stock
+            -- identity. A duplicate is ambiguous and must not be adopted.
+            byPersistentIndex[persistentIndex] = byPersistentIndex[persistentIndex] == nil
+                and pickup
+                or false
         end
     end
-    return bySeed
+    return byPersistentIndex
 end
 
-local function findSourceForSlot(session, manifest, slot, sourcesBySeed)
+local function findSourceForSlot(session, manifest, slot, sourcesByPersistentIndex)
     local expectedId = expectedTrinket(session, manifest, slot)
-    local expectedSeed = getSourceSeed(session, manifest, slot)
-    if not expectedId then return nil end
-    local indexed = sourcesBySeed or indexCurrentRoomTrinkets()
-    local pickup = indexed[expectedSeed]
+    local expectedPersistentIndex = getPersistentIndex(manifest, slot)
+    if not expectedId or not expectedPersistentIndex then return nil end
+    local indexed = sourcesByPersistentIndex or indexCurrentRoomTrinkets()
+    local pickup = indexed[expectedPersistentIndex]
+    local currentSeed = M._stockInitSeeds[getStockSeedKey(session, manifest, slot)]
     if pickup
         and pickup:Exists()
-        and tonumber(pickup.InitSeed) == expectedSeed
+        and StageAPIGalleryRooms.getPickupPersistentIndex(pickup)
+            == expectedPersistentIndex
+        and (currentSeed == nil or tonumber(pickup.InitSeed) == currentSeed)
         and tonumber(pickup.SubType) == tonumber(expectedId)
     then
+        rememberCurrentStockSeed(session, manifest, slot, pickup)
         pickup:GetData()[STOCK_DATA_KEY] = {
             token = session.token,
             roomKey = manifest.key,
             slot = slot,
             trinketId = expectedId,
+            persistentIndex = expectedPersistentIndex,
         }
         return pickup
     end
@@ -919,7 +929,7 @@ local function clearDebugStockRoomVerification(session, manifest)
     end
 end
 
-local function debugAuditCurrentStockRoom(session, manifest, sourcesBySeed)
+local function debugAuditCurrentStockRoom(session, manifest, sourcesByPersistentIndex)
     if not debugEnabled()
         or type(session) ~= "table"
         or type(session.catalog) ~= "table"
@@ -937,38 +947,46 @@ local function debugAuditCurrentStockRoom(session, manifest, sourcesBySeed)
         M._debugStockAudit = { token = auditToken, verifiedRooms = {} }
     end
 
-    local indexed = sourcesBySeed or indexCurrentRoomTrinkets()
+    local indexed = sourcesByPersistentIndex or indexCurrentRoomTrinkets()
     local expectedIds = {}
     local actualIds = {}
     local missingSlots = {}
-    local duplicateSeeds = {}
+    local duplicatePersistentIndices = {}
     local subtypeMismatches = {}
-    local duplicateSeedSet = {}
-    local seenExpectedSeeds = {}
-    local uniqueExpectedSeeds = 0
+    local duplicatePersistentIndexSet = {}
+    local seenExpectedPersistentIndices = {}
+    local uniqueExpectedPersistentIndices = 0
     local verified = 0
     local count = tonumber(manifest.slotCount) or 0
 
     for slot = 1, count do
         local expectedId = tonumber(expectedTrinket(session, manifest, slot))
-        local expectedSeed = tonumber(getSourceSeed(session, manifest, slot))
+        local expectedPersistentIndex = getPersistentIndex(manifest, slot)
         if expectedId then expectedIds[#expectedIds + 1] = expectedId end
-        if expectedSeed then
-            if seenExpectedSeeds[expectedSeed] and not duplicateSeedSet[expectedSeed] then
-                duplicateSeedSet[expectedSeed] = true
-                duplicateSeeds[#duplicateSeeds + 1] = tostring(expectedSeed)
-            elseif not seenExpectedSeeds[expectedSeed] then
-                seenExpectedSeeds[expectedSeed] = true
-                uniqueExpectedSeeds = uniqueExpectedSeeds + 1
+        if expectedPersistentIndex then
+            if seenExpectedPersistentIndices[expectedPersistentIndex]
+                and not duplicatePersistentIndexSet[expectedPersistentIndex]
+            then
+                duplicatePersistentIndexSet[expectedPersistentIndex] = true
+                duplicatePersistentIndices[#duplicatePersistentIndices + 1]
+                    = tostring(expectedPersistentIndex)
+            elseif not seenExpectedPersistentIndices[expectedPersistentIndex] then
+                seenExpectedPersistentIndices[expectedPersistentIndex] = true
+                uniqueExpectedPersistentIndices = uniqueExpectedPersistentIndices + 1
             end
         end
-        local pickup = expectedSeed and indexed[expectedSeed] or nil
+        local pickup = expectedPersistentIndex and indexed[expectedPersistentIndex] or nil
         if pickup == false then
-            if not duplicateSeedSet[expectedSeed] then
-                duplicateSeedSet[expectedSeed] = true
-                duplicateSeeds[#duplicateSeeds + 1] = tostring(expectedSeed)
+            if not duplicatePersistentIndexSet[expectedPersistentIndex] then
+                duplicatePersistentIndexSet[expectedPersistentIndex] = true
+                duplicatePersistentIndices[#duplicatePersistentIndices + 1]
+                    = tostring(expectedPersistentIndex)
             end
-        elseif pickup and pickup:Exists() and tonumber(pickup.InitSeed) == expectedSeed then
+        elseif pickup
+            and pickup:Exists()
+            and StageAPIGalleryRooms.getPickupPersistentIndex(pickup)
+                == expectedPersistentIndex
+        then
             local actualId = tonumber(pickup.SubType)
             if actualId then actualIds[#actualIds + 1] = actualId end
             if actualId == expectedId then
@@ -984,9 +1002,9 @@ local function debugAuditCurrentStockRoom(session, manifest, sourcesBySeed)
     end
 
     local roomPass = verified == count
-        and uniqueExpectedSeeds == count
+        and uniqueExpectedPersistentIndices == count
         and #missingSlots == 0
-        and #duplicateSeeds == 0
+        and #duplicatePersistentIndices == 0
         and #subtypeMismatches == 0
     M._debugStockAudit.verifiedRooms[manifest.key] = roomPass and count or nil
 
@@ -1020,19 +1038,23 @@ local function debugAuditCurrentStockRoom(session, manifest, sourcesBySeed)
         and #remainingIds == 0
         and registryMatches
     debugPrint(string.format(
-        "stock room=%s listIndex=%s expected=%d verified=%d uniqueSeeds=%d status=%s expectedIds=%s actualIds=%s",
+        "stock room=%s mapID=%s roomID=%s expected=%d verified=%d uniquePersistentIndices=%d status=%s expectedIds=%s actualIds=%s",
         tostring(manifest.key),
-        tostring(manifest.listIndex),
+        tostring(manifest.mapID),
+        tostring(manifest.roomID),
         count,
         verified,
-        uniqueExpectedSeeds,
+        uniqueExpectedPersistentIndices,
         roomPass and "PASS" or "FAIL",
         formatNumberRanges(expectedIds),
         formatNumberRanges(actualIds)
     ))
     debugPrint("stock room=" .. tostring(manifest.key)
         .. " missingSlots=" .. formatNumberRanges(missingSlots)
-        .. " duplicateSeeds=" .. (#duplicateSeeds > 0 and table.concat(duplicateSeeds, ",") or "none")
+        .. " duplicatePersistentIndices="
+        .. (#duplicatePersistentIndices > 0
+            and table.concat(duplicatePersistentIndices, ",")
+            or "none")
         .. " subtypeMismatches="
         .. (#subtypeMismatches > 0 and table.concat(subtypeMismatches, ",") or "none"))
     debugPrint(string.format(
@@ -1053,6 +1075,13 @@ end
 
 local function sourceSlot(session, manifest, pickup)
     if not pickup or pickup.Variant ~= PickupVariant.PICKUP_TRINKET then return nil end
+    local persistentIndex = StageAPIGalleryRooms.getPickupPersistentIndex(pickup)
+    if not persistentIndex then return nil end
+    local initSeed = tonumber(pickup.InitSeed)
+    local function currentSeedMatches(slot)
+        local remembered = M._stockInitSeeds[getStockSeedKey(session, manifest, slot)]
+        return remembered == nil or remembered == initSeed
+    end
     local data = pickup:GetData()[STOCK_DATA_KEY]
     if type(data) == "table"
         and data.token == session.token
@@ -1061,27 +1090,51 @@ local function sourceSlot(session, manifest, pickup)
         local slot = tonumber(data.slot)
         if slot
             and expectedTrinket(session, manifest, slot) == pickup.SubType
-            and getSourceSeed(session, manifest, slot) == pickup.InitSeed
+            and getPersistentIndex(manifest, slot) == persistentIndex
+            and tonumber(data.persistentIndex) == persistentIndex
+            and currentSeedMatches(slot)
         then
+            rememberCurrentStockSeed(session, manifest, slot, pickup)
             return slot
         end
     end
     for slot = 1, tonumber(manifest.slotCount) or 0 do
         if expectedTrinket(session, manifest, slot) == pickup.SubType
-            and getSourceSeed(session, manifest, slot) == pickup.InitSeed
+            and getPersistentIndex(manifest, slot) == persistentIndex
+            and currentSeedMatches(slot)
         then
+            rememberCurrentStockSeed(session, manifest, slot, pickup)
             return slot
         end
     end
     return nil
 end
 
-local function removeRoomStock(session, manifest, sourcesBySeed)
+local function removeRoomStock(session, manifest, sourcesByPersistentIndex)
     if type(manifest) ~= "table" or manifest.kind ~= "stock" then return end
-    local indexed = sourcesBySeed or indexCurrentRoomTrinkets()
+    local indexed = sourcesByPersistentIndex or indexCurrentRoomTrinkets()
     for slot = 1, tonumber(manifest.slotCount) or 0 do
         local pickup = findSourceForSlot(session, manifest, slot, indexed)
-        if pickup then pickup:Remove() end
+        if pickup then
+            local unbound, reason = StageAPIGalleryRooms.unbindStockPickup(pickup)
+            if not unbound then
+                ConchBlessing.printError(
+                    "Appraisal could not unbind closed StageAPI stock: "
+                        .. tostring(reason)
+                )
+            end
+            if pickup:Exists() then pickup:Remove() end
+            M._stockInitSeeds[getStockSeedKey(session, manifest, slot)] = nil
+        end
+    end
+    local runtime = M._runtimeToken == session.token and M._runtime or nil
+    if runtime and session.floorEnded ~= true and sessionMatchesCurrentFloor(session) then
+        local saved, reason = StageAPIGalleryRooms.save(session.graph, runtime)
+        if not saved then
+            ConchBlessing.printError(
+                "Appraisal could not save closed StageAPI stock: " .. tostring(reason)
+            )
+        end
     end
 end
 
@@ -1104,7 +1157,7 @@ local function isChoiceClosureDurable(pending)
         and M._durableChoiceClosures[pending.token] == true
 end
 
-local function persistChoiceClosure(session, pending, manifest)
+local function persistChoiceClosure(session, pending, manifest, selectedPickup)
     if type(session) ~= "table"
         or type(pending) ~= "table"
         or pending.roomClosed ~= true
@@ -1120,6 +1173,23 @@ local function persistChoiceClosure(session, pending, manifest)
         and manifest.key == pending.roomKey
         and M._removedChoiceStock[pending.token] ~= true
     then
+        if selectedPickup
+            and sourceSlot(session, manifest, selectedPickup) == tonumber(pending.slot)
+        then
+            local unbound, reason = StageAPIGalleryRooms.unbindStockPickup(
+                selectedPickup
+            )
+            if not unbound then
+                ConchBlessing.printError(
+                    "Appraisal could not unbind selected StageAPI stock: "
+                        .. tostring(reason)
+                )
+            end
+            if selectedPickup:Exists() then selectedPickup:Remove() end
+            M._stockInitSeeds[
+                getStockSeedKey(session, manifest, tonumber(pending.slot))
+            ] = nil
+        end
         removeRoomStock(session, manifest)
         M._removedChoiceStock[pending.token] = true
     end
@@ -1128,13 +1198,13 @@ end
 
 local function spawnSource(session, manifest, slot)
     local exactId = expectedTrinket(session, manifest, slot)
-    local position = NativeGalleryRooms.getSlotWorldPosition(
+    local position = StageAPIGalleryRooms.getSlotWorldPosition(
         Game():GetRoom(),
         manifest,
         slot
     )
     if not exactId or not position then return nil end
-    local seed = getSourceSeed(session, manifest, slot)
+    local seed = getSpawnSeed(session, manifest, slot)
     local entity = Game():Spawn(
         EntityType.ENTITY_PICKUP,
         PickupVariant.PICKUP_TRINKET,
@@ -1146,14 +1216,29 @@ local function spawnSource(session, manifest, slot)
     )
     local pickup = entity and entity:ToPickup() or nil
     if not pickup then return nil end
-    manifest.sourceSeeds[slot] = pickup.InitSeed
     pickup.OptionsPickupIndex = 0
     pickup.Price = 0
+    local persistentIndex, bindReason = StageAPIGalleryRooms.bindStockPickup(
+        pickup,
+        manifest,
+        slot
+    )
+    if not persistentIndex then
+        if pickup:Exists() then pickup:Remove() end
+        ConchBlessing.printError(
+            "Appraisal could not bind StageAPI stock: " .. tostring(bindReason)
+        )
+        return nil
+    end
+    manifest.persistentIndices = manifest.persistentIndices or {}
+    manifest.persistentIndices[slot] = persistentIndex
+    rememberCurrentStockSeed(session, manifest, slot, pickup)
     pickup:GetData()[STOCK_DATA_KEY] = {
         token = session.token,
         roomKey = manifest.key,
         slot = slot,
         trinketId = exactId,
+        persistentIndex = persistentIndex,
     }
     return pickup
 end
@@ -1175,19 +1260,24 @@ local function initializeRoomStock(session, manifest)
     end
 
     if manifest.initialized == true then
-        local sourcesBySeed = indexCurrentRoomTrinkets()
+        local sourcesByPersistentIndex = indexCurrentRoomTrinkets()
         for slot = 1, tonumber(manifest.slotCount) or 0 do
-            if not findSourceForSlot(session, manifest, slot, sourcesBySeed) then
+            if not findSourceForSlot(
+                session,
+                manifest,
+                slot,
+                sourcesByPersistentIndex
+            ) then
                 -- A previously initialized source cannot be recreated safely:
                 -- it may have been consumed immediately before a process exit.
                 clearDebugStockRoomVerification(session, manifest)
                 ConchBlessing.printError(
-                    "Appraisal found missing native room stock and closed that room fail-closed."
+                    "Appraisal found missing StageAPI room stock and closed that room fail-closed."
                 )
                 return closeRoom(session, manifest)
             end
         end
-        debugAuditCurrentStockRoom(session, manifest, sourcesBySeed)
+        debugAuditCurrentStockRoom(session, manifest, sourcesByPersistentIndex)
         return true
     end
 
@@ -1198,55 +1288,105 @@ local function initializeRoomStock(session, manifest)
     end
 
     local spawned = {}
-    local sourcesBySeed = indexCurrentRoomTrinkets()
+    local sourcesByPersistentIndex = indexCurrentRoomTrinkets()
     for slot = 1, tonumber(manifest.slotCount) or 0 do
-        local pickup = findSourceForSlot(session, manifest, slot, sourcesBySeed)
+        local pickup = findSourceForSlot(
+            session,
+            manifest,
+            slot,
+            sourcesByPersistentIndex
+        )
             or spawnSource(session, manifest, slot)
         if not pickup then
             for _, source in ipairs(spawned) do
-                if source:Exists() then source:Remove() end
+                if source:Exists() then
+                    StageAPIGalleryRooms.unbindStockPickup(source)
+                    source:Remove()
+                end
             end
+            StageAPIGalleryRooms.save(session.graph, M._runtime)
             manifest.initializing = nil
             clearDebugStockRoomVerification(session, manifest)
-            ConchBlessing.printError("Appraisal could not create all native room stock.")
+            ConchBlessing.printError("Appraisal could not create all StageAPI room stock.")
             saveNow()
             return false
         end
         spawned[#spawned + 1] = pickup
-        sourcesBySeed[tonumber(pickup.InitSeed)] = pickup
+        local persistentIndex = StageAPIGalleryRooms.getPickupPersistentIndex(pickup)
+        if persistentIndex then sourcesByPersistentIndex[persistentIndex] = pickup end
+    end
+
+    local backendSaved, backendSaveReason = StageAPIGalleryRooms.save(
+        session.graph,
+        getRuntime(session)
+    )
+    if not backendSaved then
+        for _, source in ipairs(spawned) do
+            if source:Exists() then
+                StageAPIGalleryRooms.unbindStockPickup(source)
+                source:Remove()
+            end
+        end
+        StageAPIGalleryRooms.save(session.graph, M._runtime)
+        manifest.initializing = nil
+        clearDebugStockRoomVerification(session, manifest)
+        ConchBlessing.printError(
+            "Appraisal could not save its StageAPI room stock: "
+                .. tostring(backendSaveReason)
+        )
+        saveNow()
+        return false
     end
 
     manifest.initialized = true
     manifest.initializing = nil
     if not saveNow() then
         for _, source in ipairs(spawned) do
-            if source:Exists() then source:Remove() end
+            if source:Exists() then
+                StageAPIGalleryRooms.unbindStockPickup(source)
+                source:Remove()
+            end
         end
+        StageAPIGalleryRooms.save(session.graph, M._runtime)
         manifest.initialized = nil
         clearDebugStockRoomVerification(session, manifest)
         return false
     end
-    debugAuditCurrentStockRoom(session, manifest, sourcesBySeed)
+    debugAuditCurrentStockRoom(session, manifest, sourcesByPersistentIndex)
     return true
 end
 
-local function setNativeDoorsOpen(open)
-    if not M.isCurrentGalleryRoom() then return end
-    local room = Game():GetRoom()
-    if not room then return end
-    for slot = 0, 7 do
-        local door = room:GetDoor(slot)
-        if door then
-            pcall(function()
-                if open then door:Open() else door:Close(true) end
-            end)
+local function setBackendDoorsOpen(open)
+    if not M.isCurrentGalleryRoom() then return true end
+    local opened, reason = StageAPIGalleryRooms.setCurrentDoorsOpen(open)
+    if opened ~= true then
+        local message = tostring(reason or "unknown StageAPI door error")
+        if M._doorOpenFailureReported ~= message then
+            M._doorOpenFailureReported = message
+            ConchBlessing.printError(
+                "Appraisal could not keep its gallery route open: " .. message
+            )
         end
+        return false
     end
+    M._doorOpenFailureReported = nil
+    return true
 end
 
 local function getStageAPI()
     local stageAPI = rawget(_G, "StageAPI")
     return type(stageAPI) == "table" and stageAPI or nil
+end
+
+local function roomTransitionReady()
+    local roomTransition = rawget(_G, "RoomTransition")
+    if type(roomTransition) ~= "table"
+        or type(roomTransition.GetTransitionMode) ~= "function"
+    then
+        return false
+    end
+    local ok, mode = pcall(roomTransition.GetTransitionMode)
+    return ok and type(mode) == "number" and mode == 0
 end
 
 local function getStageAPIExtraRoomState()
@@ -1268,10 +1408,118 @@ local function getStageAPIExtraRoomState()
         return not not result
     end
 
-    -- This is StageAPI 2.33's own InExtraRoom identity. It is deliberately
-    -- narrower than inspecting the native placeholder RoomDescriptor.
+    -- This is StageAPI 2.33's own logical extra-room identity.
     return not not (stageAPI.CurrentLevelMapID and stageAPI.CurrentLevelMapRoomID)
 end
+
+-- MiniMAPI map teleport (NiceJourney) -----------------------------------------
+-- The gallery's MiniMAPI rooms carry a TeleportHandler that resolves through
+-- the two public gates below. CanTeleport runs for every drawn room on every
+-- rendered frame while the map teleport UI is open, so the session/context
+-- evaluation is memoized per update frame.
+
+local function getGalleryTeleportContext()
+    local frame = Isaac.GetFrameCount()
+    local cached = M._galleryTeleportEval
+    if cached and cached.frame == frame then
+        return cached.session, cached.context, cached.currentMapID
+    end
+    local session = getSession()
+    local context = session and getCurrentGalleryContext(session) or nil
+    local stageAPI = context and getStageAPI() or nil
+    local currentMapID = stageAPI
+        and tonumber(stageAPI.CurrentLevelMapRoomID)
+        or nil
+    M._galleryTeleportEval = {
+        frame = frame,
+        session = session,
+        context = context,
+        currentMapID = currentMapID,
+    }
+    return session, context, currentMapID
+end
+
+local function resolveGalleryTeleport(seed, mapID)
+    local session, context, currentMapID = getGalleryTeleportContext()
+    if not session or not context or currentMapID == nil then
+        return nil, "not_in_gallery"
+    end
+    -- Death Certificate detours pin the exact origin room across the
+    -- excursion; teleporting during any transient detour phase would
+    -- invalidate that saved identity.
+    if type(session.deathCertificateDetour) == "table" then
+        return nil, "detour_active"
+    end
+    local graphSeed = type(session.graph) == "table" and session.graph.seed or nil
+    if graphSeed == nil or tostring(graphSeed) ~= tostring(seed) then
+        return nil, "seed_mismatch"
+    end
+    local targetMapID = tonumber(mapID)
+    if targetMapID == nil or targetMapID == currentMapID then
+        return nil, "invalid_target"
+    end
+    if type(context.runtime.byMapID) ~= "table"
+        or context.runtime.byMapID[targetMapID] == nil
+    then
+        return nil, "unknown_target"
+    end
+    return {
+        session = session,
+        context = context,
+        targetMapID = targetMapID,
+    }
+end
+
+function M.canTeleportToGalleryRoom(seed, mapID)
+    if M._runLifecycleReady ~= true then return false end
+    return resolveGalleryTeleport(seed, mapID) ~= nil
+end
+
+function M.teleportToGalleryRoom(seed, mapID, player)
+    if M._runLifecycleReady ~= true then return false, "lifecycle_not_ready" end
+    local resolved, reason = resolveGalleryTeleport(seed, mapID)
+    if not resolved then return false, reason end
+    -- The transition mutates StageAPI state within this same frame; the memo
+    -- must not keep serving the pre-teleport context.
+    M._galleryTeleportEval = nil
+    return StageAPIGalleryRooms.teleportWithinGallery(
+        resolved.session.graph,
+        resolved.context.runtime,
+        resolved.targetMapID,
+        player
+    )
+end
+
+-- NiceJourney sits behind the user-level MouseTeleport option. Inside the
+-- gallery the map teleport UI is part of the feature itself, so it is enabled
+-- through MiniMAPI's runtime OverrideConfig, which never touches the user's
+-- persisted Config value. The override is cleared the moment the player is no
+-- longer standing in a settled gallery room (and again on game exit, because
+-- OverrideConfig survives returning to the menu within one app session).
+local function syncMinimapTeleportOverride(forceOff)
+    local minimapAPI = rawget(_G, "MinimapAPI")
+    if type(minimapAPI) ~= "table"
+        or type(minimapAPI.OverrideConfig) ~= "table"
+    then
+        return
+    end
+    local inGallery = false
+    if not forceOff then
+        local _, context = getGalleryTeleportContext()
+        inGallery = context ~= nil
+    end
+    if inGallery then
+        if M._minimapTeleportOverride ~= true then
+            M._minimapTeleportOverride = true
+            minimapAPI.OverrideConfig.MouseTeleport = true
+        end
+    elseif M._minimapTeleportOverride == true then
+        M._minimapTeleportOverride = nil
+        minimapAPI.OverrideConfig.MouseTeleport = nil
+    end
+end
+M._syncMinimapTeleportOverride = syncMinimapTeleportOverride
+-- end MiniMAPI map teleport ----------------------------------------------------
 
 local function stageAPIDoorReady(stageAPI)
     return type(stageAPI) == "table"
@@ -1292,6 +1540,11 @@ local function removeReturnDoor(stageAPI)
             if persistent and persistent.Slot == DoorSlot.LEFT0 then
                 found = true
                 if type(door.Remove) ~= "function" then return false end
+                local doorEntity = door.Data and door.Data.DoorEntity or nil
+                if doorEntity and doorEntity:Exists() then
+                    stageAPI.SetDoorOpen(false, doorEntity)
+                    doorEntity:Remove()
+                end
                 door:Remove(true)
             end
         end
@@ -1311,22 +1564,63 @@ local function getReturnDoorData(stageAPI)
     return gridData and gridData.PersistData and gridData.PersistData.Data or nil
 end
 
+local function getVerifiedReturnDoor(stageAPI, session)
+    if not stageAPIDoorReady(stageAPI)
+        or type(session) ~= "table"
+        or type(session.visitId) ~= "string"
+    then
+        return nil
+    end
+    local gridData = stageAPI.GetCustomDoorDataAtSlot(
+        DoorSlot.LEFT0,
+        RETURN_DOOR_NAME
+    )
+    local persistData = gridData and gridData.PersistData or nil
+    local expectedData = persistData and persistData.Data or nil
+    if type(expectedData) ~= "table"
+        or expectedData.kind ~= "gallery_return"
+        or expectedData.token ~= session.token
+        or expectedData.visitId ~= session.visitId
+        or persistData.Slot ~= DoorSlot.LEFT0
+    then
+        return nil
+    end
+    for _, customDoor in ipairs(stageAPI.GetCustomDoors(RETURN_DOOR_NAME)) do
+        local persistent = customDoor and customDoor.PersistentData or nil
+        local data = persistent and persistent.Data or nil
+        local doorEntity = customDoor
+            and customDoor.Data
+            and customDoor.Data.DoorEntity
+            or nil
+        if type(data) == "table"
+            and data.kind == expectedData.kind
+            and data.token == expectedData.token
+            and data.visitId == expectedData.visitId
+            and persistent.Slot == DoorSlot.LEFT0
+            and doorEntity
+            and doorEntity:Exists()
+        then
+            return customDoor, doorEntity
+        end
+    end
+    return nil
+end
+
 local function setCustomDoorsOpen(open)
     local stageAPI = getStageAPI()
     if not stageAPIDoorReady(stageAPI) or type(stageAPI.GetCustomDoors) ~= "function" then
-        return
+        return true
     end
     local session = getSession()
     local context = session and getCurrentGalleryContext(session) or nil
     if not session
         or not context
         or context.manifest.kind ~= "entrance"
-        or session.atroposMode ~= true
         or not session.visitId
     then
-        return
+        return true
     end
-    pcall(function()
+    local ok = pcall(function()
         for _, customDoor in ipairs(stageAPI.GetCustomDoors(RETURN_DOOR_NAME)) do
             local persistent = customDoor and customDoor.PersistentData or nil
             local data = persistent and persistent.Data or nil
@@ -1346,16 +1640,23 @@ local function setCustomDoorsOpen(open)
             end
         end
     end)
+    return ok
 end
 
-local function setAllGalleryDoorsOpen(open)
-    setNativeDoorsOpen(open)
-    setCustomDoorsOpen(open)
+local function setAllGalleryDoorsOpen(_)
+    -- Every physical route to the entrance and its return door stays open.
+    -- Choice ownership is enforced by the durable collision journal, not by
+    -- trapping the player behind a door while an acquisition settles.
+    local backendOpen = setBackendDoorsOpen(true)
+    -- The entrance return door is the emergency escape and must never be
+    -- locked by a pickup/smelt transaction. Manager-stock collisions remain
+    -- blocked by the pending-choice ledger while the player moves.
+    local returnOpen = setCustomDoorsOpen(true)
+    return backendOpen == true and returnOpen == true
 end
 
 local function ensureReturnDoor(session, context)
-    if session.atroposMode ~= true
-        or context.manifest.kind ~= "entrance"
+    if context.manifest.kind ~= "entrance"
         or (session.phase ~= "entering" and session.phase ~= "browsing")
     then
         return true
@@ -1364,12 +1665,20 @@ local function ensureReturnDoor(session, context)
     if not stageAPIDoorReady(stageAPI) then return false end
     local data = getReturnDoorData(stageAPI)
     if data and data.token == session.token then
-        -- The native floor graph is reused. Re-adopt an earlier Atropos door
+        -- The StageAPI floor graph is reused. Re-adopt an earlier visit's door
         -- instead of depending on StageAPI 2.33's broken GetCustomDoorAtSlot
         -- helper or trying to duplicate its persistent grid.
         data.visitId = session.visitId
         data.kind = "gallery_return"
-        return true
+        local _, doorEntity = getVerifiedReturnDoor(stageAPI, session)
+        if doorEntity then
+            local opened = pcall(stageAPI.SetDoorOpen, true, doorEntity)
+            if not opened then return false end
+            local saved = StageAPIGalleryRooms.save(session.graph, context.runtime)
+            if saved == true then return true end
+        end
+        if not removeReturnDoor(stageAPI) then return false end
+        data = nil
     end
     if data and not removeReturnDoor(stageAPI) then return false end
     local room = Game():GetRoom()
@@ -1399,7 +1708,45 @@ local function ensureReturnDoor(session, context)
             "Appraisal return door could not be spawned: " .. tostring(err)
         )
     end
-    return ok
+    if not ok then return false end
+    local _, doorEntity = getVerifiedReturnDoor(stageAPI, session)
+    if not doorEntity then
+        removeReturnDoor(stageAPI)
+        return false
+    end
+    local opened = pcall(stageAPI.SetDoorOpen, true, doorEntity)
+    if not opened then
+        removeReturnDoor(stageAPI)
+        return false
+    end
+    local saved, saveReason = StageAPIGalleryRooms.save(
+        session.graph,
+        context.runtime
+    )
+    if saved ~= true then
+        removeReturnDoor(stageAPI)
+        ConchBlessing.printError(
+            "Appraisal return door could not be persisted before payment: "
+                .. tostring(saveReason)
+        )
+        return false
+    end
+    return true
+end
+
+local function keepReturnDoorOpen(session, context)
+    if not session
+        or not context
+        or context.manifest.kind ~= "entrance"
+        or (session.phase ~= "entering" and session.phase ~= "browsing")
+    then
+        return true
+    end
+    local stageAPI = getStageAPI()
+    if not stageAPIDoorReady(stageAPI) then return false end
+    local _, doorEntity = getVerifiedReturnDoor(stageAPI, session)
+    if not doorEntity then return ensureReturnDoor(session, context) end
+    return pcall(stageAPI.SetDoorOpen, true, doorEntity)
 end
 
 local function clearVisitFields(session)
@@ -1417,6 +1764,9 @@ local function clearVisitFields(session)
     session.permanentVisitFailure = nil
     session.visitRewardCount = nil
     session.visitId = nil
+    session.emergencyReturnRequested = nil
+    session.deathCertificateDetour = nil
+    session.deathCertificateDetourSequence = nil
 end
 
 local function resetSessionRuntime(session)
@@ -1429,8 +1779,46 @@ local function resetSessionRuntime(session)
     end
 end
 
+local function destroyGalleryGraph(session)
+    if type(session) ~= "table" or type(session.graph) ~= "table" then return true end
+    local runtime = M._runtimeToken == session.token and M._runtime or nil
+    local callOK, destroyed, reason = pcall(
+        StageAPIGalleryRooms.destroy,
+        session.graph,
+        runtime
+    )
+    if not callOK or destroyed ~= true then
+        ConchBlessing.printError(
+            "Appraisal could not destroy its StageAPI floor graph: "
+                .. tostring(callOK and reason or destroyed)
+        )
+        return false
+    end
+    return true
+end
+
+local function cleanupOrphanedGalleryGraph()
+    local empty, emptyReason = StageAPIGalleryRooms.isDimensionEmpty()
+    if empty == true then return true end
+    local callOK, destroyed, destroyReason = pcall(
+        StageAPIGalleryRooms.destroy,
+        nil,
+        nil
+    )
+    if not callOK or destroyed ~= true then
+        ConchBlessing.printError(
+            "Appraisal refused orphaned or foreign StageAPI state: "
+                .. tostring(callOK and (destroyReason or emptyReason) or destroyed)
+        )
+        return false
+    end
+    return true
+end
+
 local function finalizeFloorEndedSession(session)
     if not session or session.floorEnded ~= true then return false end
+
+    if not destroyGalleryGraph(session) then return false end
 
     session.phase = "floor_ended_complete"
     clearVisitFields(session)
@@ -1455,9 +1843,9 @@ local function finalizeFloorEndedSession(session)
     M._durableSmeltAttempts = {}
     M._removedChoiceStock = {}
     if not saveNow() then
-        -- The durable tombstone above is sufficient for continue recovery;
-        -- this in-memory removal only makes the new floor immediately usable.
-        ConchBlessing.printError("Appraisal could not remove its settled floor tombstone.")
+        -- The durable completed state above is sufficient for continue
+        -- recovery; this removal only makes the new floor immediately usable.
+        ConchBlessing.printError("Appraisal could not remove its settled floor session.")
     end
     return true
 end
@@ -1482,7 +1870,7 @@ originDescriptorMatches = function(origin, descriptor, dimension)
         or not optionalNumberMatches(origin.spawnSeed, descriptor.SpawnSeed)
         or not optionalNumberMatches(origin.roomType, data.Type)
         or not optionalNumberMatches(origin.roomVariant, data.Variant)
-        or not optionalNumberMatches(origin.roomSubType, data.Subtype)
+        or not optionalNumberMatches(origin.roomSubType, data.Subtype or data.SubType)
     then
         return false
     end
@@ -1568,8 +1956,7 @@ local function transitionToOrigin(session)
     local dimension = tonumber(origin.dimension)
     if dimension == nil then return false end
     local descriptor, _, reason = getValidatedOriginDescriptor(session)
-    local target = descriptor and tonumber(descriptor.SafeGridIndex) or nil
-    if not target then
+    if not descriptor then
         return settleStaleOrigin(
             session,
             "Appraisal refused an invalid native return descriptor: " .. tostring(reason)
@@ -1577,59 +1964,60 @@ local function transitionToOrigin(session)
     end
     local player = getPlayerFromIndex(session.ownerPlayerIndex)
     if not player then return false end
-    local level = Game():GetLevel()
-    local current = level and level:GetCurrentRoomDesc() or nil
+    local context = getCurrentGalleryContext(session)
+    if not context then return false end
     session.returnIssuedFrom = {
-        dimension = getCurrentDimension(),
-        listIndex = current and current.ListIndex or nil,
-        gridIndex = current and current.GridIndex or nil,
-        safeGridIndex = current and current.SafeGridIndex or nil,
+        mapID = context.manifest.mapID,
+        roomID = context.manifest.roomID,
     }
     if not saveNow() then
         session.returnIssuedFrom = nil
         return false
     end
-    -- Arm before calling the engine. A no-op or synchronously delivered room
+    -- Arm before calling StageAPI. A no-op or synchronously delivered room
     -- callback must not reopen the transaction and recursively issue it again.
     M._returnTransitionIssued[session.token] = true
-    local ok, err = pcall(function()
-        Game():StartRoomTransition(
-            target,
-            Direction.NO_DIRECTION,
-            RETURN_TRANSITION,
-            player,
-            dimension
-        )
-    end)
-    if not ok then
+    local callOK, transitioned, exitReason = pcall(
+        StageAPIGalleryRooms.exitToNative,
+        origin,
+        player
+    )
+    if not callOK or transitioned ~= true then
         M._returnTransitionIssued[session.token] = nil
         session.returnIssuedFrom = nil
         saveNow()
         ConchBlessing.printError(
-            "Appraisal return transition failed: " .. tostring(err)
+            "Appraisal StageAPI return transition failed: "
+                .. tostring(callOK and exitReason or transitioned)
         )
+        return false
     end
-    return ok
+    return true
 end
 
 local function releaseCompletedReturnLatch(session)
     if not session or M._returnTransitionIssued[session.token] ~= true then return true end
     local departure = session.returnIssuedFrom
-    local level = Game():GetLevel()
-    local current = level and level:GetCurrentRoomDesc() or nil
+    local current = getCurrentGalleryContext(session)
     local sameDeparture = type(departure) == "table"
         and current
-        and tonumber(getCurrentDimension()) == tonumber(departure.dimension)
-        and ((departure.listIndex ~= nil
-                and tonumber(current.ListIndex) == tonumber(departure.listIndex))
-            or (departure.listIndex == nil
-                and (tonumber(current.GridIndex) == tonumber(departure.gridIndex)
-                    or tonumber(current.SafeGridIndex)
-                        == tonumber(departure.safeGridIndex))))
+        and tostring(current.manifest.mapID) == tostring(departure.mapID)
+        and tostring(current.manifest.roomID) == tostring(departure.roomID)
     if sameDeparture then
         -- A synchronous/no-op callback is not a completed transition. Keep the
         -- write-before-call latch armed so it cannot recurse into another call.
         return false
+    end
+
+    if isOriginRoom(session) then
+        M._returnTransitionIssued[session.token] = nil
+        session.returnIssuedFrom = nil
+        if not saveNow() then
+            M._returnTransitionIssued[session.token] = true
+            session.returnIssuedFrom = departure
+            return false
+        end
+        return true
     end
 
     local previousCount = tonumber(session.returnMisdirectionCount) or 0
@@ -1645,7 +2033,7 @@ local function releaseCompletedReturnLatch(session)
     if session.returnMisdirectionCount > MAX_RETURN_MISDIRECTIONS then
         settleStaleOrigin(
             session,
-            "Appraisal stopped after repeated native return redirection."
+            "Appraisal stopped after repeated StageAPI return redirection."
         )
         return false
     end
@@ -1698,6 +2086,14 @@ local function completeVisitAtOrigin(session)
         or not sessionMatchesCurrentFloor(session)
         or not isOriginRoom(session)
     then
+        return false
+    end
+    local providerFinalized, providerReason = StageAPIGalleryRooms.finalizeNativeExit()
+    if providerFinalized ~= true then
+        ConchBlessing.printError(
+            "Appraisal could not persist its completed StageAPI exit: "
+                .. tostring(providerReason)
+        )
         return false
     end
     if session.phase == "returning" then
@@ -1754,6 +2150,422 @@ local function completeVisitOutsideGallery(session)
     clearVisitFields(session)
     if not saveNow() then
         ConchBlessing.printError("Appraisal could not clean up an externally ended visit.")
+    end
+    return true
+end
+
+local function getGraphManifest(session, roomKey, mapID)
+    local graph = session and session.graph or nil
+    if type(graph) ~= "table" then return nil end
+    local manifests = { graph.entrance }
+    for _, manifest in ipairs(graph.rooms or {}) do
+        manifests[#manifests + 1] = manifest
+    end
+    for _, manifest in ipairs(manifests) do
+        if type(manifest) == "table"
+            and tostring(manifest.key) == tostring(roomKey)
+            and tonumber(manifest.mapID) == tonumber(mapID)
+        then
+            return manifest
+        end
+    end
+    return nil
+end
+
+local function copyDeathCertificateDetourIdentity(source)
+    if type(source) ~= "table" then return nil end
+    return {
+        version = source.version,
+        kind = source.kind,
+        detourId = source.detourId,
+        token = source.token,
+        visitId = source.visitId,
+        mapDimension = source.mapDimension,
+        mapID = source.mapID,
+        roomID = source.roomID,
+        roomKey = source.roomKey,
+        graphSeed = source.graphSeed,
+        playerIndex = source.playerIndex,
+        underlyingDimension = source.underlyingDimension,
+        baseRoomIndex = source.baseRoomIndex,
+        baseRoomVariant = source.baseRoomVariant,
+        baseRoomSpawnSeed = source.baseRoomSpawnSeed,
+        stage = source.stage,
+        stageType = source.stageType,
+        floorPlacementSeed = source.floorPlacementSeed,
+    }
+end
+
+local function deathCertificateDetourIdentityMatches(session, identity)
+    if type(session) ~= "table"
+        or type(identity) ~= "table"
+        or identity.version ~= ATROPOS_DC_DETOUR_VERSION
+        or identity.kind ~= ATROPOS_DC_DETOUR_KIND
+        or identity.token ~= session.token
+        or identity.visitId ~= session.visitId
+        or tonumber(identity.mapDimension) ~= StageAPIGalleryRooms.MAP_DIMENSION
+        or tonumber(identity.graphSeed) ~= tonumber(session.seed)
+        or not sessionMatchesCurrentFloor(session)
+    then
+        return false
+    end
+    local floor = session.floor or {}
+    if tonumber(identity.stage) ~= tonumber(floor.stage)
+        or tonumber(identity.stageType) ~= tonumber(floor.stageType)
+        or tonumber(identity.floorPlacementSeed)
+            ~= tonumber(floor.placementSeed)
+    then
+        return false
+    end
+    local manifest = getGraphManifest(session, identity.roomKey, identity.mapID)
+    return manifest ~= nil
+        and tostring(manifest.roomID) == tostring(identity.roomID)
+        and tonumber(manifest.graphSeed) == tonumber(identity.graphSeed)
+end
+
+local function currentContextMatchesDeathCertificateOrigin(session, identity, context)
+    return deathCertificateDetourIdentityMatches(session, identity)
+        and type(context) == "table"
+        and tostring(context.manifest.key) == tostring(identity.roomKey)
+        and tostring(context.manifest.roomID) == tostring(identity.roomID)
+        and tonumber(context.manifest.mapID) == tonumber(identity.mapID)
+end
+
+local function savedDeathCertificateDetourMatches(session, identity, dcSessionId)
+    local detour = session and session.deathCertificateDetour or nil
+    return deathCertificateDetourIdentityMatches(session, identity)
+        and type(detour) == "table"
+        and detour.version == identity.version
+        and detour.kind == identity.kind
+        and detour.detourId == identity.detourId
+        and detour.token == identity.token
+        and detour.visitId == identity.visitId
+        and tonumber(detour.mapDimension) == tonumber(identity.mapDimension)
+        and tonumber(detour.mapID) == tonumber(identity.mapID)
+        and tostring(detour.roomID) == tostring(identity.roomID)
+        and tostring(detour.roomKey) == tostring(identity.roomKey)
+        and tonumber(detour.graphSeed) == tonumber(identity.graphSeed)
+        and tonumber(detour.playerIndex) == tonumber(identity.playerIndex)
+        and tonumber(detour.underlyingDimension)
+            == tonumber(identity.underlyingDimension)
+        and tonumber(detour.baseRoomIndex) == tonumber(identity.baseRoomIndex)
+        and tonumber(detour.baseRoomVariant) == tonumber(identity.baseRoomVariant)
+        and tonumber(detour.baseRoomSpawnSeed)
+            == tonumber(identity.baseRoomSpawnSeed)
+        and tonumber(detour.stage) == tonumber(identity.stage)
+        and tonumber(detour.stageType) == tonumber(identity.stageType)
+        and tonumber(detour.floorPlacementSeed)
+            == tonumber(identity.floorPlacementSeed)
+        and (dcSessionId == nil or detour.dcSessionId == dcSessionId)
+end
+
+local function clearStalePreparedDeathCertificateDetour(session, context)
+    local detour = session and session.deathCertificateDetour or nil
+    if type(detour) ~= "table" or detour.phase ~= "prepared" or not context then
+        return true
+    end
+    session.deathCertificateDetour = nil
+    if saveNow() then return true end
+    session.deathCertificateDetour = detour
+    return false
+end
+
+local function shouldFreezeForDeathCertificateDetour(session)
+    local detour = session and session.deathCertificateDetour or nil
+    return type(detour) == "table"
+        and deathCertificateDetourIdentityMatches(session, detour)
+        and (detour.phase == "active"
+            or detour.phase == "reentering"
+            or detour.phase == "arrived")
+end
+
+local function preparedDeathCertificateDetourReachedEntrance(session)
+    local detour = session and session.deathCertificateDetour or nil
+    if type(detour) ~= "table"
+        or detour.phase ~= "prepared"
+        or not deathCertificateDetourIdentityMatches(session, detour)
+        or getCurrentDimension() ~= 2
+    then
+        return false
+    end
+    local level = Game():GetLevel()
+    local descriptor = level and level:GetCurrentRoomDesc() or nil
+    local data = descriptorData(descriptor)
+    if not level or not descriptor or not data
+        or tonumber(level:GetCurrentRoomIndex())
+            ~= DEATH_CERTIFICATE_ENTRANCE_INDEX
+        or tonumber(descriptor.GridIndex) ~= DEATH_CERTIFICATE_ENTRANCE_INDEX
+        or tonumber(descriptor.SafeGridIndex) ~= DEATH_CERTIFICATE_ENTRANCE_INDEX
+        or tonumber(data.Subtype or data.SubType)
+            ~= DEATH_CERTIFICATE_ROOM_SUBTYPE
+        or type(level.GetPreviousRoomIndex) ~= "function"
+    then
+        return false
+    end
+    local previousOK, previousRoomIndex = pcall(function()
+        return level:GetPreviousRoomIndex()
+    end)
+    local baseOK, baseDescriptor = pcall(function()
+        return level:GetRoomByIdx(detour.baseRoomIndex)
+    end)
+    local baseData = baseOK and descriptorData(baseDescriptor) or nil
+    local stageAPI = getStageAPI()
+    local previousExtra = stageAPI and stageAPI.PreviousExtraRoomData or nil
+    return previousOK
+        and tonumber(previousRoomIndex) == tonumber(detour.baseRoomIndex)
+        and baseDescriptor ~= nil
+        and baseData ~= nil
+        and tonumber(baseData.Variant) == tonumber(detour.baseRoomVariant)
+        and tonumber(baseDescriptor.SpawnSeed) == tonumber(detour.baseRoomSpawnSeed)
+        and type(previousExtra) == "table"
+        and tonumber(previousExtra.MapID) == tonumber(detour.mapDimension)
+        and tonumber(previousExtra.RoomID) == tonumber(detour.mapID)
+        and tonumber(previousExtra.RoomIndex) == tonumber(detour.baseRoomIndex)
+        and tonumber(previousExtra.RoomVariant) == tonumber(detour.baseRoomVariant)
+        and tonumber(previousExtra.RoomSeed) == tonumber(detour.baseRoomSpawnSeed)
+end
+
+function M.prepareDeathCertificateDetour(player)
+    if M._runLifecycleReady ~= true then return nil, "lifecycle_not_ready" end
+    local session = getSession()
+    local context = session and getCurrentGalleryContext(session) or nil
+    local playerIndex = getPlayerIndex(player)
+    if not session
+        or not context
+        or session.phase ~= "browsing"
+        or session.entryCommitted ~= true
+        or session.pendingChoice ~= nil
+        or playerIndex == nil
+    then
+        return nil, "gallery_visit_not_detour_ready"
+    end
+    local stageAPI = getStageAPI()
+    if not stageAPI or stageAPI.TransitioningToExtraRoom == true then
+        return nil, "stageapi_transition_busy"
+    end
+    local backendSaved, backendReason = StageAPIGalleryRooms.save(
+        session.graph,
+        context.runtime
+    )
+    if backendSaved ~= true then return nil, backendReason or "stageapi_save_failed" end
+
+    local level = Game():GetLevel()
+    local descriptor = level and level:GetCurrentRoomDesc() or nil
+    local descriptorDataValue = descriptorData(descriptor)
+    local floor = session.floor or {}
+    local underlyingDimension = getCurrentDimension()
+    local previousExtra = stageAPI.PreviousExtraRoomData
+    if not level
+        or not descriptor
+        or not descriptorDataValue
+        or underlyingDimension == nil
+        or tonumber(stageAPI.CurrentLevelMapID)
+            ~= StageAPIGalleryRooms.MAP_DIMENSION
+        or tonumber(stageAPI.CurrentLevelMapRoomID)
+            ~= tonumber(context.manifest.mapID)
+        or type(previousExtra) ~= "table"
+        or tonumber(previousExtra.MapID) ~= StageAPIGalleryRooms.MAP_DIMENSION
+        or tonumber(previousExtra.RoomID) ~= tonumber(context.manifest.mapID)
+        or tonumber(previousExtra.RoomIndex) ~= tonumber(level:GetCurrentRoomIndex())
+        or tonumber(previousExtra.RoomVariant) ~= tonumber(descriptorDataValue.Variant)
+        or tonumber(previousExtra.RoomSeed) ~= tonumber(descriptor.SpawnSeed)
+    then
+        return nil, "gallery_base_room_identity_missing"
+    end
+    session.deathCertificateDetourSequence =
+        (tonumber(session.deathCertificateDetourSequence) or 0) + 1
+    local identity = {
+        version = ATROPOS_DC_DETOUR_VERSION,
+        kind = ATROPOS_DC_DETOUR_KIND,
+        detourId = session.visitId .. ":dc:"
+            .. tostring(session.deathCertificateDetourSequence),
+        token = session.token,
+        visitId = session.visitId,
+        mapDimension = StageAPIGalleryRooms.MAP_DIMENSION,
+        mapID = context.manifest.mapID,
+        roomID = context.manifest.roomID,
+        roomKey = context.manifest.key,
+        graphSeed = session.seed,
+        playerIndex = playerIndex,
+        underlyingDimension = underlyingDimension,
+        baseRoomIndex = level:GetCurrentRoomIndex(),
+        baseRoomVariant = descriptorDataValue.Variant,
+        baseRoomSpawnSeed = descriptor.SpawnSeed,
+        stage = floor.stage,
+        stageType = floor.stageType,
+        floorPlacementSeed = floor.placementSeed,
+    }
+    local savedDetour = copyDeathCertificateDetourIdentity(identity)
+    savedDetour.phase = "prepared"
+    session.deathCertificateDetour = savedDetour
+    if not saveNow() then
+        session.deathCertificateDetour = nil
+        return nil, "detour_save_failed"
+    end
+    return copyDeathCertificateDetourIdentity(identity)
+end
+
+function M.bindDeathCertificateDetour(identity, dcSessionId)
+    local session = getSession()
+    if type(dcSessionId) ~= "string"
+        or not savedDeathCertificateDetourMatches(session, identity, nil)
+    then
+        return false
+    end
+    local detour = session.deathCertificateDetour
+    if detour.phase == "active" and detour.dcSessionId == dcSessionId then
+        return true
+    end
+    if detour.phase ~= "prepared" then return false end
+    detour.dcSessionId = dcSessionId
+    detour.phase = "active"
+    if saveNow() then return true end
+    detour.dcSessionId = nil
+    detour.phase = "prepared"
+    return false
+end
+
+function M.isDeathCertificateDetourValid(identity, dcSessionId)
+    local session = getSession()
+    if not savedDeathCertificateDetourMatches(session, identity, dcSessionId) then
+        return false
+    end
+    local phase = session.deathCertificateDetour.phase
+    return phase == "active" or phase == "reentering" or phase == "arrived"
+end
+
+function M.isDeathCertificateDetourPrepared(identity)
+    local session = getSession()
+    return savedDeathCertificateDetourMatches(session, identity, nil)
+        and session.deathCertificateDetour.phase == "prepared"
+end
+
+function M.getDeathCertificateDetour()
+    local session = getSession()
+    local detour = session and session.deathCertificateDetour or nil
+    if type(detour) ~= "table"
+        or not deathCertificateDetourIdentityMatches(session, detour)
+    then
+        return nil
+    end
+    local copy = copyDeathCertificateDetourIdentity(detour)
+    copy.phase = detour.phase
+    copy.dcSessionId = detour.dcSessionId
+    return copy
+end
+
+function M.returnDeathCertificateDetour(identity, dcSessionId, player)
+    local session = getSession()
+    if not savedDeathCertificateDetourMatches(session, identity, dcSessionId)
+        or getPlayerIndex(player) ~= tonumber(identity.playerIndex)
+    then
+        return false, "detour_identity_mismatch"
+    end
+    local detour = session.deathCertificateDetour
+    if detour.phase ~= "active" and detour.phase ~= "reentering" then
+        return false, "detour_phase_invalid"
+    end
+    local previousPhase = detour.phase
+    detour.phase = "reentering"
+    if not saveNow() then
+        detour.phase = previousPhase
+        return false, "detour_return_save_failed"
+    end
+    invalidateRuntime()
+    M._runtimeToken = nil
+    local runtime, runtimeReason = getRuntime(session)
+    if not runtime then
+        detour.phase = "active"
+        saveNow()
+        return false, runtimeReason or "graph_restore_failed"
+    end
+    local transitioned, transitionReason = StageAPIGalleryRooms.enterRoom(
+        session.graph,
+        runtime,
+        identity.mapID,
+        player
+    )
+    if transitioned ~= true then
+        detour.phase = "active"
+        saveNow()
+        return false, transitionReason or "detour_transition_failed"
+    end
+    return true
+end
+
+function M.isCurrentDeathCertificateOrigin(identity)
+    local session = getSession()
+    local context = session and getCurrentGalleryContext(session) or nil
+    return currentContextMatchesDeathCertificateOrigin(session, identity, context)
+end
+
+function M.markDeathCertificateDetourArrived(identity, dcSessionId)
+    local session = getSession()
+    if not savedDeathCertificateDetourMatches(session, identity, dcSessionId) then
+        return false, "detour_identity_mismatch"
+    end
+    local detour = session.deathCertificateDetour
+    if detour.phase ~= "reentering" and detour.phase ~= "arrived" then
+        return false, "detour_phase_invalid"
+    end
+    local context = getCurrentGalleryContext(session)
+    if not currentContextMatchesDeathCertificateOrigin(session, identity, context) then
+        return false, "detour_room_mismatch"
+    end
+    local stageAPI = getStageAPI()
+    if not stageAPI
+        or stageAPI.TransitioningToExtraRoom == true
+        or stageAPI.DoingExtraRoomTransition == true
+        or context.levelRoom.Loaded ~= true
+        or stageAPI.GetCurrentRoom() ~= context.levelRoom
+    then
+        return false, "detour_room_not_loaded"
+    end
+    local backendSaved, backendReason = StageAPIGalleryRooms.save(
+        session.graph,
+        context.runtime
+    )
+    if backendSaved ~= true then
+        return false, backendReason or "detour_room_save_failed"
+    end
+    if detour.phase == "arrived" then return true end
+    detour.phase = "arrived"
+    if saveNow() then return true end
+    detour.phase = "reentering"
+    return false, "detour_arrival_save_failed"
+end
+
+function M.completeDeathCertificateDetourArrival(identity, dcSessionId)
+    local session = getSession()
+    if not savedDeathCertificateDetourMatches(session, identity, dcSessionId) then
+        return false, "detour_identity_mismatch"
+    end
+    local detour = session.deathCertificateDetour
+    local context = getCurrentGalleryContext(session)
+    if detour.phase ~= "arrived"
+        or not currentContextMatchesDeathCertificateOrigin(session, identity, context)
+    then
+        return false, "detour_arrival_not_ready"
+    end
+    session.deathCertificateDetour = nil
+    if saveNow() then return true end
+    session.deathCertificateDetour = detour
+    return false, "detour_completion_save_failed"
+end
+
+function M.abortDeathCertificateDetour(identity, dcSessionId)
+    local session = getSession()
+    if not savedDeathCertificateDetourMatches(session, identity, dcSessionId) then
+        return false
+    end
+    local detour = session.deathCertificateDetour
+    session.deathCertificateDetour = nil
+    if not saveNow() then
+        session.deathCertificateDetour = detour
+        return false
+    end
+    if getCurrentGalleryContext(session) == nil and session.phase == "browsing" then
+        return completeVisitOutsideGallery(session)
     end
     return true
 end
@@ -1862,7 +2674,13 @@ local function commitEntry(session, player)
             "Appraisal could not persist its committed entry."
         )
     end
-    setAllGalleryDoorsOpen(true)
+    if not setAllGalleryDoorsOpen(true) then
+        return failEntry(
+            session,
+            player,
+            "Appraisal lost an internal room route after entry payment."
+        )
+    end
     return true
 end
 
@@ -2056,7 +2874,7 @@ local function finishChoiceFailure(session, message)
         session.returnReason = "choice_failed"
         -- Keep the full pending journal until the failure decision itself is
         -- durable. Finalize it from the next semantic update/lifecycle event;
-        -- StartRoomTransition must not re-enter native room code while the
+        -- The StageAPI return transition must not re-enter room code while the
         -- item-queue completion callback is still unwinding.
         if not saveNow() then
             session.phase = previousPhase
@@ -2085,6 +2903,11 @@ end
 local function finishChoiceSuccess(session)
     local pending = session.pendingChoice
     if type(pending) ~= "table" or pending.smelted ~= true then return false end
+
+    -- Atropos can be acquired (including as this exact smelted reward) after
+    -- entering the gallery. Resolve the synergy from current semantic
+    -- ownership at completion instead of freezing it at entry.
+    session.atroposMode = anyoneHasAtropos()
 
     if session.phase ~= "choice_complete_ready" then
         local recordedNow = pending.rewardRecorded ~= true
@@ -2242,7 +3065,7 @@ local function resolveChoice(session, context)
         return
     end
 
-    setAllGalleryDoorsOpen(false)
+    setAllGalleryDoorsOpen(true)
     local player = getPlayerFromIndex(pending.playerIndex)
     if not player or type(player.IsItemQueueEmpty) ~= "function" then
         finishChoiceFailure(session, "Appraisal lost the player owning its choice.")
@@ -2303,6 +3126,27 @@ local function resolveChoice(session, context)
     finishChoiceSuccess(session)
 end
 
+local function requestReturnDoorExit(session)
+    if type(session) ~= "table" then return false end
+    if type(session.pendingChoice) ~= "table" then
+        return returnToOrigin("gallery_return_door")
+    end
+
+    -- A stalled acquisition may leave through the always-open entrance
+    -- without losing its exact reward journal. Keep the pickup phase intact,
+    -- move to the saved native origin, and reconcile there before the visit
+    -- completion path is allowed to clear pendingChoice.
+    if session.emergencyReturnRequested == nil then
+        session.emergencyReturnRequested = "gallery_return_door"
+        if not saveNow() then
+            session.emergencyReturnRequested = nil
+            return false
+        end
+    end
+    if M._returnTransitionIssued[session.token] == true then return true end
+    return transitionToOrigin(session)
+end
+
 local function registerReturnDoor(stageAPI)
     stageAPI.CustomDoor(
         RETURN_DOOR_NAME,
@@ -2323,14 +3167,15 @@ local function registerReturnDoor(stageAPI)
                 and data.token == session.token
                 and data.visitId ~= nil
                 and data.visitId == session.visitId
-                and session.atroposMode == true
                 and session.entryCommitted == true
-                and session.phase == "browsing"
+                and session.phase ~= "completed"
+                and session.phase ~= "build_failed"
+                and session.floorEnded ~= true
                 and doorGridData.Slot == DoorSlot.LEFT0
                 and context
                 and context.manifest.kind == "entrance"
             then
-                returnToOrigin("gallery_return_door")
+                requestReturnDoorExit(session)
             end
         end
     )
@@ -2356,10 +3201,10 @@ function M.bootstrapStageAPI()
     if type(stageAPI) ~= "table" then return false end
     if stageAPI.Loaded == true then return M.initializeStageAPI() end
     if type(stageAPI.ToCall) ~= "table" then return false end
-    if stageAPI.__ConchBlessingNativeGalleryQueued then return false end
-    stageAPI.__ConchBlessingNativeGalleryQueued = true
+    if stageAPI.__ConchBlessingStageAPIGalleryQueued then return false end
+    stageAPI.__ConchBlessingStageAPIGalleryQueued = true
     table.insert(stageAPI.ToCall, function()
-        stageAPI.__ConchBlessingNativeGalleryQueued = nil
+        stageAPI.__ConchBlessingStageAPIGalleryQueued = nil
         local manager = ConchBlessing and ConchBlessing.GalleryManager or nil
         if manager and type(manager.initializeStageAPI) == "function" then
             manager.initializeStageAPI()
@@ -2385,6 +3230,14 @@ function M.onPrePickupCollision(_, pickup, collider)
     if M._runLifecycleReady ~= true then return end
     local session = getSession()
     if not session then return end
+    if type(session.deathCertificateDetour) == "table"
+        and session.deathCertificateDetour.phase == "prepared"
+    then
+        local staleContext = getCurrentGalleryContext(session)
+        if not clearStalePreparedDeathCertificateDetour(session, staleContext) then
+            return true
+        end
+    end
     local context = getCurrentGalleryContext(session)
     if not context or context.manifest.kind ~= "stock" then return end
     local slot = sourceSlot(session, context.manifest, pickup)
@@ -2429,7 +3282,7 @@ function M.onPrePickupCollision(_, pickup, collider)
         return true
     end
     M._collisionToken = token
-    setAllGalleryDoorsOpen(false)
+    setAllGalleryDoorsOpen(true)
     -- Do not cancel the collision. The engine owns the real trinket pickup,
     -- player hold-up animation, item queue, and pickup sound.
 end
@@ -2472,7 +3325,7 @@ function M.onPostPickupCollision(_, pickup, collider)
     M._collisionToken = nil
     local queued = player.QueuedItem and player.QueuedItem.Item or nil
     if queued and tonumber(queued.ID) then pending.queueExactId = tonumber(queued.ID) end
-    if not persistChoiceClosure(session, pending, context.manifest) then
+    if not persistChoiceClosure(session, pending, context.manifest, pickup) then
         ConchBlessing.printError("Appraisal could not persist its native pickup collision.")
         return
     end
@@ -2606,26 +3459,37 @@ local function prepareCurrentGalleryRoom(session, context)
     playGalleryMusic()
     local room = Game():GetRoom()
     if room then room:SetClear(true) end
-    local revealed, revealReason = NativeGalleryRooms.reveal(session.graph, context.runtime)
+    local revealed, revealReason = StageAPIGalleryRooms.reveal(
+        session.graph,
+        context.runtime
+    )
     if not revealed then
         failVisitInfrastructure(
             session,
-            "Appraisal could not reveal its native room graph: " .. tostring(revealReason)
+            "Appraisal could not reveal its StageAPI room graph: "
+                .. tostring(revealReason)
         )
         return false
     end
     if session.phase == "entering" and context.manifest.kind == "entrance" then
-        setAllGalleryDoorsOpen(false)
         local player = getPlayerFromIndex(session.ownerPlayerIndex)
         if not player then
             failEntry(session, nil, "Appraisal lost its entering player.")
             return false
         end
-        if session.atroposMode == true and not ensureReturnDoor(session, context) then
+        if not setAllGalleryDoorsOpen(false) then
             failEntry(
                 session,
                 player,
-                "Appraisal could not prepare its Atropos return door before payment."
+                "Appraisal could not verify an open internal route before payment."
+            )
+            return false
+        end
+        if not ensureReturnDoor(session, context) then
+            failEntry(
+                session,
+                player,
+                "Appraisal could not prepare its return door before payment."
             )
             return false
         end
@@ -2636,35 +3500,39 @@ local function prepareCurrentGalleryRoom(session, context)
             if not initializeRoomStock(session, context.manifest) then
                 failVisitInfrastructure(
                     session,
-                    "Appraisal could not initialize the current native stock room."
+                    "Appraisal could not initialize the current StageAPI stock room."
                 )
                 return false
             end
         elseif context.manifest.kind == "entrance" then
-            local stageAPI = getStageAPI()
-            if session.atroposMode ~= true and stageAPIDoorReady(stageAPI) then
-                -- A previous Atropos visit can leave this persistent custom
-                -- grid in the reused floor graph. Prefer removing it; its
-                -- callback remains a safe same-floor return fallback if the
-                -- provider has not materialized it yet.
-                removeReturnDoor(stageAPI)
-            end
-            if not ensureReturnDoor(session, context) and session.atroposMode == true then
+            if not ensureReturnDoor(session, context) then
                 failVisitInfrastructure(
                     session,
-                    "Appraisal lost its Atropos return door after entry."
+                    "Appraisal lost its return door after entry."
                 )
                 return false
             end
         end
-        setAllGalleryDoorsOpen(true)
+        if not setAllGalleryDoorsOpen(true) then
+            failVisitInfrastructure(
+                session,
+                "Appraisal lost an internal room route while browsing."
+            )
+            return false
+        end
     elseif session.phase == "pickup_prepared"
         or session.phase == "pickup_closing"
         or session.phase == "pickup_animating"
         or session.phase == "absorbing"
         or session.phase == "choice_complete_ready"
     then
-        setAllGalleryDoorsOpen(false)
+        if not setAllGalleryDoorsOpen(true) then
+            failVisitInfrastructure(
+                session,
+                "Appraisal lost an internal room route during reward settlement."
+            )
+            return false
+        end
         local pending = session.pendingChoice
         if type(pending) == "table"
             and pending.roomKey == context.manifest.key
@@ -2722,6 +3590,9 @@ local function settleFloorEndedSession(session)
 end
 
 function M.onUpdate()
+    -- Runs before the lifecycle gates: the MiniMAPI teleport override must be
+    -- withdrawn even on frames where the session logic below bails out.
+    syncMinimapTeleportOverride()
     if M._runLifecycleReady ~= true then return end
     local session = getSession()
     if not session then return end
@@ -2734,6 +3605,7 @@ function M.onUpdate()
         return
     end
     if session.phase == "completed" or session.phase == "build_failed" then return end
+    if shouldFreezeForDeathCertificateDetour(session) then return end
     if completeVisitAtOrigin(session) then return end
 
     if session.phase == "return_ready" or session.phase == "returning" then
@@ -2764,6 +3636,27 @@ function M.onUpdate()
 
     local context = getCurrentGalleryContext(session)
     if context then
+        local phaseNeedsRoute = session.phase == "entering"
+            or session.phase == "browsing"
+            or session.phase == "pickup_prepared"
+            or session.phase == "pickup_closing"
+            or session.phase == "pickup_animating"
+            or session.phase == "absorbing"
+            or session.phase == "choice_complete_ready"
+        if phaseNeedsRoute and not setBackendDoorsOpen(true) then
+            failVisitInfrastructure(
+                session,
+                "Appraisal lost a live internal room route."
+            )
+            return
+        end
+        if phaseNeedsRoute and not keepReturnDoorOpen(session, context) then
+            failVisitInfrastructure(
+                session,
+                "Appraisal lost its always-open return door."
+            )
+            return
+        end
         if session.phase == "entering" and context.manifest.kind == "entrance" then
             prepareCurrentGalleryRoom(session, context)
         elseif session.phase == "browsing"
@@ -2771,14 +3664,15 @@ function M.onUpdate()
         then
             prepareCurrentGalleryRoom(session, context)
         end
-        if session.phase == "entering"
-            or session.phase == "pickup_prepared"
+        if session.phase == "entering" then
+            setAllGalleryDoorsOpen(false)
+        elseif session.phase == "pickup_prepared"
             or session.phase == "pickup_closing"
             or session.phase == "pickup_animating"
             or session.phase == "absorbing"
             or session.phase == "choice_complete_ready"
         then
-            setAllGalleryDoorsOpen(false)
+            setAllGalleryDoorsOpen(true)
         end
     end
     if session.pendingChoice then resolveChoice(session, context) end
@@ -2788,6 +3682,9 @@ function M.onPostNewRoom()
     if M._runLifecycleReady ~= true then return end
     M._preparedRoomKey = nil
     M._collisionToken = nil
+    -- StageAPI recreates persistent pickups when a LevelRoom loads, so their
+    -- InitSeed evidence is valid only for the just-finished physical load.
+    M._stockInitSeeds = {}
     invalidateRuntime()
     local session = getSession()
     if not session then return end
@@ -2800,6 +3697,12 @@ function M.onPostNewRoom()
         return
     end
     if completeVisitAtOrigin(session) then return end
+    if session.emergencyReturnRequested ~= nil
+        and M._returnTransitionIssued[session.token] == true
+        and not releaseCompletedReturnLatch(session)
+    then
+        return
+    end
     if (session.phase == "return_ready"
             or session.phase == "returning"
             or session.phase == "completing")
@@ -2809,11 +3712,13 @@ function M.onPostNewRoom()
     end
     local context = getCurrentGalleryContext(session)
     if context then
+        if not clearStalePreparedDeathCertificateDetour(session, context) then return end
+        if shouldFreezeForDeathCertificateDetour(session) then return end
         if session.phase == "entering" and context.manifest.kind ~= "entrance" then
             failEntry(
                 session,
                 getPlayerFromIndex(session.ownerPlayerIndex),
-                "Appraisal entry reached the wrong native room."
+                "Appraisal entry reached the wrong StageAPI room."
             )
             return
         end
@@ -2839,61 +3744,47 @@ function M.onPostNewRoom()
         return
     end
 
-    if getCurrentDimension() ~= DC_DIMENSION then
-        if session.phase == "entering" then
-            failEntry(
-                session,
-                getPlayerFromIndex(session.ownerPlayerIndex),
-                "Appraisal entry ended outside its native entrance."
-            )
-        elseif session.phase == "choice_failed" then
-            local pending = session.pendingChoice
-            finishChoiceFailure(
-                session,
-                type(pending) == "table" and pending.failureReason
-                    or "Appraisal is recovering a failed choice."
-            )
-        elseif session.pendingChoice then
-            resolveChoice(session, nil)
-        elseif session.phase == "return_ready"
-            or session.phase == "returning"
-            or session.phase == "completing"
-        then
-            if session.phase == "completing" then session.phase = "return_ready" end
-            beginReturn(session, session.returnReason)
-        elseif session.phase == "browsing" or session.phase == "completing_external" then
-            completeVisitOutsideGallery(session)
-        end
-        return
-    end
+    if shouldFreezeForDeathCertificateDetour(session) then return end
 
-    if session.phase ~= "completed" and session.phase ~= "build_failed" then
-        if session.phase == "entering" then
-            failEntry(
-                session,
-                getPlayerFromIndex(session.ownerPlayerIndex),
-                "Appraisal entered an unowned Death Certificate room."
-            )
-        elseif session.pendingChoice then
-            resolveChoice(session, nil)
-        else
-            session.permanentVisitFailure = true
-            beginReturn(session, "foreign_death_certificate_room")
-        end
+    if session.phase == "entering" then
+        failEntry(
+            session,
+            getPlayerFromIndex(session.ownerPlayerIndex),
+            "Appraisal entry ended outside its StageAPI entrance."
+        )
+    elseif session.phase == "choice_failed" then
+        local pending = session.pendingChoice
+        finishChoiceFailure(
+            session,
+            type(pending) == "table" and pending.failureReason
+                or "Appraisal is recovering a failed choice."
+        )
+    elseif session.pendingChoice then
+        resolveChoice(session, nil)
+    elseif session.phase == "return_ready"
+        or session.phase == "returning"
+        or session.phase == "completing"
+    then
+        if session.phase == "completing" then session.phase = "return_ready" end
+        beginReturn(session, session.returnReason)
+    elseif session.phase == "browsing" or session.phase == "completing_external" then
+        completeVisitOutsideGallery(session)
     end
 end
 
 function M.onPostNewLevel()
     if M._runLifecycleReady ~= true then return end
     local session = getSession()
+    local floorEndMarked = session and markSessionFloorEnded(session) or false
     invalidateRuntime()
     M._runtimeToken = nil
     M._preparedRoomKey = nil
     M._collisionToken = nil
     M._debugStockAudit = nil
+    M._stockInitSeeds = {}
     if session and session.token then M._returnTransitionIssued[session.token] = nil end
     if session then
-        if markSessionFloorEnded(session) then settleFloorEndedSession(session) end
+        if floorEndMarked then settleFloorEndedSession(session) end
         return
     end
     M._durableChoiceClosures = {}
@@ -2919,30 +3810,29 @@ local function reconcileInterruptedBuild(session)
             return session
         end
         ConchBlessing.printError(
-            "Appraisal could not restore its interrupted native build: " .. tostring(reason)
+            "Appraisal could not restore its interrupted StageAPI build: "
+                .. tostring(reason)
         )
         session.phase = "build_failed"
         saveNow()
         return session
     end
 
-    if type(session.graph) ~= "table" or session.graph.entrance == nil then
-        local empty = NativeGalleryRooms.isDimensionEmpty()
-        if empty == true then
-            local runSave = getRunSave(true)
-            if runSave then runSave[SAVE_KEY] = nil end
-            saveNow()
-            return nil
+    if not destroyGalleryGraph(session) then
+        session.phase = "build_failed"
+        if not saveNow() then
+            ConchBlessing.printError(
+                "Appraisal could not persist its interrupted-build failure."
+            )
         end
+        return session
     end
 
-    -- Native placed rooms cannot be rolled back. A partial persisted graph is
-    -- therefore a permanent floor-local tombstone, never an active visit.
-    session.phase = "build_failed"
-    if not saveNow() then
-        ConchBlessing.printError("Appraisal could not persist its interrupted-build tombstone.")
-    end
-    return session
+    local runSave = getRunSave(true)
+    if runSave then runSave[SAVE_KEY] = nil end
+    saveNow()
+    resetSessionRuntime(session)
+    return nil
 end
 
 local function clearRunTransientState()
@@ -2955,6 +3845,10 @@ local function clearRunTransientState()
     M._removedChoiceStock = {}
     M._returnTransitionIssued = {}
     M._debugStockAudit = nil
+    M._stockInitSeeds = {}
+    -- Isaac.GetFrameCount() restarts per run; a stale memo entry could
+    -- otherwise collide with an early frame number of the next run.
+    M._galleryTeleportEval = nil
 end
 
 function M.onGameStarted(_, isContinued)
@@ -2990,7 +3884,10 @@ function M.onGameStarted(_, isContinued)
     -- From here onward this callback has authoritatively reconciled new-run
     -- versus continued-run state. Later room/update callbacks may now act.
     M._runLifecycleReady = true
-    if not session then return end
+    if not session then
+        cleanupOrphanedGalleryGraph()
+        return
+    end
     local loadedPending = session.pendingChoice
     if isContinued
         and type(loadedPending) == "table"
@@ -3037,6 +3934,13 @@ function M.onGameStarted(_, isContinued)
     session = reconcileInterruptedBuild(session)
     if not session then return end
 
+    -- SaveManager can resume after the native Death Certificate room loaded
+    -- but before Atropos bound its saved session ID. Preserve this exact
+    -- provider/engine handshake for Atropos's normal-priority callback; every
+    -- other prepared candidate remains harmless and is cleaned normally.
+    if preparedDeathCertificateDetourReachedEntrance(session) then return end
+    if shouldFreezeForDeathCertificateDetour(session) then return end
+
     if completeVisitAtOrigin(session) then return end
     if session.phase == "return_ready" or session.phase == "returning" then
         beginReturn(session, session.returnReason)
@@ -3059,19 +3963,10 @@ function M.onGameStarted(_, isContinued)
         completeVisitOutsideGallery(session)
         return
     end
-    if session.phase == "entering" and getCurrentDimension() ~= DC_DIMENSION then
-        failEntry(
-            session,
-            getPlayerFromIndex(session.ownerPlayerIndex),
-            "Appraisal recovered an entry that never reached its native entrance."
-        )
-        return
-    end
-
     local runtime, reason = getRuntime(session)
     if not runtime then
         ConchBlessing.printError(
-            "Appraisal could not restore its native room graph: " .. tostring(reason)
+            "Appraisal could not restore its StageAPI room graph: " .. tostring(reason)
         )
         if session.phase == "entering" then
             failEntry(session, getPlayerFromIndex(session.ownerPlayerIndex), "Appraisal entry graph was lost.")
@@ -3087,10 +3982,11 @@ function M.onGameStarted(_, isContinued)
         return
     end
     debugAuditGraph(session)
-    local revealed, revealReason = NativeGalleryRooms.reveal(session.graph, runtime)
+    local revealed, revealReason = StageAPIGalleryRooms.reveal(session.graph, runtime)
     if not revealed then
         ConchBlessing.printError(
-            "Appraisal could not reveal its restored native graph: " .. tostring(revealReason)
+            "Appraisal could not reveal its restored StageAPI graph: "
+                .. tostring(revealReason)
         )
         if session.phase == "completed" then
             session.phase = "build_failed"
@@ -3098,18 +3994,19 @@ function M.onGameStarted(_, isContinued)
         else
             failVisitInfrastructure(
                 session,
-                "Appraisal could not safely resume its native room graph."
+                "Appraisal could not safely resume its StageAPI room graph."
             )
         end
         return
     end
     local context = getCurrentGalleryContext(session)
     if context then
+        if not clearStalePreparedDeathCertificateDetour(session, context) then return end
         if session.phase == "entering" and context.manifest.kind ~= "entrance" then
             failEntry(
                 session,
                 getPlayerFromIndex(session.ownerPlayerIndex),
-                "Appraisal continued in the wrong native room."
+                "Appraisal continued in the wrong StageAPI room."
             )
             return
         end
@@ -3119,7 +4016,7 @@ function M.onGameStarted(_, isContinued)
         failEntry(
             session,
             getPlayerFromIndex(session.ownerPlayerIndex),
-            "Appraisal continued outside its exact native entrance."
+            "Appraisal continued outside its exact StageAPI entrance."
         )
     elseif session.pendingChoice then
         resolveChoice(session, nil)
@@ -3131,6 +4028,7 @@ end
 function M.onPreGameExit()
     M._runLifecycleReady = false
     clearRunTransientState()
+    syncMinimapTeleportOverride(true)
 end
 
 local function isPrimaryPocketHourglass(player)
@@ -3242,21 +4140,15 @@ local function inspectStart(player, cost)
     end
     if inStageAPIExtraRoom then return "stageapi_extra_room" end
 
-    local available, dependencyReason = NativeGalleryRooms.isAvailable()
-    if not available then return dependencyReason or "repentogon_missing" end
-    local transitionMode = getRoomTransitionMode()
-    if getDeathCertificateUseFlags() == nil or transitionMode == nil then
-        return "repentogon_incompatible"
-    end
-    if transitionMode ~= 0 then return "transition_busy" end
+    local available, dependencyReason = StageAPIGalleryRooms.isAvailable()
+    if not available then return dependencyReason or "stageapi_missing" end
     if M._nativeEvidenceCallbacksRegistered ~= true then
         return "repentogon_incompatible"
     end
+    if not roomTransitionReady() then return "repentogon_incompatible" end
     if not player or getPlayerIndex(player) == nil then return "invalid_player" end
     if not canJournalDirectSmelt(player) then return "repentogon_missing" end
     if not getRunSave(true) then return "save_unavailable" end
-    if getCurrentDimension() == DC_DIMENSION then return "death_certificate" end
-
     local requiredCoins = math.max(0, math.floor(tonumber(cost) or 0))
     if player:GetNumCoins() < requiredCoins then
         return "coins", requiredCoins, player:GetNumCoins()
@@ -3285,7 +4177,7 @@ local function inspectStart(player, cost)
         if not runtime then return reason or "graph_restore_failed" end
         debugAuditGraph(session)
         if not hasRemainingStock(session) then return "no_trinkets" end
-        if session.atroposMode == true and not M.initializeStageAPI() then
+        if not M.initializeStageAPI() then
             return "stageapi_missing"
         end
         return nil, requiredCoins, player:GetNumCoins(), session.catalog, session
@@ -3293,7 +4185,7 @@ local function inspectStart(player, cost)
 
     local catalog = getRegisteredTrinkets()
     if #catalog == 0 then return "no_trinkets" end
-    if anyoneHasAtropos() and not M.initializeStageAPI() then
+    if not M.initializeStageAPI() then
         return "stageapi_missing"
     end
     return nil, requiredCoins, player:GetNumCoins(), catalog, nil
@@ -3327,7 +4219,7 @@ local function createFloorSession(catalog)
         return nil, "save_failed"
     end
 
-    local graph, reason = NativeGalleryRooms.build(
+    local graph, reason = StageAPIGalleryRooms.build(
         session.seed,
         #catalog,
         function(partialGraph)
@@ -3336,17 +4228,9 @@ local function createFloorSession(catalog)
         end
     )
     if not graph then
-        local mayHaveNoPlacedRoom = not session.graph or not session.graph.entrance
-        local dimensionEmpty = mayHaveNoPlacedRoom
-            and NativeGalleryRooms.isDimensionEmpty()
-            or false
-        if dimensionEmpty == true then
+        if destroyGalleryGraph(session) then
             runSave[SAVE_KEY] = nil
         else
-            -- TryPlaceRoom mutates the native level before the first manifest
-            -- can be persisted. Any non-empty or unknowable dimension must
-            -- retain a floor-local tombstone because native rooms cannot be
-            -- rolled back.
             session.phase = "build_failed"
         end
         saveNow()
@@ -3355,7 +4239,8 @@ local function createFloorSession(catalog)
     session.graph = graph
     session.phase = "completed"
     if not saveNow() then
-        session.phase = "build_failed"
+        destroyGalleryGraph(session)
+        runSave[SAVE_KEY] = nil
         saveNow()
         return nil, "save_failed"
     end
@@ -3363,9 +4248,17 @@ local function createFloorSession(catalog)
     M._runtimeToken = nil
     local runtime, restoreReason = getRuntime(session)
     if not runtime then
-        session.phase = "build_failed"
+        destroyGalleryGraph(session)
+        runSave[SAVE_KEY] = nil
         saveNow()
         return nil, restoreReason or "graph_restore_failed"
+    end
+    local backendSaved, backendSaveReason = StageAPIGalleryRooms.save(graph, runtime)
+    if not backendSaved then
+        destroyGalleryGraph(session)
+        runSave[SAVE_KEY] = nil
+        saveNow()
+        return nil, backendSaveReason or "stageapi_save_failed"
     end
     debugAuditGraph(session)
     return session
@@ -3380,9 +4273,8 @@ function M.startAppraisal(player, cost)
     end
     if not hasRemainingStock(session) then return false, "no_trinkets" end
 
-    -- Re-enumerate the full shared dimension immediately before opening an
-    -- entry transaction. The canonical Death Certificate routine accepts any
-    -- non-empty descriptor at grid 80, so cached ownership is not sufficient.
+    -- Rebind the independent StageAPI graph immediately before opening the
+    -- entry transaction so a stale logical map cannot receive payment.
     invalidateRuntime()
     M._runtimeToken = nil
     local runtime, runtimeReason = getRuntime(session)
@@ -3399,7 +4291,7 @@ function M.startAppraisal(player, cost)
     if not beforeSmelted then return false, "repentogon_missing" end
 
     local atroposMode = anyoneHasAtropos()
-    if atroposMode and not M.initializeStageAPI() then
+    if not M.initializeStageAPI() then
         return false, "stageapi_missing"
     end
     clearVisitFields(session)
@@ -3418,7 +4310,7 @@ function M.startAppraisal(player, cost)
         spawnSeed = descriptor.SpawnSeed,
         roomType = originData.Type,
         roomVariant = originData.Variant,
-        roomSubType = originData.Subtype,
+        roomSubType = originData.Subtype or originData.SubType,
         dimension = originDimension,
         stage = level:GetStage(),
         stageType = level:GetStageType(),
@@ -3435,57 +4327,24 @@ function M.startAppraisal(player, cost)
         return false, "save_failed"
     end
 
-    local entrance = session.graph and session.graph.entrance or nil
-    local entranceDescriptor = runtime.entrance
-    local target = entrance and tonumber(entrance.safeGridIndex) or nil
-    local canonicalTarget = tonumber(NativeGalleryRooms.ENTRANCE_GRID_INDEX)
-    if not target
-        or not canonicalTarget
-        or target ~= canonicalTarget
-        or tonumber(entrance.gridIndex) ~= canonicalTarget
-        or not entranceDescriptor
-        or tonumber(entranceDescriptor.SafeGridIndex) ~= canonicalTarget
-        or tonumber(entranceDescriptor.GridIndex) ~= canonicalTarget
-    then
-        session.phase = "build_failed"
-        clearVisitFields(session)
-        saveNow()
-        return false, "graph_restore_failed"
-    end
-
-    local transitionModeBefore = getRoomTransitionMode()
-    if transitionModeBefore == nil or transitionModeBefore ~= 0 then
-        session.phase = "completed"
-        clearVisitFields(session)
-        saveNow()
-        return false, transitionModeBefore == nil
-            and "repentogon_incompatible"
-            or "transition_busy"
-    end
-
-    -- Directly transitioning into dimension 2 skips the private return-room
-    -- snapshot owned by Death Certificate and crashes Level::ChangeRoom on
-    -- exit. The canonical item effect sees our validated room at grid 80,
-    -- skips vanilla room generation, records that snapshot, and owns the
-    -- lying/fade/get-up sequence. Arrival still commits only after the exact
-    -- manager entrance is observed in MC_POST_NEW_ROOM.
-    local transitioned, transitionError = pcall(function()
-        player:UseActiveItem(
-            CollectibleType.COLLECTIBLE_DEATH_CERTIFICATE,
-            getDeathCertificateUseFlags(),
-            -1
-        )
-    end)
-    local transitionModeAfter = getRoomTransitionMode()
-    if not transitioned or transitionModeAfter == nil or transitionModeAfter == 0 then
+    -- StageAPI owns both directions of this transition. Appraisal no longer
+    -- calls or intercepts Death Certificate, so its native dimension remains
+    -- independent and available throughout the floor.
+    local callOK, transitioned, transitionReason = pcall(
+        StageAPIGalleryRooms.enter,
+        session.graph,
+        runtime,
+        player
+    )
+    if not callOK or transitioned ~= true then
         session.phase = "completed"
         clearVisitFields(session)
         saveNow()
         ConchBlessing.printError(
-            "Appraisal canonical Death Certificate entry failed: "
-                .. tostring(transitionError or transitionModeAfter)
+            "Appraisal StageAPI entry failed: "
+                .. tostring(callOK and transitionReason or transitioned)
         )
-        return false, "transition_failed"
+        return false, transitionReason or "transition_failed"
     end
     return true
 end

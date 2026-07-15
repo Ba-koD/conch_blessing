@@ -9,10 +9,14 @@ ConchBlessing.atropos = ConchBlessing.atropos or {}
 local M = ConchBlessing.atropos
 
 local DC_DIMENSION = 2
+local DC_ENTRANCE_GRID_INDEX = 80
 local SAVE_KEY = "atroposNativeDeathCertificate"
 local OPTION_SAVE_KEY = "atroposChoiceOptionGroups"
 local SAVE_VERSION = 2
 local OPTION_SAVE_VERSION = 1
+local RETURN_DOOR_NAME = "ConchBlessingAtroposDeathCertificateReturn"
+local RETURN_DOOR_KIND = "atropos_death_certificate_return"
+local APPRAISAL_ORIGIN_KIND = "appraisal_stageapi"
 local PHASE_PREPARED = "prepared"
 local PHASE_CANCELLED = "cancelled"
 local PHASE_CLOSING = "closing"
@@ -39,6 +43,16 @@ local function isAppraisalGalleryRoom()
         and manager.isCurrentGalleryRoom()
 end
 
+local function getGalleryManager()
+    local manager = ConchBlessing.GalleryManager
+    if type(manager) == "table" then return manager end
+    return nil
+end
+
+local function isAppraisalOrigin(origin)
+    return type(origin) == "table" and origin.kind == APPRAISAL_ORIGIN_KIND
+end
+
 local function getState()
     M._state = M._state or {
         gameStartedKnown = false,
@@ -55,6 +69,8 @@ local function getState()
         optionSaveBlocked = false,
         optionFallbackLinked = false,
         hourglassTransition = nil,
+        pendingNativeOrigin = nil,
+        returnTransitionIssued = nil,
     }
     return M._state
 end
@@ -188,6 +204,7 @@ local function getCurrentRoomContext()
     if not level then return nil end
 
     local descriptor = level:GetCurrentRoomDesc()
+    local data = descriptor and descriptor.Data or nil
     local context = {
         stage = level:GetStage(),
         stageType = level:GetStageType(),
@@ -195,6 +212,12 @@ local function getCurrentRoomContext()
         listIndex = descriptor and descriptor.ListIndex or nil,
         spawnSeed = descriptor and descriptor.SpawnSeed or nil,
         decorationSeed = descriptor and descriptor.DecorationSeed or nil,
+        awardSeed = descriptor and descriptor.AwardSeed or nil,
+        gridIndex = descriptor and descriptor.GridIndex or nil,
+        safeGridIndex = descriptor and descriptor.SafeGridIndex or nil,
+        roomType = data and data.Type or nil,
+        roomVariant = data and data.Variant or nil,
+        roomSubType = data and (data.Subtype or data.SubType) or nil,
         dimension = getCurrentDimension(),
     }
     context.key = table.concat({
@@ -354,7 +377,585 @@ local function getNativeMapFingerprint()
     return table.concat(roomTokens, "|")
 end
 
-local function beginNativeSession()
+local function numbersMatch(left, right)
+    return tonumber(left) ~= nil
+        and tonumber(right) ~= nil
+        and tonumber(left) == tonumber(right)
+end
+
+local function getDescriptorDimension(descriptor)
+    if descriptor and type(descriptor.GetDimension) == "function" then
+        local ok, dimension = pcall(function() return descriptor:GetDimension() end)
+        if ok then return dimension end
+    end
+    return nil
+end
+
+local function descriptorMatchesSnapshot(snapshot, descriptor, dimension)
+    if type(snapshot) ~= "table" or not descriptor then return false end
+    local data = descriptor.Data
+    if not data then return false end
+
+    local descriptorDimension = getDescriptorDimension(descriptor)
+    if descriptorDimension ~= nil
+        and not numbersMatch(descriptorDimension, snapshot.dimension)
+    then
+        return false
+    end
+    if dimension ~= nil and not numbersMatch(dimension, snapshot.dimension) then
+        return false
+    end
+
+    return numbersMatch(descriptor.ListIndex, snapshot.listIndex)
+        and numbersMatch(descriptor.GridIndex, snapshot.gridIndex)
+        and numbersMatch(descriptor.SafeGridIndex, snapshot.safeGridIndex)
+        and numbersMatch(descriptor.SpawnSeed, snapshot.spawnSeed)
+        and numbersMatch(descriptor.DecorationSeed, snapshot.decorationSeed)
+        and numbersMatch(descriptor.AwardSeed, snapshot.awardSeed)
+        and numbersMatch(data.Type, snapshot.roomType)
+        and numbersMatch(data.Variant, snapshot.roomVariant)
+        and numbersMatch(data.Subtype or data.SubType, snapshot.roomSubType)
+end
+
+local function snapshotCurrentDescriptor(player)
+    local level = Game():GetLevel()
+    local descriptor = level and level:GetCurrentRoomDesc() or nil
+    local data = descriptor and descriptor.Data or nil
+    local dimension = getCurrentDimension()
+    local playerIndex = player and isc.getPlayerIndex(nil, player) or nil
+    if not level
+        or not descriptor
+        or not data
+        or dimension == nil
+        or playerIndex == nil
+        or tonumber(descriptor.SafeGridIndex) == nil
+        or tonumber(descriptor.SafeGridIndex) < 0
+    then
+        return nil
+    end
+
+    local snapshot = {
+        stage = level:GetStage(),
+        stageType = level:GetStageType(),
+        dimension = dimension,
+        roomIndex = level:GetCurrentRoomIndex(),
+        listIndex = descriptor.ListIndex,
+        gridIndex = descriptor.GridIndex,
+        safeGridIndex = descriptor.SafeGridIndex,
+        spawnSeed = descriptor.SpawnSeed,
+        decorationSeed = descriptor.DecorationSeed,
+        awardSeed = descriptor.AwardSeed,
+        roomType = data.Type,
+        roomVariant = data.Variant,
+        roomSubType = data.Subtype or data.SubType,
+        playerIndex = playerIndex,
+    }
+    if not descriptorMatchesSnapshot(snapshot, descriptor, dimension) then return nil end
+    return snapshot
+end
+
+local function snapshotCurrentEntrance()
+    local context = getCurrentRoomContext()
+    if not context
+        or not numbersMatch(context.dimension, DC_DIMENSION)
+        or not numbersMatch(context.roomIndex, DC_ENTRANCE_GRID_INDEX)
+        or not numbersMatch(context.gridIndex, DC_ENTRANCE_GRID_INDEX)
+        or not numbersMatch(context.safeGridIndex, DC_ENTRANCE_GRID_INDEX)
+        or not numbersMatch(context.roomSubType, 33)
+    then
+        return nil
+    end
+
+    return {
+        key = context.key,
+        stage = context.stage,
+        stageType = context.stageType,
+        dimension = context.dimension,
+        roomIndex = context.roomIndex,
+        listIndex = context.listIndex,
+        gridIndex = context.gridIndex,
+        safeGridIndex = context.safeGridIndex,
+        spawnSeed = context.spawnSeed,
+        decorationSeed = context.decorationSeed,
+        awardSeed = context.awardSeed,
+        roomType = context.roomType,
+        roomVariant = context.roomVariant,
+        roomSubType = context.roomSubType,
+    }
+end
+
+local function getRoomTransitionMode()
+    local roomTransition = rawget(_G, "RoomTransition")
+    if type(roomTransition) ~= "table"
+        or type(roomTransition.GetTransitionMode) ~= "function"
+    then
+        return nil
+    end
+    local ok, mode = pcall(roomTransition.GetTransitionMode)
+    if ok and type(mode) == "number" then return mode end
+    return nil
+end
+
+local function entranceMatchesCurrent(entrance)
+    if type(entrance) ~= "table" then return false end
+    local level = Game():GetLevel()
+    local descriptor = level and level:GetCurrentRoomDesc() or nil
+    if not level
+        or not numbersMatch(level:GetStage(), entrance.stage)
+        or not numbersMatch(level:GetStageType(), entrance.stageType)
+        or not numbersMatch(level:GetCurrentRoomIndex(), entrance.roomIndex)
+    then
+        return false
+    end
+    return descriptorMatchesSnapshot(entrance, descriptor, getCurrentDimension())
+end
+
+local function resolveOriginDescriptor(origin)
+    if type(origin) ~= "table" then return nil end
+    local level = Game():GetLevel()
+    if not level
+        or not numbersMatch(level:GetStage(), origin.stage)
+        or not numbersMatch(level:GetStageType(), origin.stageType)
+    then
+        return nil
+    end
+
+    local checked = {}
+    for _, index in ipairs({ origin.roomIndex, origin.safeGridIndex, origin.gridIndex }) do
+        index = tonumber(index)
+        if index and not checked[index] then
+            checked[index] = true
+            local descriptor = level:GetRoomByIdx(index, origin.dimension)
+            if descriptorMatchesSnapshot(origin, descriptor, origin.dimension) then
+                return descriptor
+            end
+        end
+    end
+    return nil
+end
+
+local function originIsValid(origin, dcSessionId)
+    if isAppraisalOrigin(origin) then
+        local manager = getGalleryManager()
+        return manager ~= nil
+            and type(manager.isDeathCertificateDetourValid) == "function"
+            and manager.isDeathCertificateDetourValid(origin, dcSessionId) == true
+    end
+    return resolveOriginDescriptor(origin) ~= nil
+end
+
+local function currentRoomMatchesOrigin(origin)
+    if type(origin) ~= "table" then return false end
+    if isAppraisalOrigin(origin) then
+        local manager = getGalleryManager()
+        return manager ~= nil
+            and type(manager.isCurrentDeathCertificateOrigin) == "function"
+            and manager.isCurrentDeathCertificateOrigin(origin) == true
+    end
+    local level = Game():GetLevel()
+    local descriptor = level and level:GetCurrentRoomDesc() or nil
+    local currentRoomIndex = level and level:GetCurrentRoomIndex() or nil
+    return level ~= nil
+        and numbersMatch(level:GetStage(), origin.stage)
+        and numbersMatch(level:GetStageType(), origin.stageType)
+        and (numbersMatch(currentRoomIndex, origin.roomIndex)
+            or numbersMatch(currentRoomIndex, origin.safeGridIndex)
+            or numbersMatch(currentRoomIndex, origin.gridIndex))
+        and descriptorMatchesSnapshot(origin, descriptor, getCurrentDimension())
+end
+
+local function takeValidatedPendingOrigin(previousDimension)
+    local state = getState()
+    local pending = state.pendingNativeOrigin
+    state.pendingNativeOrigin = nil
+    if type(pending) ~= "table"
+        or type(pending.origin) ~= "table"
+        or not snapshotCurrentEntrance()
+    then
+        return nil
+    end
+
+    local level = Game():GetLevel()
+    if not level or type(level.GetPreviousRoomIndex) ~= "function" then return nil end
+    local ok, previousRoomIndex = pcall(function() return level:GetPreviousRoomIndex() end)
+    if not ok then return nil end
+
+    if isAppraisalOrigin(pending.origin) then
+        local origin = pending.origin
+        local manager = getGalleryManager()
+        local stageAPI = rawget(_G, "StageAPI")
+        local previousExtra = type(stageAPI) == "table"
+            and stageAPI.PreviousExtraRoomData
+            or nil
+        local descriptorOK, descriptor = pcall(function()
+            return level:GetRoomByIdx(origin.baseRoomIndex)
+        end)
+        local data = descriptorOK and descriptor and descriptor.Data or nil
+        local valid = numbersMatch(previousDimension, origin.underlyingDimension)
+            and numbersMatch(level:GetStage(), origin.stage)
+            and numbersMatch(level:GetStageType(), origin.stageType)
+            and numbersMatch(previousRoomIndex, origin.baseRoomIndex)
+            and descriptor ~= nil
+            and data ~= nil
+            and numbersMatch(data.Variant, origin.baseRoomVariant)
+            and numbersMatch(descriptor.SpawnSeed, origin.baseRoomSpawnSeed)
+            and type(previousExtra) == "table"
+            and numbersMatch(previousExtra.MapID, origin.mapDimension)
+            and numbersMatch(previousExtra.RoomID, origin.mapID)
+            and numbersMatch(previousExtra.RoomIndex, origin.baseRoomIndex)
+            and numbersMatch(previousExtra.RoomVariant, origin.baseRoomVariant)
+            and numbersMatch(previousExtra.RoomSeed, origin.baseRoomSpawnSeed)
+            and manager ~= nil
+            and type(manager.isDeathCertificateDetourPrepared) == "function"
+            and manager.isDeathCertificateDetourPrepared(origin) == true
+        if not valid then
+            if manager and type(manager.abortDeathCertificateDetour) == "function" then
+                manager.abortDeathCertificateDetour(origin, nil)
+            end
+            return nil
+        end
+        return pending
+    end
+
+    if not numbersMatch(previousDimension, pending.origin.dimension)
+        or not resolveOriginDescriptor(pending.origin)
+        or (not numbersMatch(previousRoomIndex, pending.origin.roomIndex)
+            and not numbersMatch(previousRoomIndex, pending.origin.safeGridIndex)
+            and not numbersMatch(previousRoomIndex, pending.origin.gridIndex))
+    then
+        return nil
+    end
+    return pending
+end
+
+local function isStageAPIExtraOrigin()
+    local stageAPI = rawget(_G, "StageAPI")
+    if type(stageAPI) ~= "table" then return true end
+
+    if type(stageAPI.InOrTransitioningToExtraRoom) == "function" then
+        local ok, result = pcall(stageAPI.InOrTransitioningToExtraRoom)
+        if not ok or type(result) ~= "boolean" then return true end
+        return result
+    end
+    if stageAPI.TransitioningToExtraRoom == true then return true end
+    if type(stageAPI.InExtraRoom) == "function" then
+        local ok, result = pcall(stageAPI.InExtraRoom)
+        if not ok or type(result) ~= "boolean" then return true end
+        return result
+    end
+    if stageAPI.CurrentLevelMapRoomID ~= nil
+        or (stageAPI.CurrentLevelMapID ~= nil
+            and stageAPI.CurrentLevelMapID ~= stageAPI.DefaultLevelMapID)
+    then
+        return true
+    end
+    -- Without one of StageAPI's explicit extra-room signals the origin cannot
+    -- be proven native, so the vanilla Fool remains the only return path.
+    return true
+end
+
+local function getReturnDoorData(gridData)
+    local persistData = gridData and (gridData.PersistData or gridData.PersistentData) or nil
+    local data = persistData and persistData.Data or nil
+    if type(persistData) ~= "table"
+        or persistData.DoorDataName ~= RETURN_DOOR_NAME
+        or type(data) ~= "table"
+        or data.kind ~= RETURN_DOOR_KIND
+    then
+        return nil, nil
+    end
+    return data, persistData
+end
+
+local function returnDoorDataMatches(gridData, nativeSave)
+    local data, persistData = getReturnDoorData(gridData)
+    local entrance = nativeSave and nativeSave.entrance or nil
+    return data ~= nil
+        and persistData ~= nil
+        and numbersMatch(persistData.Slot, DoorSlot.LEFT0)
+        and type(nativeSave) == "table"
+        and data.sessionId == nativeSave.sessionId
+        and type(entrance) == "table"
+        and data.entranceKey == entrance.key
+end
+
+local function supportsReturnDoor()
+    local stageAPI = rawget(_G, "StageAPI")
+    local repentogon = rawget(_G, "REPENTOGON")
+    local game = Game()
+    return M._returnDoorRegistered == true
+        and type(repentogon) == "table"
+        and repentogon.Real == true
+        and type(stageAPI) == "table"
+        and stageAPI.Loaded == true
+        and type(stageAPI.GetCustomDoorDataAtSlot) == "function"
+        and type(stageAPI.GetCustomDoors) == "function"
+        and type(stageAPI.SpawnCustomDoor) == "function"
+        and type(stageAPI.SetDoorOpen) == "function"
+        and game ~= nil
+        and type(game.StartRoomTransition) == "function"
+        and getRoomTransitionMode() ~= nil
+end
+
+local function removeOwnedReturnDoor(nativeSave)
+    local stageAPI = rawget(_G, "StageAPI")
+    if type(stageAPI) ~= "table" or type(stageAPI.GetCustomDoors) ~= "function" then
+        return false
+    end
+
+    local removed = false
+    local ok, doors = pcall(stageAPI.GetCustomDoors, RETURN_DOOR_NAME)
+    if not ok or type(doors) ~= "table" then return false end
+    for _, customGrid in ipairs(doors) do
+        local data, persistData = getReturnDoorData(customGrid)
+        if data
+            and persistData
+            and numbersMatch(persistData.Slot, DoorSlot.LEFT0)
+            and (not nativeSave or not returnDoorDataMatches(customGrid, nativeSave))
+            and type(customGrid.Remove) == "function"
+        then
+            local door = customGrid.Data and customGrid.Data.DoorEntity or nil
+            if door and door:Exists() then
+                pcall(stageAPI.SetDoorOpen, false, door)
+                pcall(function() door:Remove() end)
+            end
+            local removedOk = pcall(function() customGrid:Remove(true) end)
+            removed = removedOk or removed
+        end
+    end
+    return removed
+end
+
+local function setReturnDoorOpen(nativeSave, open)
+    local stageAPI = rawget(_G, "StageAPI")
+    if type(stageAPI) ~= "table"
+        or type(stageAPI.GetCustomDoors) ~= "function"
+        or type(stageAPI.SetDoorOpen) ~= "function"
+    then
+        return
+    end
+
+    local ok, doors = pcall(stageAPI.GetCustomDoors, RETURN_DOOR_NAME)
+    if not ok or type(doors) ~= "table" then return end
+    for _, customGrid in ipairs(doors) do
+        if returnDoorDataMatches(customGrid, nativeSave) then
+            local door = customGrid.Data and customGrid.Data.DoorEntity or nil
+            if door then pcall(stageAPI.SetDoorOpen, open, door) end
+        end
+    end
+end
+
+local function rollbackReturnIntent(nativeSave, intent, message)
+    local state = getState()
+    state.returnTransitionIssued = nil
+    nativeSave.returnIntent = nil
+    if not saveNow() then nativeSave.returnIntent = intent end
+    if message then ConchBlessing.printError(message) end
+end
+
+local function tryReturnThroughDoor(doorGridData)
+    local state = getState()
+    if state.returnDoorSyncInProgress == true
+        or state.returnTransitionIssued ~= nil
+        or type(state.hourglassTransition) == "table"
+        or isAppraisalGalleryRoom()
+    then
+        return
+    end
+
+    local nativeSave = state.nativeSessionReady == true and getNativeSave(false) or nil
+    if not nativeSave
+        or nativeSave.active ~= true
+        or type(nativeSave.transaction) == "table"
+        or nativeSave.returnIntent ~= nil
+        or not returnDoorDataMatches({ PersistData = doorGridData }, nativeSave)
+        or not entranceMatchesCurrent(nativeSave.entrance)
+        or not originIsValid(nativeSave.origin, nativeSave.sessionId)
+        or not anyoneHasAtropos()
+    then
+        return
+    end
+
+    local player = isc.getPlayerFromIndex(nil, nativeSave.ownerPlayerIndex)
+    local game = Game()
+    if not player or getRoomTransitionMode() ~= 0 then return end
+
+    local intent = {
+        sessionId = nativeSave.sessionId,
+        entranceKey = nativeSave.entrance.key,
+        targetKind = nativeSave.origin.kind,
+        detourId = nativeSave.origin.detourId,
+        targetMapDimension = nativeSave.origin.mapDimension,
+        targetMapID = nativeSave.origin.mapID,
+        originListIndex = nativeSave.origin.listIndex,
+        targetSafeGridIndex = nativeSave.origin.safeGridIndex,
+        targetDimension = nativeSave.origin.dimension,
+    }
+    nativeSave.returnIntent = intent
+    if not saveNow() then
+        nativeSave.returnIntent = nil
+        ConchBlessing.printError("Atropos kept its return door closed because the return intent was not saved.")
+        return
+    end
+
+    -- Arm the process latch before invoking the engine: MC_POST_NEW_ROOM may
+    -- run synchronously, and StageAPI evaluates this exit callback every frame.
+    state.returnTransitionIssued = nativeSave.sessionId
+    setReturnDoorOpen(nativeSave, false)
+    local transitioned, transitionError
+    if isAppraisalOrigin(nativeSave.origin) then
+        local manager = getGalleryManager()
+        local callOK, result, reason = pcall(function()
+            return manager and manager.returnDeathCertificateDetour(
+                nativeSave.origin,
+                nativeSave.sessionId,
+                player
+            )
+        end)
+        transitioned = callOK and result == true
+        transitionError = callOK and reason or result
+    else
+        transitioned, transitionError = pcall(function()
+            game:StartRoomTransition(
+                nativeSave.origin.safeGridIndex,
+                Direction.NO_DIRECTION,
+                RoomTransitionAnim.FADE,
+                player,
+                nativeSave.origin.dimension
+            )
+        end)
+    end
+    local modeAfter = getRoomTransitionMode()
+    local sessionEnded = nativeSave.active ~= true
+    if not transitioned or (not sessionEnded and (modeAfter == nil or modeAfter == 0)) then
+        rollbackReturnIntent(
+            nativeSave,
+            intent,
+            "Atropos could not start its Death Certificate return transition: "
+                .. tostring(transitionError or modeAfter)
+        )
+    end
+end
+
+local function syncReturnDoorInner()
+    if getCurrentDimension() ~= DC_DIMENSION or isAppraisalGalleryRoom() then return end
+
+    local state = getState()
+    local nativeSave = state.nativeSessionReady == true and getNativeSave(false) or nil
+    if not nativeSave
+        or nativeSave.active ~= true
+        or not entranceMatchesCurrent(nativeSave.entrance)
+    then
+        -- A saved StageAPI custom grid can respawn before this mod has proved
+        -- the matching native session. Remove it instead of leaving a passable
+        -- wall whose exit callback must reject the player.
+        removeOwnedReturnDoor(nil)
+        return
+    end
+
+    local stageAPI = rawget(_G, "StageAPI")
+    if not supportsReturnDoor()
+        or not anyoneHasAtropos()
+        or not originIsValid(nativeSave.origin, nativeSave.sessionId)
+    then
+        removeOwnedReturnDoor(nil)
+        return
+    end
+
+    local room = Game():GetRoom()
+    if room and room:GetDoor(DoorSlot.LEFT0) then
+        removeOwnedReturnDoor(nil)
+        return
+    end
+
+    local existing = stageAPI.GetCustomDoorDataAtSlot(DoorSlot.LEFT0)
+    if existing and not returnDoorDataMatches(existing, nativeSave) then
+        local owned = getReturnDoorData(existing) ~= nil
+        if not owned then return end
+        removeOwnedReturnDoor(nativeSave)
+        existing = stageAPI.GetCustomDoorDataAtSlot(DoorSlot.LEFT0)
+        if existing then return end
+    end
+
+    if not existing then
+        local spawned = pcall(
+            stageAPI.SpawnCustomDoor,
+            DoorSlot.LEFT0,
+            nil,
+            nil,
+            RETURN_DOOR_NAME,
+            {
+                kind = RETURN_DOOR_KIND,
+                sessionId = nativeSave.sessionId,
+                entranceKey = nativeSave.entrance.key,
+            },
+            DoorSlot.RIGHT0,
+            nil,
+            RoomTransitionAnim.FADE,
+            nil,
+            false
+        )
+        if not spawned then return end
+        existing = stageAPI.GetCustomDoorDataAtSlot(DoorSlot.LEFT0, RETURN_DOOR_NAME)
+        if not returnDoorDataMatches(existing, nativeSave) then return end
+    end
+
+    local open = nativeSave.transaction == nil
+        and nativeSave.returnIntent == nil
+        and state.returnTransitionIssued == nil
+    setReturnDoorOpen(nativeSave, open)
+end
+
+local function syncReturnDoor()
+    local state = getState()
+    if state.returnDoorSyncInProgress == true then return end
+    state.returnDoorSyncInProgress = true
+    local ok, syncError = pcall(syncReturnDoorInner)
+    state.returnDoorSyncInProgress = false
+    if not ok and state.returnDoorSyncFailureReported ~= true then
+        state.returnDoorSyncFailureReported = true
+        ConchBlessing.printError("Atropos could not synchronize its return door: " .. tostring(syncError))
+    elseif ok then
+        state.returnDoorSyncFailureReported = false
+    end
+end
+
+local function bindAppraisalOriginIfNeeded(nativeSave)
+    local origin = nativeSave and nativeSave.origin or nil
+    if not isAppraisalOrigin(origin) then return true end
+    local manager = getGalleryManager()
+    local bound = manager
+        and type(manager.bindDeathCertificateDetour) == "function"
+        and manager.bindDeathCertificateDetour(origin, nativeSave.sessionId) == true
+    if not bound and manager
+        and type(manager.isDeathCertificateDetourValid) == "function"
+    then
+        bound = manager.isDeathCertificateDetourValid(
+            origin,
+            nativeSave.sessionId
+        ) == true
+    end
+    if bound then return true end
+
+    if manager and type(manager.abortDeathCertificateDetour) == "function" then
+        manager.abortDeathCertificateDetour(origin, nil)
+    end
+    nativeSave.origin = nil
+    nativeSave.ownerPlayerIndex = nil
+    nativeSave.entrance = nil
+    nativeSave.returnIntent = nil
+    if not saveNow() then
+        ConchBlessing.printError(
+            "Atropos could not persist removal of an unbound Appraisal return origin."
+        )
+    end
+    ConchBlessing.printError(
+        "Atropos could not bind Appraisal to its Death Certificate session; The Fool remains available."
+    )
+    return false
+end
+
+local function beginNativeSession(origin, ownerPlayerIndex)
     local state = getState()
     state.nativeSessionReady = false
 
@@ -369,6 +970,8 @@ local function beginNativeSession()
             attempts = type(pending) == "table" and pending.kind == "initialize"
                 and (tonumber(pending.attempts) or 0)
                 or 0,
+            origin = origin,
+            ownerPlayerIndex = ownerPlayerIndex,
         }
         if state.mapFingerprintFailureReported ~= true then
             state.mapFingerprintFailureReported = true
@@ -387,9 +990,18 @@ local function beginNativeSession()
     nativeSave.sessionId = tostring(startSeed) .. ":" .. tostring(sequence)
     nativeSave.rooms = {}
     nativeSave.transaction = nil
+    nativeSave.returnIntent = nil
+    nativeSave.foolSpawned = false
+    local acceptsOrigin = isAppraisalOrigin(origin)
+        or resolveOriginDescriptor(origin) ~= nil
+    nativeSave.origin = acceptsOrigin and origin or nil
+    nativeSave.ownerPlayerIndex = nativeSave.origin and ownerPlayerIndex or nil
+    nativeSave.entrance = nativeSave.origin and snapshotCurrentEntrance() or nil
     if saveNow() then
+        bindAppraisalOriginIfNeeded(nativeSave)
         state.nativeSessionReady = true
         state.nativeBoundarySavePending = nil
+        state.returnTransitionIssued = nil
         return nativeSave
     end
 
@@ -433,6 +1045,45 @@ local function ensureContinuedNativeSession()
         return nil
     end
 
+    if isAppraisalOrigin(nativeSave.origin)
+        and not originIsValid(nativeSave.origin, nativeSave.sessionId)
+    then
+        local manager = getGalleryManager()
+        if manager
+            and type(manager.isDeathCertificateDetourPrepared) == "function"
+            and manager.isDeathCertificateDetourPrepared(nativeSave.origin) == true
+        then
+            bindAppraisalOriginIfNeeded(nativeSave)
+        end
+    end
+    if isAppraisalOrigin(nativeSave.origin)
+        and not originIsValid(nativeSave.origin, nativeSave.sessionId)
+    then
+        local staleOrigin = nativeSave.origin
+        local manager = getGalleryManager()
+        if manager and type(manager.abortDeathCertificateDetour) == "function" then
+            manager.abortDeathCertificateDetour(staleOrigin, nativeSave.sessionId)
+        end
+        nativeSave.origin = nil
+        nativeSave.ownerPlayerIndex = nil
+        nativeSave.entrance = nil
+        nativeSave.returnIntent = nil
+        if not saveNow() then
+            ConchBlessing.printError(
+                "Atropos could not persist removal of a stale Appraisal return origin."
+            )
+        end
+    elseif nativeSave.returnIntent ~= nil and not isAppraisalOrigin(nativeSave.origin) then
+        local interruptedIntent = nativeSave.returnIntent
+        nativeSave.returnIntent = nil
+        if not saveNow() then
+            nativeSave.returnIntent = interruptedIntent
+            ConchBlessing.printError(
+                "Atropos kept an interrupted return intent closed; The Fool remains available."
+            )
+        end
+    end
+
     state.nativeSessionReady = true
     state.nativeBoundarySavePending = nil
     return nativeSave
@@ -441,6 +1092,8 @@ end
 local function endNativeSession()
     local state = getState()
     state.nativeSessionReady = false
+    state.returnTransitionIssued = nil
+    state.pendingNativeOrigin = nil
 
     local nativeSave = getNativeSave(false)
     if not nativeSave then
@@ -456,6 +1109,11 @@ local function endNativeSession()
     nativeSave.mapFingerprint = nil
     nativeSave.rooms = {}
     nativeSave.transaction = nil
+    nativeSave.foolSpawned = nil
+    nativeSave.origin = nil
+    nativeSave.ownerPlayerIndex = nil
+    nativeSave.entrance = nil
+    nativeSave.returnIntent = nil
     if saveNow() then
         state.nativeBoundarySavePending = nil
         return true
@@ -463,6 +1121,204 @@ local function endNativeSession()
 
     state.nativeBoundarySavePending = { kind = "end", attempts = 0 }
     ConchBlessing.printError("Atropos will retry saving its Death Certificate session end.")
+    return false
+end
+
+local function settleCurrentAppraisalDetour()
+    if not isAppraisalGalleryRoom() then return false end
+    local state = getState()
+    local manager = getGalleryManager()
+    if not manager
+        or type(manager.getDeathCertificateDetour) ~= "function"
+        or type(manager.markDeathCertificateDetourArrived) ~= "function"
+        or type(manager.completeDeathCertificateDetourArrival) ~= "function"
+    then
+        return false
+    end
+
+    local pending = state.pendingAppraisalDetourCompletion
+    local nativeSave = getNativeSave(false)
+    if type(pending) ~= "table" then
+        if nativeSave
+            and nativeSave.active == true
+            and isAppraisalOrigin(nativeSave.origin)
+            and type(nativeSave.sessionId) == "string"
+            and currentRoomMatchesOrigin(nativeSave.origin)
+        then
+            pending = {
+                origin = nativeSave.origin,
+                dcSessionId = nativeSave.sessionId,
+                underlyingDimension = nativeSave.origin.underlyingDimension,
+            }
+        else
+            local detour = manager.getDeathCertificateDetour()
+            if nativeSave and nativeSave.active == true then return false end
+            if type(detour) ~= "table"
+                or detour.phase ~= "arrived"
+                or type(detour.dcSessionId) ~= "string"
+                or manager.isCurrentDeathCertificateOrigin(detour) ~= true
+            then
+                return false
+            end
+            pending = {
+                origin = detour,
+                dcSessionId = detour.dcSessionId,
+                underlyingDimension = detour.underlyingDimension,
+            }
+        end
+
+        local marked, markReason = manager.markDeathCertificateDetourArrived(
+            pending.origin,
+            pending.dcSessionId
+        )
+        if marked ~= true then
+            ConchBlessing.printError(
+                "Atropos could not persist its return to Appraisal: "
+                    .. tostring(markReason)
+            )
+            return false
+        end
+        state.pendingAppraisalDetourCompletion = pending
+    end
+
+    nativeSave = getNativeSave(false)
+    if nativeSave and nativeSave.active == true then
+        if nativeSave.sessionId ~= pending.dcSessionId
+            or not isAppraisalOrigin(nativeSave.origin)
+        then
+            return false
+        end
+        if not endNativeSession() then return false end
+    elseif type(state.nativeBoundarySavePending) == "table" then
+        return false
+    end
+
+    local completed, completionReason = manager.completeDeathCertificateDetourArrival(
+        pending.origin,
+        pending.dcSessionId
+    )
+    if completed ~= true then
+        ConchBlessing.printError(
+            "Atropos could not close its completed Appraisal detour: "
+                .. tostring(completionReason)
+        )
+        return false
+    end
+    state.pendingAppraisalDetourCompletion = nil
+    state.returnTransitionIssued = nil
+    state.droppedInCurrentDC = false
+    state.lastDimension = tonumber(pending.underlyingDimension)
+    return true
+end
+
+local function endNativeSessionAndAbortAppraisalDetour(nativeSave)
+    local state = getState()
+    local origin = nativeSave and nativeSave.origin or nil
+    local dcSessionId = nativeSave and nativeSave.sessionId or nil
+    local isDetour = isAppraisalOrigin(origin) and type(dcSessionId) == "string"
+    local ended = endNativeSession()
+    if not isDetour then return ended end
+    local pending = {
+        origin = origin,
+        dcSessionId = dcSessionId,
+    }
+    if not ended then
+        state.pendingAppraisalDetourAbort = pending
+        return false
+    end
+    local manager = getGalleryManager()
+    local aborted = manager
+        and type(manager.abortDeathCertificateDetour) == "function"
+        and manager.abortDeathCertificateDetour(origin, dcSessionId) == true
+    if not aborted then
+        state.pendingAppraisalDetourAbort = pending
+        return false
+    end
+    state.pendingAppraisalDetourAbort = nil
+    return true
+end
+
+local function finishPendingAppraisalDetourAbort()
+    if isAppraisalGalleryRoom() or getCurrentDimension() == DC_DIMENSION then
+        return false
+    end
+    local state = getState()
+    local manager = getGalleryManager()
+    if not manager or type(manager.abortDeathCertificateDetour) ~= "function" then
+        return false
+    end
+    local pending = state.pendingAppraisalDetourAbort
+    local nativeSave = getNativeSave(false)
+    if type(pending) ~= "table"
+        and (not nativeSave or nativeSave.active ~= true)
+        and type(manager.getDeathCertificateDetour) == "function"
+    then
+        local detour = manager.getDeathCertificateDetour()
+        if type(detour) == "table"
+            and type(detour.dcSessionId) == "string"
+            and (detour.phase == "active"
+                or detour.phase == "reentering"
+                or detour.phase == "arrived")
+        then
+            pending = { origin = detour, dcSessionId = detour.dcSessionId }
+            state.pendingAppraisalDetourAbort = pending
+        end
+    end
+    if type(pending) ~= "table"
+        or (nativeSave and nativeSave.active == true)
+        or type(state.nativeBoundarySavePending) == "table"
+    then
+        return false
+    end
+    if manager.abortDeathCertificateDetour(
+        pending.origin,
+        pending.dcSessionId
+    ) ~= true then
+        return false
+    end
+    state.pendingAppraisalDetourAbort = nil
+    return true
+end
+
+local function resumeAppraisalReturnIfNeeded()
+    local state = getState()
+    local nativeSave = state.nativeSessionReady == true and getNativeSave(false) or nil
+    if getCurrentDimension() ~= DC_DIMENSION
+        or isAppraisalGalleryRoom()
+        or state.returnTransitionIssued ~= nil
+        or not nativeSave
+        or nativeSave.active ~= true
+        or not isAppraisalOrigin(nativeSave.origin)
+        or type(nativeSave.returnIntent) ~= "table"
+        or nativeSave.returnIntent.sessionId ~= nativeSave.sessionId
+        or not entranceMatchesCurrent(nativeSave.entrance)
+        or not originIsValid(nativeSave.origin, nativeSave.sessionId)
+        or getRoomTransitionMode() ~= 0
+    then
+        return false
+    end
+    local player = isc.getPlayerFromIndex(nil, nativeSave.ownerPlayerIndex)
+    local manager = getGalleryManager()
+    if not player or not manager
+        or type(manager.returnDeathCertificateDetour) ~= "function"
+    then
+        return false
+    end
+    state.returnTransitionIssued = nativeSave.sessionId
+    setReturnDoorOpen(nativeSave, false)
+    local callOK, transitioned, reason = pcall(
+        manager.returnDeathCertificateDetour,
+        nativeSave.origin,
+        nativeSave.sessionId,
+        player
+    )
+    if callOK and transitioned == true then return true end
+    rollbackReturnIntent(
+        nativeSave,
+        nativeSave.returnIntent,
+        "Atropos could not resume its Appraisal return transition: "
+            .. tostring(callOK and reason or transitioned)
+    )
     return false
 end
 
@@ -477,7 +1333,9 @@ local function retryNativeBoundarySave()
     local dimension = getCurrentDimension()
     local nativeSave = getNativeSave(false)
     if pending.kind == "initialize" then
-        if dimension == DC_DIMENSION then beginNativeSession() end
+        if dimension == DC_DIMENSION then
+            beginNativeSession(pending.origin, pending.ownerPlayerIndex)
+        end
     elseif pending.kind == "continue" then
         if dimension == DC_DIMENSION then ensureContinuedNativeSession() end
     elseif pending.kind == "begin" then
@@ -489,11 +1347,12 @@ local function retryNativeBoundarySave()
             return
         end
         if saveNow() then
+            bindAppraisalOriginIfNeeded(nativeSave)
             state.nativeBoundarySavePending = nil
             state.nativeSessionReady = true
         end
     elseif pending.kind == "end" then
-        if dimension == DC_DIMENSION
+        if (dimension == DC_DIMENSION and not isAppraisalGalleryRoom())
             or not nativeSave
             or nativeSave.active == true
         then
@@ -501,6 +1360,60 @@ local function retryNativeBoundarySave()
         end
         if saveNow() then state.nativeBoundarySavePending = nil end
     end
+end
+
+function M.clearPendingDeathCertificateOrigin()
+    local state = M._state
+    if state then state.pendingNativeOrigin = nil end
+end
+
+function M.onPreUseDeathCertificate(_, collectibleId, _, player)
+    local state = getState()
+    -- Every invocation invalidates an older candidate first so a failed or
+    -- superseded use cannot bind its origin to a later dimension-2 entry.
+    M.clearPendingDeathCertificateOrigin()
+    if collectibleId ~= CollectibleType.COLLECTIBLE_DEATH_CERTIFICATE
+        or state.gameStartedKnown ~= true
+        or not player
+        or type(state.hourglassTransition) == "table"
+        or getRoomTransitionMode() ~= 0
+    then
+        return
+    end
+
+    if isAppraisalGalleryRoom() then
+        if not anyoneHasAtropos() then return end
+        local manager = getGalleryManager()
+        local origin, reason
+        if manager and type(manager.prepareDeathCertificateDetour) == "function" then
+            origin, reason = manager.prepareDeathCertificateDetour(player)
+        end
+        if origin then
+            state.pendingNativeOrigin = {
+                origin = origin,
+                playerIndex = origin.playerIndex,
+            }
+        else
+            ConchBlessing.printError(
+                "Atropos could not prepare Appraisal's Death Certificate return: "
+                    .. tostring(reason or "manager_unavailable")
+            )
+        end
+        -- Never cancel Death Certificate. If exact Appraisal capture failed,
+        -- vanilla still enters dimension 2 and The Fool remains its escape.
+        return
+    end
+
+    if getCurrentDimension() == DC_DIMENSION or isStageAPIExtraOrigin() then
+        return
+    end
+
+    local origin = snapshotCurrentDescriptor(player)
+    if not origin then return end
+    state.pendingNativeOrigin = {
+        origin = origin,
+        playerIndex = origin.playerIndex,
+    }
 end
 
 local function spawnFoolIfNeeded(state)
@@ -516,6 +1429,11 @@ local function spawnFoolIfNeeded(state)
         local pickup = entity:ToPickup()
         if pickup and pickup:Exists() then
             state.droppedInCurrentDC = true
+            local nativeSave = state.nativeSessionReady == true and getNativeSave(false) or nil
+            if nativeSave and nativeSave.foolSpawned ~= true then
+                nativeSave.foolSpawned = true
+                saveNow()
+            end
             return
         end
     end
@@ -531,6 +1449,11 @@ local function spawnFoolIfNeeded(state)
         nil
     )
     state.droppedInCurrentDC = true
+    local nativeSave = state.nativeSessionReady == true and getNativeSave(false) or nil
+    if nativeSave and nativeSave.foolSpawned ~= true then
+        nativeSave.foolSpawned = true
+        saveNow()
+    end
     ConchBlessing.printDebug("[Atropos] Dropped The Fool in Death Certificate.")
 end
 
@@ -546,9 +1469,9 @@ local function resumeHourglassNativeSession()
 
     local nativeSave = ensureContinuedNativeSession()
     if nativeSave then
-        -- The rewound session already owns the Fool created at its original
-        -- entry. Do not create another card in later DC rooms.
-        state.droppedInCurrentDC = true
+        -- Preserve the exact first-room Fool state instead of assuming that
+        -- Atropos was already held when the rewound DC session began.
+        state.droppedInCurrentDC = nativeSave.foolSpawned == true
         return true
     end
 
@@ -591,6 +1514,8 @@ function M.onPreHourglassReset()
     }
     state.nativeSessionReady = false
     state.runtimeTransactionToken = nil
+    state.pendingNativeOrigin = nil
+    state.returnTransitionIssued = nil
 end
 
 function M.onPostHourglassReset()
@@ -607,6 +1532,8 @@ function M.onPostHourglassReset()
     transition.postResetSeen = true
     state.nativeBoundarySavePending = nil
     state.runtimeTransactionToken = nil
+    state.pendingNativeOrigin = nil
+    state.returnTransitionIssued = nil
     state.optionGroupsReady = false
     state.optionRestoreNeeded = true
     state.optionSaveBlocked = false
@@ -978,6 +1905,7 @@ function M.onPrePickupCollision(_, pickup, collider)
     end
 
     state.runtimeTransactionToken = transactionToken
+    syncReturnDoor()
 end
 
 function M.onPreAddCollectible(_, collectibleId, _, _, _, _, player)
@@ -1050,9 +1978,17 @@ function M.onPostPickupCollision(_, pickup, collider)
 end
 
 function M.onPostUpdate()
-    if isAppraisalGalleryRoom() then return end
     local state = getState()
+    if type(state.nativeBoundarySavePending) == "table" then
+        retryNativeBoundarySave()
+    end
+    if isAppraisalGalleryRoom() then
+        settleCurrentAppraisalDetour()
+        return
+    end
+    finishPendingAppraisalDetourAbort()
     if type(state.hourglassTransition) == "table" then return end
+    resumeAppraisalReturnIfNeeded()
     if state.gameStartedKnown
         and state.nativeSessionReady == true
         and getCurrentDimension() == DC_DIMENSION
@@ -1096,19 +2032,29 @@ function M.onPostUpdate()
     elseif hasAtropos then
         state.optionSaveFailureReported = false
     end
+
+    if getCurrentDimension() == DC_DIMENSION then
+        -- Acquiring Atropos after entry may materialize the first-room escape,
+        -- but must never move the documented Fool drop into a later room.
+        local nativeSave = state.nativeSessionReady == true and getNativeSave(false) or nil
+        if nativeSave and entranceMatchesCurrent(nativeSave.entrance) then
+            spawnFoolIfNeeded(state)
+        end
+        syncReturnDoor()
+    end
 end
 
 function M.onPostNewRoom()
     local dimension = getCurrentDimension()
     local state = getState()
     if isAppraisalGalleryRoom() then
-        -- Appraisal owns these native dimension-2 descriptors. They are not a
-        -- vanilla Death Certificate session: do not spawn The Fool, rewrite
-        -- option groups, or open Atropos's collectible transaction here.
-        state.lastDimension = nil
-        state.nativeSessionReady = false
-        state.nativeBoundarySavePending = nil
+        -- Appraisal is a StageAPI detour outside every native dimension. Keep
+        -- lastDimension and the complete Death Certificate ledger untouched:
+        -- entering AC from DC and returning to DC is not a DC exit/re-entry.
+        -- Only process-local collision evidence cannot survive leaving the
+        -- physical room and is safe to discard here.
         state.runtimeTransactionToken = nil
+        if state.gameStartedKnown then settleCurrentAppraisalDetour() end
         return
     end
     if not state.gameStartedKnown then
@@ -1124,6 +2070,8 @@ function M.onPostNewRoom()
         -- arrive in either order. Record the room event and make no gameplay
         -- mutation until both halves of the handshake have completed.
         state.runtimeTransactionToken = nil
+        state.pendingNativeOrigin = nil
+        state.returnTransitionIssued = nil
         state.optionGroupsReady = false
         state.optionRestoreNeeded = true
         state.optionSaveBlocked = false
@@ -1141,10 +2089,35 @@ function M.onPostNewRoom()
     state.optionRestoreNeeded = true
     state.optionSaveBlocked = false
     state.optionFallbackLinked = false
+    if dimension ~= DC_DIMENSION and previousDimension ~= DC_DIMENSION then
+        state.pendingNativeOrigin = nil
+    end
+
+    local pending = dimension == DC_DIMENSION
+        and takeValidatedPendingOrigin(previousDimension)
+        or nil
 
     if previousDimension == DC_DIMENSION and dimension ~= DC_DIMENSION then
-        endNativeSession()
+        local nativeSave = getNativeSave(false)
+        if nativeSave
+            and nativeSave.active == true
+            and type(nativeSave.returnIntent) == "table"
+            and nativeSave.returnIntent.sessionId == nativeSave.sessionId
+            and not currentRoomMatchesOrigin(nativeSave.origin)
+        then
+            ConchBlessing.printError(
+                "Atropos's return transition reached an unexpected room; its session was closed."
+            )
+        end
+        endNativeSessionAndAbortAppraisalDetour(nativeSave)
         state.droppedInCurrentDC = false
+    elseif dimension == DC_DIMENSION and pending then
+        beginNativeSession(
+            pending.origin,
+            pending.playerIndex
+        )
+        state.droppedInCurrentDC = false
+        spawnFoolIfNeeded(state)
     elseif dimension == DC_DIMENSION and previousDimension ~= DC_DIMENSION then
         beginNativeSession()
         state.droppedInCurrentDC = false
@@ -1160,6 +2133,7 @@ function M.onPostNewRoom()
     end
 
     state.lastDimension = dimension
+    if dimension == DC_DIMENSION then syncReturnDoor() end
 end
 
 function M.onGameStarted(_, isContinued)
@@ -1178,27 +2152,72 @@ function M.onGameStarted(_, isContinued)
         optionSaveBlocked = false,
         optionFallbackLinked = false,
         hourglassTransition = nil,
+        pendingNativeOrigin = nil,
+        returnTransitionIssued = nil,
+        pendingAppraisalDetourCompletion = nil,
+        pendingAppraisalDetourAbort = nil,
     }
     M._reportedSaveUnavailable = false
 
     if isAppraisalGalleryRoom() then
-        M._state.lastDimension = nil
+        local manager = ConchBlessing.GalleryManager
+        local originDimension = type(manager) == "table"
+            and type(manager.getCurrentGalleryOriginDimension) == "function"
+            and manager.getCurrentGalleryOriginDimension()
+            or nil
+        local nativeSave = getNativeSave(false)
+        if settleCurrentAppraisalDetour() then return end
+        local preservesDeathCertificate = originDimension == DC_DIMENSION
+            or (
+                originDimension == nil
+                and nativeSave
+                and nativeSave.active == true
+            )
+            or (nativeSave
+                and nativeSave.active == true
+                and isAppraisalOrigin(nativeSave.origin))
+        M._state.lastDimension = preservesDeathCertificate
+            and DC_DIMENSION
+            or originDimension
+        if isContinued and preservesDeathCertificate then
+            local restored = ensureContinuedNativeSession()
+            M._state.droppedInCurrentDC = restored
+                and restored.foolSpawned == true
+                or false
+        end
         return
     end
 
     if dimension == DC_DIMENSION then
         if isContinued then
-            if ensureContinuedNativeSession() then
-                -- A valid continued session already spawned its one Fool on
-                -- the original entry; keep the documented first-room scope.
-                M._state.droppedInCurrentDC = true
+            local restored = ensureContinuedNativeSession()
+            if restored then
+                -- A valid continued session retains whether its first-room
+                -- Fool was actually created before the save.
+                local nativeSave = getNativeSave(false)
+                M._state.droppedInCurrentDC = nativeSave
+                    and nativeSave.foolSpawned == true
+                    or false
+            else
+                local manager = getGalleryManager()
+                local detour = manager
+                    and type(manager.getDeathCertificateDetour) == "function"
+                    and manager.getDeathCertificateDetour()
+                    or nil
+                if type(detour) == "table"
+                    and detour.phase == "prepared"
+                    and type(manager.abortDeathCertificateDetour) == "function"
+                then
+                    manager.abortDeathCertificateDetour(detour, nil)
+                end
             end
         else
             beginNativeSession()
         end
         spawnFoolIfNeeded(M._state)
+        syncReturnDoor()
     else
-        endNativeSession()
+        endNativeSessionAndAbortAppraisalDetour(getNativeSave(false))
     end
 end
 
@@ -1226,8 +2245,53 @@ local function registerHourglassCallbacks()
     M._hourglassCallbacksRegistered = true
 end
 
+local function registerReturnDoorType()
+    M._returnDoorRegistered = false
+    local stageAPI = rawget(_G, "StageAPI")
+    if type(stageAPI) ~= "table" or type(stageAPI.CustomDoor) ~= "table" then
+        return
+    end
+
+    local ok, registerError = pcall(function()
+        stageAPI.CustomDoor(
+            RETURN_DOOR_NAME,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            false,
+            true,
+            function(_, _, _, _, doorGridData)
+                tryReturnThroughDoor(doorGridData)
+            end,
+            nil,
+            RoomTransitionAnim.FADE
+        )
+    end)
+    if not ok then
+        ConchBlessing.printError(
+            "Atropos could not register its Death Certificate return door: "
+                .. tostring(registerError)
+        )
+        return
+    end
+    M._returnDoorRegistered = true
+end
+
+registerReturnDoorType()
 registerSaveConfirmation()
 registerHourglassCallbacks()
+
+local preUseItemCallback = ModCallbacks.MC_PRE_USE_ITEM
+if type(preUseItemCallback) == "number" then
+    ConchBlessing:AddPriorityCallback(
+        preUseItemCallback,
+        CALLBACK_PRIORITY_EARLY,
+        M.onPreUseDeathCertificate,
+        CollectibleType.COLLECTIBLE_DEATH_CERTIFICATE
+    )
+end
 
 local repentogon = rawget(_G, "REPENTOGON")
 local preAddCollectibleCallback = ModCallbacks.MC_PRE_ADD_COLLECTIBLE

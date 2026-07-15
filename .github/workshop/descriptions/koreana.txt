@@ -10,10 +10,11 @@
 
 필수 아이템:
 - Magic Conch
+- StageAPI
+- MiniMAPI
 
 기능별 필수 아이템:
 - REPENTOGON (감정 평가서)
-- StageAPI (감정 평가서의 아트로포스 귀환문)
 
 권장:
 - RGON

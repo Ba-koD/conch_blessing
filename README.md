@@ -2,7 +2,7 @@
 ==================================================
 - 아이템 설명 가이드(Item Description Guide): [tboi.rnen.kr](https://tboi.rnen.kr)
 
-![Version](https://img.shields.io/badge/version-1.0.26-2ea44f)
+![Version](https://img.shields.io/badge/version-1.0.68-2ea44f)
 ![Languages](https://img.shields.io/badge/lang-KR%20%2F%20EN-blue)
 ![Isaac](https://img.shields.io/badge/Game-The%20Binding%20of%20Isaac%20Rebirth-8a2be2)
 
@@ -28,6 +28,7 @@ Adds a polished "Conch’s Blessing" upgrade system. Transform items with bespok
 --------------------------------------------------
 - 영감 (Inspiration): [Lazy MattPack [RGON]](https://steamcommunity.com/sharedfiles/filedetails/?id=3408993906)
 - 필수 모드 (Essential mod): [Magic Conch](https://steamcommunity.com/sharedfiles/filedetails/?id=3540206030)
+- 필수 모드 (Essential mod): [StageAPI](https://steamcommunity.com/sharedfiles/filedetails/?id=1348031964)
+- 필수 모드 (Essential mod): [MiniMAPI](https://steamcommunity.com/sharedfiles/filedetails/?id=1978904635)
 - 감정 평가서 기능 필수 (Required for Appraisal Certificate): REPENTOGON
-- 감정 평가서의 아트로포스 귀환문 필수 (Required for Appraisal Certificate's Atropos return door): [StageAPI](https://steamcommunity.com/sharedfiles/filedetails/?id=1348031964)
 - RGON 추천 (RGON Recommended)
