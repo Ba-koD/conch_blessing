@@ -161,7 +161,29 @@ local function getModeTargetColor(mode, targets)
         or BASE_COLOR
 end
 
-local function getPickupOriginKey(pickup)
+local function getCanonicalCycleSignature(itemIds)
+    local bestOffset = 1
+    for candidateOffset = 2, #itemIds do
+        for step = 0, #itemIds - 1 do
+            local candidate = itemIds[((candidateOffset + step - 1) % #itemIds) + 1]
+            local best = itemIds[((bestOffset + step - 1) % #itemIds) + 1]
+            if candidate < best then
+                bestOffset = candidateOffset
+                break
+            elseif candidate > best then
+                break
+            end
+        end
+    end
+
+    local parts = {}
+    for step = 0, #itemIds - 1 do
+        parts[#parts + 1] = tostring(itemIds[((bestOffset + step - 1) % #itemIds) + 1])
+    end
+    return "CYCLE:" .. table.concat(parts, ",")
+end
+
+local function getPickupOriginInfo(pickup)
     if not pickup or not isUpgradeablePickupVariant(pickup.Variant) then
         return nil
     end
@@ -171,14 +193,41 @@ local function getPickupOriginKey(pickup)
         return nil
     end
 
-    local isTrinket = pickup.Variant == PickupVariant.PICKUP_TRINKET
-    local baseId = rawId
-    if isTrinket and rawId >= 32768 then
-        baseId = rawId - 32768
+    if pickup.Variant == PickupVariant.PICKUP_COLLECTIBLE
+        and type(pickup.GetCollectibleCycle) == "function" then
+        local ok, queue = pcall(function()
+            return pickup:GetCollectibleCycle()
+        end)
+        if ok and type(queue) == "table" and #queue > 0 then
+            local itemIds = { rawId }
+            for _, itemId in ipairs(queue) do
+                if type(itemId) ~= "number" or itemId <= 0 then
+                    itemIds = nil
+                    break
+                end
+                itemIds[#itemIds + 1] = itemId
+            end
+            if itemIds then
+                local originKeys = {}
+                for _, itemId in ipairs(itemIds) do
+                    originKeys[#originKeys + 1] = "C:" .. tostring(itemId)
+                end
+                return {
+                    identity = getCanonicalCycleSignature(itemIds),
+                    originKeys = originKeys,
+                }
+            end
+        end
     end
 
+    local isTrinket = pickup.Variant == PickupVariant.PICKUP_TRINKET
+    local baseId = (isTrinket and rawId >= 32768) and (rawId - 32768) or rawId
     local prefix = isTrinket and "T:" or "C:"
-    return prefix .. tostring(baseId)
+    local originKey = prefix .. tostring(baseId)
+    return {
+        identity = originKey,
+        originKeys = { originKey },
+    }
 end
 
 local function getPickupUpgradeInfo(pickup)
@@ -187,28 +236,30 @@ local function getPickupUpgradeInfo(pickup)
         return nil
     end
 
-    local originKey = getPickupOriginKey(pickup)
-    if not originKey then
+    local originInfo = getPickupOriginInfo(pickup)
+    if not originInfo then
         return nil
     end
 
-    local mappings = maps[originKey]
-    if not tableHasEntries(mappings) then
-        return nil
+    local seen = {}
+    for _, originKey in ipairs(originInfo.originKeys) do
+        local mappings = maps[originKey]
+        if tableHasEntries(mappings) then
+            for flag in pairs(mappings) do
+                seen[flag] = true
+            end
+        end
     end
 
     local flags = {}
-    local seen = {}
     for _, flag in ipairs(FLAG_ORDER) do
-        if mappings[flag] then
+        if seen[flag] then
             table.insert(flags, flag)
-            seen[flag] = true
+            seen[flag] = nil
         end
     end
-    for flag in pairs(mappings) do
-        if not seen[flag] then
-            table.insert(flags, flag)
-        end
+    for flag in pairs(seen) do
+        table.insert(flags, flag)
     end
 
     if #flags == 0 then
@@ -217,7 +268,7 @@ local function getPickupUpgradeInfo(pickup)
 
     local mode = (#flags >= 2) and "multiple" or flags[1]
     return {
-        originKey = originKey,
+        originKey = originInfo.identity,
         mode = mode,
         flags = flags,
     }
@@ -299,7 +350,8 @@ local function applyPickupPulse(pulse, frame)
     if not pickup or not pickup.Exists or not pickup:Exists() then
         return true
     end
-    if getPickupOriginKey(pickup) ~= pulse.originKey then
+    local liveInfo = getPickupUpgradeInfo(pickup)
+    if not liveInfo or liveInfo.originKey ~= pulse.originKey then
         resetPickupColor(pickup, pulse.baseColor)
         markPulseFinished(pickup, pulse.originKey)
         return true

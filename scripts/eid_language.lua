@@ -12,6 +12,48 @@ end
 ConchBlessing.EID = ConchBlessing.EID or {}
 ConchBlessing._eidRegistered = ConchBlessing._eidRegistered or { } -- [type:id][lang] = true
 
+local function resolveItemText(itemData)
+    if type(itemData) ~= "table" then
+        return nil, nil
+    end
+
+    local currentLang = getCurrentLang()
+    local itemName = type(itemData.name) == "table"
+        and (itemData.name[currentLang] or itemData.name.en)
+        or itemData.name
+    local itemDescription = type(itemData.description) == "table"
+        and (itemData.description[currentLang] or itemData.description.en)
+        or itemData.description
+    return itemName, itemDescription
+end
+
+-- Use one localized path for real acquisitions and successful pedestal morphs.
+-- Repentance+ routes this two-string overload through the same stacked streak
+-- pool as pills/cards; keeping the existing overload also preserves older
+-- runtimes where the optional stacking argument is unavailable.
+ConchBlessing.EID.showItemText = function(itemData)
+    local ok, shownOrError = pcall(function()
+        local itemName, itemDescription = resolveItemText(itemData)
+        if not itemName or not itemDescription then
+            return false
+        end
+
+        local hud = Game():GetHUD()
+        if not hud or type(hud.ShowItemText) ~= "function" then
+            ConchBlessing.printDebug("HUD not available for ShowItemText")
+            return false
+        end
+
+        hud:ShowItemText(itemName, itemDescription)
+        return true
+    end)
+    if not ok then
+        ConchBlessing.printError("[HUD] ShowItemText failed: " .. tostring(shownOrError))
+        return false
+    end
+    return shownOrError == true
+end
+
 -- Add multilingual description to EID
 -- Usage: ConchBlessing.EID.addOptLangDescription(itemId, itemData)
 -- itemData should have name, description, and eid as multilingual objects
@@ -424,16 +466,6 @@ ConchBlessing:AddCallbackCustom(
             return
         end
 
-        local currentLang = getCurrentLang()
-        local itemName = type(found.name) == "table" and (found.name[currentLang] or found.name["en"]) or found.name
-        local itemDescription = type(found.description) == "table" and (found.description[currentLang] or found.description["en"]) or found.description
-        if itemName and itemDescription then
-            local hud = Game():GetHUD()
-            if hud then
-                hud:ShowItemText(itemName, itemDescription)
-            else
-                ConchBlessing.printDebug("HUD not available for ShowItemText")
-            end
-        end
+        ConchBlessing.EID.showItemText(found)
     end
 )

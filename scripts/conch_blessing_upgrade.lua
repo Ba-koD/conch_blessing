@@ -53,6 +53,7 @@ local VALID_UPGRADE_FLAGS = {
 
 local PENDING_UPGRADE_DATA_KEY = "__ConchBlessingUpgradeJob"
 local PICKUP_LOCK_DATA_KEY = "__ConchBlessingUpgradePickupLock"
+local MAX_COLLECTIBLE_CYCLE_ITEMS = 8
 
 local function _callUpgradeFunction(label, fn, ...)
     if type(fn) ~= "function" then
@@ -252,6 +253,204 @@ local function _isPickupPending(pickup)
     return false
 end
 
+local function _copySequence(values)
+    local copy = {}
+    for index, value in ipairs(values or {}) do
+        copy[index] = value
+    end
+    return copy
+end
+
+local function _sequencesMatch(left, right)
+    if type(left) ~= "table" or type(right) ~= "table" or #left ~= #right then
+        return false
+    end
+
+    for index, value in ipairs(left) do
+        if right[index] ~= value then
+            return false
+        end
+    end
+    return true
+end
+
+local function _cyclesMatch(left, right)
+    if type(left) ~= "table" or type(right) ~= "table" or #left ~= #right then
+        return false
+    end
+    if #left == 0 then
+        return true
+    end
+
+    for offset = 0, #right - 1 do
+        local matches = true
+        for index, value in ipairs(left) do
+            local rightIndex = ((index + offset - 1) % #right) + 1
+            if right[rightIndex] ~= value then
+                matches = false
+                break
+            end
+        end
+        if matches then
+            return true
+        end
+    end
+    return false
+end
+
+local function _readCollectibleCycle(pickup)
+    if not pickup or pickup.Variant ~= PickupVariant.PICKUP_COLLECTIBLE then
+        return { supported = false, items = {} }
+    end
+    if type(pickup.GetCollectibleCycle) ~= "function" then
+        return { supported = false, items = {} }
+    end
+
+    local ok, cycle = pcall(function()
+        return pickup:GetCollectibleCycle()
+    end)
+    if not ok or type(cycle) ~= "table" then
+        return nil, "GetCollectibleCycle failed: " .. tostring(cycle)
+    end
+
+    local queue = {}
+    for index, itemId in ipairs(cycle) do
+        if type(itemId) ~= "number" or itemId <= 0 then
+            return nil, "invalid collectible cycle entry at " .. tostring(index)
+        end
+        queue[index] = itemId
+    end
+    if #queue > MAX_COLLECTIBLE_CYCLE_ITEMS then
+        return nil, "collectible cycle exceeds capacity"
+    end
+    if type(pickup.SubType) ~= "number" or pickup.SubType <= 0 then
+        return nil, "invalid displayed collectible"
+    end
+
+    -- REPENTOGON exposes only the queued entries. The currently displayed
+    -- SubType is the head of the same logical circle; every native display step
+    -- rotates that head into the tail of the queue.
+    local items = { pickup.SubType }
+    for _, itemId in ipairs(queue) do
+        table.insert(items, itemId)
+    end
+
+    return { supported = true, items = items, queue = queue }
+end
+
+local function _mapCycleItem(itemId, resultType)
+    local mappings = ConchBlessing.ItemMaps and ConchBlessing.ItemMaps["C:" .. tostring(itemId)] or nil
+    return mappings and mappings[resultType] or nil
+end
+
+local function _buildCollectibleCyclePlan(pickup, resultType)
+    local snapshot, snapshotError = _readCollectibleCycle(pickup)
+    if not snapshot then
+        return nil, snapshotError
+    end
+    if not snapshot.supported or #snapshot.queue == 0 then
+        return nil
+    end
+    if type(pickup.RemoveCollectibleCycle) ~= "function"
+        or type(pickup.AddCollectibleCycle) ~= "function" then
+        return nil, "collectible cycle mutation methods are unavailable"
+    end
+
+    local plan = {
+        sourceCycle = _copySequence(snapshot.items),
+        replacements = {},
+        upgradeDataBySource = {},
+        matched = false,
+    }
+
+    local function inspectItem(itemId)
+        local upgradeData = _mapCycleItem(itemId, resultType)
+        if not upgradeData then
+            return itemId
+        end
+        if upgradeData.itemData and upgradeData.itemData.type == "trinket" then
+            return nil, "a collectible cycle target cannot be a trinket"
+        end
+
+        plan.matched = true
+        plan.replacements[itemId] = upgradeData.upgradeId
+        plan.upgradeDataBySource[itemId] = upgradeData
+        if not plan.primaryUpgradeData or itemId == pickup.SubType then
+            plan.primaryUpgradeData = upgradeData
+        end
+        return upgradeData.upgradeId
+    end
+
+    for _, itemId in ipairs(plan.sourceCycle) do
+        local targetId, mapError = inspectItem(itemId)
+        if not targetId then
+            return nil, mapError
+        end
+    end
+
+    return plan
+end
+
+local function _rebuildCollectibleCycle(pickup, fullCycle)
+    if not pickup
+        or type(pickup.RemoveCollectibleCycle) ~= "function"
+        or type(pickup.AddCollectibleCycle) ~= "function"
+        or type(pickup.GetCollectibleCycle) ~= "function" then
+        return false, "collectible cycle API is unavailable"
+    end
+    local displayedItemId = fullCycle and fullCycle[1] or nil
+    if type(displayedItemId) ~= "number" or displayedItemId <= 0 then
+        return false, "invalid displayed collectible"
+    end
+    if #fullCycle - 1 > MAX_COLLECTIBLE_CYCLE_ITEMS then
+        return false, "collectible cycle exceeds capacity"
+    end
+
+    local morphOk, morphError = pcall(function()
+        pickup:Morph(
+            EntityType.ENTITY_PICKUP,
+            PickupVariant.PICKUP_COLLECTIBLE,
+            displayedItemId,
+            true,
+            true,
+            true
+        )
+    end)
+    if not morphOk then
+        return false, "Morph failed: " .. tostring(morphError)
+    end
+
+    -- Morph can let an owned/native modifier initialize a fresh list. Clear it
+    -- once more before restoring the exact ordered snapshot.
+    local clearOk, clearError = pcall(function()
+        pickup:RemoveCollectibleCycle()
+    end)
+    if not clearOk then
+        return false, "post-Morph RemoveCollectibleCycle failed: " .. tostring(clearError)
+    end
+
+    for index = 2, #fullCycle do
+        local itemId = fullCycle[index]
+        local addOk, added = pcall(function()
+            return pickup:AddCollectibleCycle(itemId)
+        end)
+        if not addOk or added == false then
+            return false, "AddCollectibleCycle failed at " .. tostring(index - 1) .. ": " .. tostring(added)
+        end
+    end
+
+    local rebuilt, readError = _readCollectibleCycle(pickup)
+    if not rebuilt or not rebuilt.supported then
+        return false, readError or "rebuilt cycle cannot be read"
+    end
+    if pickup.Variant ~= PickupVariant.PICKUP_COLLECTIBLE
+        or not _sequencesMatch(rebuilt.items, fullCycle) then
+        return false, "rebuilt collectible cycle did not match the requested state"
+    end
+
+    return true
+end
+
 local function _clearPendingMarker(job)
     local pickup = job and job.pickup and job.pickup:ToPickup() or nil
     if not pickup then
@@ -277,7 +476,7 @@ local function _removeUpgradeJob(index, job, cancelAnimation)
     table.remove(ConchBlessing._upgradeJobs, index)
 end
 
-local function _enqueueUpgradeJob(entityPickup, upgradeData, savedFields)
+local function _enqueueUpgradeJob(entityPickup, upgradeData, savedFields, cyclePlan)
     if not entityPickup or _isPickupPending(entityPickup) then
         return false
     end
@@ -303,6 +502,7 @@ local function _enqueueUpgradeJob(entityPickup, upgradeData, savedFields)
         beforeFrames = math.max(0, tonumber(itemData.beforeFrames) or 0),
         afterFrames = math.max(0, tonumber(itemData.afterFrames) or 0),
         targetVariant = targetVariant,
+        cyclePlan = cyclePlan,
         templateState = {},
         token = {},
     }
@@ -315,11 +515,21 @@ local function _enqueueUpgradeJob(entityPickup, upgradeData, savedFields)
 end
 
 local function _sourceStillMatches(job, pickup)
-    return pickup
+    local basicIdentityMatches = pickup
         and pickup:Exists()
         and pickup.Variant == job.sourceVariant
-        and pickup.SubType == job.sourceSubType
         and pickup.InitSeed == job.sourceInitSeed
+    if not basicIdentityMatches then
+        return false
+    end
+    if not job.cyclePlan then
+        return pickup.SubType == job.sourceSubType
+    end
+
+    local liveCycle = _readCollectibleCycle(pickup)
+    return liveCycle ~= nil
+        and liveCycle.supported
+        and _cyclesMatch(job.cyclePlan.sourceCycle, liveCycle.items)
 end
 
 local function _preventPendingUpgradePickup(_, pickup, collider)
@@ -334,13 +544,27 @@ local function _preventPendingUpgradePickup(_, pickup, collider)
 end
 
 local function _restorePickupFields(pickup, saved)
+    local restoredWithMakeShopItem = false
+    if saved.isShopItem and type(pickup.MakeShopItem) == "function" then
+        restoredWithMakeShopItem = pcall(function()
+            pickup:MakeShopItem(saved.shopId)
+        end)
+    end
+    if not restoredWithMakeShopItem and saved.shopId ~= nil then
+        pickup.ShopItemId = saved.shopId
+    end
+    if saved.price ~= nil then
+        pickup.Price = saved.price
+    end
+    if saved.autoUpdatePrice ~= nil and pickup.AutoUpdatePrice ~= nil then
+        pickup.AutoUpdatePrice = saved.autoUpdatePrice
+    end
+
     local fields = {
-        { "Price", "price" },
         { "OptionsPickupIndex", "options" },
         { "Wait", "wait" },
         { "Timeout", "timeout" },
         { "Touched", "touched" },
-        { "ShopItemId", "shopId" },
         { "State", "state" },
     }
 
@@ -350,6 +574,61 @@ local function _restorePickupFields(pickup, saved)
             pickup[field[1]] = savedValue
         end
     end
+end
+
+local function _pickupIsShopItem(pickup)
+    if not pickup or type(pickup.IsShopItem) ~= "function" then
+        return false
+    end
+    local ok, isShopItem = pcall(function()
+        return pickup:IsShopItem()
+    end)
+    return ok and isShopItem == true
+end
+
+local function _commitCycleUpgrade(job, pickup)
+    local liveCycle, liveError = _readCollectibleCycle(pickup)
+    if not liveCycle
+        or not liveCycle.supported
+        or not _cyclesMatch(job.cyclePlan.sourceCycle, liveCycle.items) then
+        return false, liveError or "collectible cycle identity changed before commit"
+    end
+
+    local sourceAtCommit = _copySequence(liveCycle.items)
+    local targetAtCommit = {}
+    local titleItemData = nil
+    for index, itemId in ipairs(sourceAtCommit) do
+        local liveUpgradeData = job.cyclePlan.upgradeDataBySource[itemId]
+        targetAtCommit[index] = liveUpgradeData and liveUpgradeData.upgradeId or itemId
+        if liveUpgradeData and (not titleItemData or index == 1) then
+            titleItemData = liveUpgradeData.itemData
+        end
+    end
+
+    local rebuilt, rebuildError = _rebuildCollectibleCycle(pickup, targetAtCommit)
+    if rebuilt then
+        local severedOath = ConchBlessing.severedoath
+        if severedOath and type(severedOath.onCollectibleCycleRewritten) == "function" then
+            local notifyOk, notifyError = pcall(
+                severedOath.onCollectibleCycleRewritten,
+                pickup,
+                job.cyclePlan.replacements
+            )
+            if not notifyOk then
+                ConchBlessing.printError(
+                    "[Upgrade] Collectible cycle owner notification failed: " .. tostring(notifyError)
+                )
+            end
+        end
+        return true, titleItemData
+    end
+
+    local rolledBack, rollbackError = _rebuildCollectibleCycle(pickup, sourceAtCommit)
+    _restorePickupFields(pickup, job.saved)
+    if not rolledBack then
+        return false, tostring(rebuildError) .. "; rollback failed: " .. tostring(rollbackError)
+    end
+    return false, tostring(rebuildError) .. "; original cycle restored"
 end
 
 local function _processUpgradeJobs()
@@ -414,29 +693,55 @@ local function _processUpgradeJobs()
                         ConchBlessing.template.cancelForPickup(pickup)
                     end
 
-                    local variantToUse = job.targetVariant
-                    local morphId = job.upgradeId
-                    if variantToUse == PickupVariant.PICKUP_TRINKET and job.saved.wasGoldenTrinket then
-                        morphId = morphId + 32768
-                    end
+                    local titleItemData = job.itemData
+                    if job.cyclePlan then
+                        local cycleOk, cycleResult = _commitCycleUpgrade(job, pickup)
+                        if not cycleOk then
+                            ConchBlessing.printError(
+                                "[Upgrade] Collectible cycle conversion failed for "
+                                    .. tostring(job.itemKey or job.upgradeId)
+                                    .. ": "
+                                    .. tostring(cycleResult)
+                            )
+                            _removeUpgradeJob(i, job, true)
+                            goto continue
+                        end
+                        titleItemData = cycleResult or titleItemData
+                    else
+                        local variantToUse = job.targetVariant
+                        local morphId = job.upgradeId
+                        if variantToUse == PickupVariant.PICKUP_TRINKET and job.saved.wasGoldenTrinket then
+                            morphId = morphId + 32768
+                        end
 
-                    ConchBlessing.printDebug("[Upgrade] Morphing pickup to variant=" .. tostring(variantToUse) .. ", id=" .. tostring(morphId))
-                    local morphOk, morphError = pcall(function()
-                        pickup:Morph(EntityType.ENTITY_PICKUP, variantToUse, morphId, true, true, true)
-                    end)
-                    if not morphOk then
-                        ConchBlessing.printError("[Upgrade] Morph failed for " .. tostring(job.itemKey or job.upgradeId) .. ": " .. tostring(morphError))
-                        _removeUpgradeJob(i, job, true)
-                        goto continue
-                    end
-                    if pickup.Variant ~= variantToUse or pickup.SubType ~= morphId then
-                        ConchBlessing.printError("[Upgrade] Morph result mismatch for " .. tostring(job.itemKey or job.upgradeId))
-                        _removeUpgradeJob(i, job, true)
-                        goto continue
+                        ConchBlessing.printDebug("[Upgrade] Morphing pickup to variant=" .. tostring(variantToUse) .. ", id=" .. tostring(morphId))
+                        local morphOk, morphError = pcall(function()
+                            pickup:Morph(EntityType.ENTITY_PICKUP, variantToUse, morphId, true, true, true)
+                        end)
+                        if not morphOk then
+                            ConchBlessing.printError("[Upgrade] Morph failed for " .. tostring(job.itemKey or job.upgradeId) .. ": " .. tostring(morphError))
+                            _removeUpgradeJob(i, job, true)
+                            goto continue
+                        end
+                        if pickup.Variant ~= variantToUse or pickup.SubType ~= morphId then
+                            ConchBlessing.printError("[Upgrade] Morph result mismatch for " .. tostring(job.itemKey or job.upgradeId))
+                            _removeUpgradeJob(i, job, true)
+                            goto continue
+                        end
                     end
 
                     _restorePickupFields(pickup, job.saved)
                     _clearPendingMarker(job)
+
+                    -- A pedestal morph is not an acquisition, so the engine
+                    -- does not announce the new subtype. Add the localized
+                    -- target title only after the conversion has committed;
+                    -- it can then stack with Magic Conch's result streak.
+                    local showItemText = ConchBlessing.EID and ConchBlessing.EID.showItemText or nil
+                    if type(showItemText) == "function" then
+                        showItemText(titleItemData)
+                    end
+
                     _spawnEffects(job.itemData.upgradeEffectsAfter or job.itemData.upgradeEffects, job.pos)
 
                     local templateDelay = 0
@@ -674,59 +979,87 @@ local function handleMagicConchResult(result)
         if entity.Type == EntityType.ENTITY_PICKUP
             and (entity.Variant == PickupVariant.PICKUP_COLLECTIBLE or entity.Variant == PickupVariant.PICKUP_TRINKET)
             and not _isPickupPending(entity:ToPickup()) then
-            local rawId = entity.SubType
-            local isTrinketPickup = (entity.Variant == PickupVariant.PICKUP_TRINKET)
-            local baseId = rawId
-            local wasGoldenTrinket = false
-            if isTrinketPickup and rawId >= 32768 then
-                baseId = rawId - 32768
-                wasGoldenTrinket = true
-            end
-            local variantName = isTrinketPickup and "TRINKET" or "COLLECTIBLE"
-            ConchBlessing.printDebug("Field item found: variant=" .. variantName .. ", id=" .. tostring(rawId) .. ", baseId=" .. tostring(baseId))
-
-            -- find item in conversion map by type + id (trinket/collectible 구분)
-            local originKey = (isTrinketPickup and "T:" or "C:") .. tostring(baseId)
-            local originMappings = ConchBlessing.ItemMaps[originKey]
-            
-            if originMappings then
-                -- This item HAS evolution possibilities
-                ConchBlessing.printDebug("Convertible item found: originKey=" .. originKey)
-
-                local availableFlags = {}
-                for flag, _ in pairs(originMappings) do
-                    table.insert(availableFlags, flag)
-                end
-                ConchBlessing.printDebug("  Available flags: " .. table.concat(availableFlags, ", "))
-                ConchBlessing.printDebug("  Current result type: " .. resultType)
-
-                local upgradeData = originMappings[resultType]
-                if upgradeData then
-                    -- Flag matches - perform upgrade
-                    ConchBlessing.printDebug("Flag matches! Item conversion: id=" .. tostring(baseId) .. " -> " .. tostring(upgradeData.upgradeId))
-                    ConchBlessing.printDebug("  Flag type: " .. upgradeData.flag .. ", Result type: " .. resultType)
-
-                    -- Queue upgrade info
+            local pickup = entity:ToPickup()
+            local cycleHandled = false
+            if pickup and entity.Variant == PickupVariant.PICKUP_COLLECTIBLE then
+                local cyclePlan, cycleError = _buildCollectibleCyclePlan(pickup, resultType)
+                if cycleError then
+                    ConchBlessing.printError(
+                        "[Upgrade] Skipping an incompatible collectible cycle: " .. tostring(cycleError)
+                    )
+                    cycleHandled = true
+                elseif cyclePlan and cyclePlan.matched then
                     table.insert(upgradeableItems, {
                         entity = entity,
-                        upgradeData = upgradeData,
-                        wasGoldenTrinket = wasGoldenTrinket,
-                        isTrinketPickup = isTrinketPickup,
+                        upgradeData = cyclePlan.primaryUpgradeData,
+                        wasGoldenTrinket = false,
+                        isTrinketPickup = false,
+                        cyclePlan = cyclePlan,
                     })
+                    cycleHandled = true
+                    ConchBlessing.printDebug(
+                        "[Upgrade] Queued rotating collectible pedestal with "
+                            .. tostring(#cyclePlan.sourceCycle)
+                            .. " choices"
+                    )
+                end
+            end
+
+            if not cycleHandled then
+                local rawId = entity.SubType
+                local isTrinketPickup = (entity.Variant == PickupVariant.PICKUP_TRINKET)
+                local baseId = rawId
+                local wasGoldenTrinket = false
+                if isTrinketPickup and rawId >= 32768 then
+                    baseId = rawId - 32768
+                    wasGoldenTrinket = true
+                end
+                local variantName = isTrinketPickup and "TRINKET" or "COLLECTIBLE"
+                ConchBlessing.printDebug("Field item found: variant=" .. variantName .. ", id=" .. tostring(rawId) .. ", baseId=" .. tostring(baseId))
+
+                -- find item in conversion map by type + id (trinket/collectible 구분)
+                local originKey = (isTrinketPickup and "T:" or "C:") .. tostring(baseId)
+                local originMappings = ConchBlessing.ItemMaps[originKey]
+
+                if originMappings then
+                    -- This item HAS evolution possibilities
+                    ConchBlessing.printDebug("Convertible item found: originKey=" .. originKey)
+
+                    local availableFlags = {}
+                    for flag, _ in pairs(originMappings) do
+                        table.insert(availableFlags, flag)
+                    end
+                    ConchBlessing.printDebug("  Available flags: " .. table.concat(availableFlags, ", "))
+                    ConchBlessing.printDebug("  Current result type: " .. resultType)
+
+                    local upgradeData = originMappings[resultType]
+                    if upgradeData then
+                        -- Flag matches - perform upgrade
+                        ConchBlessing.printDebug("Flag matches! Item conversion: id=" .. tostring(baseId) .. " -> " .. tostring(upgradeData.upgradeId))
+                        ConchBlessing.printDebug("  Flag type: " .. upgradeData.flag .. ", Result type: " .. resultType)
+
+                        -- Queue upgrade info
+                        table.insert(upgradeableItems, {
+                            entity = entity,
+                            upgradeData = upgradeData,
+                            wasGoldenTrinket = wasGoldenTrinket,
+                            isTrinketPickup = isTrinketPickup,
+                        })
+                    else
+                        -- Flag does NOT match - if Delete Mode is on, delete the item
+                        ConchBlessing.printDebug("Flag does not match. No conversion.")
+                        if deleteModeActive then
+                            ConchBlessing.printDebug("Delete Mode: Item has evolution but result type doesn't match any flag. Marking for deletion.")
+                            table.insert(deleteableItems, entity)
+                        end
+                    end
                 else
-                    -- Flag does NOT match - if Delete Mode is on, delete the item
-                    ConchBlessing.printDebug("Flag does not match. No conversion.")
-                    if deleteModeActive then
-                        ConchBlessing.printDebug("Delete Mode: Item has evolution but result type doesn't match any flag. Marking for deletion.")
+                    -- This item has NO evolution possibilities in ConchBlessing
+                    -- If Delete Mode is on and result is "negative", delete the item
+                    if deleteModeActive and resultType == "negative" then
+                        ConchBlessing.printDebug("Delete Mode: Item has no evolution and result is negative. Marking for deletion.")
                         table.insert(deleteableItems, entity)
                     end
-                end
-            else
-                -- This item has NO evolution possibilities in ConchBlessing
-                -- If Delete Mode is on and result is "negative", delete the item
-                if deleteModeActive and resultType == "negative" then
-                    ConchBlessing.printDebug("Delete Mode: Item has no evolution and result is negative. Marking for deletion.")
-                    table.insert(deleteableItems, entity)
                 end
             end
         end
@@ -745,6 +1078,8 @@ local function handleMagicConchResult(result)
 
             if pickup then
                 local queued = _enqueueUpgradeJob(pickup, upgradeData, {
+                    autoUpdatePrice = pickup.AutoUpdatePrice,
+                    isShopItem = _pickupIsShopItem(pickup),
                     price = pickup.Price,
                     options = pickup.OptionsPickupIndex,
                     wait = pickup.Wait,
@@ -753,7 +1088,7 @@ local function handleMagicConchResult(result)
                     shopId = pickup.ShopItemId,
                     state = pickup.State,
                     wasGoldenTrinket = itemInfo.wasGoldenTrinket,
-                })
+                }, itemInfo.cyclePlan)
 
                 if queued then
                     SFXManager():Play(SoundEffect.SOUND_POWERUP_SPEWER, 0.5)

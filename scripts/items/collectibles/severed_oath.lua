@@ -1479,7 +1479,9 @@ end
 
 local function savePickupState(pickup)
     return {
+        autoUpdatePrice = pickup.AutoUpdatePrice,
         charge = pickup.Charge,
+        isShopItem = pickup:IsShopItem(),
         price = pickup.Price,
         shopItemId = pickup.ShopItemId,
         timeout = pickup.Timeout,
@@ -1487,34 +1489,44 @@ local function savePickupState(pickup)
     }
 end
 
+local function restorePickupShopState(pickup, state)
+    local restoredWithMakeShopItem = false
+    -- Initialize engine-owned shop/deal state when available; older runtimes
+    -- still receive the exact exposed fields through the fallback below.
+    if state.isShopItem and type(pickup.MakeShopItem) == "function" then
+        restoredWithMakeShopItem = pcall(function()
+            pickup:MakeShopItem(state.shopItemId)
+        end)
+    end
+
+    if not restoredWithMakeShopItem and state.shopItemId ~= nil then
+        pickup.ShopItemId = state.shopItemId
+    end
+
+    if state.price ~= nil then
+        pickup.Price = state.price
+    end
+    if state.autoUpdatePrice ~= nil and pickup.AutoUpdatePrice ~= nil then
+        pickup.AutoUpdatePrice = state.autoUpdatePrice
+    end
+end
+
 local function applyPickupState(pickup, state, optionsPickupIndex)
     if not pickup or not state then
         return
     end
 
+    restorePickupShopState(pickup, state)
     pickup.OptionsPickupIndex = tonumber(optionsPickupIndex) or 0
-    if state.price ~= nil then
-        pickup.Price = state.price
-    end
     if state.timeout ~= nil then
         pickup.Timeout = state.timeout
     end
     if state.charge ~= nil then
         pickup.Charge = state.charge
     end
-    if pickup.AutoUpdatePrice ~= nil then
-        pickup.AutoUpdatePrice = false
-    end
 
     local wait = tonumber(state.wait) or 0
     pickup.Wait = math.max(wait, MIN_PICKUP_WAIT)
-
-    local shopItemId = tonumber(state.shopItemId)
-    if shopItemId and shopItemId < 0 then
-        pickup.ShopItemId = shopItemId
-    else
-        pickup.ShopItemId = -1
-    end
 
     pickup.Touched = false
 end
@@ -1795,6 +1807,31 @@ local function reAddDroppedBonus(pickup, state)
             #rawCycleItems
         ))
     end
+end
+
+-- Keep this item's owned bonus identity aligned when the central Magic Conch
+-- transaction rewrites one or more members of the same collectible cycle.
+function M.onCollectibleCycleRewritten(pickup, replacements)
+    if not pickup or type(replacements) ~= "table" then
+        return
+    end
+
+    local state = getPickupCycleState(pickup)
+    local oldBonus = state and state.bonusItem or nil
+    local newBonus = oldBonus and replacements[oldBonus] or nil
+    if not newBonus or newBonus == oldBonus or not isValidCollectibleId(newBonus) then
+        return
+    end
+
+    state.bonusItem = newBonus
+    writeCycleStateToPickup(pickup, state)
+    markSavedBonusState(pickup, state)
+    logVerify(string.format(
+        "cycle-upgrade bonus seed=%s old=%s new=%s",
+        tostring(pickup.InitSeed),
+        tostring(oldBonus),
+        tostring(newBonus)
+    ))
 end
 
 function M.onPostPickupInit(_, pickup)

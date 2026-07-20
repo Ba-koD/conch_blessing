@@ -31,6 +31,9 @@ local ATROPOS_DC_DETOUR_KIND = "appraisal_stageapi"
 local ATROPOS_DC_DETOUR_VERSION = 1
 local DEATH_CERTIFICATE_ENTRANCE_INDEX = 80
 local DEATH_CERTIFICATE_ROOM_SUBTYPE = 33
+local ENTRY_TRANSITION_CALL_PENDING = "call_pending"
+local ENTRY_TRANSITION_CALL_CONFIRMED = "call_confirmed"
+local ENTRY_TRANSITION_ARRIVAL_VERIFIED = "arrival_verified"
 
 M._confirmedSaveRevision = tonumber(M._confirmedSaveRevision) or 0
 M._durableChoiceClosures = M._durableChoiceClosures or {}
@@ -1392,6 +1395,7 @@ end
 local function getStageAPIExtraRoomState()
     local stageAPI = getStageAPI()
     if not stageAPI then return false end
+    if stageAPI.DoingExtraRoomTransition == true then return true end
 
     if type(stageAPI.InOrTransitioningToExtraRoom) == "function" then
         local ok, result = pcall(function()
@@ -1756,6 +1760,8 @@ local function clearVisitFields(session)
     session.atroposMode = nil
     session.entryCommitted = nil
     session.entryJournal = nil
+    session.entryTransitionState = nil
+    session.entryRecoveryReason = nil
     session.heldAbsorptionJournal = nil
     session.pendingChoice = nil
     session.returnReason = nil
@@ -1769,6 +1775,58 @@ local function clearVisitFields(session)
     session.deathCertificateDetourSequence = nil
 end
 
+local function legacyEntryMutationStarted(session)
+    if type(session) ~= "table"
+        or session.phase ~= "entering"
+        or session.entryTransitionState ~= nil
+    then
+        return false
+    end
+    local journal = session.entryJournal
+    if type(journal) ~= "table" then return false end
+    if session.entryCommitted == true
+        or journal.coinsApplied == true
+        or getSmeltedDeltaSize(journal.appliedSmeltedDelta) > 0
+    then
+        return true
+    end
+
+    -- Version-9 saves predate the entry transition state. A process can stop
+    -- after the inventory operation but before its journal save, so also
+    -- compare the live player against the persisted pre-entry baseline.
+    local player = getPlayerFromIndex(session.ownerPlayerIndex)
+    if not player then return false end
+    local coinsBefore = tonumber(journal.coinsBefore)
+    if coinsBefore ~= nil and player:GetNumCoins() ~= coinsBefore then return true end
+    if type(journal.heldSnapshot) == "table"
+        and not heldTrinketSnapshotMatches(player, journal.heldSnapshot)
+    then
+        return true
+    end
+    return getSmeltedDeltaSize(getPositiveSmeltedDelta(
+        journal.beforeSmelted,
+        getSmeltedSnapshot(player)
+    )) > 0
+end
+
+local function isUnpaidEntryRecovery(session)
+    if type(session) ~= "table" then return false end
+    if session.entryRecoveryReason ~= nil then return true end
+    local state = session.entryTransitionState
+    if session.phase == "entering" and state == nil then
+        return not legacyEntryMutationStarted(session)
+    end
+    if state == nil or state == ENTRY_TRANSITION_ARRIVAL_VERIFIED then return false end
+    if state == ENTRY_TRANSITION_CALL_CONFIRMED
+        and M._entryConfirmedToken == session.token
+    then
+        return false
+    end
+    -- Pending, unknown, or a confirmed call reconstructed without its
+    -- process-local success witness is always recovered without payment.
+    return true
+end
+
 local function resetSessionRuntime(session)
     invalidateRuntime()
     M._runtimeToken = nil
@@ -1777,6 +1835,16 @@ local function resetSessionRuntime(session)
     if session and session.token then
         M._returnTransitionIssued[session.token] = nil
     end
+    if session and M._entryTransitionCallToken == session.token then
+        M._entryTransitionCallToken = nil
+    end
+    if session and M._entryConfirmedToken == session.token then
+        M._entryConfirmedToken = nil
+    end
+    if session and M._returnTransitionCallToken == session.token then
+        M._returnTransitionCallToken = nil
+    end
+    M._entryRecoveryLogKey = nil
 end
 
 local function destroyGalleryGraph(session)
@@ -1857,6 +1925,16 @@ local function descriptorData(descriptor)
     return nil
 end
 
+local function dataNumber(data, key, alternateKey)
+    if data == nil then return nil end
+    local ok, value = pcall(function() return data[key] end)
+    if (not ok or value == nil) and alternateKey ~= nil then
+        ok, value = pcall(function() return data[alternateKey] end)
+    end
+    if not ok then return nil end
+    return tonumber(value)
+end
+
 local function optionalNumberMatches(saved, actual)
     return saved == nil or tonumber(saved) == tonumber(actual)
 end
@@ -1871,6 +1949,9 @@ originDescriptorMatches = function(origin, descriptor, dimension)
         or not optionalNumberMatches(origin.roomType, data.Type)
         or not optionalNumberMatches(origin.roomVariant, data.Variant)
         or not optionalNumberMatches(origin.roomSubType, data.Subtype or data.SubType)
+        or not optionalNumberMatches(origin.roomStageID, dataNumber(data, "StageID"))
+        or not optionalNumberMatches(origin.roomMode, dataNumber(data, "Mode"))
+        or not optionalNumberMatches(origin.roomShape, dataNumber(data, "Shape"))
     then
         return false
     end
@@ -1881,6 +1962,43 @@ originDescriptorMatches = function(origin, descriptor, dimension)
         if not ok or tonumber(actualDimension) ~= tonumber(dimension) then return false end
     end
     return true
+end
+
+local function ensureExactOriginIdentity(session)
+    local origin = session and session.origin or nil
+    if type(origin) ~= "table" then return false, "missing_origin" end
+    local needsIdentity = tonumber(origin.roomStageID) == nil
+        or tonumber(origin.roomMode) == nil
+        or tonumber(origin.roomShape) == nil
+    local legacyEntering = session.phase == "entering"
+        and session.entryTransitionState == nil
+    local legacyMutation = legacyEntering and legacyEntryMutationStarted(session)
+    if not needsIdentity and (not legacyEntering or legacyMutation) then return true end
+
+    local previous = {
+        roomStageID = origin.roomStageID,
+        roomMode = origin.roomMode,
+        roomShape = origin.roomShape,
+        entryTransitionState = session.entryTransitionState,
+        entryRecoveryReason = session.entryRecoveryReason,
+    }
+    if needsIdentity then
+        local migrated, migrationReason =
+            StageAPIGalleryRooms.migrateLegacyNativeOrigin(origin)
+        if migrated ~= true then return false, migrationReason end
+    end
+    if legacyEntering and not legacyMutation then
+        session.entryTransitionState = ENTRY_TRANSITION_CALL_PENDING
+        session.entryRecoveryReason = "legacy_entry_unconfirmed"
+    end
+    if saveNow() then return true end
+
+    origin.roomStageID = previous.roomStageID
+    origin.roomMode = previous.roomMode
+    origin.roomShape = previous.roomShape
+    session.entryTransitionState = previous.entryTransitionState
+    session.entryRecoveryReason = previous.entryRecoveryReason
+    return false, "legacy_origin_save_failed"
 end
 
 local function getValidatedOriginDescriptor(session)
@@ -1955,6 +2073,23 @@ local function transitionToOrigin(session)
     if type(origin) ~= "table" then return false end
     local dimension = tonumber(origin.dimension)
     if dimension == nil then return false end
+    local identityReady, identityReason = ensureExactOriginIdentity(session)
+    if identityReady ~= true then
+        ConchBlessing.printError(
+            "Appraisal could not recover its exact saved origin identity: "
+                .. tostring(identityReason)
+        )
+        return false
+    end
+    local originRestored, originRestoreReason =
+        StageAPIGalleryRooms.restoreNativeOriginDescriptor(origin)
+    if originRestored ~= true then
+        ConchBlessing.printError(
+            "Appraisal could not restore its exact native return descriptor: "
+                .. tostring(originRestoreReason)
+        )
+        return false
+    end
     local descriptor, _, reason = getValidatedOriginDescriptor(session)
     if not descriptor then
         return settleStaleOrigin(
@@ -1965,11 +2100,32 @@ local function transitionToOrigin(session)
     local player = getPlayerFromIndex(session.ownerPlayerIndex)
     if not player then return false end
     local context = getCurrentGalleryContext(session)
-    if not context then return false end
-    session.returnIssuedFrom = {
-        mapID = context.manifest.mapID,
-        roomID = context.manifest.roomID,
-    }
+    local directNativeRecovery = context == nil
+        and (isUnpaidEntryRecovery(session)
+            or session.emergencyReturnRequested ~= nil
+            or session.phase == "return_ready"
+            or session.phase == "returning"
+            or session.phase == "completing")
+        and StageAPIGalleryRooms.canStartNativeOriginRecovery() == true
+    if not context and not directNativeRecovery then return false end
+    -- Do not arm write-before-call state for a transition that is already
+    -- known to be blocked by another engine/provider transition. The next
+    -- semantic lifecycle pass can retry once both layers are idle.
+    if StageAPIGalleryRooms.canRetryFailedRoomTransition() ~= true then
+        return false
+    end
+    if context then
+        session.returnIssuedFrom = {
+            mapID = context.manifest.mapID,
+            roomID = context.manifest.roomID,
+        }
+    else
+        session.returnIssuedFrom = {
+            nativeRecovery = true,
+            roomIndex = Game():GetLevel():GetCurrentRoomIndex(),
+            dimension = getCurrentDimension(),
+        }
+    end
     if not saveNow() then
         session.returnIssuedFrom = nil
         return false
@@ -1977,19 +2133,32 @@ local function transitionToOrigin(session)
     -- Arm before calling StageAPI. A no-op or synchronously delivered room
     -- callback must not reopen the transaction and recursively issue it again.
     M._returnTransitionIssued[session.token] = true
+    local transitionFunction = context
+        and StageAPIGalleryRooms.exitToNative
+        or StageAPIGalleryRooms.returnNativeToOrigin
+    M._returnTransitionCallToken = session.token
     local callOK, transitioned, exitReason = pcall(
-        StageAPIGalleryRooms.exitToNative,
+        transitionFunction,
         origin,
         player
     )
+    M._returnTransitionCallToken = nil
     if not callOK or transitioned ~= true then
-        M._returnTransitionIssued[session.token] = nil
-        session.returnIssuedFrom = nil
-        saveNow()
+        local reachedOrigin = StageAPIGalleryRooms.canRollbackFailedEntry(origin) == true
+        local safelyRetryable = StageAPIGalleryRooms.canRetryFailedRoomTransition() == true
         ConchBlessing.printError(
             "Appraisal StageAPI return transition failed: "
                 .. tostring(callOK and exitReason or transitioned)
         )
+        if reachedOrigin or not safelyRetryable then
+            -- The callee can report a post-call validation failure after the
+            -- engine transition has already armed. Keep the write-before-call
+            -- latch so no update can issue a duplicate transition.
+            return true
+        end
+        M._returnTransitionIssued[session.token] = nil
+        session.returnIssuedFrom = nil
+        saveNow()
         return false
     end
     return true
@@ -2031,11 +2200,17 @@ local function releaseCompletedReturnLatch(session)
         return false
     end
     if session.returnMisdirectionCount > MAX_RETURN_MISDIRECTIONS then
-        settleStaleOrigin(
-            session,
-            "Appraisal stopped after repeated StageAPI return redirection."
-        )
-        return false
+        local logKey = tostring(session.token) .. ":return_redirected"
+        if M._entryRecoveryLogKey ~= logKey then
+            M._entryRecoveryLogKey = logKey
+            ConchBlessing.printError(
+                "Appraisal's return was redirected; retrying the exact origin."
+            )
+        end
+        -- A wrong native room is never transaction completion. Keep the
+        -- origin and every unpaid/reward journal intact and let the idle
+        -- lifecycle path reissue the exact return without a retry cap.
+        return true
     end
     return true
 end
@@ -2069,7 +2244,24 @@ local function beginReturn(session, reason)
     end
 
     if isOriginRoom(session) then return true end
-    if isStaleOriginLocation(session) then return settleStaleOrigin(session) end
+    if isStaleOriginLocation(session) then
+        -- Version-9 saves can already be back at their negative native index
+        -- while StageAPI's reusable goto descriptor still occupies that slot.
+        -- Complete the unique legacy RoomConfig identity and repair the writable
+        -- descriptor before treating a same-grid mismatch as a destroyed origin.
+        local identityReady, identityReason = ensureExactOriginIdentity(session)
+        local restored, restoreReason
+        if identityReady == true then
+            restored, restoreReason =
+                StageAPIGalleryRooms.restoreNativeOriginDescriptor(session.origin)
+            if restored == true and isOriginRoom(session) then return true end
+        end
+        return settleStaleOrigin(
+            session,
+            "Appraisal could not repair its stale native return descriptor: "
+                .. tostring(identityReady == true and restoreReason or identityReason)
+        )
+    end
     if M._returnTransitionIssued[session.token] == true then return true end
     return transitionToOrigin(session)
 end
@@ -2570,6 +2762,109 @@ function M.abortDeathCertificateDetour(identity, dcSessionId)
     return true
 end
 
+local function completeUnpaidEntryAtOrigin(session)
+    if not isUnpaidEntryRecovery(session) then return false end
+    local providerFinalized, providerReason = StageAPIGalleryRooms.finalizeNativeExit()
+    if providerFinalized ~= true then
+        ConchBlessing.printError(
+            "Appraisal could not finalize its unpaid native recovery: "
+                .. tostring(providerReason)
+        )
+        return false
+    end
+
+    local previousPhase = session.phase
+    session.phase = "completed"
+    if not saveNow() then
+        session.phase = previousPhase
+        ConchBlessing.printError(
+            "Appraisal could not persist its completed unpaid entry recovery."
+        )
+        return false
+    end
+
+    M._collisionToken = nil
+    M._returnTransitionIssued[session.token] = nil
+    restoreOriginMusic(session)
+    clearVisitFields(session)
+    -- The completed phase above is the durability barrier. Stale visit fields
+    -- are harmless and will be removed on the next successful save.
+    if not saveNow() then
+        ConchBlessing.printError(
+            "Appraisal could not clean up its completed unpaid entry recovery."
+        )
+    end
+    return true
+end
+
+local function recoverUnpaidEntry(session, context, source)
+    if not isUnpaidEntryRecovery(session) then return false end
+    -- A room callback may be delivered synchronously inside ExtraRoomTransition.
+    -- The outer call must first decide whether its write-ahead state is confirmed.
+    if M._entryTransitionCallToken == session.token then return true end
+    if M._returnTransitionCallToken == session.token then return true end
+    if session.floorEnded == true or not sessionMatchesCurrentFloor(session) then
+        return true
+    end
+    local returnLatchMaySettle = source == "new_room"
+        or StageAPIGalleryRooms.canRetryFailedRoomTransition() == true
+    if returnLatchMaySettle and M._returnTransitionIssued[session.token] == true then
+        if not releaseCompletedReturnLatch(session) then return true end
+        if not isUnpaidEntryRecovery(session) then return true end
+    end
+
+    local identityReady, identityReason = ensureExactOriginIdentity(session)
+    if identityReady ~= true then
+        local logKey = tostring(session.token) .. ":legacy:" .. tostring(identityReason)
+        if M._entryRecoveryLogKey ~= logKey then
+            M._entryRecoveryLogKey = logKey
+            ConchBlessing.printError(
+                "Appraisal kept its recovery pending because the saved origin identity "
+                    .. "could not be completed: " .. tostring(identityReason)
+            )
+        end
+        return true
+    end
+
+    local restored, restoreReason =
+        StageAPIGalleryRooms.restoreNativeOriginDescriptor(session.origin)
+    if restored ~= true then
+        local logKey = tostring(session.token) .. ":" .. tostring(restoreReason)
+        if M._entryRecoveryLogKey ~= logKey then
+            M._entryRecoveryLogKey = logKey
+            ConchBlessing.printError(
+                "Appraisal kept its unpaid entry recovery pending because its native origin "
+                    .. "is unavailable: " .. tostring(restoreReason)
+            )
+        end
+        return true
+    end
+    M._entryRecoveryLogKey = nil
+
+    if StageAPIGalleryRooms.canRollbackFailedEntry(session.origin) == true then
+        completeUnpaidEntryAtOrigin(session)
+        return true
+    end
+
+    context = context or getCurrentGalleryContext(session)
+    if context ~= nil
+        or StageAPIGalleryRooms.canStartNativeOriginRecovery() == true
+    then
+        -- Keep entryRecoveryReason through every return durability barrier. It
+        -- is the proof that commitEntry must never charge or mutate inventory.
+        if not beginReturn(session, "entry_transition_recovery") then
+            local logKey = tostring(session.token) .. ":return:" .. tostring(source)
+            if M._entryRecoveryLogKey ~= logKey then
+                M._entryRecoveryLogKey = logKey
+                ConchBlessing.printError(
+                    "Appraisal could not yet start its unpaid origin recovery."
+                )
+            end
+        end
+    end
+    return true
+end
+
 local function heldSnapshotCount(snapshot)
     local count = 0
     if type(snapshot) ~= "table" then return count end
@@ -2600,6 +2895,20 @@ end
 
 local function failEntry(session, player, message)
     ConchBlessing.printError(message)
+    if session
+        and session.phase == "entering"
+        and session.entryTransitionState == ENTRY_TRANSITION_CALL_CONFIRMED
+    then
+        session.entryRecoveryReason = "arrival_validation_failed:" .. tostring(message)
+        -- If this save is not confirmed, the durable CALL_CONFIRMED state still
+        -- lacks its process-local witness after restart and therefore recovers
+        -- unpaid. Never fall through to inventory rollback in either case.
+        saveNow()
+    end
+    if isUnpaidEntryRecovery(session) then
+        recoverUnpaidEntry(session, getCurrentGalleryContext(session), "entry_failure")
+        return false
+    end
     local rolledBack = rollbackEntry(player, session)
     session.permanentVisitFailure = not rolledBack
     session.entryCommitted = nil
@@ -2611,9 +2920,25 @@ local function failEntry(session, player, message)
     return false
 end
 
+local function rollbackLegacyMutatedEntry(session)
+    if not legacyEntryMutationStarted(session) then return false end
+    failEntry(
+        session,
+        getPlayerFromIndex(session.ownerPlayerIndex),
+        "Appraisal is rolling back an interrupted legacy entry transaction."
+    )
+    return true
+end
+
 local function commitEntry(session, player)
     if session.phase ~= "entering" or session.entryCommitted == true then
         return session.entryCommitted == true
+    end
+    if session.entryTransitionState ~= ENTRY_TRANSITION_ARRIVAL_VERIFIED then
+        session.entryRecoveryReason = "entry_arrival_not_durable"
+        saveNow()
+        recoverUnpaidEntry(session, getCurrentGalleryContext(session), "commit_gate")
+        return false
     end
     local journal = session.entryJournal
     if type(journal) ~= "table" then
@@ -2667,6 +2992,8 @@ local function commitEntry(session, player)
     journal.coinsApplied = true
     session.entryCommitted = true
     session.phase = "browsing"
+    session.entryTransitionState = nil
+    M._entryConfirmedToken = nil
     if not saveNow() then
         return failEntry(
             session,
@@ -3147,6 +3474,24 @@ local function requestReturnDoorExit(session)
     return transitionToOrigin(session)
 end
 
+local function resumeEmergencyReturn(session, source)
+    if type(session) ~= "table"
+        or session.emergencyReturnRequested == nil
+        or isOriginRoom(session)
+    then
+        return false
+    end
+    if M._returnTransitionIssued[session.token] == true then
+        local mayRelease = source == "new_room"
+            or StageAPIGalleryRooms.canRetryFailedRoomTransition() == true
+        if not mayRelease or not releaseCompletedReturnLatch(session) then
+            return true
+        end
+    end
+    transitionToOrigin(session)
+    return true
+end
+
 local function registerReturnDoor(stageAPI)
     stageAPI.CustomDoor(
         RETURN_DOOR_NAME,
@@ -3477,6 +3822,25 @@ local function prepareCurrentGalleryRoom(session, context)
             failEntry(session, nil, "Appraisal lost its entering player.")
             return false
         end
+        local originReady, originReason =
+            StageAPIGalleryRooms.restoreNativeOriginDescriptor(session.origin)
+        if originReady ~= true then
+            if session.entryRecoveryReason == nil then
+                session.entryRecoveryReason = tostring(
+                    originReason or "native origin descriptor restore failed"
+                )
+                saveNow()
+                ConchBlessing.printError(
+                    "Appraisal kept its unpaid entry pending because its native origin "
+                        .. "could not be restored: " .. session.entryRecoveryReason
+                )
+            end
+            -- Do not retry or print every update. A continue/new-room lifecycle
+            -- clears this process-local latch and retries from the durable
+            -- origin identity without ever committing payment first.
+            M._preparedRoomKey = context.manifest.key
+            return false
+        end
         if not setAllGalleryDoorsOpen(false) then
             failEntry(
                 session,
@@ -3491,6 +3855,24 @@ local function prepareCurrentGalleryRoom(session, context)
                 player,
                 "Appraisal could not prepare its return door before payment."
             )
+            return false
+        end
+        if session.entryTransitionState == ENTRY_TRANSITION_CALL_CONFIRMED then
+            session.entryTransitionState = ENTRY_TRANSITION_ARRIVAL_VERIFIED
+            M._entryConfirmedToken = nil
+            if not saveNow() then
+                session.entryTransitionState = ENTRY_TRANSITION_CALL_CONFIRMED
+                session.entryRecoveryReason = "arrival_verification_save_failed"
+                ConchBlessing.printError(
+                    "Appraisal could not persist its verified entrance; returning without payment."
+                )
+                recoverUnpaidEntry(session, context, "arrival_verification_save")
+                return false
+            end
+        elseif session.entryTransitionState ~= ENTRY_TRANSITION_ARRIVAL_VERIFIED then
+            session.entryRecoveryReason = "arrival_transition_state_invalid"
+            saveNow()
+            recoverUnpaidEntry(session, context, "arrival_transition_state")
             return false
         end
         if not commitEntry(session, player) then return false end
@@ -3566,6 +3948,11 @@ local function settleFloorEndedSession(session)
     if session.phase == "floor_ended_complete" then
         return finalizeFloorEndedSession(session)
     end
+    if isUnpaidEntryRecovery(session) then
+        -- A write-ahead entry recovery has never crossed commitEntry. Floor
+        -- teardown therefore owns no player inventory or currency rollback.
+        return finalizeFloorEndedSession(session)
+    end
     if session.phase == "entering" then
         return failEntry(
             session,
@@ -3606,7 +3993,11 @@ function M.onUpdate()
     end
     if session.phase == "completed" or session.phase == "build_failed" then return end
     if shouldFreezeForDeathCertificateDetour(session) then return end
+    if M._returnTransitionCallToken == session.token then return end
+    if rollbackLegacyMutatedEntry(session) then return end
+    if recoverUnpaidEntry(session, nil, "update") then return end
     if completeVisitAtOrigin(session) then return end
+    if resumeEmergencyReturn(session, "update") then return end
 
     if session.phase == "return_ready" or session.phase == "returning" then
         beginReturn(session, session.returnReason)
@@ -3696,13 +4087,11 @@ function M.onPostNewRoom()
         if markSessionFloorEnded(session) then settleFloorEndedSession(session) end
         return
     end
+    if M._returnTransitionCallToken == session.token then return end
+    if rollbackLegacyMutatedEntry(session) then return end
+    if recoverUnpaidEntry(session, nil, "new_room") then return end
     if completeVisitAtOrigin(session) then return end
-    if session.emergencyReturnRequested ~= nil
-        and M._returnTransitionIssued[session.token] == true
-        and not releaseCompletedReturnLatch(session)
-    then
-        return
-    end
+    if resumeEmergencyReturn(session, "new_room") then return end
     if (session.phase == "return_ready"
             or session.phase == "returning"
             or session.phase == "completing")
@@ -3844,6 +4233,10 @@ local function clearRunTransientState()
     M._durableSmeltAttempts = {}
     M._removedChoiceStock = {}
     M._returnTransitionIssued = {}
+    M._entryTransitionCallToken = nil
+    M._entryConfirmedToken = nil
+    M._returnTransitionCallToken = nil
+    M._entryRecoveryLogKey = nil
     M._debugStockAudit = nil
     M._stockInitSeeds = {}
     -- Isaac.GetFrameCount() restarts per run; a stale memo entry could
@@ -3933,6 +4326,9 @@ function M.onGameStarted(_, isContinued)
 
     session = reconcileInterruptedBuild(session)
     if not session then return end
+
+    if rollbackLegacyMutatedEntry(session) then return end
+    if recoverUnpaidEntry(session, nil, "continued_game") then return end
 
     -- SaveManager can resume after the native Death Certificate room loaded
     -- but before Atropos bound its saved session ID. Preserve this exact
@@ -4139,6 +4535,14 @@ local function inspectStart(player, cost)
         return stageAPIOriginReason or "stageapi_origin_unknown"
     end
     if inStageAPIExtraRoom then return "stageapi_extra_room" end
+    if type(StageAPIGalleryRooms.validateCurrentNativeOriginForEntry) ~= "function" then
+        return "stageapi_origin_unknown"
+    end
+    local nativeOriginReady, nativeOriginReason =
+        StageAPIGalleryRooms.validateCurrentNativeOriginForEntry()
+    if nativeOriginReady ~= true then
+        return nativeOriginReason or "stageapi_origin_unknown"
+    end
 
     local available, dependencyReason = StageAPIGalleryRooms.isAvailable()
     if not available then return dependencyReason or "stageapi_missing" end
@@ -4299,6 +4703,10 @@ function M.startAppraisal(player, cost)
     session.visitId = session.token .. ":visit:" .. tostring(session.visitSequence)
     session.visitRewardCount = 0
     session.phase = "entering"
+    -- Write-ahead proof: provider success is not charge-eligible until the
+    -- entrance itself verifies the exact origin and persists that arrival.
+    session.entryTransitionState = ENTRY_TRANSITION_CALL_PENDING
+    session.entryRecoveryReason = nil
     session.ownerPlayerIndex = getPlayerIndex(player)
     session.cost = requiredCoins
     session.atroposMode = atroposMode
@@ -4311,6 +4719,9 @@ function M.startAppraisal(player, cost)
         roomType = originData.Type,
         roomVariant = originData.Variant,
         roomSubType = originData.Subtype or originData.SubType,
+        roomStageID = dataNumber(originData, "StageID"),
+        roomMode = dataNumber(originData, "Mode"),
+        roomShape = dataNumber(originData, "Shape"),
         dimension = originDimension,
         stage = level:GetStage(),
         stageType = level:GetStageType(),
@@ -4330,22 +4741,59 @@ function M.startAppraisal(player, cost)
     -- StageAPI owns both directions of this transition. Appraisal no longer
     -- calls or intercepts Death Certificate, so its native dimension remains
     -- independent and available throughout the floor.
+    M._entryTransitionCallToken = session.token
     local callOK, transitioned, transitionReason = pcall(
         StageAPIGalleryRooms.enter,
         session.graph,
         runtime,
         player
     )
+    M._entryTransitionCallToken = nil
     if not callOK or transitioned ~= true then
-        session.phase = "completed"
-        clearVisitFields(session)
-        saveNow()
+        local failureReason = tostring(callOK and transitionReason or transitioned)
+        session.entryRecoveryReason = "entry_call_failed:" .. failureReason
+        if StageAPIGalleryRooms.canRollbackFailedEntry(session.origin) == true then
+            local previousPhase = session.phase
+            session.phase = "completed"
+            if saveNow() then
+                clearVisitFields(session)
+                if not saveNow() then
+                    ConchBlessing.printError(
+                        "Appraisal could not clean up its safely cancelled entry metadata."
+                    )
+                end
+            else
+                session.phase = previousPhase
+                ConchBlessing.printError(
+                    "Appraisal kept its unpaid entry recovery after cancellation save failed."
+                )
+            end
+        else
+            -- The engine room transition cannot be cancelled after issuance.
+            -- Preserve the unpaid origin/journal so arrival or continue repairs
+            -- the descriptor and returns instead of orphaning the player.
+            if not saveNow() then
+                ConchBlessing.printError(
+                    "Appraisal could not persist its uncertain entry recovery state."
+                )
+            end
+        end
         ConchBlessing.printError(
             "Appraisal StageAPI entry failed: "
-                .. tostring(callOK and transitionReason or transitioned)
+                .. failureReason
         )
         return false, transitionReason or "transition_failed"
     end
+    session.entryTransitionState = ENTRY_TRANSITION_CALL_CONFIRMED
+    if not saveNow() then
+        session.entryTransitionState = ENTRY_TRANSITION_CALL_PENDING
+        session.entryRecoveryReason = "entry_confirmation_save_failed"
+        ConchBlessing.printError(
+            "Appraisal could not confirm its StageAPI entry; it will return without payment."
+        )
+        return false, "entry_confirmation_save_failed"
+    end
+    M._entryConfirmedToken = session.token
     return true
 end
 

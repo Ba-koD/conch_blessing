@@ -159,6 +159,329 @@ local function hasMethod(object, key)
     return type(getMember(object, key)) == "function"
 end
 
+local function getRoomConfigSubtype(data)
+    local subtype = getMember(data, "Subtype")
+    if subtype == nil then subtype = getMember(data, "SubType") end
+    return tonumber(subtype)
+end
+
+local function getRoomConfigIdentity(data)
+    if data == nil then return nil end
+    local identity = {
+        stageID = tonumber(getMember(data, "StageID")),
+        roomType = tonumber(getMember(data, "Type")),
+        variant = tonumber(getMember(data, "Variant")),
+        subtype = getRoomConfigSubtype(data),
+        shape = tonumber(getMember(data, "Shape")),
+        mode = tonumber(getMember(data, "Mode")),
+    }
+    if identity.stageID == nil
+        or identity.roomType == nil
+        or identity.variant == nil
+        or identity.subtype == nil
+        or identity.shape == nil
+        or identity.mode == nil
+    then
+        return nil
+    end
+    return identity
+end
+
+local function roomConfigIdentityMatches(identity, data)
+    local actual = getRoomConfigIdentity(data)
+    if type(identity) ~= "table" or type(actual) ~= "table" then return false end
+    return actual.stageID == identity.stageID
+        and actual.roomType == identity.roomType
+        and actual.variant == identity.variant
+        and actual.subtype == identity.subtype
+        and actual.shape == identity.shape
+        and actual.mode == identity.mode
+end
+
+local function descriptorIdentity(descriptor)
+    if descriptor == nil then return nil end
+    local identity = {
+        listIndex = tonumber(getMember(descriptor, "ListIndex")),
+        gridIndex = tonumber(getMember(descriptor, "GridIndex")),
+        safeGridIndex = tonumber(getMember(descriptor, "SafeGridIndex")),
+        spawnSeed = tonumber(getMember(descriptor, "SpawnSeed")),
+    }
+    if identity.listIndex == nil
+        or identity.gridIndex == nil
+        or identity.safeGridIndex == nil
+        or identity.spawnSeed == nil
+    then
+        return nil
+    end
+    return identity
+end
+
+local function descriptorIdentityMatches(expected, descriptor)
+    local actual = descriptorIdentity(descriptor)
+    if type(expected) ~= "table" or type(actual) ~= "table" then return false end
+    return actual.listIndex == expected.listIndex
+        and actual.gridIndex == expected.gridIndex
+        and actual.safeGridIndex == expected.safeGridIndex
+        and actual.spawnSeed == expected.spawnSeed
+end
+
+local function currentNativeLocationMatches(roomIndex, dimension, expectedDescriptor)
+    local level = Game():GetLevel()
+    if not level or type(level.GetDimension) ~= "function" then return false end
+    local dimensionOK, currentDimension = pcall(function()
+        return level:GetDimension()
+    end)
+    return dimensionOK
+        and tonumber(currentDimension) == tonumber(dimension)
+        and tonumber(level:GetCurrentRoomIndex()) == tonumber(roomIndex)
+        and descriptorIdentityMatches(expectedDescriptor, level:GetCurrentRoomDesc())
+end
+
+local function synchronousGalleryArrivalMatches(
+    stageAPI,
+    transitionSnapshot,
+    modeAfter,
+    targetMapID,
+    targetRoom,
+    departureRoomIndex,
+    departureDimension,
+    departureDescriptorIdentity
+)
+    if modeAfter ~= 0
+        or type(transitionSnapshot) ~= "table"
+        or transitionSnapshot.transitioning == true
+        or transitionSnapshot.doing == true
+        or departureRoomIndex == nil
+        or departureDimension == nil
+        or type(departureDescriptorIdentity) ~= "table"
+        or stageAPI.TransitioningToExtraRoom == true
+        or tonumber(stageAPI.CurrentLevelMapID) ~= MAP_DIMENSION
+        or tonumber(stageAPI.CurrentLevelMapRoomID) ~= tonumber(targetMapID)
+        or targetRoom == nil
+        or targetRoom.Loaded ~= true
+        or currentNativeLocationMatches(
+            departureRoomIndex,
+            departureDimension,
+            departureDescriptorIdentity
+        )
+    then
+        return false
+    end
+
+    local currentRoomOK, currentRoom = pcall(stageAPI.GetCurrentRoom)
+    local level = Game():GetLevel()
+    local descriptor = level and level:GetCurrentRoomDesc() or nil
+    local data = getMember(descriptor, "Data")
+    local previous = stageAPI.PreviousExtraRoomData
+    return level ~= nil
+        and currentRoomOK
+        and currentRoom == targetRoom
+        and type(previous) == "table"
+        and tonumber(previous.MapID) == MAP_DIMENSION
+        and tonumber(previous.RoomID) == tonumber(targetMapID)
+        and tonumber(previous.RoomIndex) == tonumber(level:GetCurrentRoomIndex())
+        and tonumber(previous.RoomVariant) == tonumber(getMember(data, "Variant"))
+        and tonumber(previous.RoomSeed) == tonumber(getMember(descriptor, "SpawnSeed"))
+end
+
+local function settleSynchronousProviderFlag(stageAPI, completedSynchronously)
+    if completedSynchronously and stageAPI.DoingExtraRoomTransition == true then
+        -- Installed StageAPI 2.33 writes this flag after StartRoomTransition
+        -- returns. When MC_POST_NEW_ROOM ran synchronously, its callback already
+        -- cleared the flag before that trailing write. Exact post-room evidence
+        -- makes only this one provider field stale; every other field belongs to
+        -- the completed arrival and must remain untouched.
+        stageAPI.DoingExtraRoomTransition = false
+    end
+end
+
+local function synchronousNativeDepartureCompleted(
+    stageAPI,
+    transitionSnapshot,
+    modeAfter,
+    sameDimension,
+    transitionCallCompleted,
+    departureRoomIndex,
+    departureDimension,
+    departureDescriptorIdentity
+)
+    return sameDimension
+        and transitionCallCompleted == true
+        and modeAfter == 0
+        and type(transitionSnapshot) == "table"
+        and transitionSnapshot.transitioning ~= true
+        and transitionSnapshot.doing ~= true
+        and departureRoomIndex ~= nil
+        and departureDimension ~= nil
+        and type(departureDescriptorIdentity) == "table"
+        and stageAPI.TransitioningToExtraRoom ~= true
+        and not currentNativeLocationMatches(
+            departureRoomIndex,
+            departureDimension,
+            departureDescriptorIdentity
+        )
+        and not stageAPI.InExtraRoom()
+        and tonumber(stageAPI.CurrentLevelMapID) ~= MAP_DIMENSION
+        and stageAPI.CurrentLevelMapRoomID == nil
+end
+
+local function resolveRoomConfig(identity)
+    local roomConfig = rawget(_G, "RoomConfig")
+    if type(identity) ~= "table"
+        or type(roomConfig) ~= "table"
+        or type(roomConfig.GetRoomByStageTypeAndVariant) ~= "function"
+    then
+        return nil, "REPENTOGON RoomConfig lookup is unavailable"
+    end
+    local resolved, data = pcall(
+        roomConfig.GetRoomByStageTypeAndVariant,
+        identity.stageID,
+        identity.roomType,
+        identity.variant,
+        identity.mode
+    )
+    if not resolved or not roomConfigIdentityMatches(identity, data) then
+        return nil, "native off-grid RoomConfig identity could not be resolved"
+    end
+    return data
+end
+
+-- StageAPI 2.33 treats every negative native room index as one of its own
+-- reusable extra-room shells and overwrites that descriptor's Data while
+-- arming ExtraRoomTransition. Native special rooms (Devil/Angel, Black Market,
+-- Boss Rush, and the other GridRooms entries) use those negative indices too.
+-- Keep the userdata only for this synchronous call and restore the writable
+-- engine descriptor immediately; persisted origin state remains plain data.
+local function captureNativeOrigin()
+    local game = Game()
+    local level = game and game:GetLevel() or nil
+    local roomIndex = level and tonumber(level:GetCurrentRoomIndex()) or nil
+    if not level or roomIndex == nil then
+        return false, "native origin index is unavailable"
+    end
+    if type(level.GetDimension) ~= "function" then
+        return false, "native origin dimension capability is unavailable"
+    end
+    local dimensionOK, dimension = pcall(function() return level:GetDimension() end)
+    dimension = dimensionOK and tonumber(dimension) or nil
+    if dimension == nil then
+        return false, "native origin dimension is unavailable"
+    end
+
+    local descriptorOK, descriptor = pcall(function()
+        return level:GetRoomByIdx(roomIndex, dimension)
+    end)
+    local currentDescriptor = level:GetCurrentRoomDesc()
+    local data = descriptorOK and getMember(descriptor, "Data") or nil
+    local identity = getRoomConfigIdentity(data)
+    local savedDescriptorIdentity = descriptorIdentity(descriptor)
+    if not descriptorOK
+        or descriptor == nil
+        or currentDescriptor == nil
+        or data == nil
+        or identity == nil
+        or savedDescriptorIdentity == nil
+        or not descriptorIdentityMatches(savedDescriptorIdentity, currentDescriptor)
+        or not roomConfigIdentityMatches(identity, getMember(currentDescriptor, "Data"))
+    then
+        return false, "native origin descriptor is invalid"
+    end
+    if type(descriptor.GetDimension) == "function" then
+        local descriptorDimensionOK, descriptorDimension = pcall(function()
+            return descriptor:GetDimension()
+        end)
+        if not descriptorDimensionOK
+            or tonumber(descriptorDimension) ~= dimension
+        then
+            return false, "native origin descriptor dimension is stale"
+        end
+    end
+    if roomIndex >= 0 then
+        return {
+            offGrid = false,
+            roomIndex = roomIndex,
+            dimension = dimension,
+            descriptorIdentity = savedDescriptorIdentity,
+        }
+    end
+
+    local room = game:GetRoom()
+    if room and type(room.GetType) == "function"
+        and tonumber(room:GetType()) ~= identity.roomType
+    then
+        return false, "native off-grid origin room type is stale"
+    end
+    if room and type(room.GetRoomShape) == "function"
+        and tonumber(room:GetRoomShape()) ~= identity.shape
+    then
+        return false, "native off-grid origin room shape is stale"
+    end
+
+    local resolvedData, resolveReason = resolveRoomConfig(identity)
+    if resolvedData == nil then return false, resolveReason end
+
+    -- A no-op assignment proves that this build exposes the writable
+    -- descriptor StageAPI itself is about to mutate.
+    local writable = pcall(function() descriptor.Data = data end)
+    if not writable
+        or not descriptorIdentityMatches(savedDescriptorIdentity, descriptor)
+        or not roomConfigIdentityMatches(identity, getMember(descriptor, "Data"))
+    then
+        return false, "native off-grid origin descriptor is not writable"
+    end
+
+    return {
+        offGrid = true,
+        roomIndex = roomIndex,
+        dimension = dimension,
+        descriptorIdentity = savedDescriptorIdentity,
+        identity = identity,
+        originalData = data,
+        resolvedData = resolvedData,
+    }
+end
+
+local function restoreNativeOffGridOrigin(snapshot)
+    if type(snapshot) ~= "table" then
+        return false, "native off-grid origin snapshot is invalid"
+    end
+    if snapshot.offGrid ~= true then return true end
+    local level = Game():GetLevel()
+    if not level then return false, "native level is unavailable during origin restore" end
+    local descriptorOK, descriptor = pcall(function()
+        return level:GetRoomByIdx(snapshot.roomIndex, snapshot.dimension)
+    end)
+    if not descriptorOK or descriptor == nil then
+        return false, "native off-grid descriptor disappeared during entry"
+    end
+
+    local function tryRestore(data)
+        if data == nil then return false end
+        local restored = pcall(function()
+            descriptor.Data = data
+        end)
+        return restored
+            and descriptorIdentityMatches(snapshot.descriptorIdentity, descriptor)
+            and roomConfigIdentityMatches(snapshot.identity, getMember(descriptor, "Data"))
+    end
+
+    if tryRestore(snapshot.originalData) or tryRestore(snapshot.resolvedData) then
+        return true
+    end
+    return false, "native off-grid origin descriptor could not be restored"
+end
+
+function M.validateCurrentNativeOriginForEntry()
+    local stageAPI = getStageAPI()
+    if not stageAPI then return false, "StageAPI is unavailable" end
+    if stageAPI.DoingExtraRoomTransition == true then
+        return false, "another StageAPI room transition is active"
+    end
+    local snapshot, reason = captureNativeOrigin()
+    if snapshot == false then return false, reason end
+    return true
+end
+
 local function printError(message)
     if ConchBlessing and type(ConchBlessing.printError) == "function" then
         ConchBlessing.printError(message)
@@ -2053,6 +2376,9 @@ function M.enterRoom(graph, runtime, mapID, player)
     end
     local stageAPI = getStageAPI()
     if not stageAPI then return false, "StageAPI is unavailable" end
+    if stageAPI.DoingExtraRoomTransition == true then
+        return false, "another StageAPI room transition is active"
+    end
     local stateOK, inExtraOrTransitioning = pcall(function()
         return stageAPI.InOrTransitioningToExtraRoom()
     end)
@@ -2071,6 +2397,11 @@ function M.enterRoom(graph, runtime, mapID, player)
             .. tostring(revealReason)
     end
 
+    local nativeOrigin, originReason = captureNativeOrigin()
+    if nativeOrigin == false then
+        return false, originReason or "native off-grid origin is not restorable"
+    end
+
     local transitionSnapshot = snapshotExtraTransitionState(stageAPI)
     local transitioned, transitionError = pcall(function()
         stageAPI.ExtraRoomTransition(
@@ -2084,23 +2415,51 @@ function M.enterRoom(graph, runtime, mapID, player)
             getDefaultRoomType()
         )
     end)
+    local originRestored, originRestoreReason = restoreNativeOffGridOrigin(
+        nativeOrigin
+    )
+    local modeAfter = getRoomTransitionMode()
+    local remainedAtNativeOrigin = currentNativeLocationMatches(
+        nativeOrigin.roomIndex,
+        nativeOrigin.dimension,
+        nativeOrigin.descriptorIdentity
+    )
+    local arrivedSynchronously = synchronousGalleryArrivalMatches(
+        stageAPI,
+        transitionSnapshot,
+        modeAfter,
+        targetMapID,
+        targetRoom,
+        nativeOrigin.roomIndex,
+        nativeOrigin.dimension,
+        nativeOrigin.descriptorIdentity
+    )
+    settleSynchronousProviderFlag(stageAPI, arrivedSynchronously)
+    if not originRestored then
+        if not arrivedSynchronously and modeAfter == 0 and remainedAtNativeOrigin then
+            restoreExtraTransitionState(stageAPI, transitionSnapshot)
+        end
+        return false, originRestoreReason
+            or "native off-grid origin restore failed after StageAPI entry"
+    end
     if not transitioned then
-        restoreExtraTransitionState(stageAPI, transitionSnapshot)
+        if not arrivedSynchronously and modeAfter == 0 and remainedAtNativeOrigin then
+            restoreExtraTransitionState(stageAPI, transitionSnapshot)
+        end
         return false, "StageAPI gallery entry failed: " .. tostring(transitionError)
     end
     if tonumber(stageAPI.CurrentLevelMapID) ~= MAP_DIMENSION
         or tonumber(stageAPI.CurrentLevelMapRoomID) ~= targetMapID
     then
-        restoreExtraTransitionState(stageAPI, transitionSnapshot)
+        if modeAfter == 0 and remainedAtNativeOrigin then
+            restoreExtraTransitionState(stageAPI, transitionSnapshot)
+        end
         return false, "StageAPI did not arm the gallery entry transition"
     end
-    local modeAfter = getRoomTransitionMode()
-    local arrivedSynchronously = stageAPI.TransitioningToExtraRoom ~= true
-        and targetRoom.Loaded == true
-        and tonumber(stageAPI.CurrentLevelMapID) == MAP_DIMENSION
-        and tonumber(stageAPI.CurrentLevelMapRoomID) == targetMapID
     if not arrivedSynchronously and (modeAfter == nil or modeAfter == 0) then
-        restoreExtraTransitionState(stageAPI, transitionSnapshot)
+        if modeAfter == 0 and remainedAtNativeOrigin then
+            restoreExtraTransitionState(stageAPI, transitionSnapshot)
+        end
         return false, "StageAPI did not start the gallery entry transition"
     end
     return true
@@ -2170,6 +2529,15 @@ function M.teleportWithinGallery(graph, runtime, mapID, player)
     if getRoomTransitionMode() ~= 0 then
         return false, "another room transition is already active"
     end
+    local level = Game():GetLevel()
+    local departureRoomIndex = level and tonumber(level:GetCurrentRoomIndex()) or nil
+    local departureDimensionOK, departureDimension = pcall(function()
+        return level and level:GetDimension()
+    end)
+    departureDimension = departureDimensionOK and tonumber(departureDimension) or nil
+    local departureDescriptorIdentity = level
+        and descriptorIdentity(level:GetCurrentRoomDesc())
+        or nil
     local transitionSnapshot = snapshotExtraTransitionState(stageAPI)
     local transitioned, transitionError = pcall(function()
         stageAPI.ExtraRoomTransition(
@@ -2183,22 +2551,41 @@ function M.teleportWithinGallery(graph, runtime, mapID, player)
             getDefaultRoomType()
         )
     end)
+    local modeAfter = getRoomTransitionMode()
+    local remainedAtDeparture = currentNativeLocationMatches(
+        departureRoomIndex,
+        departureDimension,
+        departureDescriptorIdentity
+    )
+    local arrivedSynchronously = synchronousGalleryArrivalMatches(
+        stageAPI,
+        transitionSnapshot,
+        modeAfter,
+        targetMapID,
+        targetRoom,
+        departureRoomIndex,
+        departureDimension,
+        departureDescriptorIdentity
+    )
+    settleSynchronousProviderFlag(stageAPI, arrivedSynchronously)
     if not transitioned then
-        restoreExtraTransitionState(stageAPI, transitionSnapshot)
+        if not arrivedSynchronously and modeAfter == 0 and remainedAtDeparture then
+            restoreExtraTransitionState(stageAPI, transitionSnapshot)
+        end
         return false, "StageAPI gallery travel failed: " .. tostring(transitionError)
     end
     if tonumber(stageAPI.CurrentLevelMapID) ~= MAP_DIMENSION
         or tonumber(stageAPI.CurrentLevelMapRoomID) ~= targetMapID
     then
-        restoreExtraTransitionState(stageAPI, transitionSnapshot)
+        if modeAfter == 0 and remainedAtDeparture then
+            restoreExtraTransitionState(stageAPI, transitionSnapshot)
+        end
         return false, "StageAPI did not arm the gallery travel transition"
     end
-    local modeAfter = getRoomTransitionMode()
-    local arrivedSynchronously = stageAPI.TransitioningToExtraRoom ~= true
-        and targetRoom.Loaded == true
-        and tonumber(stageAPI.CurrentLevelMapRoomID) == targetMapID
     if not arrivedSynchronously and (modeAfter == nil or modeAfter == 0) then
-        restoreExtraTransitionState(stageAPI, transitionSnapshot)
+        if modeAfter == 0 and remainedAtDeparture then
+            restoreExtraTransitionState(stageAPI, transitionSnapshot)
+        end
         return false, "StageAPI did not start the gallery travel transition"
     end
     return true
@@ -2214,22 +2601,330 @@ local function optionalNumberMatches(saved, actual)
     return saved == nil or tonumber(saved) == tonumber(actual)
 end
 
-local function originDescriptorMatches(origin, descriptor, dimension)
-    local data = descriptorData(descriptor)
-    if type(origin) ~= "table" or descriptor == nil or data == nil then return false end
+local function originDescriptorLocationMatches(origin, descriptor, dimension)
+    if type(origin) ~= "table" or descriptor == nil then return false end
     if not optionalNumberMatches(origin.listIndex, descriptor.ListIndex)
         or not optionalNumberMatches(origin.safeGridIndex, descriptor.SafeGridIndex)
         or not optionalNumberMatches(origin.gridIndex, descriptor.GridIndex)
         or not optionalNumberMatches(origin.spawnSeed, descriptor.SpawnSeed)
-        or not optionalNumberMatches(origin.roomType, data.Type)
-        or not optionalNumberMatches(origin.roomVariant, data.Variant)
-        or not optionalNumberMatches(origin.roomSubType, data.Subtype or data.SubType)
     then
         return false
     end
     if type(descriptor.GetDimension) == "function" then
         local ok, actualDimension = pcall(function() return descriptor:GetDimension() end)
         if not ok or tonumber(actualDimension) ~= tonumber(dimension) then return false end
+    end
+    return true
+end
+
+local function originDescriptorMatches(origin, descriptor, dimension)
+    local data = descriptorData(descriptor)
+    if data == nil
+        or not originDescriptorLocationMatches(origin, descriptor, dimension)
+    then
+        return false
+    end
+    return optionalNumberMatches(origin.roomType, data.Type)
+        and optionalNumberMatches(origin.roomVariant, data.Variant)
+        and optionalNumberMatches(origin.roomSubType, data.Subtype or data.SubType)
+        and optionalNumberMatches(origin.roomStageID, getMember(data, "StageID"))
+        and optionalNumberMatches(origin.roomMode, getMember(data, "Mode"))
+        and optionalNumberMatches(origin.roomShape, getMember(data, "Shape"))
+end
+
+local function roomConfigIdentityFromOrigin(origin)
+    if type(origin) ~= "table" then return nil end
+    local identity = {
+        stageID = tonumber(origin.roomStageID),
+        roomType = tonumber(origin.roomType),
+        variant = tonumber(origin.roomVariant),
+        subtype = tonumber(origin.roomSubType),
+        shape = tonumber(origin.roomShape),
+        mode = tonumber(origin.roomMode),
+    }
+    if identity.stageID == nil
+        or identity.roomType == nil
+        or identity.variant == nil
+        or identity.subtype == nil
+        or identity.shape == nil
+        or identity.mode == nil
+    then
+        return nil
+    end
+    return identity
+end
+
+-- Session v9 predates the exact StageID/Mode/Shape origin fields. Recover only
+-- when the installed RoomConfig registry yields one unambiguous config for the
+-- saved native type/variant/subtype in the run's Normal/Greed room-set mode.
+function M.migrateLegacyNativeOrigin(origin)
+    if type(origin) ~= "table" then return false, "legacy native origin is missing" end
+    if roomConfigIdentityFromOrigin(origin) ~= nil then return true end
+    local level = Game():GetLevel()
+    local dimension = tonumber(origin.dimension)
+    local target = tonumber(origin.safeGridIndex or origin.roomIndex or origin.gridIndex)
+    if not level or dimension == nil or target == nil then
+        return false, "legacy native origin identity is incomplete"
+    end
+    local descriptorOK, descriptor = pcall(function()
+        return level:GetRoomByIdx(target, dimension)
+    end)
+    if not descriptorOK
+        or not originDescriptorLocationMatches(origin, descriptor, dimension)
+    then
+        return false, "legacy native origin descriptor location is stale"
+    end
+
+    local function savedFieldsMatch(identity)
+        return type(identity) == "table"
+            and optionalNumberMatches(origin.roomType, identity.roomType)
+            and optionalNumberMatches(origin.roomVariant, identity.variant)
+            and optionalNumberMatches(origin.roomSubType, identity.subtype)
+            and optionalNumberMatches(origin.roomStageID, identity.stageID)
+            and optionalNumberMatches(origin.roomMode, identity.mode)
+            and optionalNumberMatches(origin.roomShape, identity.shape)
+    end
+
+    local identity = getRoomConfigIdentity(descriptorData(descriptor))
+    local resolvedData = identity and savedFieldsMatch(identity)
+        and descriptorData(descriptor)
+        or nil
+    if resolvedData == nil and target < 0 then
+        local roomConfig = rawget(_G, "RoomConfig")
+        local stbType = rawget(_G, "StbType")
+        local game = Game()
+        if type(roomConfig) ~= "table"
+            or type(roomConfig.GetRoomByStageTypeAndVariant) ~= "function"
+            or type(stbType) ~= "table"
+            or type(game.IsGreedMode) ~= "function"
+        then
+            return false, "legacy RoomConfig enumeration is unavailable"
+        end
+        local greedOK, greedMode = pcall(function() return game:IsGreedMode() end)
+        if not greedOK then return false, "legacy room-set mode is unavailable" end
+        local expectedMode = greedMode and 1 or 0
+        local stageIDs = {}
+        local maximumStageID = 0
+        for _, value in pairs(stbType) do
+            local stageID = tonumber(value)
+            if stageID ~= nil and stageID >= 0 and stageID == math.floor(stageID) then
+                stageIDs[stageID] = true
+                maximumStageID = math.max(maximumStageID, stageID)
+            end
+        end
+        -- The installed StbType enum omits numeric Greed room-set IDs 18-25
+        -- even though the corresponding extracted STBs and RoomConfig stages
+        -- exist. Probe the complete bounded numeric domain represented by the
+        -- provider enum; exact returned StageID/Mode validation below still
+        -- rejects holes and unrelated configs.
+        for stageID = 0, maximumStageID do
+            stageIDs[stageID] = true
+        end
+        local candidates = {}
+        for stageID in pairs(stageIDs) do
+            local found, data = pcall(
+                roomConfig.GetRoomByStageTypeAndVariant,
+                stageID,
+                tonumber(origin.roomType),
+                tonumber(origin.roomVariant),
+                expectedMode
+            )
+            local candidate = found and getRoomConfigIdentity(data) or nil
+            if candidate
+                and candidate.stageID == stageID
+                and candidate.mode == expectedMode
+                and savedFieldsMatch(candidate)
+            then
+                local key = table.concat({
+                    candidate.stageID,
+                    candidate.roomType,
+                    candidate.variant,
+                    candidate.subtype,
+                    candidate.shape,
+                    candidate.mode,
+                }, ":")
+                candidates[key] = { identity = candidate, data = data }
+            end
+        end
+        local count = 0
+        local only
+        for _, candidate in pairs(candidates) do
+            count = count + 1
+            only = candidate
+        end
+        if count ~= 1 then
+            return false, count == 0
+                and "legacy native RoomConfig was not found"
+                or "legacy native RoomConfig identity is ambiguous"
+        end
+        identity = only.identity
+        local exact, exactReason = resolveRoomConfig(identity)
+        if exact == nil then return false, exactReason end
+        resolvedData = exact
+    end
+    if resolvedData == nil or not savedFieldsMatch(identity) then
+        return false, "legacy native RoomConfig identity could not be verified"
+    end
+
+    local restored, restoreError = pcall(function() descriptor.Data = resolvedData end)
+    if not restored
+        or not originDescriptorLocationMatches(origin, descriptor, dimension)
+        or not roomConfigIdentityMatches(identity, descriptorData(descriptor))
+    then
+        return false, "legacy native descriptor restore failed: " .. tostring(restoreError)
+    end
+    origin.roomStageID = identity.stageID
+    origin.roomMode = identity.mode
+    origin.roomShape = identity.shape
+    return true
+end
+
+function M.restoreNativeOriginDescriptor(origin)
+    if type(origin) ~= "table" then return false, "native origin is missing" end
+    local level = Game():GetLevel()
+    local dimension = tonumber(origin.dimension)
+    local target = tonumber(origin.safeGridIndex or origin.roomIndex or origin.gridIndex)
+    if not level or dimension == nil or target == nil then
+        return false, "native origin identity is incomplete"
+    end
+    if not optionalNumberMatches(origin.stage, level:GetStage())
+        or not optionalNumberMatches(origin.stageType, level:GetStageType())
+    then
+        return false, "native origin floor changed"
+    end
+    local descriptorOK, descriptor = pcall(function()
+        return level:GetRoomByIdx(target, dimension)
+    end)
+    if not descriptorOK
+        or not originDescriptorLocationMatches(origin, descriptor, dimension)
+    then
+        return false, "native origin descriptor location is stale"
+    end
+    if target >= 0 then
+        if originDescriptorMatches(origin, descriptor, dimension) then return true end
+        return false, "native origin descriptor is stale"
+    end
+
+    local identity = roomConfigIdentityFromOrigin(origin)
+    if identity == nil then
+        return false, "native off-grid RoomConfig identity is incomplete"
+    end
+    local data, resolveReason = resolveRoomConfig(identity)
+    if data == nil then return false, resolveReason end
+    local restored, restoreError = pcall(function() descriptor.Data = data end)
+    if not restored then
+        return false, "native off-grid descriptor restore failed: "
+            .. tostring(restoreError)
+    end
+    if not originDescriptorMatches(origin, descriptor, dimension) then
+        return false, "native off-grid descriptor restore did not verify"
+    end
+    return true
+end
+
+function M.canRollbackFailedEntry(origin)
+    if getRoomTransitionMode() ~= 0 then return false end
+    local stageAPI = getStageAPI()
+    if not stageAPI then return false end
+    if stageAPI.DoingExtraRoomTransition == true then return false end
+    local stateOK, inOrTransitioning = pcall(function()
+        return stageAPI.InOrTransitioningToExtraRoom()
+    end)
+    if not stateOK or inOrTransitioning then return false end
+    local level = Game():GetLevel()
+    local dimension = type(origin) == "table" and tonumber(origin.dimension) or nil
+    if not level or dimension == nil then return false end
+    local currentDimensionOK, currentDimension = pcall(function()
+        return level:GetDimension()
+    end)
+    if not currentDimensionOK or tonumber(currentDimension) ~= dimension then return false end
+    local currentIndex = tonumber(level:GetCurrentRoomIndex())
+    if currentIndex ~= tonumber(origin.safeGridIndex)
+        and currentIndex ~= tonumber(origin.roomIndex)
+        and currentIndex ~= tonumber(origin.gridIndex)
+    then
+        return false
+    end
+    return originDescriptorMatches(
+        origin,
+        level:GetCurrentRoomDesc(),
+        dimension
+    )
+end
+
+-- This is deliberately narrower than exitToNative. It is used only by an
+-- unpaid write-ahead entry recovery after the player has ended up in another
+-- ordinary native room. Never adopt or leave an unrelated StageAPI extra room.
+function M.canStartNativeOriginRecovery()
+    if getRoomTransitionMode() ~= 0 then return false end
+    local stageAPI = getStageAPI()
+    if not stageAPI then return false end
+    if stageAPI.DoingExtraRoomTransition == true then return false end
+    local stateOK, inOrTransitioning = pcall(function()
+        return stageAPI.InOrTransitioningToExtraRoom()
+    end)
+    return stateOK and not inOrTransitioning
+end
+
+function M.canRetryFailedRoomTransition()
+    if getRoomTransitionMode() ~= 0 then return false end
+    local stageAPI = getStageAPI()
+    return stageAPI ~= nil
+        and stageAPI.TransitioningToExtraRoom ~= true
+        and stageAPI.DoingExtraRoomTransition ~= true
+end
+
+function M.returnNativeToOrigin(origin, player)
+    if type(origin) ~= "table" then return false, "native origin is missing" end
+    if player == nil or type(player.ToPlayer) ~= "function" or player:ToPlayer() == nil then
+        return false, "return player is invalid"
+    end
+    if not M.canStartNativeOriginRecovery() then
+        return false, "native recovery transition is not idle"
+    end
+    local restored, restoreReason = M.restoreNativeOriginDescriptor(origin)
+    if restored ~= true then return false, restoreReason end
+
+    local level = Game():GetLevel()
+    local dimension = tonumber(origin.dimension)
+    local target = tonumber(origin.safeGridIndex or origin.roomIndex or origin.gridIndex)
+    if not level or dimension == nil or target == nil then
+        return false, "native recovery identity is incomplete"
+    end
+    local currentDimensionOK, currentDimension = pcall(function()
+        return level:GetDimension()
+    end)
+    if currentDimensionOK
+        and tonumber(currentDimension) == dimension
+        and tonumber(level:GetCurrentRoomIndex()) == target
+        and originDescriptorMatches(origin, level:GetCurrentRoomDesc(), dimension)
+    then
+        return true
+    end
+
+    local transitioned, transitionError = pcall(function()
+        Game():StartRoomTransition(
+            target,
+            Direction.NO_DIRECTION,
+            RoomTransitionAnim.FADE,
+            player,
+            dimension
+        )
+    end)
+    local modeAfter = getRoomTransitionMode()
+    local arrivedSynchronously
+    currentDimensionOK, currentDimension = pcall(function()
+        return level:GetDimension()
+    end)
+    arrivedSynchronously = currentDimensionOK
+        and tonumber(currentDimension) == dimension
+        and tonumber(level:GetCurrentRoomIndex()) == target
+        and originDescriptorMatches(origin, level:GetCurrentRoomDesc(), dimension)
+    if not transitioned then
+        return false, "native recovery transition failed: " .. tostring(transitionError)
+    end
+    if not arrivedSynchronously and (modeAfter == nil or modeAfter == 0) then
+        return false, "native recovery transition did not start"
     end
     return true
 end
@@ -2278,6 +2973,8 @@ function M.exitToNative(origin, player)
 
     local sameDimension = tonumber(currentNativeDimension) == dimension
     local transitionSnapshot = snapshotExtraTransitionState(stageAPI)
+    local departureRoomIndex = tonumber(level:GetCurrentRoomIndex())
+    local departureDescriptorIdentity = descriptorIdentity(level:GetCurrentRoomDesc())
     local transitioned, transitionError
     if sameDimension then
         transitioned, transitionError = pcall(function()
@@ -2337,10 +3034,6 @@ function M.exitToNative(origin, player)
             )
         end)
     end
-    if not transitioned then
-        restoreExtraTransitionState(stageAPI, transitionSnapshot)
-        return false, "native return transition failed: " .. tostring(transitionError)
-    end
     local modeAfter = getRoomTransitionMode()
     local arrivedSynchronously
     local currentDimensionOK, currentDimension = pcall(function()
@@ -2352,14 +3045,40 @@ function M.exitToNative(origin, player)
         and tonumber(level:GetCurrentRoomIndex()) == target
         and originDescriptorMatches(origin, currentDescriptor, dimension)
         and (not stageAPI.InExtraRoom())
+    local remainedAtDeparture = currentNativeLocationMatches(
+        departureRoomIndex,
+        currentNativeDimension,
+        departureDescriptorIdentity
+    )
+    local completedSynchronously = synchronousNativeDepartureCompleted(
+        stageAPI,
+        transitionSnapshot,
+        modeAfter,
+        sameDimension,
+        transitioned or arrivedSynchronously,
+        departureRoomIndex,
+        currentNativeDimension,
+        departureDescriptorIdentity
+    )
+    settleSynchronousProviderFlag(stageAPI, completedSynchronously)
+    if not transitioned then
+        if not arrivedSynchronously and modeAfter == 0 and remainedAtDeparture then
+            restoreExtraTransitionState(stageAPI, transitionSnapshot)
+        end
+        return false, "native return transition failed: " .. tostring(transitionError)
+    end
     if not arrivedSynchronously and (modeAfter == nil or modeAfter == 0) then
-        restoreExtraTransitionState(stageAPI, transitionSnapshot)
+        if modeAfter == 0 and remainedAtDeparture then
+            restoreExtraTransitionState(stageAPI, transitionSnapshot)
+        end
         return false, "native return transition did not start"
     end
     if sameDimension and (stageAPI.CurrentLevelMapRoomID ~= nil
         or tonumber(stageAPI.CurrentLevelMapID) == MAP_DIMENSION)
     then
-        restoreExtraTransitionState(stageAPI, transitionSnapshot)
+        if modeAfter == 0 and remainedAtDeparture then
+            restoreExtraTransitionState(stageAPI, transitionSnapshot)
+        end
         return false, "StageAPI did not release the gallery map"
     end
     return true
