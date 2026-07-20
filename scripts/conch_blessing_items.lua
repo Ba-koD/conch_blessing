@@ -631,6 +631,7 @@ ConchBlessing.ItemData = {
 			en = {
 				"Absorbs and removes familiar-type collectibles.",
 				"#Each absorbed familiar increases {{Damage}}Damage by 2.0 and may grant a custom effect.",
+				"#The effects last until this item is lost. (Familiars return when it is lost.)",
 				"#Some familiars are excluded by a blacklist."
 			}
 		},
@@ -657,8 +658,8 @@ ConchBlessing.ItemData = {
 		},
 		synergies = {
             [{ id = CollectibleType.COLLECTIBLE_TWISTED_PAIR, type = "collectible" }] = {
-                kr = "75% 데미지의 공격을 2개 추가합니다.",
-                en = "Adds 2 additional 75% damage attacks."
+                kr = "37.5% 데미지의 공격을 2개 추가합니다.",
+                en = "Adds 2 additional 37.5% damage attacks."
             },
             [{ id = CollectibleType.COLLECTIBLE_SUCCUBUS, type = "collectible" }] = {
                 kr = "내 주변으로 오라가 고정됩니다.",
@@ -1735,10 +1736,12 @@ ConchBlessing.ItemData = {
         eid = {
             kr = {
                 "모든 선택지 아이템을 획득할 수 있게 합니다.",
+                "#모든 아이템에 선택지를 +1 합니다.",
                 "#{{Warning}} REPENTOGON 권장",
             },
             en = {
                 "Allows picking all optioned items",
+                "#Adds +1 option to all items.",
                 "#{{Warning}} REPENTOGON recommended",
             }
         },

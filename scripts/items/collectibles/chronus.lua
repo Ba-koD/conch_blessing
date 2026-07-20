@@ -660,14 +660,15 @@ function ConchBlessing.chronus._trackConvertedItemRemoval(player)
     end
 end
 
--- Twisted Pair: spawn invisible Incubus with offset (2 per pair)
-local function spawnInvisibleTwistedPairIncubus(player, pairIndex, side)
-    dbg(string.format("Spawning Twisted Pair Incubus: pairIndex=%d, side=%d", tonumber(pairIndex) or 0, tonumber(side) or 0))
-    local ent = Isaac.Spawn(EntityType.ENTITY_FAMILIAR, FamiliarVariant.INCUBUS, 0, player.Position, Vector.Zero, player)
+-- Twisted Pair: spawn both original Twisted Baby subtypes invisibly (2 per pair)
+local function spawnInvisibleTwistedBaby(player, pairIndex, side)
+    local subtype = side < 0 and 1 or 0
+    dbg(string.format("Spawning Twisted Baby: pairIndex=%d, side=%d, subtype=%d", tonumber(pairIndex) or 0, tonumber(side) or 0, subtype))
+    local ent = Isaac.Spawn(EntityType.ENTITY_FAMILIAR, FamiliarVariant.TWISTED_BABY, subtype, player.Position, Vector.Zero, player)
     local fam = ent and ent:ToFamiliar() or nil
-    if not fam then 
-        dbg("Failed to spawn Twisted Pair Incubus entity")
-        return nil 
+    if not fam then
+        dbg("Failed to spawn Twisted Baby entity")
+        return nil
     end
     fam:ClearEntityFlags(EntityFlag.FLAG_APPEAR)
     local spr = fam:GetSprite()
@@ -682,7 +683,7 @@ local function spawnInvisibleTwistedPairIncubus(player, pairIndex, side)
     fd.__chronusTwistedPair = true
     fd.__chronusPairIndex = tonumber(pairIndex) or 1
     fd.__chronusSide = tonumber(side) or 1
-    dbg(string.format("Twisted Pair Incubus spawned at position (%f, %f)", fam.Position.X, fam.Position.Y))
+    dbg(string.format("Twisted Baby spawned at position (%f, %f)", fam.Position.X, fam.Position.Y))
     return fam
 end
 
@@ -699,7 +700,13 @@ function ConchBlessing.chronus._ensureTwistedPairs(player)
     for _, f in ipairs(pdata.__chronusTwistedPairs) do
         if f and f:Exists() and f:ToFamiliar() then
             local fd = f:GetData()
-            if fd and fd.__chronusTwistedPair then table.insert(kept, f) end
+            if fd and fd.__chronusTwistedPair then
+                if f.Variant == FamiliarVariant.TWISTED_BABY then
+                    table.insert(kept, f)
+                else
+                    f:Remove()
+                end
+            end
         end
     end
     pdata.__chronusTwistedPairs = kept
@@ -707,10 +714,10 @@ function ConchBlessing.chronus._ensureTwistedPairs(player)
     while #pdata.__chronusTwistedPairs < target do
         local idx = math.floor(#pdata.__chronusTwistedPairs / 2) + 1
         local side = (#pdata.__chronusTwistedPairs % 2 == 0) and 1 or -1
-        dbg(string.format("Spawning Twisted Pair Incubus %d/%d", #pdata.__chronusTwistedPairs + 1, target))
-        local fam = spawnInvisibleTwistedPairIncubus(player, idx, side)
-        if not fam then 
-            dbg("Failed to spawn Twisted Pair Incubus, breaking loop")
+        dbg(string.format("Spawning Twisted Baby %d/%d", #pdata.__chronusTwistedPairs + 1, target))
+        local fam = spawnInvisibleTwistedBaby(player, idx, side)
+        if not fam then
+            dbg("Failed to spawn Twisted Baby, breaking loop")
             break 
         end
         table.insert(pdata.__chronusTwistedPairs, fam)
@@ -1471,8 +1478,8 @@ ConchBlessing.chronus.onFamiliarUpdate = function(_, fam)
     if not f then return end
     local fd = f:GetData() or {}
     
-    -- Handle Twisted Pair Incubus (offset position with side)
-    if f.Variant == FamiliarVariant.INCUBUS and fd.__chronusTwistedPair then
+    -- Handle Twisted Baby (offset position with side)
+    if f.Variant == FamiliarVariant.TWISTED_BABY and fd.__chronusTwistedPair then
         if not fd.__chronusTwistedPairSpr then
             local spr = f:GetSprite()
             local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
@@ -1482,7 +1489,7 @@ ConchBlessing.chronus.onFamiliarUpdate = function(_, fam)
             end
             pcall(function() spr:LoadGraphics() end)
             fd.__chronusTwistedPairSpr = true
-            dbg(string.format("Twisted Pair Incubus sprite initialized (all layers): pairIdx=%s, side=%s", 
+            dbg(string.format("Twisted Baby sprite initialized (all layers): pairIdx=%s, side=%s",
                 tostring(fd.__chronusPairIndex or "nil"), 
                 tostring(fd.__chronusSide or "nil")))
         end
