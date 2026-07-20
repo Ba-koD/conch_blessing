@@ -648,7 +648,7 @@ def create_items_xml(items, output_path):
     for item_key, item_info in items.items():
         # determine the item type (use type if it exists, otherwise use maxcharges)
         item_type = item_info.get('type', 'passive')
-        if not item_info.get('type') and item_info.get('maxcharges'):
+        if not item_info.get('type') and item_info.get('maxcharges') is not None:
             item_type = 'active'
 
         # write exact type as tag, including <familiar> support
@@ -701,7 +701,7 @@ def create_items_xml(items, output_path):
         if item_info.get('devilprice'):
             item_elem.set("devilprice", str(item_info['devilprice']))
         
-        if item_info.get('maxcharges'):
+        if item_type == 'active' and item_info.get('maxcharges') is not None:
             item_elem.set("maxcharges", str(item_info['maxcharges']))
         
         if item_info.get('chargetype'):

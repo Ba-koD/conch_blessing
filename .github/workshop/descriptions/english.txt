@@ -8,8 +8,13 @@ Key Features:
 - Natural Spawn Toggle: Enable or disable mod item spawns via Mod Config Menu
 - Compatible with Mod Config Menu
 
-Required Item:
+Required Items:
 - Magic Conch
+- StageAPI
+- MiniMAPI
+
+Feature Requirements:
+- REPENTOGON (Appraisal Certificate)
 
 Recommended:
 - RGON

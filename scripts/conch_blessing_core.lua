@@ -1,15 +1,164 @@
 local mod = RegisterMod("Conch's Blessing", 1)
 
 local function hasStatsAPIDependency()
-    return type(_G.StatsAPI) == "table"
-        and type(StatsAPI.stats) == "table"
-        and type(StatsAPI.stats.unifiedMultipliers) == "table"
+    local statsAPI = rawget(_G, "StatsAPI")
+    return type(statsAPI) == "table"
+        and type(statsAPI.stats) == "table"
+        and type(statsAPI.stats.unifiedMultipliers) == "table"
 end
 
-if not hasStatsAPIDependency() then
+local function hasMinimapAPIDependency()
+    local minimapAPI = rawget(_G, "MinimapAPI")
+    return type(minimapAPI) == "table"
+        and type(minimapAPI.AddRoom) == "function"
+        and type(minimapAPI.GetRoomTypeIconID) == "function"
+        and type(minimapAPI.GetUnknownRoomTypeIconID) == "function"
+        and type(minimapAPI.RoomTypeDisplayFlagsAdjacent) == "table"
+        and type(minimapAPI.GetLevel) == "function"
+        and type(minimapAPI.SetLevel) == "function"
+        and type(minimapAPI.SetPlayerPosition) == "function"
+        and type(minimapAPI.AddPlayerPositionCallback) == "function"
+        and type(minimapAPI.AddDimensionCallback) == "function"
+        and type(minimapAPI.RemovePlayerPositionCallbacks) == "function"
+        and type(minimapAPI.RemoveDimensionCallbacks) == "function"
+end
+
+local STAGEAPI_MINIMAP_COMPAT_MARKER = "__ConchBlessingMinimapCompatProvider"
+
+local function ensureStageAPIMinimapCompatibility(stageAPI)
+    local minimapAPI = rawget(_G, "MinimapAPI")
+    if type(stageAPI) ~= "table"
+        or type(stageAPI.LoadMinimapAPICompat) ~= "function"
+        or not hasMinimapAPIDependency()
+    then
+        return false
+    end
+
+    local bridgedProvider = rawget(stageAPI, STAGEAPI_MINIMAP_COMPAT_MARKER)
+    if stageAPI.LoadedMinimapAPICompat == true
+        and bridgedProvider == minimapAPI
+    then
+        return true
+    end
+
+    -- StageAPI normally installs this bridge during MC_POST_GAME_STARTED, but
+    -- either provider can be hot-reloaded independently. Remove the provider's
+    -- stable callback key before installing it so the current object has exactly
+    -- one dimension callback and one player-position callback.
+    local reset = pcall(function()
+        minimapAPI:RemovePlayerPositionCallbacks("StageAPI")
+        minimapAPI:RemoveDimensionCallbacks("StageAPI")
+    end)
+    if not reset then return false end
+    local loaded = pcall(function()
+        stageAPI.LoadMinimapAPICompat()
+    end)
+    if not loaded then return false end
+
+    stageAPI.LoadedMinimapAPICompat = true
+    rawset(stageAPI, STAGEAPI_MINIMAP_COMPAT_MARKER, minimapAPI)
+    return true
+end
+
+local function hasStageAPIDependency()
+    local stageAPI = rawget(_G, "StageAPI")
+    if type(stageAPI) ~= "table" or stageAPI.Loaded ~= true then
+        return false
+    end
+
+    local callbacks = type(stageAPI.Enum) == "table"
+        and stageAPI.Enum.Callbacks
+        or nil
+
+    return type(stageAPI.CustomDoor) == "table"
+        and type(stageAPI.SpawnCustomDoor) == "function"
+        and type(stageAPI.GetCustomDoors) == "function"
+        and type(stageAPI.GetCustomDoorDataAtSlot) == "function"
+        and type(stageAPI.SetDoorOpen) == "function"
+        and type(stageAPI.LevelMap) == "table"
+        and type(stageAPI.LevelMap.AddRoom) == "function"
+        and type(stageAPI.LevelMap.RemoveRoom) == "function"
+        and type(stageAPI.LevelMap.SetAllRoomDoors) == "function"
+        and type(stageAPI.LevelMap.AddRoomToMinimap) == "function"
+        and type(stageAPI.LevelMap.Destroy) == "function"
+        and type(stageAPI.LevelRoom) == "table"
+        and type(stageAPI.LevelRoom.GetNextPersistentIndex) == "function"
+        and type(stageAPI.CreateEmptyRoomLayout) == "function"
+        and type(stageAPI.RegisterLayout) == "function"
+        and type(stageAPI.GetLevelRoom) == "function"
+        and type(stageAPI.SetLevelRoom) == "function"
+        and type(stageAPI.GetCurrentRoom) == "function"
+        and type(stageAPI.GetCurrentLevelMap) == "function"
+        and type(stageAPI.InExtraRoom) == "function"
+        and type(stageAPI.InOrTransitioningToExtraRoom) == "function"
+        and type(stageAPI.ExtraRoomTransition) == "function"
+        and type(stageAPI.CheckPersistence) == "function"
+        and type(stageAPI.GetEntityPersistenceData) == "function"
+        and type(stageAPI.SetEntityPersistenceData) == "function"
+        and type(stageAPI.AddCallback) == "function"
+        and type(stageAPI.UnregisterCallbacks) == "function"
+        and type(stageAPI.SaveModData) == "function"
+        and type(stageAPI.LevelMaps) == "table"
+        and type(stageAPI.LevelRooms) == "table"
+        and type(stageAPI.RoomsToLoad) == "table"
+        and type(stageAPI.LoadMinimapAPICompat) == "function"
+        and type(callbacks) == "table"
+        and callbacks.POST_STAGEAPI_LOAD_SAVE ~= nil
+        and (
+            not hasMinimapAPIDependency()
+            or ensureStageAPIMinimapCompatibility(stageAPI)
+        )
+end
+
+local requiredDependencies = {
+    {
+        name = "StatsAPI",
+        isAvailable = hasStatsAPIDependency,
+        reloadCommands = {
+            "luamod statsapi",
+        },
+    },
+    {
+        name = "MiniMAPI",
+        isAvailable = hasMinimapAPIDependency,
+        reloadCommands = {
+            "luamod minimapi",
+            "luamod minimapi_1978904635",
+        },
+    },
+    {
+        name = "StageAPI",
+        isAvailable = hasStageAPIDependency,
+        reloadCommands = {
+            "luamod stageapi15",
+            "luamod stageapi15_1348031964",
+        },
+    },
+}
+
+local function getMissingRequiredDependencies()
+    local missing = {}
+    for _, dependency in ipairs(requiredDependencies) do
+        if not dependency.isAvailable() then
+            missing[#missing + 1] = dependency
+        end
+    end
+    return missing
+end
+
+local function getDependencyNames(dependencies)
+    local names = {}
+    for _, dependency in ipairs(dependencies) do
+        names[#names + 1] = dependency.name
+    end
+    return table.concat(names, ", ")
+end
+
+local missingDependencies = getMissingRequiredDependencies()
+if #missingDependencies > 0 then
     local missingDepFont = Font()
     local missingDepMessages = {
-        "Missing required mod: StatsAPI",
+        "",
         "Conch's Blessing is disabled.",
     }
     local missingDepScale = 1.1
@@ -20,7 +169,18 @@ if not hasStatsAPIDependency() then
     local reloadAttempts = 0
     local maxReloadAttempts = 0 -- 0 = infinite retries
 
+    local function refreshMissingDependencies()
+        missingDependencies = getMissingRequiredDependencies()
+        if #missingDependencies == 0 then
+            missingDepMessages[1] = "Required mods detected."
+        else
+            missingDepMessages[1] = "Missing or incompatible required mod(s): "
+                .. getDependencyNames(missingDependencies)
+        end
+    end
+
     missingDepFont:Load("font/pftempestasevencondensed.fnt")
+    refreshMissingDependencies()
 
     local function drawCenteredMessage(text, y, color)
         local width = missingDepFont:GetStringWidth(text) * missingDepScale
@@ -44,9 +204,12 @@ if not hasStatsAPIDependency() then
         dependencyCheckTimer = dependencyCheckTimer + 1
         if dependencyCheckTimer >= dependencyCheckInterval then
             dependencyCheckTimer = 0
-            if hasStatsAPIDependency() then
+            refreshMissingDependencies()
+            if #missingDependencies == 0 then
                 requestedReload = true
-                Isaac.ConsoleOutput("[ConchBlessing] StatsAPI detected late. Reloading Conch's Blessing...\n")
+                Isaac.ConsoleOutput(
+                    "[ConchBlessing] Required dependencies detected. Reloading Conch's Blessing...\n"
+                )
                 Isaac.ExecuteCommand("luamod conch_blessing")
                 Isaac.ExecuteCommand("luamod conch_blessing_3545334858")
                 return
@@ -64,14 +227,34 @@ if not hasStatsAPIDependency() then
         end
 
         reloadAttempts = reloadAttempts + 1
-        Isaac.ConsoleOutput("[ConchBlessing] StatsAPI missing. Auto-reload attempt #" .. tostring(reloadAttempts) .. "\n")
-        Isaac.ExecuteCommand("luamod statsapi")
+        refreshMissingDependencies()
+        local missingNames = getDependencyNames(missingDependencies)
+        Isaac.ConsoleOutput(
+            "[ConchBlessing] Missing or incompatible required mod(s): "
+                .. missingNames
+                .. ". Auto-reload attempt #"
+                .. tostring(reloadAttempts)
+                .. "\n"
+        )
+        for _, dependency in ipairs(missingDependencies) do
+            for _, command in ipairs(dependency.reloadCommands) do
+                Isaac.ExecuteCommand(command)
+            end
+        end
         if reloadAttempts % 5 == 0 then
-            Isaac.ConsoleOutput("[ConchBlessing] StatsAPI still missing; continuing retry loop.\n")
+            Isaac.ConsoleOutput(
+                "[ConchBlessing] Required mod(s) still unavailable: "
+                    .. missingNames
+                    .. "; continuing retry loop.\n"
+            )
         end
     end)
 
-    Isaac.ConsoleOutput("[ConchBlessing][ERROR] Required mod 'StatsAPI' not found. Initialization blocked.\n")
+    Isaac.ConsoleOutput(
+        "[ConchBlessing][ERROR] Missing or incompatible required mod(s): "
+            .. getDependencyNames(missingDependencies)
+            .. ". Initialization blocked.\n"
+    )
     return
 end
 
@@ -102,11 +285,14 @@ Isaac.ConsoleOutput("[Core] SaveManager.Init() completed\n")
 
 -- Register SaveManager PRE_DATA_SAVE callback to clean EntityEffect objects
 Isaac.ConsoleOutput("[Core] Registering SaveManager PRE_DATA_SAVE callback\n")
-local callbackKey = mod.__SAVEMANAGER_UNIQUE_KEY .. SaveManager.SaveCallbacks.PRE_DATA_SAVE
-mod:AddCallback(callbackKey, function(saveData)
+local callbackKey = SaveManager.SaveCallbacks.PRE_DATA_SAVE
+mod:AddCallback(callbackKey, function(_, saveData)
     -- Clean dragon EntityEffect objects before saving
     if ConchBlessing.dragon and ConchBlessing.dragon.onPreDataSave then
-        return ConchBlessing.dragon.onPreDataSave(saveData)
+        local sanitizedData = ConchBlessing.dragon.onPreDataSave(saveData)
+        if type(sanitizedData) == "table" then
+            return sanitizedData
+        end
     end
     return saveData
 end)
@@ -585,7 +771,9 @@ ConchBlessing.printDebug = function(text)
 end
 
 ConchBlessing.printError = function(text)
-    Isaac.ConsoleOutput("[ConchBlessing][ERROR] " .. tostring(text) .. "\n")
+    local message = "[ConchBlessing][ERROR] " .. tostring(text)
+    Isaac.DebugString(message)
+    Isaac.ConsoleOutput(message .. "\n")
 end
 
 ConchBlessing.print = function(text)
@@ -637,6 +825,14 @@ if ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers then
     ConchBlessing.print("StatsAPI integration active.")
 else
     ConchBlessing.printError("StatsAPI integration failed: StatsAPI not found or not ready.")
+end
+
+-- Load non-item room systems after shared managers and before item behavior.
+local roomsSuccess, roomsErr = pcall(function()
+    require("scripts/rooms/init")
+end)
+if not roomsSuccess then
+    ConchBlessing.printError("Room system load failed: " .. tostring(roomsErr))
 end
 
 -- load items and management
