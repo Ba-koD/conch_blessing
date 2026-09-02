@@ -437,3 +437,7 @@ function ConchBlessing.timemoney.onPlayerUpdate(_)
 		end
 	end
 end
+
+
+-- Test hooks for scripts/dev/rng_probe.lua. Pure helpers, no gameplay use.
+ConchBlessing.timemoney._test = { chooseCoinSubtype = chooseCoinSubtype }

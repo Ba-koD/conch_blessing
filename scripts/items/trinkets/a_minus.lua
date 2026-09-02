@@ -219,4 +219,6 @@ ConchBlessing.originalMod:AddCallback(ModCallbacks.MC_ENTITY_TAKE_DMG, function(
 	end
 end)
 
+-- Test hooks for scripts/dev/rng_probe.lua. Pure helpers, no gameplay use.
+ConchBlessing.aminus._test = { computeRandomSplit = computeRandomSplit }
 return true

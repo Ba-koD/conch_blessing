@@ -145,7 +145,6 @@ if EID then
             -- Append to existing description
             descObj.Description = descObj.Description .. remainingText
             
-            ConchBlessing.printDebug("[EID] Sealed Demon Sword: Added remaining kills info: " .. tostring(remaining))
         end
         
         return descObj

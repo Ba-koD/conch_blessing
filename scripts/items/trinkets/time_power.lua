@@ -205,7 +205,11 @@ function ConchBlessing.timepowertrinket.onUpdate()
                 -- Evaluate every frame at 30 FPS (lightweight enough)
                 p:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
                 p:EvaluateItems()
-				if frame % fps == 0 then
+				-- Only report when the stack composition changes. This block used to
+				-- fire twice a second for as long as the trinket was held.
+				local logKey = string.format("%d|%s", mult, tostring(hasMomsBox))
+				if ConchBlessing.timepowertrinket.data.lastLogKey ~= logKey then
+				    ConchBlessing.timepowertrinket.data.lastLogKey = logKey
 					-- Print current per-second and per-tick increase without cumulative totals
 					ConchBlessing.printDebug(string.format("[Time=Power] perSecond=%.6f perTick=%.6f (mult=%d, momsBox=%s)", perSecond, delta, mult, tostring(hasMomsBox)))
 					-- Breakdown of contributions

@@ -181,7 +181,6 @@ if EID then
             -- Append to existing description
             descObj.Description = descObj.Description .. infoText
             
-            ConchBlessing.printDebug("[EID] Tyrfing: Added accumulated damage info: +" .. string.format("%.2f", accDmg))
         end
         
         return descObj

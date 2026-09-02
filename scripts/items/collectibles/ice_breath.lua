@@ -524,4 +524,6 @@ ConchBlessing.icebreath.onTearCollision = function(_, tear, collider, _)
     return nil
 end
 
+-- Test hooks for scripts/dev/rng_probe.lua. Pure helpers, no gameplay use.
+ConchBlessing.icebreath._test = { getFreezeChance = getFreezeChance }
 return ConchBlessing.icebreath

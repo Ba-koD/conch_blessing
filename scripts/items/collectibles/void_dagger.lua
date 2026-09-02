@@ -230,7 +230,6 @@ if EID then
             -- Append to existing description
             descObj.Description = descObj.Description .. procChanceText
             
-            ConchBlessing.printDebug("[EID] Void Dagger: Added proc chance info - base=" .. string.format("%.1f", pBase * 100) .. "%, final=" .. string.format("%.1f", pFinal * 100) .. "%")
         end
         
         return descObj
@@ -238,3 +237,11 @@ if EID then
     
     ConchBlessing.printDebug("[EID] Void Dagger: Description modifier registered")
 end
+
+
+-- Test hooks for scripts/dev/rng_probe.lua. Pure helpers, no gameplay use.
+ConchBlessing.voiddagger._test = {
+    getShotsPerSecond = getShotsPerSecond,
+    computeProcChanceFromS = computeProcChanceFromS,
+    applyLuckBonus = applyLuckBonus,
+}

@@ -519,4 +519,6 @@ ConchBlessing.firebreath.onTearCollision = function(_, tear, collider, _)
     return nil
 end
 
+-- Test hooks for scripts/dev/rng_probe.lua. Pure helpers, no gameplay use.
+ConchBlessing.firebreath._test = { getBurnChance = getBurnChance }
 return ConchBlessing.firebreath

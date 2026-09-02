@@ -551,4 +551,6 @@ ConchBlessing.soflam.onGameStarted = function(_)
     end
 end
 
+-- Test hooks for scripts/dev/rng_probe.lua. Pure helpers, no gameplay use.
+ConchBlessing.soflam._test = { getProcChance = getProcChance }
 return ConchBlessing.soflam

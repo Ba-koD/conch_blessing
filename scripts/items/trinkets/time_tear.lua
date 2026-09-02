@@ -195,7 +195,11 @@ function ConchBlessing.timeteartrinket.onUpdate()
 				ps.spsBonus = ps.spsBonus + delta
 				p:AddCacheFlags(CacheFlag.CACHE_FIREDELAY)
 				p:EvaluateItems()
-				if frame % fps == 0 then
+				-- Only report when the stack composition changes. This block used to
+				-- fire twice a second for as long as the trinket was held.
+				local logKey = string.format("%d|%s", mult, tostring(hasMomsBox))
+				if ConchBlessing.timeteartrinket.data.lastLogKey ~= logKey then
+				    ConchBlessing.timeteartrinket.data.lastLogKey = logKey
 					ConchBlessing.printDebug(string.format("[Time=Tear] perSecond=%.6f perTick=%.6f (mult=%d, momsBox=%s)", perSecond, delta, mult, tostring(hasMomsBox)))
 					local normalUnit = (hasMomsBox and 2 or 1)
 					local goldenUnit = (hasMomsBox and 3 or 2)
