@@ -102,6 +102,34 @@ if not ModCallbacks then
     return
 end
 
+-- EID inline icon helpers for referencing items from description text.
+-- EID resolves {{Collectible<id>}} / {{Trinket<id>}} / {{Card<id>}} against the game item
+-- config while rendering, so modded IDs work exactly like vanilla ones.
+-- An unresolvable ID yields an empty string instead of leaking raw markup.
+local function eidCollectibleIcon(id)
+    if type(id) ~= "number" or id <= 0 then return "" end
+    return "{{Collectible" .. id .. "}} "
+end
+
+local function eidTrinketIcon(id)
+    if type(id) ~= "number" or id <= 0 then return "" end
+    return "{{Trinket" .. id .. "}} "
+end
+
+local function eidCardIcon(id)
+    if type(id) ~= "number" or id <= 0 then return "" end
+    return "{{Card" .. id .. "}} "
+end
+
+-- Our own items only get their IDs at load time, so look them up by XML name.
+local function eidOwnCollectibleIcon(name)
+    return eidCollectibleIcon(Isaac.GetItemIdByName(name))
+end
+
+local function eidOwnTrinketIcon(name)
+    return eidTrinketIcon(Isaac.GetTrinketIdByName(name))
+end
+
 -- define ItemData table
 ConchBlessing.ItemData = {
     -- Collectibles
@@ -179,20 +207,16 @@ ConchBlessing.ItemData = {
                 "#내 공격으로 적에게 피해를 주면 확률로 그 위치에 내 데미지의 보이드 링을 소환합니다.",
                 "#확률은 (30 - {{Tears}}연사)%로 5%보다 작아지지 않습니다",
                 "#위 확률은 {{Luck}}운에 따라 (1+0.1×{{Luck}}운) 배수로 증가합니다. (최대 100%)",
-                "#한 공격이 여러 번 피해를 줘도 최초 피해에서 발동 확률은 한 번만 판정됩니다.",
                 "#지속시간은 {{Damage}}데미지에 따라 증가하며 데미지 10당 5단계로 증가합니다.",
                 "#{{BlackHeart}}블랙하트는 드랍되지 않습니다.",
-                "#Void Dagger가 만든 공격과 그 파생 공격으로는 다시 발동하지 않습니다.",
                 "#{{Warning}} REPENTOGON 권장"
             },
             en = {
                 "#When your attack damages an enemy, has a chance to spawn a void ring at the impact that deals your damage",
                 "#Chance is (30 − {{Tears}}Tears)% guaranteed 5%",
                 "#chance is increased by (1+0.1×{{Luck}}Luck) (up to 100%)",
-                "#Each attack gets only one activation roll when it first deals damage, even if it hits multiple times",
                 "#Duration increases by 10 frames per 10 {{Damage}}Damage by 5 steps",
                 "#{{BlackHeart}}No black heart drops",
-                "#Attacks created by Void Dagger and their descendants cannot retrigger it",
                 "#{{Warning}} REPENTOGON recommended"
             }
         },
@@ -230,12 +254,12 @@ ConchBlessing.ItemData = {
             kr = {
                 "저주가 걸릴 때마다 저주를 제거합니다.",
                 "#저주 제거 시 고정 데미지 +3.0, 연사 +1.0을 영구적으로 부여합니다.",
-                "#이터널 하트 1개를 획득합니다."
+                "#{{EternalHeart}} 이터널 하트 1개를 획득합니다."
             },
             en = {
                 "Removes curses when they are applied.",
                 "#Grants fixed damage +3.0 and fixed fire rate +1.0 permanently when removing curses.",
-                "#Gains 1 eternal heart."
+                "#Gains 1 {{EternalHeart}} eternal heart."
             }
         },
         pool = {
@@ -276,12 +300,14 @@ ConchBlessing.ItemData = {
             kr = {
                 "사용시 데미지, 연사, 사거리, 행운이 1.0~1.3배가 됩니다.",
                 "#최초 획득시 게이지가 절반 차 있습니다",
-                "#중첩시 합연산으로 증가합니다."
+                "#중첩시 합연산으로 증가합니다.",
+                "#최종 배수는 0.5 아래로 내려가지 않습니다."
             },
             en = {
                 "Damage, tears, range, and luck are changed to 1.0~1.3x when used",
                 "#Starts with half-charged gauge",
-                "#When stacked, increases by addition"
+                "#When stacked, increases by addition",
+                "#The final multiplier never drops below 0.5"
             }
         },
         pool = {
@@ -321,11 +347,13 @@ ConchBlessing.ItemData = {
         eid = {
             kr = {
                 "획득시 데미지, 연사, 사거리, 행운이 0.8 ~ 1.5배가 됩니다.",
-                "#중첩시 합연산으로 증가합니다."
+                "#중첩시 합연산으로 증가합니다.",
+                "#최종 배수는 0.4 아래로 내려가지 않습니다."
             },
             en = {
                 "Damage, fire rate, range, and luck are changed to 0.8 ~ 1.5x when obtained",
-                "#When stacked, increases by addition"
+                "#When stacked, increases by addition",
+                "#The final multiplier never drops below 0.4"
             }
         },
         pool = {
@@ -366,9 +394,10 @@ ConchBlessing.ItemData = {
                 "사용시 데미지, 연사, 사거리, 행운이 0.5~2.0배가 됩니다.",
                 "#최초 획득시 게이지가 절반 차 있습니다",
                 "#중첩시 합연산으로 증가합니다.",
+                "#최종 배수는 0.25 아래로 내려가지 않습니다.",
                 "#{{Warning}} 몸이 점점 노래집니다...",
                 "#{{Warning}} 기본 1% 확률로 즉사합니다.",
-                "#{{Warning}} 즉사는 보호막과 무적을 무시하지만 추가 목숨은 정상 발동합니다.",
+                "#{{Warning}} 즉사는 보호막과 무적을 무시하지만 부활은 정상 발동합니다.",
                 "#{{Warning}} 사용시 즉사 확률이 3%씩 증가하고 층마다 초기화됩니다.",
                 "#방 클리어시마다 즉사확률이 0.25% 감소합니다."
             },
@@ -376,6 +405,7 @@ ConchBlessing.ItemData = {
                 "Damage, fire rate, range, and luck are changed to 0.5~2.0x when used",
                 "#Starts with half-charged gauge",
                 "#When stacked, increases by addition",
+                "#The final multiplier never drops below 0.25",
                 "#{{Warning}}Your body is gradually turning yellow...",
                 "#{{Warning}}Base 1% chance of instant death when used",
                 "#{{Warning}}Instant death ignores shields and invincibility; extra lives still activate",
@@ -672,88 +702,88 @@ ConchBlessing.ItemData = {
             [{ id = CollectibleType.COLLECTIBLE_SERAPHIM, type = "collectible" }] = {
                 kr = {
                     "공중, 지형관통 효과를 얻습니다.",
-                    "신성한 심장을 획득합니다. (최초 1회)"
+                    eidCollectibleIcon(CollectibleType.COLLECTIBLE_SACRED_HEART) .. "신성한 심장을 획득합니다. (최초 1회)"
                 },
                 en = {
                     "Gains flight, and spectral tear effects.",
-                    "Gains a Sacred Heart (first time only)."
+                    "Gains a " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_SACRED_HEART) .. "Sacred Heart (first time only)."
                 }
             },
             [{ id = CollectibleType.COLLECTIBLE_ROBO_BABY, type = "collectible" }] = {
-                kr = "테크를 얻습니다.",
-                en = "Gains Technology."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_TECHNOLOGY) .. "테크를 얻습니다.",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_TECHNOLOGY) .. "Technology."
             },
             [{ id = CollectibleType.COLLECTIBLE_ROBO_BABY_2, type = "collectible" }] = {
-                kr = "테크 2를 얻습니다.",
-                en = "Gains Technology 2."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_TECHNOLOGY_2) .. "테크 2를 얻습니다.",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_TECHNOLOGY_2) .. "Technology 2."
             },
             [{ id = CollectibleType.COLLECTIBLE_BLUE_BABYS_ONLY_FRIEND, type = "collectible" }] = {
-                kr = "루도비코를 얻습니다. (최초 1회)",
-                en = "Gains Ludovico Technique (first time only)."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_LUDOVICO_TECHNIQUE) .. "루도비코를 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_LUDOVICO_TECHNIQUE) .. "Ludovico Technique (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_LIL_BRIMSTONE, type = "collectible" }] = {
-                kr = "혈사를 얻습니다.",
-                en = "Gains Brimstone."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_BRIMSTONE) .. "혈사를 얻습니다.",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_BRIMSTONE) .. "Brimstone."
             },
             [{ id = CollectibleType.COLLECTIBLE_BOBS_BRAIN, type = "collectible" }] = {
-                kr = "구토제를 얻습니다. (최초 1회)",
-                en = "Gains Ipecac (first time only)."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_IPECAC) .. "구토제를 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_IPECAC) .. "Ipecac (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_LIL_MONSTRO, type = "collectible" }] = {
-                kr = "몬스트로의 폐를 얻습니다. (최초 1회)",
-                en = "Gains Monstro's Lung (first time only)."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_MONSTROS_LUNG) .. "몬스트로의 폐를 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_MONSTROS_LUNG) .. "Monstro's Lung (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_LIL_HAUNT, type = "collectible" }] = {
                 kr = "모든 공격에 공포 효과를 부여합니다.",
                 en = "Grants fear effect to all attacks."
             },
             [{ id = CollectibleType.COLLECTIBLE_BLOOD_PUPPY, type = "collectible" }] = {
-                kr = "김피를 얻습니다. (최초 1회)",
-                en = "Gains Gimpy (first time only)."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_GIMPY) .. "김피를 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_GIMPY) .. "Gimpy (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_ANGELIC_PRISM, type = "collectible" }] = {
                 kr = "공격이 4갈래로 갈라져 나갑니다.",
                 en = "Attacks split into 4 beams."
             },
             [{ id = CollectibleType.COLLECTIBLE_BOT_FLY, type = "collectible" }] = {
-                kr = "잃어버린 렌즈를 얻습니다. (최초 1회)",
-                en = "Gains Lost Contact(first time only)."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_LOST_CONTACT) .. "잃어버린 렌즈를 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_LOST_CONTACT) .. "Lost Contact (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_FREEZER_BABY, type = "collectible" }] = {
-                kr = "천왕성을 얻습니다. (최초 1회)",
-                en = "Gains Uranus (first time only)."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_URANUS) .. "천왕성을 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_URANUS) .. "Uranus (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_LIL_ABADDON, type = "collectible" }] = {
-                kr = "공허의 구렁텅이를 얻습니다. (최초 1회)",
-                en = "Gains Maw of the Void (first time only)."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_MAW_OF_THE_VOID) .. "공허의 구렁텅이를 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_MAW_OF_THE_VOID) .. "Maw of the Void (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_MULTIDIMENSIONAL_BABY, type = "collectible" }] = {
-                kr = "20/20을 얻습니다.",
-                en = "Gains 20/20."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_20_20) .. "20/20을 얻습니다.",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_20_20) .. "20/20."
             },
             [{ id = CollectibleType.COLLECTIBLE_HARLEQUIN_BABY, type = "collectible" }] = {
-                kr = "법사를 얻습니다.",
-                en = "Gains The Wiz."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_THE_WIZ) .. "법사를 얻습니다.",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_THE_WIZ) .. "The Wiz."
             },
             [{ id = CollectibleType.COLLECTIBLE_BROTHER_BOBBY, type = "collectible" }] = {
                 kr = "{{Tears}} 고정연사 +2를 얻습니다.",
                 en = "Gains +2 {{Tears}} fire rate."
             },
             [{ id = CollectibleType.COLLECTIBLE_DEMON_BABY, type = "collectible" }] = {
-                kr = "표식을 얻습니다. (최초 1회)",
-                en = "Gains Marked (first time only)."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_MARKED) .. "표식을 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_MARKED) .. "Marked (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_LITTLE_GISH, type = "collectible" }] = {
                 kr = "모든 공격에 느림 효과를 부여합니다.",
                 en = "Grants slowing effect to all attacks."
             },
             [{ id = CollectibleType.COLLECTIBLE_LIL_LOKI, type = "collectible" }] = {
-                kr = "로키의 뿔을 얻습니다.",
-                en = "Gains Loki's Horns."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_LOKIS_HORNS) .. "로키의 뿔을 얻습니다.",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_LOKIS_HORNS) .. "Loki's Horns."
             },
             [{ id = CollectibleType.COLLECTIBLE_GHOST_BABY, type = "collectible" }] = {
-                kr = "연속체를 얻습니다.",
-                en = "Gains Continuum."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_CONTINUUM) .. "연속체를 얻습니다.",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_CONTINUUM) .. "Continuum."
             },
             [{ id = CollectibleType.COLLECTIBLE_ROTTEN_BABY, type = "collectible" }] = {
                 kr = "적에게 데미지를 줄 때마다 아군 파리를 소환합니다.",
@@ -764,8 +794,8 @@ ConchBlessing.ItemData = {
                 en = "Gains homing effect."
             },
             [{ id = CollectibleType.COLLECTIBLE_RAINBOW_BABY, type = "collectible" }] = {
-                kr = "과일 케이크를 얻습니다. (최초 1회)",
-                en = "Gains Fruit Cake (first time only)."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_FRUIT_CAKE) .. "과일 케이크를 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_FRUIT_CAKE) .. "Fruit Cake (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_GUARDIAN_ANGEL, type = "collectible" }] = {
                 kr = "이동 속도{{Speed}} +0.3을 얻습니다.",
@@ -776,99 +806,99 @@ ConchBlessing.ItemData = {
                 en = "Censer's smoke effect is fixed to player position."
             },
             [{ id = CollectibleType.COLLECTIBLE_LEECH, type = "collectible" }] = {
-                kr = "흡혈귀의 부적을 얻습니다. (최초 1회)",
-                en = "Gains Charm of the Vampire (first time only)."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_CHARM_VAMPIRE) .. "흡혈귀의 부적을 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_CHARM_VAMPIRE) .. "Charm of the Vampire (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_BOMB_BAG, type = "collectible" }] = {
-                kr = "파이로를 얻습니다. (최초 1회)",
-                en = "Gains Pyro (first time only)."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_PYRO) .. "파이로를 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_PYRO) .. "Pyro (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_DARK_BUM, type = "collectible" }] = {
-                kr = "주교관을 얻습니다. (최초 1회)",
-                en = "Gains Mitre (first time only)."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_MITRE) .. "주교관을 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_MITRE) .. "Mitre (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_KEY_BUM, type = "collectible" }] = {
-                kr = "해골 열쇠를 얻습니다. (최초 1회)",
-                en = "Gains Skeleton Key (first time only)."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_SKELETON_KEY) .. "해골 열쇠를 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_SKELETON_KEY) .. "Skeleton Key (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_ABEL, type = "collectible" }] = {
-                kr = "거울을 얻습니다. (최초 1회)",
-                en = "Gains My Reflection (first time only)."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_MY_REFLECTION) .. "거울을 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_MY_REFLECTION) .. "My Reflection (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_STAR_OF_BETHLEHEM, type = "collectible" }] = {
                 kr = {
                     "베들레헴의 별 오라가 플레이어 위치에 고정됩니다.",
-                    "나침반을 얻습니다. (최초 1회)"
+                    eidCollectibleIcon(CollectibleType.COLLECTIBLE_COMPASS) .. "나침반을 얻습니다. (최초 1회)"
                 },
                 en = {
                     "Star of Bethlehem's aura is fixed to player position.",
-                    "Gains Compass (first time only)."
+                    "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_COMPASS) .. "Compass (first time only)."
                 }
             },
             [{ id = CollectibleType.COLLECTIBLE_FARTING_BABY, type = "collectible" }] = {
-                kr = "젤리 배를 얻습니다. (최초 1회)",
-                en = "Gains Jelly Belly (first time only)."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_JELLY_BELLY) .. "젤리 배를 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_JELLY_BELLY) .. "Jelly Belly (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_SAMSONS_CHAINS, type = "collectible" }] = {
-                kr = "천둥 허벅지를 얻습니다. (최초 1회)",
-                en = "Gains Thunder Thighs (first time only)."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_THUNDER_THIGHS) .. "천둥 허벅지를 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_THUNDER_THIGHS) .. "Thunder Thighs (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_FINGER, type = "collectible" }] = {
-                kr = "트랙터 빔을 얻습니다. (최초 1회)",
-                en = "Gains Tractor Beam (first time only)."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_TRACTOR_BEAM) .. "트랙터 빔을 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_TRACTOR_BEAM) .. "Tractor Beam (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_IMMACULATE_CONCEPTION, type = "collectible" }] = {
-                kr = "사탕 하트를 얻습니다. (최초 1회)",
-                en = "Gains Candy Heart (first time only)."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_CANDY_HEART) .. "사탕 하트를 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_CANDY_HEART) .. "Candy Heart (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_SACK_OF_PENNIES, type = "collectible" }] = {
-                kr = "달러를 얻습니다. (최초 1회)",
-                en = "Gains Dollar (first time only)."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_DOLLAR) .. "달러를 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_DOLLAR) .. "Dollar (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_SACK_OF_SACKS, type = "collectible" }] = {
-                kr = "자루 머리를 얻습니다. (최초 1회)",
-                en = "Gains Sack Head (first time only)."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_SACK_HEAD) .. "자루 머리를 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_SACK_HEAD) .. "Sack Head (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_CHARGED_BABY, type = "collectible" }] = {
-                kr = "9볼트를 얻습니다. (최초 1회)",
-                en = "Gains 9 Volt (first time only)."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_9_VOLT) .. "9볼트를 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_9_VOLT) .. "9 Volt (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_YO_LISTEN, type = "collectible" }] = {
-                kr = "엑스레이 투시를 얻습니다. (최초 1회)",
-                en = "Gains X-Ray Vision (first time only)."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_XRAY_VISION) .. "엑스레이 투시를 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_XRAY_VISION) .. "X-Ray Vision (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_DADDY_LONGLEGS, type = "collectible" }] = {
-                kr = "신성한 빛을 얻습니다. (최초 1회)",
-                en = "Gains Holy Light (first time only)."
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_HOLY_LIGHT) .. "신성한 빛을 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_HOLY_LIGHT) .. "Holy Light (first time only)."
             },
             -- Blacklisted items
             [{ id = CollectibleType.COLLECTIBLE_1UP, type = "collectible" }] = {
-                kr = "크로노스에 흡수되지 않습니다.",
-                en = "Cannot be absorbed by Chronus."
+                kr = eidOwnCollectibleIcon("Chronus") .. "크로노스에 흡수되지 않습니다.",
+                en = "Cannot be absorbed by " .. eidOwnCollectibleIcon("Chronus") .. "Chronus."
             },
             [{ id = CollectibleType.COLLECTIBLE_ISAACS_HEART, type = "collectible" }] = {
-                kr = "크로노스에 흡수되지 않습니다.",
-                en = "Cannot be absorbed by Chronus."
+                kr = eidOwnCollectibleIcon("Chronus") .. "크로노스에 흡수되지 않습니다.",
+                en = "Cannot be absorbed by " .. eidOwnCollectibleIcon("Chronus") .. "Chronus."
             },
             [{ id = CollectibleType.COLLECTIBLE_DEAD_CAT, type = "collectible" }] = {
-                kr = "크로노스에 흡수되지 않습니다.",
-                en = "Cannot be absorbed by Chronus."
+                kr = eidOwnCollectibleIcon("Chronus") .. "크로노스에 흡수되지 않습니다.",
+                en = "Cannot be absorbed by " .. eidOwnCollectibleIcon("Chronus") .. "Chronus."
             },
             [{ id = CollectibleType.COLLECTIBLE_KEY_PIECE_1, type = "collectible" }] = {
-                kr = "크로노스에 흡수되지 않습니다.",
-                en = "Cannot be absorbed by Chronus."
+                kr = eidOwnCollectibleIcon("Chronus") .. "크로노스에 흡수되지 않습니다.",
+                en = "Cannot be absorbed by " .. eidOwnCollectibleIcon("Chronus") .. "Chronus."
             },
             [{ id = CollectibleType.COLLECTIBLE_KEY_PIECE_2, type = "collectible" }] = {
-                kr = "크로노스에 흡수되지 않습니다.",
-                en = "Cannot be absorbed by Chronus."
+                kr = eidOwnCollectibleIcon("Chronus") .. "크로노스에 흡수되지 않습니다.",
+                en = "Cannot be absorbed by " .. eidOwnCollectibleIcon("Chronus") .. "Chronus."
             },
             [{ id = CollectibleType.COLLECTIBLE_KNIFE_PIECE_1, type = "collectible" }] = {
-                kr = "크로노스에 흡수되지 않습니다.",
-                en = "Cannot be absorbed by Chronus."
+                kr = eidOwnCollectibleIcon("Chronus") .. "크로노스에 흡수되지 않습니다.",
+                en = "Cannot be absorbed by " .. eidOwnCollectibleIcon("Chronus") .. "Chronus."
             },
             [{ id = CollectibleType.COLLECTIBLE_KNIFE_PIECE_2, type = "collectible" }] = {
-                kr = "크로노스에 흡수되지 않습니다.",
-                en = "Cannot be absorbed by Chronus."
+                kr = eidOwnCollectibleIcon("Chronus") .. "크로노스에 흡수되지 않습니다.",
+                en = "Cannot be absorbed by " .. eidOwnCollectibleIcon("Chronus") .. "Chronus."
             },
         }
 	},
@@ -885,14 +915,14 @@ ConchBlessing.ItemData = {
         },
         eid = {
             kr = {
-                "{{Coin}} 30원을 소비하여 현재 들고 있는 장신구를 모두 흡수하고 사용 가능한 모든 장신구가 진열된, 사망 증명서와 분리된 전용 공간으로 이동합니다.",
+                "{{Coin}} 30원을 소비하여 현재 들고 있는 장신구를 모두 흡수하고 사용 가능한 모든 장신구가 진열된, " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_DEATH_CERTIFICATE) .. "사망 증명서와 분리된 전용 공간으로 이동합니다.",
                 "#첫 번째 방의 왼쪽에는 원래 방으로 돌아가는 문이 항상 열려 있습니다.",
-                "#전용 공간 안에서는 빛나는 모래시계를 사용할 수 없습니다.",
+                "#전용 공간 안에서는 " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_GLOWING_HOUR_GLASS) .. "빛나는 모래시계를 사용할 수 없습니다.",
             },
             en = {
-                "Consumes {{Coin}} 30 to absorb all currently held trinkets and enter a dedicated space separate from the Death Certificate dimension, containing every available trinket.",
+                "Consumes {{Coin}} 30 to absorb all currently held trinkets and enter a dedicated space separate from the " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_DEATH_CERTIFICATE) .. "Death Certificate dimension, containing every available trinket.",
                 "#An always-open door back to the original room is on the left side of the first room.",
-                "#Glowing Hourglass cannot be used inside the dedicated space.",
+                "#" .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_GLOWING_HOUR_GLASS) .. "Glowing Hourglass cannot be used inside the dedicated space.",
             },
         },
         pool = {
@@ -1049,11 +1079,11 @@ ConchBlessing.ItemData = {
         eid = {
             kr = {
                 "{{Speed}} 이동속도가 -0.2 감소합니다.",
-                "#{{Warning}} 몬스터를 300마리 처치하면 티르핑으로 진화합니다."
+                "#{{Warning}} 몬스터를 300마리 처치하면 " .. eidOwnCollectibleIcon("Tyrfing") .. "티르핑으로 진화합니다."
             },
             en = {
                 "{{Speed}} Movement speed -0.2",
-                "#{{Warning}} After killing 300 enemies, evolves into Tyrfing."
+                "#{{Warning}} After killing 300 enemies, evolves into " .. eidOwnCollectibleIcon("Tyrfing") .. "Tyrfing."
             }
         },
         pool = {
@@ -1227,14 +1257,14 @@ ConchBlessing.ItemData = {
             kr = {
                 "기본 눈물이 레이저로 대체됩니다",
                 "#내 공격으로 적에게 피해를 주면 10% 확률로 타겟이 지정됩니다 ({{Luck}}운 x5% 추가)",
-                "#타겟으로 지정되면 1.5초 뒤 현재 멀티샷 수만큼 Epic Fetus 미사일이 1발씩 연속으로 떨어집니다",
+                "#타겟으로 지정되면 1.5초 뒤 현재 멀티샷 수만큼 " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_EPIC_FETUS) .. "Epic Fetus 미사일이 1발씩 연속으로 떨어집니다",
                 "#미사일은 내 {{Damage}}공격력의 10배 데미지",
                 "#{{Warning}} REPENTOGON이 필요합니다!",
             },
             en = {
                 "Replaces your tears with lasers",
                 "#When your attack damages an enemy: 10% chance to designate the target (+{{Luck}}Luck x5%)",
-                "#After 1.5 seconds, Epic Fetus missiles strike one-by-one equal to your current multishot count",
+                "#After 1.5 seconds, " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_EPIC_FETUS) .. "Epic Fetus missiles strike one-by-one equal to your current multishot count",
                 "#Missile deals 10 times of your {{Damage}}Damage",
                 "#{{Warning}} Requires REPENTOGON!",
             }
@@ -1587,11 +1617,11 @@ ConchBlessing.ItemData = {
         eid = {
             kr = {
                 "행운이 5 증가합니다.",
-                "#피격 당하지 않은 채로 다음 층으로 이동 시, C -로 진화합니다."
+                "#피격 당하지 않은 채로 다음 층으로 이동 시, " .. eidOwnTrinketIcon("C -") .. "C -로 진화합니다."
             },
             en = {
                 "Luck increases by 5.",
-                "#When moving to the next floor without taking damage, evolves into C -."
+                "#When moving to the next floor without taking damage, evolves into " .. eidOwnTrinketIcon("C -") .. "C -."
             }
         },
         gfx = "f_minus.png",
@@ -1621,12 +1651,12 @@ ConchBlessing.ItemData = {
             kr = {
                 "행운이 4 증가합니다.",
                 "#{{Tears}} 고정연사가 2.0 증가합니다.",
-                "#피격 당하지 않은 채로 다음 층으로 이동 시, B -로 진화합니다."
+                "#피격 당하지 않은 채로 다음 층으로 이동 시, " .. eidOwnTrinketIcon("B -") .. "B -로 진화합니다."
             },
             en = {
                 "Luck increases by 4.",
                 "#{{Tears}} Fixed SPS increases by 2.0.",
-                "#When moving to the next floor without taking damage, evolves into B -."
+                "#When moving to the next floor without taking damage, evolves into " .. eidOwnTrinketIcon("B -") .. "B -."
             }
         },
         gfx = "c_minus.png",
@@ -1657,13 +1687,13 @@ ConchBlessing.ItemData = {
                 "행운이 3 증가합니다.",
                 "#{{Tears}} 고정 연사가 3.0 증가합니다.",
                 "#{{Damage}} 공격력이 3.0 증가합니다.",
-                "#피격 당하지 않은 채로 다음 층으로 이동 시, A -로 진화합니다."
+                "#피격 당하지 않은 채로 다음 층으로 이동 시, " .. eidOwnTrinketIcon("A -") .. "A -로 진화합니다."
             },
             en = {
                 "Luck increases by 3.",
                 "#{{Tears}}Fixed SPS increases by 3.0.",
                 "#{{Damage}}Damage increases by 3.0.",
-                "#When moving to the next floor without taking damage, evolves into A -."
+                "#When moving to the next floor without taking damage, evolves into " .. eidOwnTrinketIcon("A -") .. "A -."
             }
         },
         gfx = "b_minus.png",
@@ -1696,7 +1726,7 @@ ConchBlessing.ItemData = {
                 "#{{Damage}} 공격력이 4.0 증가합니다.",
                 "#4배수가 공격력, 행운, 연사에 나눠서 적용됩니다. (중첩X)",
                 "#0.8배이상으로 나눠서 적용됩니다.",
-                "#피격 시 B -로 강등됩니다.",
+                "#피격 시 " .. eidOwnTrinketIcon("B -") .. "B -로 강등됩니다.",
             },
             en = {
                 "Luck increases by 2.",
@@ -1704,7 +1734,7 @@ ConchBlessing.ItemData = {
                 "#{{Damage}} Damage increases by 4.0.",
                 "#4x multipliers are distributed to Damage, Luck, and SPS. (No stacking)",
                 "#Multipliers are at least 0.8x.",
-                "#On hit, downgrades to B -.",
+                "#On hit, downgrades to " .. eidOwnTrinketIcon("B -") .. "B -.",
             }
         },
         gfx = "a_minus.png",
@@ -1762,12 +1792,12 @@ ConchBlessing.ItemData = {
             [{ id = CollectibleType.COLLECTIBLE_DEATH_CERTIFICATE, type = "collectible" }] = {
                 kr = {
                     "사망 증명서 공간의 첫 방 왼쪽에 원래 방으로 돌아가는 문이 열립니다.",
-                    "#첫 방에 바보 카드를 드랍합니다.",
+                    "#첫 방에 " .. eidCardIcon(Card.CARD_FOOL) .. "바보 카드를 드랍합니다.",
                     "#아이템 하나를 획득하면 해당 방에 남은 아이템이 모두 사라지지만, 자동으로 원래 방으로 돌아가지는 않습니다."
                 },
                 en = {
                     "A door back to the original room opens on the left side of the first room in the Death Certificate dimension.",
-                    "#Drops a Fool card in the first room.",
+                    "#Drops a " .. eidCardIcon(Card.CARD_FOOL) .. "Fool card in the first room.",
                     "#After picking up an item, all other items in that room disappear, but you do not automatically return to the original room."
                 }
             }
@@ -2129,6 +2159,16 @@ local function loadAllItems()
                 return cfg:GetTrinket(id) ~= nil
             end
 
+            -- EID description modifiers run every render frame, so an unconditional
+            -- printDebug here repeats the same line thousands of times a minute.
+            -- Messages carry their own ids, so one line per distinct message is enough.
+            local eidLoggedOnce = {}
+            local function eidDebugOnce(message)
+                if eidLoggedOnce[message] then return end
+                eidLoggedOnce[message] = true
+                ConchBlessing.printDebug(message)
+            end
+
             if not ConchBlessing._didRegisterUnifiedModifier then
                 EID:addDescriptionModifier(
                     "ConchBlessing_ByOriginType",
@@ -2223,10 +2263,10 @@ local function loadAllItems()
 							end
 						end
 						
-						ConchBlessing.printDebug("[EID] Checking pickup: ObjType=" .. tostring(descObj.ObjType) .. ", Variant=" .. tostring(descObj.ObjVariant) .. ", SubType=" .. tostring(subId) .. ", category=" .. tostring(originCategory))
+						eidDebugOnce("[EID] Checking pickup: ObjType=" .. tostring(descObj.ObjType) .. ", Variant=" .. tostring(descObj.ObjVariant) .. ", SubType=" .. tostring(subId) .. ", category=" .. tostring(originCategory))
 						
 						if not originCategory then
-							ConchBlessing.printDebug("[EID] Skipping: not a collectible or trinket pickup")
+							eidDebugOnce("[EID] Skipping: not a collectible or trinket pickup")
 							return descObj
 						end
 						
@@ -2258,11 +2298,11 @@ local function loadAllItems()
                                 ConchBlessing._conchDescCache[cacheKey] = cached
                             end
                             if cached and #cached > 0 then
-								ConchBlessing.printDebug("[EID] Conch attach OK: " .. pickupTypeName .. " id=" .. tostring(subId) .. ", keys=" .. tostring(table.concat(itemKeys, ",")))
+								eidDebugOnce("[EID] Conch attach OK: " .. pickupTypeName .. " id=" .. tostring(subId) .. ", keys=" .. tostring(table.concat(itemKeys, ",")))
                                 EID:appendToDescription(descObj, cached)
                             end
 						else
-							ConchBlessing.printDebug("[EID] Conch attach SKIP: no " .. pickupTypeName .. " mapping for id=" .. tostring(subId))
+							eidDebugOnce("[EID] Conch attach SKIP: no " .. pickupTypeName .. " mapping for id=" .. tostring(subId))
 						end
 
                         -- Synergy part
@@ -2318,17 +2358,17 @@ local function loadAllItems()
                                     local t = (type(entry.text) == "table" and (entry.text[lang] or entry.text.en)) or entry.text
                                     local iconToken
                                     -- Use the explicitly stored targetIsTrinket flag from synergy definition
-                                    ConchBlessing.printDebug("[EID Synergy] Processing target ID: " .. tostring(entry.target) .. ", targetIsTrinket flag: " .. tostring(entry.targetIsTrinket))
+                                    eidDebugOnce("[EID Synergy] Processing target ID: " .. tostring(entry.target) .. ", targetIsTrinket flag: " .. tostring(entry.targetIsTrinket))
                                     if entry.targetIsTrinket == true then
                                         iconToken = "{{Trinket" .. tostring(entry.target) .. "}}"
-                                        ConchBlessing.printDebug("[EID Synergy] Using Trinket icon for ID: " .. tostring(entry.target))
+                                        eidDebugOnce("[EID Synergy] Using Trinket icon for ID: " .. tostring(entry.target))
                                     elseif entry.targetIsTrinket == false then
                                         iconToken = "{{Collectible" .. tostring(entry.target) .. "}}"
-                                        ConchBlessing.printDebug("[EID Synergy] Using Collectible icon for ID: " .. tostring(entry.target))
+                                        eidDebugOnce("[EID Synergy] Using Collectible icon for ID: " .. tostring(entry.target))
                                     else
                                         -- Fallback: auto-detect if type was not explicitly specified
                                         local isTrinket = isTrinketId(entry.target)
-                                        ConchBlessing.printDebug("[EID Synergy] Auto-detecting type for ID: " .. tostring(entry.target) .. ", isTrinket: " .. tostring(isTrinket))
+                                        eidDebugOnce("[EID Synergy] Auto-detecting type for ID: " .. tostring(entry.target) .. ", isTrinket: " .. tostring(isTrinket))
                                         if isTrinket then
                                             iconToken = "{{Trinket" .. tostring(entry.target) .. "}}"
                                         else
@@ -2522,3 +2562,6 @@ end)
 
 -- Ensure minus chain evolution logic is loaded
 pcall(function() require("scripts.items.trinkets.minus_chain") end)
+
+-- Dev tooling: registers the conch_rng console probe. Safe to remove.
+pcall(function() require("scripts.dev.rng_probe") end)

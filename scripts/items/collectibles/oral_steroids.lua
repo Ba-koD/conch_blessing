@@ -9,6 +9,9 @@ local SaveManager = require("scripts.lib.save_manager")
 ConchBlessing.oralsteroids.STATS = {
     MIN_MULTIPLIER = 0.8,        -- Minimum random multiplier value
     MAX_MULTIPLIER = 1.5,        -- Maximum random multiplier value
+    -- Floor for the APPLIED total multiplier, as a fraction of the minimum
+    -- single roll. 0.5 means the total can never drop below half of it.
+    MIN_TOTAL_MULTIPLIER_FACTOR = 0.5,
 }
 
 ConchBlessing.oralsteroids.data = {
@@ -28,6 +31,24 @@ local function rebuildOralUnified(player, playerID)
         um:SetItemAdditiveMultiplier(player, ORAL_STEROIDS_ID, "Damage", m.damage or 1.0, "Oral Steroids #" .. i)
         um:SetItemAdditiveMultiplier(player, ORAL_STEROIDS_ID, "Range", m.range or 1.0, "Oral Steroids #" .. i)
         um:SetItemAdditiveMultiplier(player, ORAL_STEROIDS_ID, "Luck", m.luck or 1.0, "Oral Steroids #" .. i)
+    end
+    -- StatsAPI applies 1 + sum(roll - 1) and clamps only at zero, so without this
+    -- a run of bad rolls can drive a stat multiplier to 0. Lift the accumulated
+    -- total back to the floor with one corrective entry.
+    local cfg = ConchBlessing.oralsteroids.STATS
+    local floorValue = (cfg.MIN_MULTIPLIER or 0) * (cfg.MIN_TOTAL_MULTIPLIER_FACTOR or 0)
+    for _, pair in ipairs({ { "Tears", "tears" }, { "Damage", "damage" }, { "Range", "range" }, { "Luck", "luck" } }) do
+        local statName, field = pair[1], pair[2]
+        local total = 1.0
+        for i = 1, #stored do
+            total = total + ((stored[i][field] or 1.0) - 1.0)
+        end
+        if total < floorValue then
+            um:SetItemAdditiveMultiplier(player, ORAL_STEROIDS_ID, statName,
+                1.0 + (floorValue - total), "Oral Steroids floor")
+            ConchBlessing.printDebug(string.format(
+                "Oral Steroids: %s total %.3f floored to %.3f", statName, total, floorValue))
+        end
     end
     um:SaveToSaveManager(player)
 end
@@ -166,10 +187,7 @@ ConchBlessing.oralsteroids.onEvaluateCache = function(_, player, cacheFlag)
                 ConchBlessing.printDebug("Oral Steroids: Registering multipliers to unified system")
                 for i = 1, storedCount do
                     local m = ConchBlessing.oralsteroids.storedMultipliers[playerID][i]
-                    ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, ORAL_STEROIDS_ID, "Tears", m.tears or 1.0, "Oral Steroids #" .. i)
-                    ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, ORAL_STEROIDS_ID, "Damage", m.damage or 1.0, "Oral Steroids #" .. i)
-                    ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, ORAL_STEROIDS_ID, "Range", m.range or 1.0, "Oral Steroids #" .. i)
-                    ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, ORAL_STEROIDS_ID, "Luck", m.luck or 1.0, "Oral Steroids #" .. i)
+                    rebuildOralUnified(player, playerID)
                     ConchBlessing.printDebug(string.format("  #%d registered: Tears=%.2f Damage=%.2f Range=%.2f Luck=%.2f", 
                         i, m.tears or 0, m.damage or 0, m.range or 0, m.luck or 0))
                 end
@@ -192,15 +210,9 @@ ConchBlessing.oralsteroids.onEvaluateCache = function(_, player, cacheFlag)
     -- Generate new multipliers if needed (item count increased or storedMultipliers doesn't have enough)
     if itemNum > storedCount then
         for i = storedCount + 1, itemNum do
-            -- Use math.random() per stat for independent randomness
-            local function rollStat()
-                local r = math.random()
-                local span = ConchBlessing.oralsteroids.STATS.MAX_MULTIPLIER - ConchBlessing.oralsteroids.STATS.MIN_MULTIPLIER
-                local value = math.floor((r * span + ConchBlessing.oralsteroids.STATS.MIN_MULTIPLIER) * 100) / 100
-                ConchBlessing.printDebug("Oral Steroids rollStat r=" .. string.format("%.6f", r) .. ", value=" .. string.format("%.2f", value))
-                return value
-            end
-
+            -- One stat roll. Lives on the module so the probe measures this exact
+            -- expression instead of a copy of it.
+            local rollStat = ConchBlessing.oralsteroids.rollStat
             local newMultipliers = {
                 tears = rollStat(),
                 damage = rollStat(),
@@ -314,10 +326,7 @@ ConchBlessing.oralsteroids.onGameStarted = function(_)
             -- Reconstruct unified from arrays (first-time migration), using additive-mult stacking semantics
             for i = 1, #haveArrays do
                 local m = haveArrays[i]
-                ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, ORAL_STEROIDS_ID, "Tears", m.tears or 1.0, "Oral Steroids #" .. i)
-                ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, ORAL_STEROIDS_ID, "Damage", m.damage or 1.0, "Oral Steroids #" .. i)
-                ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, ORAL_STEROIDS_ID, "Range", m.range or 1.0, "Oral Steroids #" .. i)
-                ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, ORAL_STEROIDS_ID, "Luck", m.luck or 1.0, "Oral Steroids #" .. i)
+                rebuildOralUnified(player, playerID)
             end
             ConchBlessing.stats.unifiedMultipliers:SaveToSaveManager(player)
             ConchBlessing.oralsteroids._lastItemCount[playerID] = #haveArrays
@@ -366,4 +375,15 @@ do
             end
         end)
     end
+end
+
+-- Single stat multiplier roll: uniform over [MIN_MULTIPLIER, MAX_MULTIPLIER) truncated to 2 decimals,
+-- so the mean is (min + max - 0.01) / 2, not (min + max) / 2.
+function ConchBlessing.oralsteroids.rollStat()
+    local r = math.random()
+    local cfg = ConchBlessing.oralsteroids.STATS
+    local span = cfg.MAX_MULTIPLIER - cfg.MIN_MULTIPLIER
+    local value = math.floor((r * span + cfg.MIN_MULTIPLIER) * 100) / 100
+    ConchBlessing.printDebug("Oral Steroids rollStat r=" .. string.format("%.6f", r) .. ", value=" .. string.format("%.2f", value))
+    return value
 end

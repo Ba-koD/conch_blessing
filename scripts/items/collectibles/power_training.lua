@@ -29,6 +29,9 @@ end
 ConchBlessing.powertraining.data = {
     minMultiplier = 1.0,
     maxMultiplier = 1.3,
+    -- Floor for the APPLIED total multiplier, as a fraction of the minimum
+    -- single roll. 0.5 means the total can never drop below half of it.
+    minTotalMultiplierFactor = 0.5,
     speedDecrease = 0
 }
 
@@ -46,6 +49,24 @@ local function rebuildPowerTrainingUnified(player, playerID)
         um:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Damage", m.damage or 1.0, "Power Training #" .. i)
         um:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Range", m.range or 1.0, "Power Training #" .. i)
         um:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Luck", m.luck or 1.0, "Power Training #" .. i)
+    end
+    -- StatsAPI applies 1 + sum(roll - 1) and clamps only at zero, so without this
+    -- a run of bad rolls can drive a stat multiplier to 0. Lift the accumulated
+    -- total back to the floor with one corrective entry.
+    local cfg = ConchBlessing.powertraining.data
+    local floorValue = (cfg.minMultiplier or 0) * (cfg.minTotalMultiplierFactor or 0)
+    for _, pair in ipairs({ { "Tears", "tears" }, { "Damage", "damage" }, { "Range", "range" }, { "Luck", "luck" } }) do
+        local statName, field = pair[1], pair[2]
+        local total = 1.0
+        for i = 1, #arr do
+            total = total + ((arr[i][field] or 1.0) - 1.0)
+        end
+        if total < floorValue then
+            um:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, statName,
+                1.0 + (floorValue - total), "Power Training floor")
+            ConchBlessing.printDebug(string.format(
+                "Power Training: %s total %.3f floored to %.3f", statName, total, floorValue))
+        end
     end
     um:SaveToSaveManager(player)
 end
@@ -149,15 +170,9 @@ ConchBlessing.powertraining.onUseItem = function(player, collectibleID, useFlags
         ConchBlessing.powertraining.storedMultipliers[playerID] = {}
     end
     
-    -- Use math.random() per stat for independent randomness
-    local function rollStat()
-        local r = math.random()
-        local span = ConchBlessing.powertraining.data.maxMultiplier - ConchBlessing.powertraining.data.minMultiplier
-        local value = math.floor((r * span + ConchBlessing.powertraining.data.minMultiplier) * 100) / 100
-        ConchBlessing.printDebug("Power Training rollStat r=" .. string.format("%.6f", r) .. ", value=" .. string.format("%.2f", value))
-        return value
-    end
-
+    -- One stat roll. Lives on the module so the probe measures this exact
+    -- expression instead of a copy of it.
+    local rollStat = ConchBlessing.powertraining.rollStat
     local newMultipliers = {
         speed = rollStat(),
         tears = rollStat(),
@@ -206,10 +221,7 @@ ConchBlessing.powertraining.onUseItem = function(player, collectibleID, useFlags
     -- Update unified multipliers (current = last rolled, total = unified product)
     local uniqueKey = POWER_TRAINING_ID .. "_" .. newIndex
     -- Always treat as additive multiplier stacking
-    ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Tears", newMultipliers.tears, "Power Training #" .. newIndex)
-    ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Damage", newMultipliers.damage, "Power Training #" .. newIndex)
-    ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Range", newMultipliers.range, "Power Training #" .. newIndex)
-    ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Luck", newMultipliers.luck, "Power Training #" .. newIndex)
+    rebuildPowerTrainingUnified(player, playerID)
     
     SFXManager():Play(SoundEffect.SOUND_BATTERYCHARGE, 1.0, 0, false, 1.0, 0)
     
@@ -363,10 +375,7 @@ ConchBlessing.powertraining.onGameStarted = function(_)
         elseif haveArrays and #haveArrays > 0 then
             for i = 1, #haveArrays do
                 local m = haveArrays[i]
-                ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Tears", m.tears or 1.0, "Power Training #" .. i)
-                ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Damage", m.damage or 1.0, "Power Training #" .. i)
-                ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Range", m.range or 1.0, "Power Training #" .. i)
-                ConchBlessing.stats.unifiedMultipliers:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, "Luck", m.luck or 1.0, "Power Training #" .. i)
+                rebuildPowerTrainingUnified(player, player:GetPlayerType())
             end
             ConchBlessing.stats.unifiedMultipliers:SaveToSaveManager(player)
             ConchBlessing.printDebug("Power Training: Unified multipliers reconstructed from arrays and saved")
@@ -411,4 +420,15 @@ do
             end
         end)
     end
+end
+
+-- Single stat multiplier roll: uniform over [minMultiplier, maxMultiplier) truncated to 2 decimals,
+-- so the mean is (min + max - 0.01) / 2, not (min + max) / 2.
+function ConchBlessing.powertraining.rollStat()
+    local r = math.random()
+    local cfg = ConchBlessing.powertraining.data
+    local span = cfg.maxMultiplier - cfg.minMultiplier
+    local value = math.floor((r * span + cfg.minMultiplier) * 100) / 100
+    ConchBlessing.printDebug("Power Training rollStat r=" .. string.format("%.6f", r) .. ", value=" .. string.format("%.2f", value))
+    return value
 end
