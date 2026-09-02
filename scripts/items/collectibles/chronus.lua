@@ -7,6 +7,19 @@ ConchBlessing.chronus.STATS = {
     DAMAGE_PER_FAMILIAR = 2.0,        -- Flat damage per absorbed familiar with absorbActions
 }
 
+-- absorbActions re-run every frame from onPlayerUpdate, so an unconditional log
+-- there writes the same line ~30 times a second. Emit one only when a count moves.
+local absorbLogState = {}
+local function logAbsorbOnce(label, total, delta)
+    local t = tonumber(total) or 0
+    local d = tonumber(delta) or 0
+    local previous = absorbLogState[label]
+    if previous and previous.total == t and previous.delta == d then return end
+    absorbLogState[label] = { total = t, delta = d }
+    ConchBlessing.printDebug(string.format(
+        "[Chronus] %s absorbed: total=%d, delta=%d", label, t, d))
+end
+
 -- Data container: configuration and runtime-safe defaults (no hardcoded debug literals)
 ConchBlessing.chronus.data = ConchBlessing.chronus.data or {
     absorbAll = false,
@@ -14,7 +27,12 @@ ConchBlessing.chronus.data = ConchBlessing.chronus.data or {
     pairOffsetPixels = 2.0,
     laserEyeYOffset = -6,
     anchorDepthOffset = -10,
-    angelicPrismOffset = 18,
+    angelicPrismOffset = 0,
+    angelicPrismCount = 1,
+    angelicPrismSizeScale = 4,
+    -- DEBUG ONLY: leaves the prisms fully rendered (sprite + shadow). Set back to
+    -- false before shipping; nothing else reads this.
+    angelicPrismDebugVisible = false,
     scanIntervalFrames = 1,
     starOfBethlehemSpawnIntervalFrames = 300,
     starOfBethlehemRetryIntervalFrames = 30,
@@ -190,36 +208,36 @@ ConchBlessing.chronus.data = ConchBlessing.chronus.data or {
     },
     absorbActions = {
         [CollectibleType.COLLECTIBLE_TWISTED_PAIR] = function(player, total, delta)
-            ConchBlessing.printDebug(string.format("[Chronus] Twisted Pair absorbed: total=%d, delta=%d", tonumber(total) or 0, tonumber(delta) or 0))
+            logAbsorbOnce("Twisted Pair", total, delta)
             ConchBlessing.chronus._ensureTwistedPairs(player)
             ConchBlessing.chronus._updateTwistedPairAnchors(player)
         end,
         [CollectibleType.COLLECTIBLE_INCUBUS] = function(player, total, delta)
-            ConchBlessing.printDebug(string.format("[Chronus] Incubus absorbed: total=%d, delta=%d", tonumber(total) or 0, tonumber(delta) or 0))
+            logAbsorbOnce("Incubus", total, delta)
             ConchBlessing.chronus._ensureIncubusStack(player)
             ConchBlessing.chronus._updateIncubusAnchors(player)
         end,
         [CollectibleType.COLLECTIBLE_SUCCUBUS] = function(player, total, delta)
-            ConchBlessing.printDebug(string.format("[Chronus] Succubus absorbed: total=%d, delta=%d", tonumber(total) or 0, tonumber(delta) or 0))
+            logAbsorbOnce("Succubus", total, delta)
             ConchBlessing.chronus._ensureSuccubusStack(player)
             ConchBlessing.chronus._updateSuccubusAnchors(player)
         end,
         [CollectibleType.COLLECTIBLE_ANGELIC_PRISM] = function(player, total, delta)
-            ConchBlessing.printDebug(string.format("[Chronus] Angelic Prism absorbed: total=%d, delta=%d", tonumber(total) or 0, tonumber(delta) or 0))
+            logAbsorbOnce("Angelic Prism", total, delta)
             ConchBlessing.chronus._ensureAngelicPrismStack(player)
             ConchBlessing.chronus._updateAngelicPrismAnchors(player)
         end,
         [CollectibleType.COLLECTIBLE_SERAPHIM] = function(player, total, delta)
-            ConchBlessing.printDebug(string.format("[Chronus] Seraphim absorbed: total=%d, delta=%d", tonumber(total) or 0, tonumber(delta) or 0))
+            logAbsorbOnce("Seraphim", total, delta)
             ConchBlessing.chronus._ensureSeraphimEffects(player)
         end,
         [CollectibleType.COLLECTIBLE_CENSER] = function(player, total, delta)
-            ConchBlessing.printDebug(string.format("[Chronus] Censer absorbed: total=%d, delta=%d", tonumber(total) or 0, tonumber(delta) or 0))
+            logAbsorbOnce("Censer", total, delta)
             ConchBlessing.chronus._ensureCenserStack(player)
             ConchBlessing.chronus._updateCenserAnchors(player)
         end,
         [CollectibleType.COLLECTIBLE_STAR_OF_BETHLEHEM] = function(player, total, delta)
-            ConchBlessing.printDebug(string.format("[Chronus] Star of Bethlehem absorbed: total=%d, delta=%d", tonumber(total) or 0, tonumber(delta) or 0))
+            logAbsorbOnce("Star of Bethlehem", total, delta)
             ConchBlessing.chronus._ensureStarOfBethlehemStack(player, (tonumber(delta) or 0) > 0)
             ConchBlessing.chronus._updateStarOfBethlehemAnchors(player)
         end,
@@ -865,27 +883,95 @@ function ConchBlessing.chronus._ensureSuccubusStack(player)
     end
 end
 
+-- Angelic Prism placement.
+-- One prism pinned on the player, its hitbox radius scaled off the player's own Size.
+-- Tested in game: the engine's prism split is a contact test that reads Entity.Size,
+-- not the collisionRadius="10" constant from entities2.xml and not an
+-- outside-to-inside transition. So a single centred prism does split, provided its
+-- radius clears the ring the projectiles spawn on: sizeScale 4 (radius ~24) splits,
+-- 3 (~18) does not. Do not trim sizeScale to the measured floor -- player.Size and the
+-- spawn offset both vary per character and weapon.
+-- The ring layout (count > 1 with a non-zero offset) still works and stays supported;
+-- the `or` defaults below spell out its proven values so a missing config lands there.
+local function isAngelicPrismDebugVisible()
+    return ConchBlessing.chronus.data.angelicPrismDebugVisible == true
+end
+
+local function getAngelicPrismCount()
+    local count = math.floor(tonumber(ConchBlessing.chronus.data.angelicPrismCount) or 16)
+    if count < 1 then count = 1 end
+    return count
+end
+
+local function getAngelicPrismBaseDir(player)
+    local pdata = player:GetData()
+    local dir = player:GetAimDirection()
+    if dir and dir:Length() > 0 then
+        pdata.__chronusLastFireDir = dir:Normalized()
+    end
+    local baseDir = pdata.__chronusLastFireDir
+    if baseDir and baseDir:Length() > 0 then
+        return baseDir
+    end
+    return Vector(1, 0)
+end
+
+local function applyAngelicPrismAnchor(fam, player, baseDir)
+    local fd = fam:GetData()
+    local slot = (fd and fd.__chronusPrismDirection) or 0
+    local angle = slot * (2 * math.pi) / getAngelicPrismCount()
+    local slotDir = Vector(
+        baseDir.X * math.cos(angle) - baseDir.Y * math.sin(angle),
+        baseDir.X * math.sin(angle) + baseDir.Y * math.cos(angle)
+    )
+    local ringRadius = tonumber(ConchBlessing.chronus.data.angelicPrismOffset) or 22
+    fam.Position = player.Position + (slotDir * ringRadius)
+    fam.Velocity = Vector.Zero
+    fam.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
+    fam.Visible = isAngelicPrismDebugVisible()
+    local sizeScale = tonumber(ConchBlessing.chronus.data.angelicPrismSizeScale) or 0
+    if sizeScale > 0 then
+        fam.Size = player.Size * sizeScale
+        if isAngelicPrismDebugVisible() then
+            -- Size is a hitbox radius and never touches rendering. While debugging,
+            -- stretch the sprite to match it so the catch area is what you actually see.
+            -- 10 is the vanilla collisionRadius for this familiar in entities2.xml.
+            fam.SpriteScale = Vector.One * (fam.Size / 10)
+        end
+        if fd and not fd.__chronusPrismSizeLogged then
+            fd.__chronusPrismSizeLogged = true
+            dbg(string.format("Angelic Prism hitbox: player %.2f x%.2f -> %.2f (engine default 10)",
+                player.Size, sizeScale, fam.Size))
+        end
+    end
+end
+
 -- Angelic Prism: spawn invisible Angelic Prism positioned ahead in firing direction (1 per item)
 local function spawnInvisibleAngelicPrism(player)
-    dbg("Spawning Angelic Prism (positioned in firing direction, invisible)")
+    dbg("Spawning Angelic Prism")
     local ent = Isaac.Spawn(EntityType.ENTITY_FAMILIAR, FamiliarVariant.ANGELIC_PRISM, 0, player.Position, Vector.Zero, player)
     local fam = ent and ent:ToFamiliar() or nil
-    if not fam then 
+    if not fam then
         dbg("Failed to spawn Angelic Prism entity")
-        return nil 
+        return nil
     end
     fam:ClearEntityFlags(EntityFlag.FLAG_APPEAR)
-    local spr = fam:GetSprite()
-    local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
-    -- Replace all sprite layers
-    for i = 0, 10 do
-        pcall(function() spr:ReplaceSpritesheet(i, path) end)
+    if not isAngelicPrismDebugVisible() then
+        local spr = fam:GetSprite()
+        local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
+        -- Replace all sprite layers
+        for i = 0, 10 do
+            pcall(function() spr:ReplaceSpritesheet(i, path) end)
+        end
+        pcall(function() spr:LoadGraphics() end)
     end
-    pcall(function() spr:LoadGraphics() end)
     fam.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
     fam:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
     fam.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
     fam.GridCollisionClass = GridCollisionClass.COLLISION_NONE
+    -- Hide the entity itself, not only its sprite: a nulled spritesheet still
+    -- leaves the familiar's engine-drawn floor shadow behind.
+    fam.Visible = isAngelicPrismDebugVisible()
     local fd = fam:GetData()
     fd.__chronusAngelicPrism = true
     dbg(string.format("Angelic Prism spawned at position (%f, %f)", fam.Position.X, fam.Position.Y))
@@ -896,8 +982,8 @@ function ConchBlessing.chronus._ensureAngelicPrismStack(player)
     if not player then return end
     
     local absorbed = ConchBlessing.chronus._getAbsorbedCount(player, CollectibleType.COLLECTIBLE_ANGELIC_PRISM)
-    -- Always spawn exactly 4 prisms (one in each cardinal direction) if any Angelic Prism is absorbed
-    local target = (absorbed > 0) and 4 or 0
+    -- One prism per ring slot once any Angelic Prism is absorbed
+    local target = (absorbed > 0) and getAngelicPrismCount() or 0
     
     local pdata = player:GetData()
     pdata.__chronusAngelicPrisms = pdata.__chronusAngelicPrisms or {}
@@ -937,17 +1023,28 @@ function ConchBlessing.chronus._ensureAngelicPrismStack(player)
         end
     end
 
-    -- Spawn missing prisms only if we don't have enough
-    while #pdata.__chronusAngelicPrisms < target do
-        local index = #pdata.__chronusAngelicPrisms
-        local directionIndex = index  -- 0, 1, 2, 3 for 0°, 90°, 180°, 270°
-        local fam = spawnInvisibleAngelicPrism(player)
-        if not fam then 
-            break 
+    -- Fill the lowest free ring slots. Deriving the slot from the list length
+    -- instead would hand a new prism a slot a surviving prism already owns as soon
+    -- as one dies mid-list, leaving that direction uncovered.
+    local usedSlots = {}
+    for _, f in ipairs(pdata.__chronusAngelicPrisms) do
+        local fd = f:GetData()
+        if fd and fd.__chronusPrismDirection then
+            usedSlots[fd.__chronusPrismDirection] = true
         end
-        -- Store direction index in familiar data
-        local fd = fam:GetData()
-        fd.__chronusPrismDirection = directionIndex
+    end
+    local nextSlot = 0
+    while #pdata.__chronusAngelicPrisms < target do
+        while nextSlot < target and usedSlots[nextSlot] do
+            nextSlot = nextSlot + 1
+        end
+        if nextSlot >= target then break end
+        local fam = spawnInvisibleAngelicPrism(player)
+        if not fam then
+            break
+        end
+        fam:GetData().__chronusPrismDirection = nextSlot
+        usedSlots[nextSlot] = true
         table.insert(pdata.__chronusAngelicPrisms, fam)
     end
 end
@@ -958,41 +1055,11 @@ function ConchBlessing.chronus._updateAngelicPrismAnchors(player)
     if not pdata then return end
     local list = pdata.__chronusAngelicPrisms
     if not list or #list == 0 then return end
-    
-    -- Get aim direction
-    local dir = player:GetAimDirection()
-    if dir and dir:Length() > 0 then
-        pdata.__chronusLastFireDir = dir:Normalized()
-        dbg(string.format("[Chronus] GetAimDirection: (%.3f, %.3f)", dir.X, dir.Y))
-    end
-    
-    -- Use last firing direction or default to right
-    local baseDir = Vector(1, 0)
-    if pdata.__chronusLastFireDir and pdata.__chronusLastFireDir:Length() > 0 then
-        baseDir = pdata.__chronusLastFireDir
-    end
-    
-    -- Place prisms in 4 directions (0°, 90°, 180°, 270°) relative to aim direction
-    local forwardOffset = tonumber(ConchBlessing.chronus.data.angelicPrismOffset) or 15
-    local depth = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
-    
+
+    local baseDir = getAngelicPrismBaseDir(player)
     for _, fam in ipairs(list) do
         if fam and fam:Exists() then
-            local fd = fam:GetData()
-            local directionIndex = (fd and fd.__chronusPrismDirection) or 0
-            
-            -- Calculate rotation angle: 0° = 0, 90° = π/2, 180° = π, 270° = 3π/2
-            local angle = (directionIndex * math.pi / 2)
-            
-            -- Rotate base direction by angle
-            local rotatedDir = Vector(
-                baseDir.X * math.cos(angle) - baseDir.Y * math.sin(angle),
-                baseDir.X * math.sin(angle) + baseDir.Y * math.cos(angle)
-            )
-            
-            fam.Position = player.Position + (rotatedDir * forwardOffset)
-            fam.DepthOffset = depth
-            fam.Velocity = Vector.Zero
+            applyAngelicPrismAnchor(fam, player, baseDir)
         end
     end
 end
@@ -1596,9 +1663,9 @@ ConchBlessing.chronus.onFamiliarUpdate = function(_, fam)
         return
     end
     
-    -- Handle Angelic Prism (positioned in 4 directions)
+    -- Handle Angelic Prism (pinned to its ring slot around the player)
     if f.Variant == FamiliarVariant.ANGELIC_PRISM and fd.__chronusAngelicPrism then
-        if not fd.__chronusAngelicPrismSpr then
+        if not fd.__chronusAngelicPrismSpr and not isAngelicPrismDebugVisible() then
             local spr = f:GetSprite()
             local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
             -- Replace all sprite layers
@@ -1611,41 +1678,10 @@ ConchBlessing.chronus.onFamiliarUpdate = function(_, fam)
         f:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
         f.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
         f.GridCollisionClass = GridCollisionClass.COLLISION_NONE
-        
+
         local player = f.Player
-        if player then
-            local pdata = player:GetData()
-            if pdata then
-                -- Get aim direction
-                local dir = player:GetAimDirection()
-                if dir and dir:Length() > 0 then
-                    pdata.__chronusLastFireDir = dir:Normalized()
-                end
-                
-                -- Use last firing direction or default to right
-                local baseDir = Vector(1, 0)
-                if pdata.__chronusLastFireDir and pdata.__chronusLastFireDir:Length() > 0 then
-                    baseDir = pdata.__chronusLastFireDir
-                end
-                
-                -- Get direction index for this prism
-                local directionIndex = (fd.__chronusPrismDirection) or 0
-                
-                -- Calculate rotation angle: 0° = 0, 90° = π/2, 180° = π, 270° = 3π/2
-                local angle = (directionIndex * math.pi / 2)
-                
-                -- Rotate base direction by angle
-                local rotatedDir = Vector(
-                    baseDir.X * math.cos(angle) - baseDir.Y * math.sin(angle),
-                    baseDir.X * math.sin(angle) + baseDir.Y * math.cos(angle)
-                )
-                
-                -- Place in rotated direction
-                local forwardOffset = tonumber(ConchBlessing.chronus.data.angelicPrismOffset) or 15
-                f.Position = player.Position + (rotatedDir * forwardOffset)
-                f.Velocity = Vector.Zero
-                f.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
-            end
+        if player and player:GetData() then
+            applyAngelicPrismAnchor(f, player, getAngelicPrismBaseDir(player))
         end
         return
     end
