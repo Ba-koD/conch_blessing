@@ -422,9 +422,31 @@ if EID then
     EID._currentMod = prevCurrentMod
 end
 
--- Auto-register when mod loads
-ConchBlessing:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function()
+-- Registration has to survive a luamod reload. A reload re-runs these files but
+-- never fires MC_POST_GAME_STARTED, so registering only there leaves our items with
+-- no EID entry -- blank in EID itself and in InvDesc -- until the next run starts.
+-- Other mods avoid this by registering as their files load; do the same, and keep
+-- the later passes for the case where EID loads after us.
+local function ensureDescriptionsRegistered()
+    if ConchBlessing._eidDescriptionsRegistered then return end
+    if not EID then return end
+    ConchBlessing._eidDescriptionsRegistered = true
     ConchBlessing.EID.registerAllItems()
+end
+
+-- 1) At load, the way a reload reaches us.
+ensureDescriptionsRegistered()
+
+-- 2) At game start, re-running so a language change between runs is picked up.
+ConchBlessing:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function()
+    ConchBlessing._eidDescriptionsRegistered = false
+    ensureDescriptionsRegistered()
+end)
+
+-- 3) Cheap poll for the case where EID finishes loading after this file ran. The
+--    flag makes every call after the first one a single table lookup.
+ConchBlessing:AddCallback(ModCallbacks.MC_POST_UPDATE, function()
+    ensureDescriptionsRegistered()
 end)
 
 ConchBlessing:AddCallbackCustom(
