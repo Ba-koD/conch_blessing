@@ -1079,11 +1079,17 @@ ConchBlessing.ItemData = {
         eid = {
             kr = {
                 "{{Speed}} 이동속도가 -0.2 감소합니다.",
-                "#{{Warning}} 몬스터를 300마리 처치하면 " .. eidOwnCollectibleIcon("Tyrfing") .. "티르핑으로 진화합니다."
+                "#적이 " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_MEAT_CLEAVER) .. "고기 도축칼로 쪼개진 상태로 등장합니다. (체력 40%, 2마리)",
+                "#보스는 쪼개지지 않습니다.",
+                "#{{Warning}} 몬스터를 300마리 처치하면 " .. eidOwnCollectibleIcon("Tyrfing") .. "티르핑으로 진화합니다.",
+                "#{{Warning}} REPENTOGON 권장"
             },
             en = {
                 "{{Speed}} Movement speed -0.2",
-                "#{{Warning}} After killing 300 enemies, evolves into " .. eidOwnCollectibleIcon("Tyrfing") .. "Tyrfing."
+                "#Enemies arrive already cleaved by " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_MEAT_CLEAVER) .. "Meat Cleaver (2 copies at 40% health)",
+                "#Bosses are not split",
+                "#{{Warning}} After killing 300 enemies, evolves into " .. eidOwnCollectibleIcon("Tyrfing") .. "Tyrfing.",
+                "#{{Warning}} REPENTOGON recommended"
             }
         },
         pool = {
@@ -1103,6 +1109,8 @@ ConchBlessing.ItemData = {
             pickup = "sealeddemonsword.onPickup",
             evaluateCache = "sealeddemonsword.onEvaluateCache",
             postNPCDeath = "sealeddemonsword.onNPCDeath",
+            update = "sealeddemonsword.onUpdate",
+            postNewRoom = "sealeddemonsword.onNewRoom",
             gameStarted = "sealeddemonsword.onGameStarted",
         },
         synergies = {}

@@ -8,11 +8,19 @@ local SaveManager = require("scripts.lib.save_manager")
 -- Constants
 local KILLS_TO_EVOLVE = 300
 local SPEED_PENALTY = 0.2
+-- Damage handed to TrySplit. It is the threshold the engine uses to decide the
+-- split, not damage dealt to the player; enemies that cannot split take it as
+-- real damage instead, matching Meat Cleaver's own behaviour.
+local SPLIT_DAMAGE = 25
 
 -- Data structure
 ConchBlessing.sealeddemonsword.data = {
     killsToEvolve = KILLS_TO_EVOLVE,
-    speedPenalty = SPEED_PENALTY
+    speedPenalty = SPEED_PENALTY,
+    splitDamage = SPLIT_DAMAGE,
+    -- Bosses are excluded by default: halving a boss into two 40% copies changes
+    -- fight pacing far more than it does for regular enemies.
+    splitBosses = false,
 }
 
 -- Get saved data for player
@@ -24,6 +32,123 @@ local function getSaveData(player)
         }
     end
     return playerSave.sealedDemonSword
+end
+
+-- Enemies arrive already split rather than being cleaved by an active use.
+--
+-- With REPENTOGON we split each enemy as it spawns through EntityNPC:TrySplit,
+-- which is the engine's own Meat Cleaver split, so wave spawns and summons are
+-- covered too. Without it we fall back to one room-wide Meat Cleaver use on
+-- entry, which misses anything summoned later but needs no extender.
+local function hasRepentogon()
+    local repentogon = rawget(_G, "REPENTOGON")
+    return type(repentogon) == "table" and repentogon.Real == true
+end
+
+local function anyPlayerHasSword()
+    local game = Game()
+    for i = 0, game:GetNumPlayers() - 1 do
+        local player = game:GetPlayer(i)
+        if player and player:HasCollectible(SEALED_DEMON_SWORD_ID) then
+            return player
+        end
+    end
+    return nil
+end
+
+-- Split bookkeeping, reset per room.
+--
+-- A half carries 40% of the parent's health, and TrySplit's damage argument is
+-- dealt to anything it cannot split. So re-splitting a half does not double it,
+-- it kills it. Timing cannot tell a half from a fresh spawn reliably -- halves
+-- appear some frames later -- so compare health instead: the first health seen
+-- for an enemy kind in this room is the baseline, and anything of that kind that
+-- turns up well below it is a half.
+local SPLIT_BASELINE_RATIO = 0.9
+
+local splitState = {
+    handled = {},
+    baselineHP = {},
+}
+
+local function resetSplitState()
+    splitState.handled = {}
+    splitState.baselineHP = {}
+end
+
+-- Champions of the same kind carry a multiplied health pool, so they need their
+-- own baseline. Sharing one would make every normal enemy of that kind look like
+-- a half next to the champion figure and stop it from ever splitting.
+local function enemyKindKey(npc)
+    local champion = -1
+    if type(npc.GetChampionColorIdx) == "function" then
+        local ok, idx = pcall(function() return npc:GetChampionColorIdx() end)
+        if ok and type(idx) == "number" then champion = idx end
+    end
+    return npc.Type .. ":" .. npc.Variant .. ":" .. npc.SubType .. ":" .. champion
+end
+
+-- True when this enemy is a product of an earlier split rather than a new spawn.
+local function isSplitHalf(npc)
+    local key = enemyKindKey(npc)
+    local baseline = splitState.baselineHP[key]
+    if not baseline then
+        splitState.baselineHP[key] = npc.MaxHitPoints
+        return false
+    end
+    if npc.MaxHitPoints > baseline then
+        -- A bigger one showed up later (champion, or the baseline was itself a
+        -- half from a previous pass). Trust the larger value from now on.
+        splitState.baselineHP[key] = npc.MaxHitPoints
+        return false
+    end
+    return npc.MaxHitPoints < baseline * SPLIT_BASELINE_RATIO
+end
+
+ConchBlessing.sealeddemonsword.onUpdate = function()
+    if not hasRepentogon() then return end
+    local player = anyPlayerHasSword()
+    if not player then return end
+
+    for _, entity in ipairs(Isaac.GetRoomEntities()) do
+        local npc = entity:ToNPC()
+        if npc and npc:IsEnemy() and not npc:IsDead()
+            and not npc:HasEntityFlags(EntityFlag.FLAG_FRIENDLY) then
+            local hash = GetPtrHash(npc)
+            if not splitState.handled[hash] then
+                -- Mark first either way: a failed split must not retry every frame.
+                splitState.handled[hash] = true
+                local skipBoss = npc:IsBoss()
+                    and not ConchBlessing.sealeddemonsword.data.splitBosses
+                if not skipBoss and not isSplitHalf(npc)
+                    and type(npc.TrySplit) == "function" then
+                    local ok, err = pcall(function()
+                        return npc:TrySplit(
+                            tonumber(ConchBlessing.sealeddemonsword.data.splitDamage)
+                                or SPLIT_DAMAGE,
+                            EntityRef(player), false)
+                    end)
+                    if not ok then
+                        ConchBlessing.printError(
+                            "[SealedDemonSword] TrySplit failed: " .. tostring(err))
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- New room: forget the previous room's ledger, and run the base-game fallback
+-- when TrySplit is unavailable (one room-wide cleave, missing later summons).
+ConchBlessing.sealeddemonsword.onNewRoom = function(_)
+    resetSplitState()
+    if hasRepentogon() then return end
+    local player = anyPlayerHasSword()
+    if not player then return end
+    local room = Game():GetRoom()
+    if room:IsClear() then return end
+    player:UseActiveItem(CollectibleType.COLLECTIBLE_MEAT_CLEAVER,
+        UseFlag.USE_NOANIM | UseFlag.USE_NOCOSTUME)
 end
 
 -- On pickup callback
