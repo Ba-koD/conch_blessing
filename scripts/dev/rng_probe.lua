@@ -214,6 +214,40 @@ function probe.aMinus(samples)
         expected, cfg.minPerStat, cfg.totalMultSum, #stats, cfg.minPerStat, #stats))
 end
 
+-- ------------------------------------------------------------- angel's crown
+function probe.angelsCrown(samples)
+    header("Angel's Crown blessed Treasure Room (one roll per converted room)")
+    local t = ConchBlessing.angelscrown and ConchBlessing.angelscrown._test
+    if not t then out("SKIPPED (module not loaded)") return end
+
+    local rng = RNG()
+    local seed = Random()
+    if seed == 0 then seed = 1 end
+    rng:SetSeed(seed, 35)
+
+    -- goldenCount / hasMomsBox come from TrinketUtils.getTrinketCounts in the live
+    -- path; here they are the two inputs the chance is a pure function of.
+    local cases = {
+        { "plain",            0, false },
+        { "Mom's Box",        0, true },
+        { "golden",           1, false },
+        { "golden + Mom's",   1, true },
+    }
+    for _, case in ipairs(cases) do
+        local label, golden, box = case[1], case[2], case[3]
+        local chance = t.getBlessedChance(golden, box)
+        local hits = quietly(function()
+            local n = 0
+            for _ = 1, samples do
+                if t.rollBlessed(rng, golden, box) then n = n + 1 end
+            end
+            return n
+        end)
+        out(string.format("  %-16s configured=%5.1f%%  measured=%6.3f%%",
+            label, chance * 100, hits / samples * 100))
+    end
+end
+
 -- --------------------------------------------------------------- death spiral
 function probe.injectableDeath()
     header("Injectable Steroids instant death (cumulative over one floor)")
@@ -270,6 +304,7 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, cmd, params)
     probe.flatChances(luck)
     probe.timeMoney(samples, luck)
     probe.aMinus(samples)
+    probe.angelsCrown(samples)
     probe.injectableDeath()
     out("")
     out("conch_rng: done")

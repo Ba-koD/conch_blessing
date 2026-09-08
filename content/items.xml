@@ -28,4 +28,5 @@
     <trinket id="25" name="B -" gfx="b_minus.png" tags="offensive" cache="luck damage" hidden="true" shopprice="15"/>
     <trinket id="26" name="A -" gfx="a_minus.png" tags="offensive" cache="luck damage tears" hidden="true" shopprice="15"/>
     <trinket id="27" name="Atropos" gfx="atropos.png" tags="utility" shopprice="15"/>
+    <trinket id="28" name="Angel's Crown" gfx="angels_crown.png" tags="utility" shopprice="15"/>
 </items>

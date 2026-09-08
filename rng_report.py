@@ -39,6 +39,7 @@ SRC = {
     "fire": "scripts/items/collectibles/fire_breath.lua",
     "money": "scripts/items/familiars/time_money.lua",
     "aminus": "scripts/items/trinkets/a_minus.lua",
+    "crown": "scripts/items/trinkets/angels_crown.lua",
 }
 
 _cache: dict[str, list[str]] = {}
@@ -383,6 +384,38 @@ def build(samples: int, seed: int) -> str:
     w("")
     w(f"The sum is always exactly {total_sum:g}; the per-stat bound is "
       f"[{min_per:g}, {min_per + total_sum - min_per * k:g}].")
+    w("")
+
+    # 8 --------------------------------------------------------------------------
+    one_mod, one_cite = const("crown", "blessedChanceGolden")
+    both_mod, both_cite = const("crown", "blessedChanceBoth")
+    w("## 8. Angel's Crown blessed Treasure Room")
+    w("")
+    w("One roll per converted Treasure Room, seeded from the room's `SpawnSeed` so a")
+    w("re-entry cannot reroll it. The draw is a bare comparison against a flat chance")
+    w(f"({cite('crown', 'return rng:RandomFloat() < chance')}) and `RandomFloat()` is")
+    w("uniform on `[0, 1)`, so the effective odds equal the configured ones: there is no")
+    w("truncation and no sequential-branch loss here.")
+    w("")
+    w(f"- one modifier (golden trinket **or** Mom's Box): {one_mod:.0%} ({one_cite})")
+    w(f"- both modifiers: {both_mod:.0%} ({both_cite})")
+    w("")
+    rows = []
+    for label, chance in (("plain", 0.0), ("Mom's Box", one_mod),
+                          ("golden", one_mod), ("golden + Mom's Box", both_mod)):
+        hits = sum(1 for _ in range(samples) if rng.random() < chance)
+        rows.append([label, f"**{chance:.1%}**", f"{hits / samples:.3%}"])
+    w("\n".join(table(["Holder state", "Exact P", "Measured"], rows)))
+    w("")
+    w("Rooms roll independently, so over `n` converted Treasure Rooms the chance of at")
+    w("least one blessing is `1 - (1 - p)^n`:")
+    w("")
+    rows = []
+    for n in (1, 2, 3, 5, 8):
+        rows.append([str(n),
+                     f"{1 - (1 - one_mod) ** n:.1%}",
+                     f"{1 - (1 - both_mod) ** n:.1%}"])
+    w("\n".join(table(["Treasure Rooms", "one modifier", "both"], rows)))
     w("")
 
     return "\n".join(md) + "\n"
