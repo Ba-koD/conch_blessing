@@ -346,11 +346,25 @@ ConchBlessing.EID.registerAllItems = function()
                     if specLang and specLang[k] ~= nil then return specLang[k] end
                     return specTop[k]
                 end
+                local aVal = pick("append")
                 local nVal = pick("normal")
                 local mVal = pick("moms_box")
                 local bVal = pick("both")
 
-                if nVal ~= nil or mVal ~= nil or bVal ~= nil then
+                if type(aVal) == "table" and #aVal > 0 then
+                    -- Append mode: the golden/Mom's Box effect is an extra line rather
+                    -- than a bigger number, so the base description stays as written.
+                    -- EID reads this table as { golden, moms_box, both }.
+                    local appended = {}
+                    for i = 1, #aVal do appended[i] = tostring(aVal[i]) end
+                    EID:CreateDescriptionTableIfMissing("goldenTrinketEffects", targetEidLang)
+                    EID.descriptions[targetEidLang].goldenTrinketEffects[data.id] = appended
+                    -- GoldenTrinketData is language-independent; register it once.
+                    if langCode == "en" then
+                        EID:addGoldenTrinketTable(data.id, { append = true })
+                    end
+                    ConchBlessing.printDebug("[EID] Golden trinket append registered for " .. key .. " (" .. targetEidLang .. ")")
+                elseif nVal ~= nil or mVal ~= nil or bVal ~= nil then
                     if type(nVal) == "table" then
                         -- Array full replace for this language
                         local base = getBaseEidTextForLang(data, langCode)

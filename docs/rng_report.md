@@ -237,3 +237,32 @@ By symmetry each share averages `1/3`, so every stat has the same mean.
 
 The sum is always exactly 4; the per-stat bound is [0.8, 2.4].
 
+## 8. Angel's Crown blessed Treasure Room
+
+One roll per converted Treasure Room, seeded from the room's `SpawnSeed` so a
+re-entry cannot reroll it. The draw is a bare comparison against a flat chance
+(`scripts/items/trinkets/angels_crown.lua:69`) and `RandomFloat()` is
+uniform on `[0, 1)`, so the effective odds equal the configured ones: there is no
+truncation and no sequential-branch loss here.
+
+- one modifier (golden trinket **or** Mom's Box): 25% (`scripts/items/trinkets/angels_crown.lua:29`)
+- both modifiers: 33% (`scripts/items/trinkets/angels_crown.lua:31`)
+
+| Holder state | Exact P | Measured |
+|---|---|---|
+| plain | **0.0%** | 0.000% |
+| Mom's Box | **25.0%** | 25.042% |
+| golden | **25.0%** | 25.101% |
+| golden + Mom's Box | **33.0%** | 33.037% |
+
+Rooms roll independently, so over `n` converted Treasure Rooms the chance of at
+least one blessing is `1 - (1 - p)^n`:
+
+| Treasure Rooms | one modifier | both |
+|---|---|---|
+| 1 | 25.0% | 33.0% |
+| 2 | 43.8% | 55.1% |
+| 3 | 57.8% | 69.9% |
+| 5 | 76.3% | 86.5% |
+| 8 | 90.0% | 95.9% |
+

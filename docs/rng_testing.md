@@ -65,6 +65,7 @@ The measured helpers are module-scope locals, so each item file exposes them thr
 | `ice_breath.lua` / `fire_breath.lua` | `getFreezeChance` / `getBurnChance` |
 | `time_money.lua` | `chooseCoinSubtype` |
 | `a_minus.lua` | `computeRandomSplit` |
+| `angels_crown.lua` | `getBlessedChance`, `rollBlessed` |
 
 `rollStat` was hoisted from a per-call closure to a module function so the probe
 measures the shipped expression instead of a copy. That also removed three duplicated

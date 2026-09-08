@@ -84,6 +84,13 @@
 --      - Moms Box / Both are highlighted gold automatically
 --      Example (KR only):
 --          specials = { kr = { normal = { "0.006", "60" }, moms_box = { "0.012", "30" }, both = { "0.018", "20" } } }
+--   4) Append mode (extra line, base text untouched):
+--      - Use `append` with 1-3 strings in { golden, moms_box, both } order
+--      - EID prefixes the chosen line with "#{{ColorGold}}" itself, so do not add one
+--      - Use this when the golden effect is a NEW behaviour rather than a bigger number
+--      Example (per language):
+--          specials = { en = { append = { "25% chance ...", "25% chance ...", "33% chance ..." } } }
+--      `append` wins over normal/moms_box/both when both are present on the same entry.
 -- Language scoping:
 --   - Top-level specials apply to all languages as default
 --   - specials.<lang> (e.g., kr/en) overrides ONLY that language
@@ -1809,6 +1816,59 @@ ConchBlessing.ItemData = {
                     "#After picking up an item, all other items in that room disappear, but you do not automatically return to the original room."
                 }
             }
+        }
+    },
+    ANGELS_CROWN = {
+        type = "trinket",
+        id = Isaac.GetTrinketIdByName("Angel's Crown"),
+        name = {
+            kr = "천사의 왕관",
+            en = "Angel's Crown"
+        },
+        description = {
+            kr = "천상의 거래",
+            en = "Heavenly bargain"
+        },
+        eid = {
+            kr = {
+                "보물방 아이템이 {{AngelRoom}}천사방 아이템으로 바뀌고, {{Coin}}동전으로 사는 상점 거래가 됩니다.",
+                "#{{Warning}} REPENTOGON 권장"
+            },
+            en = {
+                "Treasure Room items are replaced with {{AngelRoom}}Angel Room items, sold as {{Coin}}coin deals.",
+                "#{{Warning}} REPENTOGON recommended"
+            }
+        },
+        gfx = "angels_crown.png",
+        tags = "utility",
+        hidden = false,
+        origin = { id = TrinketType.TRINKET_DEVILS_CROWN, type = "trinket" },
+        flag = "positive",
+        shopprice = 15,
+        script = "scripts/items/trinkets/angels_crown",
+        specials = {
+            kr = {
+                append = {
+                    "25% 확률로 축복받은 보물방이 되어 {{AngelRoom}}천사방 아이템 1개와 {{EternalHeart}}영원한 하트가 추가됩니다.",
+                    "25% 확률로 축복받은 보물방이 되어 {{AngelRoom}}천사방 아이템 1개와 {{EternalHeart}}영원한 하트가 추가됩니다.",
+                    "33% 확률로 축복받은 보물방이 되어 {{AngelRoom}}천사방 아이템 1개와 {{EternalHeart}}영원한 하트가 추가됩니다."
+                }
+            },
+            en = {
+                append = {
+                    "25% chance for the Angel Treasure Room to be blessed: one extra {{AngelRoom}}Angel Room item and an {{EternalHeart}}Eternal Heart",
+                    "25% chance for the Angel Treasure Room to be blessed: one extra {{AngelRoom}}Angel Room item and an {{EternalHeart}}Eternal Heart",
+                    "33% chance for the Angel Treasure Room to be blessed: one extra {{AngelRoom}}Angel Room item and an {{EternalHeart}}Eternal Heart"
+                }
+            }
+        },
+        callbacks = {
+            gameStarted = "angelscrown.onGameStarted",
+            preGameExit = "angelscrown.onPreGameExit",
+            postNewRoom = "angelscrown.onPostNewRoom",
+            postUpdate = "angelscrown.onPostUpdate"
+        },
+        synergies = {
         }
     },
 
