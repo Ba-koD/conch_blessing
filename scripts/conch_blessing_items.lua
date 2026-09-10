@@ -1866,7 +1866,8 @@ ConchBlessing.ItemData = {
             gameStarted = "angelscrown.onGameStarted",
             preGameExit = "angelscrown.onPreGameExit",
             postNewRoom = "angelscrown.onPostNewRoom",
-            postUpdate = "angelscrown.onPostUpdate"
+            postUpdate = "angelscrown.onPostUpdate",
+            preGetCollectible = "angelscrown.onPreGetCollectible"
         },
         synergies = {
         }

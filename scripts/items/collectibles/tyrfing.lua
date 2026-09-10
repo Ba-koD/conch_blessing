@@ -4,6 +4,7 @@ local TYRFING_ID = Isaac.GetItemIdByName("Tyrfing")
 
 local SaveManager = require("scripts.lib.save_manager")
 local DamageUtils = ConchBlessing.DamageUtils or require("scripts.lib.damage_utils")
+local EnemyUtils = require("scripts.lib.enemy_utils")
 
 -- Constants
 local DAMAGE_PER_KILL = 0.05 -- +0.05 damage per kill
@@ -113,8 +114,8 @@ ConchBlessing.tyrfing.onNPCDeath = function(_, npc)
     for i = 0, game:GetNumPlayers() - 1 do
         local player = game:GetPlayer(i)
         if player and player:HasCollectible(TYRFING_ID) then
-            -- Ignore friendly NPCs
-            if npc and not npc:HasEntityFlags(EntityFlag.FLAG_FRIENDLY) and npc:IsEnemy() then
+            -- Furniture is not a kill: fires and shopkeepers used to pay damage too.
+            if EnemyUtils.isMonsterKind(npc) then
                 local data = getSaveData(player)
                 
                 -- Add damage bonus per kill
