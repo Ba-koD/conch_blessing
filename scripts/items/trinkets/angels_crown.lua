@@ -583,6 +583,91 @@ local function restoreDeals()
     end
 end
 
+-- A reroll swaps the item under a pedestal without changing rooms, so the deal terms
+-- are restated on the frame the item changes: the price follows whatever the pedestal
+-- now holds, and a rerolled angel item can never be left lying there for free.
+local dealSubTypes = {}
+
+local function resetDealTracking()
+    dealSubTypes = {}
+end
+
+local function refreshRerolledDeals()
+    for _, pickup in ipairs(collectiblePedestals()) do
+        if isMarkedDeal(pickup) then
+            local hash = GetPtrHash(pickup)
+            -- A price the engine wiped is restated too: these deals are never free, so
+            -- any non-positive price means the contract was dropped somewhere.
+            if dealSubTypes[hash] ~= pickup.SubType or pickup.Price <= 0 then
+                dealSubTypes[hash] = pickup.SubType
+                applyDealTerms(pickup)
+                ConchBlessing.printDebug(string.format(
+                    "[Angel's Crown] deal restated after a reroll: item=%d price=%d",
+                    pickup.SubType, pickup.Price))
+            end
+        end
+    end
+end
+
+-- ------------------------------------------------------------------- item pool
+
+-- Devil's Crown does not patch rerolled items, it changes which pool the room draws
+-- from: RoomDescriptorFlag.DEVIL_TREASURE makes the engine answer that room's requests
+-- from the Devil Room pool, so a D6 in a Red Treasure Room returns a devil item on its
+-- own. There is no angel counterpart flag, so the same thing is done one step later, at
+-- the point where the engine asks for a collectible: a Treasure Room pool request made
+-- while the player stands in a converted room is answered from the Angel Room pool.
+-- Nothing is pinned to a pedestal, so D6, D100, Dice Rooms and every other reroll agree
+-- without knowing about this trinket, the treasure pool keeps the item it never handed
+-- out, and Chaos still scrambles the pool underneath because the answer itself comes
+-- from the engine's own GetCollectible.
+local inPoolOverride = false
+
+---@param poolType ItemPoolType
+---@param decrease boolean
+---@param seed integer
+---@return CollectibleType|nil @nil leaves the engine's own pick alone
+function ConchBlessing.angelscrown.onPreGetCollectible(_, poolType, decrease, seed)
+    if not ready or inPoolOverride then return nil end
+    if poolType ~= ItemPoolType.POOL_TREASURE then return nil end
+
+    local room = Game():GetRoom()
+    if room:GetType() ~= RoomType.ROOM_TREASURE then return nil end
+
+    -- The room owns this, not the trinket: the crown can be dropped and the room keeps
+    -- drawing angel items, the way a Red Treasure Room keeps its devil pool. An Ascent
+    -- revisit rebuilds the floor save, so the pedestal markers stand in for the record
+    -- there, exactly as they do for the deal terms.
+    local record = getRoomRecord(false)
+    local owned = record ~= nil and record.converted == true
+    if not owned then
+        for _, pickup in ipairs(collectiblePedestals()) do
+            if isMarkedDeal(pickup) then
+                owned = true
+                break
+            end
+        end
+    end
+    if not owned then return nil end
+
+    -- The guard is what keeps this one level deep: the angel request below re-enters
+    -- this callback, and without it an answer would be asked of itself forever.
+    inPoolOverride = true
+    local ok, collectibleType = pcall(function()
+        return Game():GetItemPool():GetCollectible(ItemPoolType.POOL_ANGEL, decrease, seed)
+    end)
+    inPoolOverride = false
+
+    if ok and type(collectibleType) == "number" and collectibleType > 0 then
+        ConchBlessing.printDebug(string.format(
+            "[Angel's Crown] treasure request answered from the angel pool: item=%d", collectibleType))
+        return collectibleType
+    end
+
+    -- An exhausted angel pool falls back to the room's own pool rather than nothing.
+    return nil
+end
+
 function ConchBlessing.angelscrown.onGameStarted()
     ready = true
     hadHolderLastFrame = false
@@ -595,12 +680,19 @@ function ConchBlessing.angelscrown.onPreGameExit()
     ready = false
     pendingLookFrames = 0
     hadHolderLastFrame = false
+    resetDealTracking()
 end
 
 ---Runs the deferred half of the look: the door sheet, which the engine overwrites if
 ---it is set during MC_POST_NEW_ROOM, plus the pickup/drop repaint.
 function ConchBlessing.angelscrown.onPostUpdate()
     if not ready then return end
+
+    -- A reroll lands mid-room, with no room change behind it to restore the deal.
+    if Game():GetRoom():GetType() == RoomType.ROOM_TREASURE then
+        local dealRecord = getRoomRecord(false)
+        if dealRecord and dealRecord.converted then refreshRerolledDeals() end
+    end
 
     local holderPresent = findBestHolder() ~= nil
     local holderChanged = holderPresent ~= hadHolderLastFrame
@@ -634,6 +726,7 @@ function ConchBlessing.angelscrown.onPostNewRoom()
     local goldenCount, hasMomsBox = findBestHolder()
     local room = Game():GetRoom()
     requestDoorPass()
+    resetDealTracking()
 
     if room:GetType() ~= RoomType.ROOM_TREASURE then
         -- Outside a Treasure Room the only thing to do is re-skin its door. This runs
