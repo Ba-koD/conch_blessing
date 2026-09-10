@@ -129,21 +129,54 @@ local function getRoomRecord(create, listIndex)
     return save[ROOM_SAVE_KEY]
 end
 
----Mark one pedestal as an Angel's Crown deal. The reroll-persistent pickup save keeps
----the flag through a D6 and is the scope SaveManager also restores on the Ascent.
+---Mark one pedestal as an Angel's Crown deal. The reroll-persistent pickup save carries
+---it through a D6 and is the scope SaveManager also restores on the Ascent.
+---The marker names one pedestal and one quoted item instead of being a bare flag. The
+---pickup save is indexed by pointer while the game runs, so a slot the engine later hands
+---to a different pedestal must not inherit a deal, and the quoted item is what later
+---proves whether the pedestal still holds what was actually for sale.
 local function markDeal(pickup)
     local save = SaveManager.GetRerollPickupSave(pickup, false)
     if type(save) ~= "table" then
         ConchBlessing.printError("[Angel's Crown] pickup save unavailable; deal will not survive a re-entry")
         return false
     end
-    save[PICKUP_SAVE_KEY] = true
+    save[PICKUP_SAVE_KEY] = { seed = pickup.InitSeed, item = pickup.SubType }
     return true
 end
 
-local function isMarkedDeal(pickup)
+---The live deal on this pedestal, or nil when there is none. The table handed back is the
+---saved one, so writing `item` on it updates the quote.
+local function dealMarkerFor(pickup)
     local save = SaveManager.TryGetRerollPickupSave(pickup, false)
-    return type(save) == "table" and save[PICKUP_SAVE_KEY] == true
+    if type(save) ~= "table" then return nil end
+    local marker = save[PICKUP_SAVE_KEY]
+    if marker == nil then return nil end
+    if marker == true then
+        -- Saved by a run from before the marker carried an identity. The quoted item is
+        -- left unknown on purpose: a pedestal that was already bought out must read as
+        -- settled rather than adopt the buyer's own item as the thing for sale.
+        marker = { seed = pickup.InitSeed }
+        save[PICKUP_SAVE_KEY] = marker
+    end
+    if type(marker) ~= "table" then return nil end
+    -- A reroll keeps the pedestal's seed, so the identity holds across a D6, while a
+    -- pedestal some other item dropped into the room carries a seed of its own.
+    if marker.seed ~= pickup.InitSeed then return nil end
+    return marker
+end
+
+local function isMarkedDeal(pickup)
+    return dealMarkerFor(pickup) ~= nil
+end
+
+---Drop the marker for good. Used once a deal is settled, so that no later visit, Ascent
+---restore or reroll can put a price back on that pedestal.
+local function clearDeal(pickup)
+    local save = SaveManager.TryGetRerollPickupSave(pickup, false)
+    if type(save) == "table" then
+        save[PICKUP_SAVE_KEY] = nil
+    end
 end
 
 local function collectiblePedestals()
@@ -564,25 +597,6 @@ local function convertRoom(record, goldenCount, hasMomsBox)
         goldenCount or 0, tostring(hasMomsBox)))
 end
 
----Re-apply the deal terms to every marked pedestal in the current room. The engine
----does not promise to keep a manually assigned price on a non-shop pedestal across a
----room reload, and a D6 style reroll changes the item behind an unchanged pickup, so
----the price is recomputed from whatever the pedestal currently holds. This runs even
----when the room record is gone (an Ascent revisit rebuilds the floor save from
----scratch) because the marker itself is what proves ownership.
-local function restoreDeals()
-    local restored = 0
-    for _, pickup in ipairs(collectiblePedestals()) do
-        if isMarkedDeal(pickup) then
-            applyDealTerms(pickup)
-            restored = restored + 1
-        end
-    end
-    if restored > 0 then
-        ConchBlessing.printDebug("[Angel's Crown] restored angel deals: " .. tostring(restored))
-    end
-end
-
 -- A reroll swaps the item under a pedestal without changing rooms, so the deal terms
 -- are restated on the frame the item changes: the price follows whatever the pedestal
 -- now holds, and a rerolled angel item can never be left lying there for free.
@@ -592,18 +606,78 @@ local function resetDealTracking()
     dealSubTypes = {}
 end
 
+-- Buying an active while already holding one does not empty the pedestal: the engine
+-- leaves the buyer's own previous active standing there, on the same pedestal entity,
+-- and vanilla hands that back for free. The deal is over at that point, so the price
+-- comes off and the marker goes away - otherwise the next visit would charge the player
+-- coins for the item they walked in with.
+--
+-- Two things have to hold, and neither is enough alone. Touched is the engine's record
+-- that someone took the item from this pedestal, and the item standing there no longer
+-- being the quoted one proves what is left is the buyer's own. A reroll changes the item
+-- without Touched, and bumping a pedestal the player cannot afford cannot change the
+-- item, so neither of those reads as a settled deal.
+local function isSettledDeal(pickup, marker)
+    return pickup.Touched == true and marker.item ~= pickup.SubType
+end
+
+local function settleDeal(pickup)
+    clearDeal(pickup)
+    dealSubTypes[GetPtrHash(pickup)] = nil
+    pickup.Price = 0
+    pickup.AutoUpdatePrice = false
+    ConchBlessing.printDebug(string.format(
+        "[Angel's Crown] deal settled, pedestal released: item=%d", pickup.SubType))
+    SaveManager.Save()
+end
+
+---Apply the deal and record what was quoted, so a later visit can tell the item that was
+---for sale from whatever ends up standing on the pedestal.
+local function quoteDeal(pickup, marker)
+    applyDealTerms(pickup)
+    marker.item = pickup.SubType
+    dealSubTypes[GetPtrHash(pickup)] = pickup.SubType
+end
+
+---Re-apply the deal terms to every marked pedestal in the current room. The engine
+---does not promise to keep a manually assigned price on a non-shop pedestal across a
+---room reload, and a D6 style reroll changes the item behind an unchanged pickup, so
+---the price is recomputed from whatever the pedestal currently holds. This runs even
+---when the room record is gone (an Ascent revisit rebuilds the floor save from
+---scratch) because the marker itself is what proves ownership.
+local function restoreDeals()
+    local restored = 0
+    for _, pickup in ipairs(collectiblePedestals()) do
+        local marker = dealMarkerFor(pickup)
+        if marker then
+            if isSettledDeal(pickup, marker) then
+                settleDeal(pickup)
+            else
+                quoteDeal(pickup, marker)
+                restored = restored + 1
+            end
+        end
+    end
+    if restored > 0 then
+        ConchBlessing.printDebug("[Angel's Crown] restored angel deals: " .. tostring(restored))
+    end
+end
+
 local function refreshRerolledDeals()
     for _, pickup in ipairs(collectiblePedestals()) do
-        if isMarkedDeal(pickup) then
-            local hash = GetPtrHash(pickup)
-            -- A price the engine wiped is restated too: these deals are never free, so
-            -- any non-positive price means the contract was dropped somewhere.
-            if dealSubTypes[hash] ~= pickup.SubType or pickup.Price <= 0 then
-                dealSubTypes[hash] = pickup.SubType
-                applyDealTerms(pickup)
-                ConchBlessing.printDebug(string.format(
-                    "[Angel's Crown] deal restated after a reroll: item=%d price=%d",
-                    pickup.SubType, pickup.Price))
+        local marker = dealMarkerFor(pickup)
+        if marker then
+            if isSettledDeal(pickup, marker) then
+                settleDeal(pickup)
+            else
+                -- A price the engine wiped is restated too: an unsettled deal is never
+                -- free, so a non-positive price means the contract was dropped somewhere.
+                if dealSubTypes[GetPtrHash(pickup)] ~= pickup.SubType or pickup.Price <= 0 then
+                    quoteDeal(pickup, marker)
+                    ConchBlessing.printDebug(string.format(
+                        "[Angel's Crown] deal restated after a reroll: item=%d price=%d",
+                        pickup.SubType, pickup.Price))
+                end
             end
         end
     end
