@@ -4,6 +4,7 @@ local SEALED_DEMON_SWORD_ID = Isaac.GetItemIdByName("Sealed Demon Sword")
 local TYRFING_ID = Isaac.GetItemIdByName("Tyrfing")
 
 local SaveManager = require("scripts.lib.save_manager")
+local EnemyUtils = require("scripts.lib.enemy_utils")
 
 -- Constants
 local KILLS_TO_EVOLVE = 300
@@ -21,6 +22,9 @@ ConchBlessing.sealeddemonsword.data = {
     -- Bosses are excluded by default: halving a boss into two 40% copies changes
     -- fight pacing far more than it does for regular enemies.
     splitBosses = false,
+    -- Hard ceiling on splits per room. Waves, summoners and a misread half can
+    -- all push the entity count past what the frame rate tolerates.
+    maxSplitsPerRoom = 60,
 }
 
 -- Get saved data for player
@@ -65,15 +69,20 @@ end
 -- for an enemy kind in this room is the baseline, and anything of that kind that
 -- turns up well below it is a half.
 local SPLIT_BASELINE_RATIO = 0.9
+local MAX_SPLITS_PER_ROOM = 60
 
 local splitState = {
     handled = {},
     baselineHP = {},
+    splits = 0,
+    budgetWarned = false,
 }
 
 local function resetSplitState()
     splitState.handled = {}
     splitState.baselineHP = {}
+    splitState.splits = 0
+    splitState.budgetWarned = false
 end
 
 -- Champions of the same kind carry a multiplied health pool, so they need their
@@ -105,30 +114,59 @@ local function isSplitHalf(npc)
     return npc.MaxHitPoints < baseline * SPLIT_BASELINE_RATIO
 end
 
+-- A living monster, with this item's own boss rule on top. Furniture is ruled out by
+-- the shared predicate: fires, shopkeepers and machines used to be cleaved too, which
+-- handed the player a second shopkeeper to break and left a room with more fireplaces
+-- after every visit until the entity count cost frames.
+local function isSplitTarget(npc)
+    if not EnemyUtils.isLiveMonster(npc) then return false end
+    if npc:IsBoss() and not ConchBlessing.sealeddemonsword.data.splitBosses then
+        return false
+    end
+    return true
+end
+
 ConchBlessing.sealeddemonsword.onUpdate = function()
     if not hasRepentogon() then return end
+
+    -- A settled room is left alone. That covers shops, arcades and burnt-out fire
+    -- rooms, and it stops the scan once the fight ends. Enemies arriving later
+    -- shut the doors again, which marks the room uncleared, so they still count.
+    local room = Game():GetRoom()
+    if room:IsClear() then return end
+
     local player = anyPlayerHasSword()
     if not player then return end
 
+    local budget = tonumber(ConchBlessing.sealeddemonsword.data.maxSplitsPerRoom)
+        or MAX_SPLITS_PER_ROOM
+    if splitState.splits >= budget then
+        if not splitState.budgetWarned then
+            splitState.budgetWarned = true
+            ConchBlessing.printDebug(
+                "[SealedDemonSword] Split budget reached for this room: " .. tostring(budget))
+        end
+        return
+    end
+
     for _, entity in ipairs(Isaac.GetRoomEntities()) do
         local npc = entity:ToNPC()
-        if npc and npc:IsEnemy() and not npc:IsDead()
-            and not npc:HasEntityFlags(EntityFlag.FLAG_FRIENDLY) then
+        if npc and isSplitTarget(npc) then
             local hash = GetPtrHash(npc)
             if not splitState.handled[hash] then
                 -- Mark first either way: a failed split must not retry every frame.
                 splitState.handled[hash] = true
-                local skipBoss = npc:IsBoss()
-                    and not ConchBlessing.sealeddemonsword.data.splitBosses
-                if not skipBoss and not isSplitHalf(npc)
-                    and type(npc.TrySplit) == "function" then
+                if not isSplitHalf(npc) and type(npc.TrySplit) == "function" then
                     local ok, err = pcall(function()
                         return npc:TrySplit(
                             tonumber(ConchBlessing.sealeddemonsword.data.splitDamage)
                                 or SPLIT_DAMAGE,
                             EntityRef(player), false)
                     end)
-                    if not ok then
+                    if ok then
+                        splitState.splits = splitState.splits + 1
+                        if splitState.splits >= budget then break end
+                    else
                         ConchBlessing.printError(
                             "[SealedDemonSword] TrySplit failed: " .. tostring(err))
                     end
@@ -187,8 +225,9 @@ ConchBlessing.sealeddemonsword.onNPCDeath = function(_, npc)
     for i = 0, game:GetNumPlayers() - 1 do
         local player = game:GetPlayer(i)
         if player and player:HasCollectible(SEALED_DEMON_SWORD_ID) then
-            -- Ignore friendly NPCs
-            if npc and not npc:HasEntityFlags(EntityFlag.FLAG_FRIENDLY) and npc:IsEnemy() then
+            -- Furniture is not a kill: a stomped fire or a broken shopkeeper used to
+            -- count towards the evolution.
+            if EnemyUtils.isMonsterKind(npc) then
                 local data = getSaveData(player)
                 
                 -- Increment kill count
