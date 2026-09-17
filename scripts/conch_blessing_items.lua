@@ -1437,6 +1437,133 @@ ConchBlessing.ItemData = {
             executeCmd = "severedoath.onExecuteCmd"
         },
     },
+    -- Ceil / Round / Floor share scripts/items/collectibles/stat_rounding,
+    -- which registers one late MC_EVALUATE_CACHE priority callback for all three.
+    CEIL = {
+        type = "passive",
+        id = Isaac.GetItemIdByName("Ceil"),
+        name = {
+            kr = "올림",
+            en = "Ceil"
+        },
+        description = {
+            kr = "모자라면 채운다!",
+            en = "Round it up!"
+        },
+        eid = {
+            kr = {
+                "{{Speed}}이동속도, {{Tears}}연사, {{Damage}}공격력, {{Range}}사거리, {{Shotspeed}}탄속, {{Luck}}행운을 올림합니다.",
+                "#소수점 둘째 자리 기준으로 0.01이라도 넘으면 올라갑니다.",
+            },
+            en = {
+                "Rounds {{Speed}}Speed, {{Tears}}Tears, {{Damage}}Damage, {{Range}}Range, {{Shotspeed}}Shot Speed, and {{Luck}}Luck up.",
+                "#Based on the second decimal place, rounds up if even 0.01 over.",
+            }
+        },
+        pool = {
+            RoomType.ROOM_TREASURE,
+            RoomType.ROOM_PLANETARIUM
+        },
+        quality = 4,
+        tags = "offensive stars",
+        cache = "speed firedelay damage range shotspeed luck",
+        hidden = false,
+        shopprice = 20,
+        devilprice = 2,
+        origin = { id = CollectibleType.COLLECTIBLE_LIBRA, type = "collectible" },
+        flag = "positive",
+        script = "scripts/items/collectibles/stat_rounding",
+    },
+    ROUND = {
+        type = "passive",
+        id = Isaac.GetItemIdByName("Round"),
+        name = {
+            kr = "반올림",
+            en = "Round"
+        },
+        description = {
+            kr = "반만 넘으면 된다",
+            en = "Halfway is enough"
+        },
+        eid = {
+            kr = {
+                "{{Speed}}이동속도, {{Tears}}연사, {{Damage}}공격력, {{Range}}사거리, {{Shotspeed}}탄속, {{Luck}}행운을 반올림합니다.",
+                "#소수점 둘째 자리 기준으로 0.50부터 올라갑니다.",
+                "#{{Luck}}행운을 제외한 스탯은 0이 되지 않고 최소 1이 됩니다.",
+            },
+            en = {
+                "Rounds {{Speed}}Speed, {{Tears}}Tears, {{Damage}}Damage, {{Range}}Range, {{Shotspeed}}Shot Speed, and {{Luck}}Luck to the nearest integer.",
+                "#Based on the second decimal place, rounds up from 0.50.",
+                "#Stats other than {{Luck}}Luck never become 0 and are at least 1.",
+            }
+        },
+        pool = {
+            RoomType.ROOM_TREASURE,
+            RoomType.ROOM_PLANETARIUM
+        },
+        quality = 3,
+        tags = "offensive stars",
+        cache = "speed firedelay damage range shotspeed luck",
+        hidden = false,
+        shopprice = 15,
+        devilprice = 2,
+        origin = { id = CollectibleType.COLLECTIBLE_LIBRA, type = "collectible" },
+        flag = "neutral",
+        script = "scripts/items/collectibles/stat_rounding",
+        synergies = {
+            [{ type = "collectible", name = "Ceil" }] = {
+                kr = "올림이 먼저 적용되므로 반올림은 효과가 없습니다.",
+                en = "Ceil applies first, so Round has no effect."
+            },
+        },
+    },
+    FLOOR = {
+        type = "passive",
+        id = Isaac.GetItemIdByName("Floor"),
+        name = {
+            kr = "내림",
+            en = "Floor"
+        },
+        description = {
+            kr = "바닥은 있다",
+            en = "There is a floor"
+        },
+        eid = {
+            kr = {
+                "{{Speed}}이동속도, {{Tears}}연사, {{Damage}}공격력, {{Range}}사거리, {{Shotspeed}}탄속, {{Luck}}행운을 내림합니다.",
+                "#단, 캐릭터의 기본 스탯보다 낮아지지 않습니다.",
+                "#모드 캐릭터는 {{Player0}}아이작의 기본 스탯을 기준으로 합니다."
+            },
+            en = {
+                "Rounds {{Speed}}Speed, {{Tears}}Tears, {{Damage}}Damage, {{Range}}Range, {{Shotspeed}}Shot Speed, and {{Luck}}Luck down.",
+                "#However, stats never drop below the character's base stats.",
+                "#Modded characters use {{Player0}}Isaac's base stats."
+            }
+        },
+        pool = {
+            RoomType.ROOM_TREASURE,
+            RoomType.ROOM_PLANETARIUM
+        },
+        quality = 2,
+        tags = "offensive stars",
+        cache = "speed firedelay damage range shotspeed luck",
+        hidden = false,
+        shopprice = 15,
+        devilprice = 1,
+        origin = { id = CollectibleType.COLLECTIBLE_LIBRA, type = "collectible" },
+        flag = "negative",
+        script = "scripts/items/collectibles/stat_rounding",
+        synergies = {
+            [{ type = "collectible", name = "Ceil" }] = {
+                kr = "올림이 먼저 적용되고, 기본 스탯 보장만 추가로 적용됩니다.",
+                en = "Ceil applies first; only the base stat guarantee is added."
+            },
+            [{ type = "collectible", name = "Round" }] = {
+                kr = "반올림이 먼저 적용되고, 기본 스탯 보장만 추가로 적용됩니다.",
+                en = "Round applies first; only the base stat guarantee is added."
+            },
+        },
+    },
 
     -- Familiars
     TIME_MONEY = {
