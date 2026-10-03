@@ -92,6 +92,27 @@ function M.roundStat(value, mode, allowsNonPositive)
     return result
 end
 
+---Applies every held mode in the fixed order Ceil, Round, then Floor.
+---@param value number displayed stat
+---@param allowsNonPositive boolean|nil
+---@param hasCeil boolean
+---@param hasRound boolean
+---@param hasFloor boolean
+---@param floorBase number|nil character base stat, required when hasFloor
+---@return number
+function M.applyModes(value, allowsNonPositive, hasCeil, hasRound, hasFloor, floorBase)
+    if hasCeil then
+        value = M.roundStat(value, MODE_CEIL, allowsNonPositive)
+    end
+    if hasRound then
+        value = M.roundStat(value, MODE_ROUND, allowsNonPositive)
+    end
+    if hasFloor then
+        value = math.max(M.roundStat(value, MODE_FLOOR, allowsNonPositive), floorBase)
+    end
+    return value
+end
+
 local function getItemId(itemKey)
     local itemData = ConchBlessing.ItemData and ConchBlessing.ItemData[itemKey]
     local id = itemData and itemData.id
@@ -130,17 +151,8 @@ function M.onEvaluateCache(_, player, cacheFlag)
         return
     end
 
-    local value = original
-    if hasCeil then
-        value = M.roundStat(value, MODE_CEIL, stat.allowsNonPositive)
-    end
-    if hasRound then
-        value = M.roundStat(value, MODE_ROUND, stat.allowsNonPositive)
-    end
-    if hasFloor then
-        local baseStats = CharacterBaseStats.get(player)
-        value = math.max(M.roundStat(value, MODE_FLOOR, stat.allowsNonPositive), baseStats[stat.name])
-    end
+    local floorBase = hasFloor and CharacterBaseStats.get(player)[stat.name] or nil
+    local value = M.applyModes(original, stat.allowsNonPositive, hasCeil, hasRound, hasFloor, floorBase)
 
     -- Tears are written back as a fire delay, which needs a positive rate.
     if cacheFlag == CacheFlag.CACHE_FIREDELAY and value <= 0 then return end
@@ -165,5 +177,16 @@ if not M._callbackRegistered then
         ConchBlessing.printError("[StatRounding] Ceil/Round/Floor item IDs are unresolved; callback not registered")
     end
 end
+
+-- Test hooks for scripts/dev/stat_rounding_probe.lua. No gameplay use.
+M._test = {
+    STATS = STATS,
+    ITEM_IDS = ITEM_IDS,
+    CALLBACK_PRIORITY = ROUNDING_PRIORITY,
+    playerHasMode = playerHasMode,
+    MODE_CEIL = MODE_CEIL,
+    MODE_ROUND = MODE_ROUND,
+    MODE_FLOOR = MODE_FLOOR,
+}
 
 return M

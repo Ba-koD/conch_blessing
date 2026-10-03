@@ -2761,3 +2761,11 @@ pcall(function() require("scripts.items.trinkets.minus_chain") end)
 
 -- Dev tooling: registers the conch_rng console probe. Safe to remove.
 pcall(function() require("scripts.dev.rng_probe") end)
+
+-- Dev tooling: registers the conch_round console probe. Safe to remove.
+do
+    local ok, err = pcall(require, "scripts.dev.stat_rounding_probe")
+    if not ok then
+        ConchBlessing.printError("[StatRoundingProbe] load failed: " .. tostring(err))
+    end
+end
