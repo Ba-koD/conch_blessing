@@ -179,33 +179,20 @@ if EID and UTILITY_BELT_ID and UTILITY_BELT_ID > 0 then
                 return descObj
             end
             
-            local ConchBlessing_Config = require("scripts.conch_blessing_config")
-            local currentLang = ConchBlessing_Config.GetCurrentLanguage()
-            
             local primaryItem = player:GetActiveItem(ActiveSlot.SLOT_PRIMARY)
             local pocketItem = player:GetActiveItem(ActiveSlot.SLOT_POCKET)
             
-            local statusText = ""
-            if currentLang == "kr" then
-                -- Check pocket slot first - if full, nothing can be moved
-                if pocketItem > 0 then
-                    statusText = "#{{ColorRed}}포켓 슬롯이 이미 사용 중 - 이동 불가{{CR}}"
-                elseif primaryItem > 0 then
-                    -- Display item icon only
-                    statusText = "#{{ColorGreen}}획득 시 이동: {{Collectible" .. tostring(primaryItem) .. "}}{{CR}}"
-                else
-                    statusText = "#{{ColorYellow}}현재 액티브 없음 - 다음 획득 액티브를 이동{{CR}}"
-                end
+            -- Text: ui.utility_belt in scripts/locale
+            local Locale = ConchBlessing.Locale
+            local statusText
+            -- Check pocket slot first - if full, nothing can be moved
+            if pocketItem > 0 then
+                statusText = Locale.text("ui.utility_belt.pocket_full")
+            elseif primaryItem > 0 then
+                -- Display item icon only
+                statusText = Locale.text("ui.utility_belt.will_move", "{{Collectible" .. tostring(primaryItem) .. "}}")
             else
-                -- Check pocket slot first - if full, nothing can be moved
-                if pocketItem > 0 then
-                    statusText = "#{{ColorRed}}Pocket slot already in use - cannot move{{CR}}"
-                elseif primaryItem > 0 then
-                    -- Display item icon only
-                    statusText = "#{{ColorGreen}}Will move: {{Collectible" .. tostring(primaryItem) .. "}}{{CR}}"
-                else
-                    statusText = "#{{ColorYellow}}No active - will move next acquired active{{CR}}"
-                end
+                statusText = Locale.text("ui.utility_belt.no_active")
             end
             
             descObj.Description = descObj.Description .. statusText

@@ -294,17 +294,8 @@ if EID then
                 remaining = KILLS_TO_EVOLVE - killCount
             end
             
-            -- Get current language
-            local ConchBlessing_Config = require("scripts.conch_blessing_config")
-            local currentLang = ConchBlessing_Config.GetCurrentLanguage()
-            
-            -- Add remaining kills info to description
-            local remainingText = ""
-            if currentLang == "kr" then
-                remainingText = "#{{ColorYellow}}남은 처치 수: " .. tostring(remaining) .. "{{CR}}"
-            else
-                remainingText = "#{{ColorYellow}}Remaining kills: " .. tostring(remaining) .. "{{CR}}"
-            end
+            -- Add remaining kills info to description (text: ui.sealed_demon_sword in scripts/locale)
+            local remainingText = ConchBlessing.Locale.text("ui.sealed_demon_sword.remaining_kills", tostring(remaining))
             
             -- Append to existing description
             descObj.Description = descObj.Description .. remainingText

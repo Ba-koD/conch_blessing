@@ -213,19 +213,11 @@ if EID then
             local pFinal = pBase * luckFactor
             if pFinal > 1.0 then pFinal = 1.0 end
             
-            -- Get current language for localization
-            local ConchBlessing_Config = require("scripts.conch_blessing_config")
-            local currentLang = ConchBlessing_Config.GetCurrentLanguage()
-            
-            -- Add proc chance info to description
-            local procChanceText = ""
-            if currentLang == "kr" then
-                procChanceText = "#{{ColorYellow}}현재 발동 확률: " .. string.format("%.1f", pFinal * 100) .. "%{{CR}}"
-                procChanceText = procChanceText .. " (기본: " .. string.format("%.1f", pBase * 100) .. "%, {{Luck}}x" .. string.format("%.1f", luckFactor) .. ")"
-            else
-                procChanceText = "#{{ColorYellow}}Current Proc Chance: " .. string.format("%.1f", pFinal * 100) .. "%{{CR}}"
-                procChanceText = procChanceText .. " (Base: " .. string.format("%.1f", pBase * 100) .. "%, {{Luck}}x" .. string.format("%.1f", luckFactor) .. ")"
-            end
+            -- Add proc chance info to description (text: ui.void_dagger in scripts/locale)
+            local Locale = ConchBlessing.Locale
+            local procChanceText = Locale.text("ui.void_dagger.proc_chance", string.format("%.1f", pFinal * 100))
+                .. Locale.text("ui.void_dagger.proc_detail",
+                    string.format("%.1f", pBase * 100), string.format("%.1f", luckFactor))
             
             -- Append to existing description
             descObj.Description = descObj.Description .. procChanceText

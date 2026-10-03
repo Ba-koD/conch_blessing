@@ -13,12 +13,16 @@ from xml.dom import minidom
 import hashlib
 import argparse
 from io import BytesIO
+import lua_data
 try:
     from PIL import Image
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
     print("Warning: PIL (Pillow) not available. death_items.png generation will be skipped.")
+
+# Item names live in the locale files; the English one is the items.xml name.
+LOCALE_EN_PATH = "scripts/locale/en.lua"
 
 DEATH_ITEM_RGB = (54, 47, 45)
 DEATH_ITEM_FRAME_SIZE = 16
@@ -267,10 +271,17 @@ def parse_pool_array(pool_data):
     print(f"  Final pools: {pools}")
     return pools
 
+def load_english_names(path=LOCALE_EN_PATH):
+    """item key -> English name, read from the locale file without running Lua"""
+    entries = lua_data.load(path).get("items", {})
+    return {key: entry["name"] for key, entry in entries.items()
+            if isinstance(entry, dict) and isinstance(entry.get("name"), str)}
+
 def parse_lua_file(file_path):
     """parse the lua file and extract the item information"""
     items = {}
-    
+    english_names = load_english_names()
+
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
@@ -366,25 +377,12 @@ def parse_lua_file(file_path):
             item_info['id'] = id_match.group(1)
             print(f"  ID: {item_info['id']}")
         
-        # extract name (multilingual structure)
-        name_match = re.search(r'name\s*=\s*{', item_data)
-        if name_match:
-            # 중첩된 중괄호를 올바르게 처리하기 위해 find_matching_brace 사용
-            name_start = name_match.end() - 1  # { 위치
-            name_end = find_matching_brace(item_data, name_start)
-            if name_end != -1:
-                name_data = item_data[name_start+1:name_end]
-                # 영어 이름 추출
-                en_name_match = re.search(r'en\s*=\s*"([^"]+)"', name_data)
-                if en_name_match:
-                    item_info['name'] = en_name_match.group(1)
-                    print(f"  Name (en): {item_info['name']}")
+        # the XML name is the item's English name in the locale file
+        if name in english_names:
+            item_info['name'] = english_names[name]
+            print(f"  Name (en): {item_info['name']}")
         else:
-            # 단순 문자열 형태도 지원
-            simple_name_match = re.search(r'name\s*=\s*"([^"]+)"', item_data)
-            if simple_name_match:
-                item_info['name'] = simple_name_match.group(1)
-                print(f"  Name: {item_info['name']}")
+            print(f"  warning: {name} has no English name in {LOCALE_EN_PATH}")
         
         # extract type
         type_match = re.search(r'type\s*=\s*"([^"]+)"', item_data)

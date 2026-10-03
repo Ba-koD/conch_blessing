@@ -35,41 +35,56 @@ function ConchBlessing_MCM.Setup(mod)
     end
 
     local ConchBlessing_Config = require("scripts.conch_blessing_config")
+    -- Menu text is ui.mcm in scripts/locale/en.lua. It is read in English on
+    -- purpose: Mod Config Menu's fonts are not known to cover every language.
+    -- Core calls Setup unprotected, so a broken text module only costs the menu.
+    local loaded, Locale = pcall(require, "scripts.locale.init")
+    if not loaded then
+        printError(mod, "menu text failed to load: " .. tostring(Locale))
+        return
+    end
+    local function text(key, ...)
+        return Locale.textIn("en", "ui.mcm." .. key, ...)
+    end
+    local function lines(key)
+        return Locale.linesIn("en", "ui.mcm." .. key)
+    end
+    local function onOff(enabled)
+        return text(enabled and "on" or "off")
+    end
+    local GENERAL = text("tab_general")
+    local SPAWN = text("tab_spawn")
     local category = "Conch's Blessing v" .. tostring(mod.Config.Version or "")
 
     -- Recreate category to reflect any text changes
     ModConfigMenu.RemoveCategory(category)
-    ModConfigMenu.AddSpace(category, "General")
-    ModConfigMenu.AddText(category, "General", "--- Conch's Blessing Options ---")
+    ModConfigMenu.AddSpace(category, GENERAL)
+    ModConfigMenu.AddText(category, GENERAL, text("options_title"))
 
     -- Debug mode toggle
-    ModConfigMenu.AddSetting(category, "General", {
+    ModConfigMenu.AddSetting(category, GENERAL, {
         Type = ModConfigMenu.OptionType.BOOLEAN,
         CurrentSetting = function()
             return mod.Config.debugMode and true or false
         end,
         Display = function()
-            return "Debug Mode: " .. (mod.Config.debugMode and "ON" or "OFF")
+            return text("debug_mode", onOff(mod.Config.debugMode))
         end,
         OnChange = function(b)
             mod.Config.debugMode = (b == true)
             ConchBlessing_MCM.saveConfigToSaveManager(mod)
         end,
-        Info = {
-            "Enable debug output in the log and console.",
-            "ON: show debug diagnostics",
-            "OFF: hide debug diagnostics (default)",
-        }
+        Info = lines("debug_mode_info")
     })
 
     -- Reset to Default (General)
-    ModConfigMenu.AddSetting(category, "General", {
+    ModConfigMenu.AddSetting(category, GENERAL, {
         Type = ModConfigMenu.OptionType.BOOLEAN,
         CurrentSetting = function()
             return false
         end,
         Display = function()
-            return "Reset to Default"
+            return text("reset")
         end,
         OnChange = function(b)
             if b == true then
@@ -80,43 +95,40 @@ function ConchBlessing_MCM.Setup(mod)
                 end
             end
         end,
-        Info = {
-            "Reset all settings to their default values.",
-            "This applies immediately.",
-        }
+        Info = lines("reset_info")
     })
     
     -- Spawn - Collectibles
-    ModConfigMenu.AddText(category, "Spawn", "--- Spawn Settings ---")
-    ModConfigMenu.AddSetting(category, "Spawn", {
+    ModConfigMenu.AddText(category, SPAWN, text("spawn_title"))
+    ModConfigMenu.AddSetting(category, SPAWN, {
         Type = ModConfigMenu.OptionType.BOOLEAN,
         CurrentSetting = function()
             return mod.Config.spawnCollectibles and true or false
         end,
         Display = function()
-            return "Collectibles: " .. (mod.Config.spawnCollectibles and "ON" or "OFF")
+            return text("spawn_collectibles", onOff(mod.Config.spawnCollectibles))
         end,
         OnChange = function(b)
             mod.Config.spawnCollectibles = (b == true)
             ConchBlessing_MCM.saveConfigToSaveManager(mod)
         end,
-        Info = { "Allow mod collectibles to spawn naturally.", "Default: OFF" }
+        Info = lines("spawn_collectibles_info")
     })
 
     -- Spawn - Trinkets
-    ModConfigMenu.AddSetting(category, "Spawn", {
+    ModConfigMenu.AddSetting(category, SPAWN, {
         Type = ModConfigMenu.OptionType.BOOLEAN,
         CurrentSetting = function()
             return mod.Config.spawnTrinkets and true or false
         end,
         Display = function()
-            return "Trinkets: " .. (mod.Config.spawnTrinkets and "ON" or "OFF")
+            return text("spawn_trinkets", onOff(mod.Config.spawnTrinkets))
         end,
         OnChange = function(b)
             mod.Config.spawnTrinkets = (b == true)
             ConchBlessing_MCM.saveConfigToSaveManager(mod)
         end,
-        Info = { "Allow mod trinkets to spawn naturally.", "Default: OFF" }
+        Info = lines("spawn_trinkets_info")
     })
 end
 
