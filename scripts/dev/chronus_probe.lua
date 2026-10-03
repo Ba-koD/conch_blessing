@@ -247,6 +247,22 @@ function probe.status(player)
     end
     out(string.format("== Chronus status (held: %s, total absorbed %d) ==",
         tostring(player:HasCollectible(CHRONUS_ID)), tonumber(rs.totalAbsorbed) or 0))
+    local state = ConchBlessing.getUnifiedMultiplierState(player)
+    local entry = state and state.itemAdditions and state.itemAdditions[CHRONUS_ID]
+        and state.itemAdditions[CHRONUS_ID].Damage
+    local damage = state and state.statMultipliers and state.statMultipliers.Damage
+    out(string.format("  damage actual=%.4f expectedChronus=%.4f registeredChronus=%s disabled=%s providerTotalAdd=%s",
+        player.Damage, ((tonumber(rs.totalAbsorbed) or 0)
+            + ConchBlessing.chronus._getTemporaryDamageCopies(player)) * ConchBlessing.chronus.STATS.DAMAGE_PER_FAMILIAR,
+        tostring(entry and entry.cumulative), tostring(entry and entry.disabled),
+        tostring(damage and damage.totalAdditions)))
+    for id, count in pairs(ConchBlessing.chronus._test.readTemporaryFamiliarEffects(player)) do
+        out(string.format("  live familiar effect %d x%d", id, count))
+    end
+    for key, count in pairs(rs.tempFloor and rs.tempFloor.counts or {}) do
+        out(string.format("  Manual absorbed %s x%d (grants %s)", key, count,
+            tostring(rs.tempFloor.grants and rs.tempFloor.grants[key])))
+    end
     for _, key in ipairs(sortedKeys(rs.absorbed)) do
         local entry = rs.absorbed[key]
         local id = entry.id or tonumber(tostring(key):match("%d+"))
@@ -409,11 +425,145 @@ local function buildPlan(plan)
     -- setup ----------------------------------------------------------------
     section("setup", nil)
     act(function(player, ctx)
+        ctx.savedDebugMode = ConchBlessing.Config and ConchBlessing.Config.debugMode
+        if ConchBlessing.Config then ConchBlessing.Config.debugMode = false end
         ConchBlessing.chronus._runReady = true
         player:AddMaxHearts(12, false)
         player:AddHearts(24)
         player:AddCollectible(CHRONUS_ID, 0, false)
         spawnTarget(player, ctx)
+    end)
+    wait(10)
+
+    section("damage: all familiars", nil)
+    for _, id in ipairs({ C.COLLECTIBLE_GUARDIAN_ANGEL, C.COLLECTIBLE_ROTTEN_BABY, C.COLLECTIBLE_BROTHER_BOBBY }) do
+        act(function(player, ctx)
+            ctx.damageBefore = player.Damage
+            player:AddCollectible(id, 0, false)
+        end)
+        wait(10)
+        check("+2 independent of special effect: " .. id, function(player, ctx)
+            return math.abs(player.Damage - ctx.damageBefore - 2) < 0.001,
+                string.format("damage %.4f -> %.4f", ctx.damageBefore, player.Damage)
+        end)
+    end
+    act(function(player, ctx)
+        ctx.damageBefore = player.Damage
+        while player:HasCollectible(CHRONUS_ID) do player:RemoveCollectible(CHRONUS_ID) end
+    end)
+    wait(10)
+    check("losing Chronus removes all three +2 bonuses", function(player, ctx)
+        return math.abs(player.Damage - ctx.damageBefore + 6) < 0.001,
+            string.format("damage %.4f -> %.4f", ctx.damageBefore, player.Damage)
+    end)
+    act(function(player)
+        for _, id in ipairs({ C.COLLECTIBLE_GUARDIAN_ANGEL, C.COLLECTIBLE_ROTTEN_BABY, C.COLLECTIBLE_BROTHER_BOBBY }) do
+            while player:HasCollectible(id, true) do player:RemoveCollectible(id) end
+        end
+        player:AddCollectible(CHRONUS_ID, 0, false)
+    end)
+    wait(10)
+
+    section("temp: Manual before Chronus", nil)
+    act(function(player, ctx)
+        player:RemoveCollectible(CHRONUS_ID)
+        ctx.manualEffects = {}
+    end)
+    wait(10)
+    -- Use the real active until at least one summoned familiar has an item
+    -- conversion; no invented TemporaryEffect substitutes for this boundary.
+    for _ = 1, 12 do
+        act(function(player, ctx)
+            if not ctx.manualConversion then
+                player:UseActiveItem(C.COLLECTIBLE_MONSTER_MANUAL, UseFlag.USE_NOANIM, -1)
+            end
+        end)
+        wait(3)
+        act(function(player, ctx)
+            ctx.manualEffects = ConchBlessing.chronus._test.readTemporaryFamiliarEffects(player)
+            for id in pairs(ctx.manualEffects) do
+                local conversion = ConchBlessing.chronus.data.familiarToItemMap[id]
+                if conversion and conversion.itemId then ctx.manualConversion = true end
+            end
+        end)
+    end
+    check("Manual stays vanilla before acquisition", function(player, ctx)
+        return sumValues(ctx.manualEffects) > 0 and not player:HasCollectible(CHRONUS_ID),
+            string.format("%d live effects", sumValues(ctx.manualEffects))
+    end)
+    act(function(player) player:AddCollectible(CHRONUS_ID, 0, false) end)
+    wait(20)
+    check("Manual used before Chronus is absorbed", function(_, ctx)
+        local credited = sumValues(runSave().tempFloor and runSave().tempFloor.counts)
+        return credited == sumValues(ctx.manualEffects) and credited > 0,
+            string.format("%d summoned, %d credited", sumValues(ctx.manualEffects), credited)
+    end)
+    check("every Manual absorption registers +2", function(player, ctx)
+        local state = ConchBlessing.getUnifiedMultiplierState(player, ConchBlessing.stats.unifiedMultipliers)
+        local entry = state and state.itemAdditions and state.itemAdditions[CHRONUS_ID]
+        local actual = entry and entry.Damage and entry.Damage.cumulative or 0
+        local expected = sumValues(ctx.manualEffects) * 2
+        return math.abs(actual - expected) < 0.001,
+            string.format("registered %.4f, expected %.4f", actual, expected)
+    end)
+    check("Manual grants each configured conversion", function(player, ctx)
+        local checked = 0
+        for id, count in pairs(ctx.manualEffects) do
+            local conversion = ConchBlessing.chronus.data.familiarToItemMap[id]
+            if conversion and conversion.itemId then
+                checked = checked + 1
+                local expected = conversion.maxGrants == 0 and count or math.min(count, conversion.maxGrants or 0)
+                local actual = runSave().itemGrants["fam_" .. id] or 0
+                if actual ~= expected or owns(player, conversion.itemId) < expected then
+                    return false, string.format("familiar %d: %d grants, expected %d", id, actual, expected)
+                end
+            end
+        end
+        return checked > 0, string.format("%d conversion mappings checked", checked)
+    end)
+    act(function(player, ctx)
+        ctx.manualCredits = sumValues(runSave().tempFloor and runSave().tempFloor.counts)
+        ctx.manualGrants = sumValues(runSave().itemGrants)
+        ctx.room = Game():GetLevel():GetCurrentRoomIndex()
+        Isaac.ExecuteCommand("goto s.shop")
+    end)
+    wait(20)
+    check("Manual entities stay consumed in the next room", function(player, ctx)
+        local live = 0
+        for _, entity in ipairs(Isaac.FindByType(EntityType.ENTITY_FAMILIAR)) do
+            local fam = entity:ToFamiliar()
+            if fam and fam.Player and GetPtrHash(fam.Player) == GetPtrHash(player)
+                and type(fam.GetItemConfig) == "function" then
+                local ok, config = pcall(fam.GetItemConfig, fam)
+                if ok and config and ctx.manualEffects[config.ID] then live = live + 1 end
+            end
+        end
+        local credits = sumValues(runSave().tempFloor and runSave().tempFloor.counts)
+        return live == 0 and credits == ctx.manualCredits and sumValues(runSave().itemGrants) == ctx.manualGrants,
+            string.format("%d live Manual entities, credits %d -> %d", live, ctx.manualCredits, credits)
+    end)
+    act(function(player, ctx)
+        Game():StartRoomTransition(ctx.room, Direction.NO_DIRECTION, RoomTransitionAnim.FADE)
+    end)
+    wait(20)
+    act(function(player) player:RemoveCollectible(CHRONUS_ID) end)
+    wait(10)
+    check("Manual conversions removed with Chronus", function(player, ctx)
+        for id in pairs(ctx.manualEffects) do
+            local conversion = ConchBlessing.chronus.data.familiarToItemMap[id]
+            if conversion and conversion.itemId and owns(player, conversion.itemId) > 0 then
+                return false, "converted item remains: " .. conversion.itemId
+            end
+        end
+        return sumValues(runSave().itemGrants) == 0, "converted inventory and active ledger cleared"
+    end)
+    act(function(player, ctx)
+        for id in pairs(ctx.manualEffects) do player:GetEffects():RemoveCollectibleEffect(id, -1) end
+        ConchBlessing.SaveManager.GetFloorSave(player).chronusManual = nil
+        player:AddCacheFlags(CacheFlag.CACHE_FAMILIARS)
+        player:EvaluateItems()
+        player:AddCollectible(CHRONUS_ID, 0, false)
+        if ConchBlessing.Config then ConchBlessing.Config.debugMode = ctx.savedDebugMode end
     end)
     wait(10)
 
@@ -517,6 +667,7 @@ local function buildPlan(plan)
     wait(40)
     waitUntil(function(player) return vulnerable(player) end, 120)
     act(function(player, ctx)
+        spawnTarget(player, ctx)
         snapshotCounters(ctx)
         ctx.fireDelay = player.MaxFireDelay
         ctx.poops = countWhitePoops()
@@ -667,6 +818,23 @@ local function buildPlan(plan)
         if credited > 0 then return true, string.format("%d credited for the floor", credited) end
         return false, "no temporary familiar effect found (engine may summon it another way)"
     end)
+    act(function(player, ctx)
+        ctx.manualCredits = sumValues(runSave().tempFloor and runSave().tempFloor.counts)
+        ctx.manualGrants = sumValues(runSave().itemGrants)
+        ctx.manualDamage = player.Damage
+        ctx.room = Game():GetLevel():GetCurrentRoomIndex()
+        Isaac.ExecuteCommand("goto s.shop")
+    end)
+    wait(20)
+    check("room entry does not credit Manual twice", function(player, ctx)
+        local credits = sumValues(runSave().tempFloor and runSave().tempFloor.counts)
+        return credits == ctx.manualCredits and sumValues(runSave().itemGrants) == ctx.manualGrants,
+            string.format("credits %d -> %d, damage %.4f -> %.4f", ctx.manualCredits, credits, ctx.manualDamage, player.Damage)
+    end)
+    act(function(player, ctx)
+        Game():StartRoomTransition(ctx.room, Direction.NO_DIRECTION, RoomTransitionAnim.FADE)
+    end)
+    wait(20)
 
     section("temp: Soul of Lilith", nil)
     act(function(player, ctx)

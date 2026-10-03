@@ -153,7 +153,7 @@ return {
             description = "Devours its offspring",
             eid = {
                 "Absorbs and removes familiar-type collectibles.",
-                "#Each absorbed familiar increases {{Damage}}Damage by 2.0 and may grant a custom effect.",
+                "#Every absorbed familiar grants +2.0 {{Damage}}Damage in addition to its custom effect; losing an absorption removes its +2.0 bonus.",
                 "#The effects last until this item is lost. (Familiars return when it is lost.)",
                 "#Some familiars are excluded by a blacklist.",
                 "#{{Pill}} Also absorbs the Pretty Fly pill's fly as a 5% chance to ignore enemy projectiles.",
@@ -362,7 +362,7 @@ return {
                 buddy_in_a_box = "Each floor, gains the absorbed effect of one random other familiar (one more per absorbed copy).",
                 lil_delirium = "Each floor, gains the absorbed effect of one random other familiar (one more per absorbed copy).",
                 box_of_friends = "On use, absorbed familiar effects are doubled for the room (no {c:DEMON_BABY} Demon Baby).",
-                monster_manual = "Absorbs the summoned familiar and keeps its effect for the floor.",
+                monster_manual = "Absorbs familiars summoned before or after obtaining Chronus, granting +2 Damage and their effects or item conversions for the floor. Room entry does not grant the absorption again.",
                 sacrificial_altar = "On use, sacrifices up to 2 absorbed familiars to spawn devil room items.",
                 trinket_the_twins = "50% chance on room entry to double one absorbed familiar's effect for the room.",
                 ["1up"] = "Cannot be absorbed by {own:CHRONUS} Chronus.",

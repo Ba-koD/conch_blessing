@@ -6,7 +6,7 @@ ConchBlessing.chronus = ConchBlessing.chronus or {}
 
 -- STATS: Item stat modifiers (Dark Rock style)
 ConchBlessing.chronus.STATS = {
-    DAMAGE_PER_FAMILIAR = 2.0,        -- Flat damage per absorbed familiar with absorbActions
+    DAMAGE_PER_FAMILIAR = 2.0,        -- Every absorbed familiar, independently of its special effect
     BROTHER_BOBBY_TEARS = 2.0,        -- Tears per absorbed Brother Bobby
     GUARDIAN_ANGEL_SPEED = 0.3,       -- Speed per absorbed Guardian Angel
     GUILLOTINE_DAMAGE = 1.0,          -- Guillotine keeps its vanilla stat bonus per copy
@@ -528,6 +528,7 @@ end
 -- familiar's copies counted again) and room-scoped absorbed familiars (`counts`).
 -- Runtime only; it ends with the room. The table is cleared in place, never replaced.
 local roomTemp = { counts = {}, double = 0, twins = {} }
+local refreshEffectCaches
 
 -- Absorbed familiars that did not come from an owned collectible: Monster Manual
 -- (`tempFloor`, this floor) and Soul of Lilith (`tempPermanent`), plus the room ones.
@@ -786,30 +787,7 @@ function ConchBlessing.chronus._detectAndAbsorb(player)
         end
     end
 
-    -- Calculate damage bonus for ALL absorbed familiars
-    local totalBonusDamage = 0
-    for _, info in ipairs(absorbedFamiliars) do
-        -- All absorbed familiars get damage bonus
-        totalBonusDamage = totalBonusDamage + (ConchBlessing.chronus.STATS.DAMAGE_PER_FAMILIAR * info.delta)
-        dbg(string.format("[Chronus] Adding damage bonus for familiar ID=%d: +%.2f (delta=%d)", 
-            tonumber(info.famId) or 0, 
-            ConchBlessing.chronus.STATS.DAMAGE_PER_FAMILIAR * info.delta, 
-            tonumber(info.delta) or 0))
-    end
-    
-    -- Apply damage bonus for all absorbed familiars (pass delta only, unified system handles cumulative)
-    if changed and totalBonusDamage > 0 then
-        dbg(string.format("[Chronus] Applying delta absorbed familiar bonus damage: +%.2f", totalBonusDamage))
-        local um = ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers
-        if um and um.SetItemAddition then
-            -- SetItemAddition accumulates internally: cumulative = existing.cumulative + addition
-            -- So pass ONLY the delta (totalBonusDamage), NOT the cumulative total
-            um:SetItemAddition(player, CHRONUS_ID, "Damage", totalBonusDamage, string.format("Chronus: +%d familiars", #absorbedFamiliars))
-            um:QueueCacheUpdate(player, "Damage")
-            if um.SaveToSaveManager then um:SaveToSaveManager(player) end
-            dbg(string.format("[Chronus] Applied delta bonus: +%.2f (unified system will accumulate)", totalBonusDamage))
-        end
-    end
+    if changed then ConchBlessing.chronus._syncAbsorbedDamage(player) end
     
     -- Now run absorbActions and item conversions AFTER base damage
     for _, info in ipairs(absorbedFamiliars) do
@@ -845,6 +823,7 @@ end
 
 function ConchBlessing.chronus._finalizeAbsorb(player)
     if not player then return end
+    ConchBlessing.chronus._syncAbsorbedDamage(player)
     local um = ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers
     if um and um.QueueCacheUpdate then
         um:QueueCacheUpdate(player, "Damage")
@@ -927,14 +906,23 @@ function ConchBlessing.chronus._trackConvertedItemRemoval(player)
                     remaining = remaining - taken
                     rs.itemGrants[key] = familiarGrants - taken
 
+                    local floor = rs.tempFloor
+                    local floorTaken = math.min(taken,
+                        tonumber(floor and floor.grants and floor.grants[key]) or 0,
+                        tonumber(floor and floor.counts and floor.counts[key]) or 0)
+                    if floorTaken > 0 then
+                        floor.grants[key] = floor.grants[key] - floorTaken
+                        floor.counts[key] = floor.counts[key] - floorTaken
+                    end
                     local absorbedCount = ConchBlessing.chronus._getAbsorbedCount(player, familiarId)
-                    local newAbsorbedCount = math.max(0, absorbedCount - taken)
+                    local permanentTaken = math.min(absorbedCount, taken - floorTaken)
+                    local newAbsorbedCount = absorbedCount - permanentTaken
                     if newAbsorbedCount > 0 then
                         rs.absorbed[key] = { count = newAbsorbedCount, id = familiarId }
                     else
                         rs.absorbed[key] = nil
                     end
-                    rs.totalAbsorbed = math.max(0, (rs.totalAbsorbed or 0) - taken)
+                    rs.totalAbsorbed = math.max(0, (rs.totalAbsorbed or 0) - permanentTaken)
 
                     dbg(string.format("[Chronus] Detected %d item (ID:%d) removal, reduced familiar (ID:%d) count: %d -> %d",
                         taken, tonumber(itemId) or 0, tonumber(familiarId) or 0, absorbedCount, newAbsorbedCount))
@@ -953,6 +941,9 @@ function ConchBlessing.chronus._trackConvertedItemRemoval(player)
     end
 
     if saveChanged then
+        ConchBlessing.chronus._syncAbsorbedDamage(player)
+        clearChronusRuntime(player)
+        refreshEffectCaches()
         ConchBlessing.SaveManager.Save()
     end
 end
@@ -1617,10 +1608,10 @@ ConchBlessing.chronus.onPlayerUpdate = function(_, player)
 
     local frame = Game():GetFrameCount()
     local pdata = player:GetData()
+    ConchBlessing.chronus._processPendingTempScans(player)
     if player:HasCollectible(CHRONUS_ID) then
         pdata.__chronusHadCollectible = true
         migrateRetiredGrants(player, getRunSave(player))
-        ConchBlessing.chronus._processPendingTempScans(player)
         pdata.__chronusNextScan = pdata.__chronusNextScan or 0
         local interval = tonumber(ConchBlessing.chronus.data.scanIntervalFrames) or 15
         if frame >= pdata.__chronusNextScan then
@@ -1631,6 +1622,7 @@ ConchBlessing.chronus.onPlayerUpdate = function(_, player)
 
         -- Track converted item removal (all familiar->item conversions)
         ConchBlessing.chronus._trackConvertedItemRemoval(player)
+        ConchBlessing.chronus._syncAbsorbedDamage(player)
 
         -- Auto-execute absorbActions for all absorbed familiars
         local absorbActions = ConchBlessing.chronus.data.absorbActions
@@ -1695,11 +1687,10 @@ ConchBlessing.chronus.onEvaluateCache = function(_, player, cacheFlag)
     local stats = ConchBlessing.chronus.STATS
     local effectCount = ConchBlessing.chronus._getEffectCount
 
-    -- Guillotine keeps its damage; temporary and doubled copies add the usual
-    -- per-familiar damage (real absorbed copies already have theirs in StatsAPI).
+    -- Per-familiar damage, including temporary copies, is owned by the unified
+    -- ledger. Only Guillotine's separate vanilla bonus is applied here.
     if cacheFlag == CacheFlag.CACHE_DAMAGE then
         local bonus = stats.GUILLOTINE_DAMAGE * effectCount(player, CollectibleType.COLLECTIBLE_GUILLOTINE)
-            + stats.DAMAGE_PER_FAMILIAR * ConchBlessing.chronus._getTemporaryDamageCopies(player)
         if bonus > 0 and ConchBlessing.stats and ConchBlessing.stats.damage and ConchBlessing.stats.damage.applyAddition then
             ConchBlessing.stats.damage.applyAddition(player, bonus, nil)
         end
@@ -1762,7 +1753,7 @@ ConchBlessing.chronus.onGameStarted = function(_)
             end
         end
         
-        dbg("[Chronus] Unified system will restore absorbed familiar damage bonuses automatically")
+        ConchBlessing.chronus._syncAbsorbedDamage(player)
         
         if rs.absorbedBonusDamage or rs.absorbActionBonusDamage then
             rs.absorbedBonusDamage = nil
@@ -1874,7 +1865,7 @@ function ConchBlessing.chronus._revertAll(player)
     migrateRetiredGrants(player, rs)
     ConchBlessing.chronus._restoreNonItemFamiliars(player, rs)
     local effectStateCleared = clearEffectState(rs)
-    local hadAny = false
+    local hadAny = next(rs.itemGrants or {}) ~= nil
     local familiarToItemMap = ConchBlessing.chronus.data.familiarToItemMap or {}
     
     for key, entry in pairs(rs.absorbed) do
@@ -1958,6 +1949,7 @@ ConchBlessing.chronus.onFamiliarUpdate = function(_, fam)
     local f = fam and fam:ToFamiliar() or nil
     if not f then return end
     local fd = f:GetData() or {}
+    if ConchBlessing.chronus._suppressConsumedManualFamiliar(f) then return end
     
     -- Handle Twisted Baby (offset position with side)
     if f.Variant == FamiliarVariant.TWISTED_BABY and fd.__chronusTwistedPair then
@@ -2746,11 +2738,12 @@ ConchBlessing.chronus.onRoomClear = function(_, _rng, spawnPosition)
 end
 
 -- ------------------------------------------------------------ floor state
-local function refreshEffectCaches()
+refreshEffectCaches = function()
     local game = Game()
     for i = 0, game:GetNumPlayers() - 1 do
         local holder = game:GetPlayer(i)
         if holder and holder:HasCollectible(CHRONUS_ID) then
+            ConchBlessing.chronus._syncAbsorbedDamage(holder)
             holder:AddCacheFlags(CacheFlag.CACHE_DAMAGE | CacheFlag.CACHE_FIREDELAY | CacheFlag.CACHE_SPEED | CacheFlag.CACHE_FLYING)
             holder:EvaluateItems()
         end
@@ -2805,7 +2798,9 @@ ConchBlessing.chronus.onNewLevel = function()
     rs.floorSerial = previous + 1
     -- Monster Manual familiars last one floor.
     local hadFloorTemp = rs.tempFloor ~= nil
+    ConchBlessing.chronus._clearManualGrants(player, rs)
     rs.tempFloor = nil
+    ConchBlessing.chronus._syncAbsorbedDamage(player)
     ConchBlessing.SaveManager.Save()
     if hadFloorTemp then
         clearChronusRuntime(player)
@@ -2920,14 +2915,7 @@ local function releaseCopies(player, rs, familiarIds, returnToPlayer)
     end
 
     if released > 0 then
-        local um = ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers
-        if um and um.SetItemAddition then
-            um:SetItemAddition(player, CHRONUS_ID, "Damage",
-                -ConchBlessing.chronus.STATS.DAMAGE_PER_FAMILIAR * released,
-                string.format("Chronus: -%d familiars", released))
-            um:QueueCacheUpdate(player, "Damage")
-            if um.SaveToSaveManager then um:SaveToSaveManager(player) end
-        end
+        ConchBlessing.chronus._syncAbsorbedDamage(player)
         -- Pinned stand-ins are rebuilt from the new counts on the next update.
         clearChronusRuntime(player)
         ConchBlessing.SaveManager.Save()
@@ -2983,6 +2971,7 @@ local SOURCE_TWINS = "twins"
 local SOURCE_LILITH = "lilith"
 local ALTAR_MAX_SACRIFICES = 2
 local pendingTempScans = {}
+local pendingManualScans = {}
 local altarSnapshots = {}
 
 function ConchBlessing.chronus._getPrettyFlyCount(player)
@@ -3006,11 +2995,42 @@ function ConchBlessing.chronus._getTemporaryDamageCopies(player)
     for famId, times in pairs(roomTemp.twins) do
         copies = copies + ConchBlessing.chronus._getAbsorbedCount(player, famId) * times
     end
+    copies = copies + math.max(0, tonumber(rs.prettyFlies) or 0)
     return copies + (math.max(0, tonumber(rs.totalAbsorbed) or 0) + copies) * roomTemp.double
 end
 
---- Remove every familiar-type collectible effect from the player and return them.
-local function takeTemporaryFamiliarEffects(player)
+-- SetItemAddition is a delta API. Read the provider's actual contribution instead
+-- of remembering the last delta: cache resets, continue and reward removal must
+-- all converge to the same ledger, without double-crediting an absorption.
+function ConchBlessing.chronus._syncAbsorbedDamage(player)
+    local um = ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers
+    if not (player and um and type(um.SetItemAddition) == "function") then return end
+    local rs = getRunSave(player)
+    if not rs then return end
+    local copies = player:HasCollectible(CHRONUS_ID)
+        and (math.max(0, tonumber(rs.totalAbsorbed) or 0)
+            + ConchBlessing.chronus._getTemporaryDamageCopies(player)) or 0
+    local wanted = copies * ConchBlessing.chronus.STATS.DAMAGE_PER_FAMILIAR
+    local state = ConchBlessing.getUnifiedMultiplierState(player, um)
+    local entry = state and state.itemAdditions and state.itemAdditions[CHRONUS_ID]
+        and state.itemAdditions[CHRONUS_ID].Damage
+    local actual = tonumber(entry and entry.cumulative) or 0
+    if wanted > 0 and entry and entry.disabled == true
+        and type(um.SetItemMultiplierDisabled) == "function" then
+        um:SetItemMultiplierDisabled(player, CHRONUS_ID, "Damage", false)
+    end
+    local delta = wanted - actual
+    if math.abs(delta) < 0.00001 then return end
+    um:SetItemAddition(player, CHRONUS_ID, "Damage", delta, string.format("Chronus: %d familiars", copies))
+    if type(um.QueueCacheUpdate) == "function" then um:QueueCacheUpdate(player, "Damage") end
+    if type(um.SaveToSaveManager) == "function" then um:SaveToSaveManager(player) end
+    player:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
+    player:EvaluateItems()
+    dbg(string.format("Damage reconciled: copies=%d previous=%.2f wanted=%.2f delta=%+.2f playerDamage=%.2f",
+        copies, actual, wanted, delta, player.Damage))
+end
+
+local function readTemporaryFamiliarEffects(player)
     local effects = player:GetEffects()
     if not (effects and type(effects.GetEffectsList) == "function") then return {} end
     local ok, list = pcall(effects.GetEffectsList, effects)
@@ -3025,14 +3045,124 @@ local function takeTemporaryFamiliarEffects(player)
             found[item.ID] = (found[item.ID] or 0) + count
         end
     end
+    return found
+end
+
+-- Effect removal alone can leave already-spawned familiars alive. Exhausted
+-- item effects can be matched through the optional provider's GetItemConfig;
+-- leave genuine inventory copies and unrelated entity sources untouched.
+local function removeTemporaryFamiliarEffects(player, found)
+    local effects = player:GetEffects()
     for id, count in pairs(found) do
         effects:RemoveCollectibleEffect(id, count)
     end
     if next(found) then
+        for _, entity in ipairs(Isaac.FindByType(EntityType.ENTITY_FAMILIAR)) do
+            local fam = entity:ToFamiliar()
+            if fam and fam.Player and GetPtrHash(fam.Player) == GetPtrHash(player)
+                and type(fam.GetItemConfig) == "function" then
+                local ok, item = pcall(fam.GetItemConfig, fam)
+                if ok and item and found[item.ID] and player:GetCollectibleNum(item.ID, true) == 0
+                    and effects:GetCollectibleEffectNum(item.ID) == 0 then
+                    fam:Remove()
+                end
+            end
+        end
         player:AddCacheFlags(CacheFlag.CACHE_FAMILIARS)
         player:EvaluateItems()
     end
+end
+
+local function takeTemporaryFamiliarEffects(player)
+    local found = readTemporaryFamiliarEffects(player)
+    removeTemporaryFamiliarEffects(player, found)
     return found
+end
+
+-- Record Manual uses before Chronus acquisition, in the triggering player's
+-- floor save. Consumed counts are tombstones so a cache/room replay cannot pay
+-- damage or conversion rewards again. Other sources are never swept here.
+local function getManualSource(player)
+    local floor = ConchBlessing.SaveManager.GetFloorSave(player)
+    if not floor then return nil end
+    floor.chronusManual = floor.chronusManual or { counts = {}, absorbed = {} }
+    return floor.chronusManual
+end
+
+-- Room transitions can preserve/recreate an entity even after its collectible
+-- effect was removed. Suppress that already-consumed source without paying it
+-- again. No inventory or non-item familiar is removed by this callback.
+function ConchBlessing.chronus._suppressConsumedManualFamiliar(fam)
+    local player = fam.Player
+    if not (player and player:HasCollectible(CHRONUS_ID)
+        and type(fam.GetItemConfig) == "function") then return false end
+    local ok, item = pcall(fam.GetItemConfig, fam)
+    if not (ok and item) then return false end
+    local source = getManualSource(player)
+    if not (source and (tonumber(source.absorbed["fam_" .. item.ID]) or 0) > 0) then return false end
+    if player:GetCollectibleNum(item.ID, true) > 0
+        or player:GetEffects():GetCollectibleEffectNum(item.ID) > 0 then return false end
+    fam:Remove()
+    return true
+end
+
+local function captureManualUse(player, pending)
+    local source = getManualSource(player)
+    if not source then return end
+    local changed = false
+    for id, count in pairs(readTemporaryFamiliarEffects(player)) do
+        local added = math.max(0, count - (pending.before[id] or 0))
+        local delta = added - (pending.seen[id] or 0)
+        if delta > 0 then
+            local key = "fam_" .. id
+            source.counts[key] = (tonumber(source.counts[key]) or 0) + delta
+            pending.seen[id] = added
+            changed = true
+        end
+    end
+    if changed then ConchBlessing.SaveManager.Save() end
+end
+
+function ConchBlessing.chronus._clearManualGrants(player, rs)
+    local floor = rs.tempFloor
+    for key, count in pairs(type(floor) == "table" and floor.grants or {}) do
+        local id = tonumber(key:match("^fam_(%d+)$"))
+        local conversion = id and ConchBlessing.chronus.data.familiarToItemMap[id]
+        local itemId = conversion and conversion.itemId
+        if itemId then
+            local granted = math.min(tonumber(count) or 0, familiarGrantCount(rs, id))
+            local baseline = getItemBaseline(rs, itemId) or math.max(0,
+                player:GetCollectibleNum(itemId, true) - itemGrantCount(rs, itemId))
+            local removable = math.min(granted, math.max(0, player:GetCollectibleNum(itemId, true) - baseline))
+            for _ = 1, removable do player:RemoveCollectible(itemId) end
+            rs.itemGrants[key] = familiarGrantCount(rs, id) - granted
+            if itemGrantCount(rs, itemId) == 0 then rs.itemGrantBaselines[itemBaselineKey(itemId)] = nil end
+        end
+    end
+end
+
+function ConchBlessing.chronus._scanManualFamiliars(player)
+    if not player:HasCollectible(CHRONUS_ID) then return end
+    local source = getManualSource(player)
+    local rs = getRunSave(player)
+    if not (source and rs) then return end
+    if next(source.counts) == nil then return end
+    local current = readTemporaryFamiliarEffects(player)
+    local remove, found = {}, {}
+    for key, total in pairs(source.counts) do
+        local id = tonumber(key:match("^fam_(%d+)$"))
+        local live = current[id] or 0
+        local credited = tonumber(source.absorbed[key]) or 0
+        local new = math.min(math.max(0, total - credited), live)
+        if new > 0 then
+            source.absorbed[key] = credited + new
+            found[id] = new
+        end
+        local consumed = math.min(live, credited + new)
+        if consumed > 0 then remove[id] = consumed end
+    end
+    removeTemporaryFamiliarEffects(player, remove)
+    if next(found) then ConchBlessing.chronus._absorbTemporary(player, SOURCE_MANUAL, found) end
 end
 
 -- The Twins: count one absorbed familiar's copies again for this room. With no
@@ -3055,11 +3185,11 @@ local function applyTwinsDouble(player, standInId)
     return pick
 end
 
-function ConchBlessing.chronus._absorbTemporary(player, source)
+function ConchBlessing.chronus._absorbTemporary(player, source, captured)
     if not (player and player:HasCollectible(CHRONUS_ID)) then return 0 end
     local rs = getRunSave(player)
     if not rs then return 0 end
-    local found = takeTemporaryFamiliarEffects(player)
+    local found = captured or takeTemporaryFamiliarEffects(player)
     local ids = {}
     for id in pairs(found) do ids[#ids + 1] = id end
     table.sort(ids)
@@ -3074,6 +3204,12 @@ function ConchBlessing.chronus._absorbTemporary(player, source)
                 rs.tempFloor = { serial = serial, counts = {} }
             end
             rs.tempFloor.counts[key] = (tonumber(rs.tempFloor.counts[key]) or 0) + count
+            local before = familiarGrantCount(rs, id)
+            ConchBlessing.chronus._handleFamiliarToItemConversion(player, id,
+                ConchBlessing.chronus._getEffectCount(player, id), count)
+            rs.tempFloor.grants = rs.tempFloor.grants or {}
+            rs.tempFloor.grants[key] = (tonumber(rs.tempFloor.grants[key]) or 0)
+                + familiarGrantCount(rs, id) - before
         elseif source == SOURCE_LILITH then
             rs.tempPermanent = rs.tempPermanent or {}
             rs.tempPermanent[key] = (tonumber(rs.tempPermanent[key]) or 0) + count
@@ -3109,6 +3245,12 @@ end
 
 function ConchBlessing.chronus._processPendingTempScans(player)
     local key = GetPtrHash(player)
+    local manual = pendingManualScans[key]
+    if manual then
+        pendingManualScans[key] = nil
+        captureManualUse(player, manual)
+    end
+    ConchBlessing.chronus._scanManualFamiliars(player)
     local pending = pendingTempScans[key]
     if not pending then return end
     pendingTempScans[key] = nil
@@ -3168,6 +3310,8 @@ function ConchBlessing.chronus._restoreNonItemFamiliars(player, rs)
     if type(rs.tempFloor) == "table" and rs.tempFloor.serial == (tonumber(rs.floorSerial) or 0) then
         giveBack(rs.tempFloor.counts)
     end
+    local source = getManualSource(player)
+    if source then source.absorbed = {} end
     roomTemp.double = 0
     for key in pairs(roomTemp.counts) do roomTemp.counts[key] = nil end
     for key in pairs(roomTemp.twins) do roomTemp.twins[key] = nil end
@@ -3187,10 +3331,15 @@ local function onUseBoxOfFriends(_, _item, _rng, player)
     refreshEffectCaches()
 end
 
+local function onPreUseMonsterManual(_, _item, _rng, player)
+    if not player then return end
+    pendingManualScans[GetPtrHash(player)] = { before = readTemporaryFamiliarEffects(player), seen = {} }
+end
+
 local function onUseMonsterManual(_, _item, _rng, player)
-    if player and player:HasCollectible(CHRONUS_ID) then
-        scanNowAndNextUpdate(player, SOURCE_MANUAL)
-    end
+    if not player then return end
+    local pending = pendingManualScans[GetPtrHash(player)]
+    if pending then captureManualUse(player, pending) end
 end
 
 local function onUseSoulOfLilith(_, _card, player)
@@ -3503,13 +3652,14 @@ ConchBlessing.chronus.onPreGameExit = function()
     for key in pairs(roomTemp.counts) do roomTemp.counts[key] = nil end
     for key in pairs(roomTemp.twins) do roomTemp.twins[key] = nil end
     for key in pairs(pendingTempScans) do pendingTempScans[key] = nil end
+    for key in pairs(pendingManualScans) do pendingManualScans[key] = nil end
     for key in pairs(altarSnapshots) do altarSnapshots[key] = nil end
     pendingHurts = {}
     transferEffects = {}
     stompVisuals = {}
 end
 
--- Test hooks for scripts/dev/rng_probe.lua. Pure helpers, no gameplay use.
+-- Test/diagnostic hooks for the RNG and Chronus probes.
 ConchBlessing.chronus._test = {
     getProjectileBlockChance = getProjectileBlockChance,
     getSpawnChance = getSpawnChance,
@@ -3517,6 +3667,7 @@ ConchBlessing.chronus._test = {
     pickFromPool = pickFromPool,
     pickRandomCopies = pickRandomCopies,
     getFloorPickPool = getFloorPickPool,
+    readTemporaryFamiliarEffects = readTemporaryFamiliarEffects,
     PROJECTILE_BLOCK_PERCENT = PROJECTILE_BLOCK_PERCENT,
     PRETTY_FLY_BLOCK_PERCENT = PRETTY_FLY_BLOCK_PERCENT,
     SPAWN_CHANCE_PER_STACK = SPAWN_CHANCE_PER_STACK,
@@ -3538,6 +3689,7 @@ end
 -- registered here with their own filters: ItemData callbacks filter by Chronus's id.
 ConchBlessing:AddCallback(ModCallbacks.MC_USE_ITEM, onUseBoxOfFriends, CollectibleType.COLLECTIBLE_BOX_OF_FRIENDS)
 ConchBlessing:AddCallback(ModCallbacks.MC_USE_ITEM, onUseMonsterManual, CollectibleType.COLLECTIBLE_MONSTER_MANUAL)
+ConchBlessing:AddCallback(ModCallbacks.MC_PRE_USE_ITEM, onPreUseMonsterManual, CollectibleType.COLLECTIBLE_MONSTER_MANUAL)
 ConchBlessing:AddCallback(ModCallbacks.MC_PRE_USE_ITEM, onPreUseSacrificialAltar, CollectibleType.COLLECTIBLE_SACRIFICIAL_ALTAR)
 ConchBlessing:AddCallback(ModCallbacks.MC_USE_ITEM, onUseSacrificialAltar, CollectibleType.COLLECTIBLE_SACRIFICIAL_ALTAR)
 ConchBlessing:AddCallback(ModCallbacks.MC_USE_CARD, onUseSoulOfLilith, Card.CARD_SOUL_LILITH)
