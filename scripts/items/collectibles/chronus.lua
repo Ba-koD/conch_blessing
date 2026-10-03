@@ -1442,6 +1442,35 @@ function ConchBlessing.chronus._updateCenserAnchors(player)
     end
 end
 
+-- A short, renewable native grace period survives vanilla route restrictions.
+-- Never clear or shorten this shared timer: white poop and other stars use it
+-- too. When the absorption expires, stop renewing and let the engine expire it.
+local STAR_AURA_GRACE_FRAMES = 3
+function ConchBlessing.chronus._maintainStarOfBethlehemAura(player)
+    if not player or not player:HasCollectible(CHRONUS_ID)
+        or ConchBlessing.chronus._getEffectCount(player, CollectibleType.COLLECTIBLE_STAR_OF_BETHLEHEM) <= 0 then
+        return false
+    end
+    if type(player.GetHallowedGroundCountdown) ~= "function"
+        or type(player.SetHallowedGroundCountdown) ~= "function" then
+        return false -- Optional REPENTOGON API; native anchors remain the fallback.
+    end
+    local ok, countdown = pcall(player.GetHallowedGroundCountdown, player)
+    countdown = ok and tonumber(countdown) or nil
+    if countdown == nil then return false end
+    if countdown < STAR_AURA_GRACE_FRAMES then
+        local renewed = pcall(player.SetHallowedGroundCountdown, player, STAR_AURA_GRACE_FRAMES)
+        if not renewed then return false end
+    end
+    if countdown <= 0 then
+        -- REPENTOGON's setter only writes the timer; it does not invalidate stats.
+        player:AddCacheFlags(CacheFlag.CACHE_DAMAGE | CacheFlag.CACHE_FIREDELAY | CacheFlag.CACHE_TEARFLAG)
+        player:EvaluateItems()
+        dbg("Star of Bethlehem native aura buff activated independently of room route")
+    end
+    return true
+end
+
 --- Star of Bethlehem: spawn invisible Star of Bethlehem fixed to player position
 local function spawnInvisibleStarOfBethlehem(player)
     local ent = Isaac.Spawn(EntityType.ENTITY_FAMILIAR, FamiliarVariant.STAR_OF_BETHLEHEM, 0, player.Position, Vector.Zero, player)
@@ -1517,6 +1546,7 @@ function ConchBlessing.chronus._ensureStarOfBethlehemStack(player, forceRespawn)
 end
 
 function ConchBlessing.chronus._updateStarOfBethlehemAnchors(player)
+    ConchBlessing.chronus._maintainStarOfBethlehemAura(player)
     local pdata = player and player:GetData() or nil
     local list = pdata and pdata.__chronusStarsOfBethlehem or nil
     if not list or #list == 0 then return end

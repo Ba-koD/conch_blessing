@@ -295,7 +295,7 @@ function probe.help()
     for _, scenario in ipairs(SCENARIOS) do
         out(string.format("  %-9s %s", scenario.key, scenario.about))
     end
-    out("helpers: status | hurtme | clearsim [n] | enemies [n] | give <id> [n] | drop")
+    out("helpers: aura (automatic Boss Rush check) | status | hurtme | clearsim [n] | enemies [n] | give <id> [n] | drop")
 end
 
 function probe.run(scenario, player)
@@ -422,6 +422,7 @@ local function buildPlan(plan)
     local act, wait, check, section, waitUntil = plan.act, plan.wait, plan.check, plan.section, plan.waitUntil
     local eqCheck, atLeast = plan.eq, plan.atLeast
 
+    if not probe._auraOnly then
     -- setup ----------------------------------------------------------------
     section("setup", nil)
     act(function(player, ctx)
@@ -563,7 +564,6 @@ local function buildPlan(plan)
         player:AddCacheFlags(CacheFlag.CACHE_FAMILIARS)
         player:EvaluateItems()
         player:AddCollectible(CHRONUS_ID, 0, false)
-        if ConchBlessing.Config then ConchBlessing.Config.debugMode = ctx.savedDebugMode end
     end)
     wait(10)
 
@@ -1037,12 +1037,109 @@ local function buildPlan(plan)
     end)
     eqCheck("granted Aquarius taken back", function(p) return owns(p, C.COLLECTIBLE_AQUARIUS) end, 0)
     eqCheck("ledger cleared", function() return totalAbsorbed() end, 0)
+    else
+        section("setup", nil)
+        act(function(_, ctx)
+            ctx.savedDebugMode = ConchBlessing.Config and ConchBlessing.Config.debugMode
+            if ConchBlessing.Config then ConchBlessing.Config.debugMode = false end
+            ConchBlessing.chronus._runReady = true
+        end)
+    end
+    probe._auraOnly = nil
+
+    -- Actual native aura stats, rather than merely counting Star entities.
+    section("Star aura: Boss Rush", "Star aura should remain visible around the player in Boss Rush; timer/stat checks do not prove the visual")
+    act(function(player, ctx)
+        local config = Isaac.GetItemConfig()
+        for id = 1, C.NUM_COLLECTIBLES - 1 do
+            local item = config:GetCollectible(id)
+            if item and item.Type == ItemType.ITEM_FAMILIAR then
+                while player:HasCollectible(id, true) do player:RemoveCollectible(id) end
+            end
+        end
+        -- Chronus loss restores temporary familiar effects too. Clear those
+        -- previous scenarios before measuring a single new absorption.
+        for id in pairs(ConchBlessing.chronus._test.readTemporaryFamiliarEffects(player)) do
+            player:GetEffects():RemoveCollectibleEffect(id, -1)
+        end
+        ctx.starAuraAPI = type(player.GetHallowedGroundCountdown) == "function"
+            and type(player.SetHallowedGroundCountdown) == "function"
+        Isaac.ExecuteCommand("goto s.bossrush")
+    end)
+    waitUntil(function() return Game():GetRoom():GetType() == RoomType.ROOM_BOSSRUSH end, 120)
+    eqCheck("entered real Boss Rush", function() return Game():GetRoom():GetType() end, RoomType.ROOM_BOSSRUSH)
+    waitUntil(function(player, ctx)
+        return not ctx.starAuraAPI or player:GetHallowedGroundCountdown() <= 0
+    end, 120)
+    act(function(player)
+        player:AddCollectible(CHRONUS_ID, 0, false)
+    end)
+    wait(10)
+    check("isolated baseline has no absorption damage", function(player)
+        local state = ConchBlessing.getUnifiedMultiplierState(player, ConchBlessing.stats.unifiedMultipliers)
+        local entry = state and state.itemAdditions and state.itemAdditions[CHRONUS_ID]
+        local damage = entry and entry.Damage and entry.Damage.cumulative or 0
+        return totalAbsorbed() == 0 and math.abs(damage) < 0.001,
+            string.format("absorbed=%d; registered damage=%.4f", totalAbsorbed(), damage)
+    end)
+    act(function(player, ctx)
+        player:AddCacheFlags(CacheFlag.CACHE_DAMAGE | CacheFlag.CACHE_FIREDELAY | CacheFlag.CACHE_TEARFLAG)
+        player:EvaluateItems()
+        ctx.starAuraBaseDamage = player.Damage
+        ctx.starAuraBaseDelay = player.MaxFireDelay
+        player:AddCollectible(C.COLLECTIBLE_STAR_OF_BETHLEHEM, 0, false)
+    end)
+    waitUntil(function(player, ctx)
+        return absorbed(player, C.COLLECTIBLE_STAR_OF_BETHLEHEM) == 1
+            and (not ctx.starAuraAPI or player:GetHallowedGroundCountdown() > 0)
+    end, 120)
+    check("native aura active in Boss Rush", function(player, ctx)
+        if not ctx.starAuraAPI then return nil, "optional REPENTOGON aura API unavailable" end
+        local countdown = player:GetHallowedGroundCountdown()
+        return countdown > 0 and absorbed(player, C.COLLECTIBLE_STAR_OF_BETHLEHEM) == 1,
+            "countdown=" .. countdown .. "; absorbed=" .. absorbed(player, C.COLLECTIBLE_STAR_OF_BETHLEHEM)
+    end)
+    check("native aura raises damage beyond flat +2 and improves fire rate", function(player, ctx)
+        if not ctx.starAuraAPI then return nil, "optional REPENTOGON aura API unavailable" end
+        return player.Damage > ctx.starAuraBaseDamage + 2.001 and player.MaxFireDelay < ctx.starAuraBaseDelay - 0.001,
+            string.format("damage %.4f -> %.4f; fire delay %.4f -> %.4f", ctx.starAuraBaseDamage,
+                player.Damage, ctx.starAuraBaseDelay, player.MaxFireDelay)
+    end)
+    wait(45)
+    check("native aura remains active beyond its renewed grace period", function(player, ctx)
+        if not ctx.starAuraAPI then return nil, "optional REPENTOGON aura API unavailable" end
+        return player:GetHallowedGroundCountdown() > 0 and player.Damage > ctx.starAuraBaseDamage + 2.001,
+            "countdown=" .. player:GetHallowedGroundCountdown() .. "; damage=" .. player.Damage
+    end)
+    act(function(player)
+        -- Losing the converted reward removes its exact absorbed source and +2.
+        while player:HasCollectible(C.COLLECTIBLE_COMPASS, true) do player:RemoveCollectible(C.COLLECTIBLE_COMPASS) end
+    end)
+    waitUntil(function(player, ctx)
+        return absorbed(player, C.COLLECTIBLE_STAR_OF_BETHLEHEM) == 0
+            and (not ctx.starAuraAPI or player:GetHallowedGroundCountdown() <= 0)
+    end, 120)
+    check("reward loss expires the native aura and its independent +2", function(player, ctx)
+        if not ctx.starAuraAPI then return nil, "optional REPENTOGON aura API unavailable" end
+        return player:GetHallowedGroundCountdown() <= 0
+            and math.abs(player.Damage - ctx.starAuraBaseDamage) < 0.001
+            and math.abs(player.MaxFireDelay - ctx.starAuraBaseDelay) < 0.001,
+            string.format("countdown=%d; damage %.4f -> %.4f; fire delay %.4f -> %.4f",
+                player:GetHallowedGroundCountdown(), ctx.starAuraBaseDamage, player.Damage,
+                ctx.starAuraBaseDelay, player.MaxFireDelay)
+    end)
+    act(function(_, ctx)
+        if ConchBlessing.Config then ConchBlessing.Config.debugMode = ctx.savedDebugMode end
+    end)
 end
 
 -- Manual setups and helpers, reached as `conch_chronus <action>`.
 local function handleCommand(action, words, player)
     local scenario = findScenario(action)
-    if scenario then
+    if action == "aura" then
+        probe._auraOnly = true
+        if not TestBench.start("conch_chronus", true) then probe._auraOnly = nil end
+    elseif scenario then
         probe.run(scenario, player)
     elseif action == "status" then
         probe.status(player)
