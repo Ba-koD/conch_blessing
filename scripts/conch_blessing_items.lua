@@ -663,13 +663,17 @@ ConchBlessing.ItemData = {
 				"패밀리어 아이템을 흡수하여 제거합니다.",
 				"#흡수한 패밀리어마다 {{Damage}}데미지가 2.0 증가하고, 지정된 패밀리어는 고유한 효과를 부여합니다.",
                 "#아이템이 사라질때까지 지속됩니다. (사라지면 패밀리어가 돌아옵니다.)",
-				"#일부 패밀리어는 제외 목록에 따라 흡수되지 않습니다."
+				"#일부 패밀리어는 제외 목록에 따라 흡수되지 않습니다.",
+				"#{{Pill}} 멋진 파리 알약의 파리도 흡수해 적의 탄환을 5% 확률로 무시합니다.",
+				"#{{Warning}} REPENTOGON 권장"
 			},
 			en = {
 				"Absorbs and removes familiar-type collectibles.",
 				"#Each absorbed familiar increases {{Damage}}Damage by 2.0 and may grant a custom effect.",
 				"#The effects last until this item is lost. (Familiars return when it is lost.)",
-				"#Some familiars are excluded by a blacklist."
+				"#Some familiars are excluded by a blacklist.",
+				"#{{Pill}} Also absorbs the Pretty Fly pill's fly as a 5% chance to ignore enemy projectiles.",
+				"#{{Warning}} REPENTOGON recommended"
 			}
 		},
 		gfx = "chronus.png",
@@ -691,7 +695,15 @@ ConchBlessing.ItemData = {
 			gameStarted = "chronus.onGameStarted",
             familiarUpdate = "chronus.onFamiliarUpdate",
             fireTear = "chronus.onFireTear",
-            entityTakeDmg = "chronus.onEntityTakeDamage"
+            entityTakeDmg = "chronus.onEntityTakeDamage",
+            postEntityTakeDmg = "chronus.onPostEntityTakeDamage",
+            postNewRoom = "chronus.onNewRoom",
+            postNewLevel = "chronus.onNewLevel",
+            postRoomClear = "chronus.onRoomClear",
+            prePlayerCollision = "chronus.onPrePlayerCollision",
+            postUpdate = "chronus.onPostUpdate",
+            postRender = "chronus.onPostRender",
+            preGameExit = "chronus.onPreGameExit"
 		},
 		synergies = {
             [{ id = CollectibleType.COLLECTIBLE_TWISTED_PAIR, type = "collectible" }] = {
@@ -793,8 +805,8 @@ ConchBlessing.ItemData = {
                 en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_CONTINUUM) .. "Continuum."
             },
             [{ id = CollectibleType.COLLECTIBLE_ROTTEN_BABY, type = "collectible" }] = {
-                kr = "적에게 데미지를 줄 때마다 아군 파리를 소환합니다.",
-                en = "Spawns friendly flies when dealing damage to enemies."
+                kr = "공격이 적에게 피해를 주면 50% 확률로 아군 파리를 소환합니다. (" .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_7_SEALS) .. "7개의 도장과 합산, 최대 100%)",
+                en = "50% chance to spawn a friendly blue fly when an attack damages an enemy (adds up with " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_7_SEALS) .. "7 Seals, up to 100%)."
             },
             [{ id = CollectibleType.COLLECTIBLE_LITTLE_STEVEN, type = "collectible" }] = {
                 kr = "유도 효과를 얻습니다.",
@@ -854,8 +866,8 @@ ConchBlessing.ItemData = {
                 kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_TRACTOR_BEAM) .. "트랙터 빔을 얻습니다. (최초 1회)",
                 en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_TRACTOR_BEAM) .. "Tractor Beam (first time only)."
             },
-            [{ id = CollectibleType.COLLECTIBLE_IMMACULATE_CONCEPTION, type = "collectible" }] = {
-                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_CANDY_HEART) .. "사탕 하트를 얻습니다. (최초 1회)",
+            [{ id = CollectibleType.COLLECTIBLE_LITTLE_CHAD, type = "collectible" }] = {
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_CANDY_HEART) .. "캔디 하트를 얻습니다. (최초 1회)",
                 en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_CANDY_HEART) .. "Candy Heart (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_SACK_OF_PENNIES, type = "collectible" }] = {
@@ -875,8 +887,470 @@ ConchBlessing.ItemData = {
                 en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_XRAY_VISION) .. "X-Ray Vision (first time only)."
             },
             [{ id = CollectibleType.COLLECTIBLE_DADDY_LONGLEGS, type = "collectible" }] = {
+                kr = "공격이 적에게 피해를 주면 10% 확률로 다리가 내려찍어 주변 적에게 공격력 x2의 피해를 줍니다. (흡수할 때마다 누적)",
+                en = "10% chance for a leg to stomp when an attack damages an enemy, dealing 2x damage around it (stacks with each absorbed copy)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_SISTER_MAGGY, type = "collectible" }] = {
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_CRICKETS_HEAD) .. "크리켓의 머리를 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_CRICKETS_HEAD) .. "Cricket's Head (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_LITTLE_CHUBBY, type = "collectible" }] = {
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_MARS) .. "화성을 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_MARS) .. "Mars (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_BIG_CHUBBY, type = "collectible" }] = {
+                kr = {
+                    eidCollectibleIcon(CollectibleType.COLLECTIBLE_MARS) .. "화성을 얻습니다. (최초 1회)",
+                    "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
+                    "현재 탄환 무시 확률: %CHRONUS_BLOCK%"
+                },
+                en = {
+                    "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_MARS) .. "Mars (first time only).",
+                    "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
+                    "Current projectile ignore chance: %CHRONUS_BLOCK%"
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_PEEPER, type = "collectible" }] = {
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_MOMS_EYE) .. "엄마의 눈알을 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_MOMS_EYE) .. "Mom's Eye (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_BBF, type = "collectible" }] = {
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_FIRE_MIND) .. "불타는 마음을 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_FIRE_MIND) .. "Fire Mind (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_FATES_REWARD, type = "collectible" }] = {
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_20_20) .. "시력 2.0을 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_20_20) .. "20/20 (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_LIL_GURDY, type = "collectible" }] = {
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_CHOCOLATE_MILK) .. "초콜릿 우유를 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_CHOCOLATE_MILK) .. "Chocolate Milk (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_BUMBO, type = "collectible" }] = {
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_PIGGY_BANK) .. "돼지 저금통을 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_PIGGY_BANK) .. "Piggy Bank (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_SPIDER_MOD, type = "collectible" }] = {
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_SPIDER_BITE) .. "거미물림을 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_SPIDER_BITE) .. "Spider Bite (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_DEPRESSION, type = "collectible" }] = {
                 kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_HOLY_LIGHT) .. "신성한 빛을 얻습니다. (최초 1회)",
                 en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_HOLY_LIGHT) .. "Holy Light (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_KING_BABY, type = "collectible" }] = {
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_MAGIC_MUSHROOM) .. "마법의 버섯을 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_MAGIC_MUSHROOM) .. "Magic Mushroom (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_ACID_BABY, type = "collectible" }] = {
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_PHD) .. "박사학위를 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_PHD) .. "PHD (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_JAW_BONE, type = "collectible" }] = {
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_COMPOUND_FRACTURE) .. "복합 골절을 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_COMPOUND_FRACTURE) .. "Compound Fracture (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_BOILED_BABY, type = "collectible" }] = {
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_EYE_SORE) .. "흉물을 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_EYE_SORE) .. "Eye Sore (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_LIL_DUMPY, type = "collectible" }] = {
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_JELLY_BELLY) .. "젤리 배를 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_JELLY_BELLY) .. "Jelly Belly (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_FRUITY_PLUM, type = "collectible" }] = {
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_KIDNEY_STONE) .. "신장 결석을 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_KIDNEY_STONE) .. "Kidney Stone (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_7_SEALS, type = "collectible" }] = {
+                kr = "공격이 적에게 피해를 주면 50% 확률로 아군 파리를 소환합니다. (" .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_ROTTEN_BABY) .. "썩은 아기와 합산, 최대 100%)",
+                en = "50% chance to spawn a friendly blue fly when an attack damages an enemy (adds up with " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_ROTTEN_BABY) .. "Rotten Baby, up to 100%)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_JUICY_SACK, type = "collectible" }] = {
+                kr = "공격이 적에게 피해를 주면 50% 확률로 아군 거미를 소환합니다. (" .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_SISSY_LONGLEGS) .. "눈나 거미와 합산, 최대 100%)",
+                en = "50% chance to spawn a friendly blue spider when an attack damages an enemy (adds up with " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_SISSY_LONGLEGS) .. "Sissy Longlegs, up to 100%)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_SISSY_LONGLEGS, type = "collectible" }] = {
+                kr = "공격이 적에게 피해를 주면 50% 확률로 아군 거미를 소환합니다. (" .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_JUICY_SACK) .. "축축한 알집과 합산, 최대 100%)",
+                en = "50% chance to spawn a friendly blue spider when an attack damages an enemy (adds up with " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_JUICY_SACK) .. "Juicy Sack, up to 100%)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_INTRUDER, type = "collectible" }] = {
+                kr = "모든 공격에 느림 효과를 부여합니다.",
+                en = "Grants slowing effect to all attacks."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_WORM_FRIEND, type = "collectible" }] = {
+                kr = "모든 공격에 느림 효과를 부여합니다.",
+                en = "Grants slowing effect to all attacks."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_HALO_OF_FLIES, type = "collectible" }] = {
+                kr = {
+                    "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
+                    "현재 탄환 무시 확률: %CHRONUS_BLOCK%"
+                },
+                en = {
+                    "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
+                    "Current projectile ignore chance: %CHRONUS_BLOCK%"
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_DISTANT_ADMIRATION, type = "collectible" }] = {
+                kr = {
+                    "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
+                    "현재 탄환 무시 확률: %CHRONUS_BLOCK%"
+                },
+                en = {
+                    "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
+                    "Current projectile ignore chance: %CHRONUS_BLOCK%"
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_CUBE_OF_MEAT, type = "collectible" }] = {
+                kr = {
+                    "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
+                    "현재 탄환 무시 확률: %CHRONUS_BLOCK%"
+                },
+                en = {
+                    "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
+                    "Current projectile ignore chance: %CHRONUS_BLOCK%"
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_FOREVER_ALONE, type = "collectible" }] = {
+                kr = {
+                    "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
+                    "현재 탄환 무시 확률: %CHRONUS_BLOCK%"
+                },
+                en = {
+                    "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
+                    "Current projectile ignore chance: %CHRONUS_BLOCK%"
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_SACRIFICIAL_DAGGER, type = "collectible" }] = {
+                kr = {
+                    "적의 탄환에 맞을 때 2% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
+                    "현재 탄환 무시 확률: %CHRONUS_BLOCK%"
+                },
+                en = {
+                    "2% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
+                    "Current projectile ignore chance: %CHRONUS_BLOCK%"
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_GUPPYS_HAIRBALL, type = "collectible" }] = {
+                kr = {
+                    "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
+                    "현재 탄환 무시 확률: %CHRONUS_BLOCK%"
+                },
+                en = {
+                    "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
+                    "Current projectile ignore chance: %CHRONUS_BLOCK%"
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_GUILLOTINE, type = "collectible" }] = {
+                kr = {
+                    "{{Damage}}공격력 +1, {{Tears}}연사 +0.5 (흡수할 때마다 누적)",
+                    "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
+                    "현재 탄환 무시 확률: %CHRONUS_BLOCK%"
+                },
+                en = {
+                    "+1 {{Damage}}damage and +0.5 {{Tears}}fire rate (stacks with each absorbed copy).",
+                    "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
+                    "Current projectile ignore chance: %CHRONUS_BLOCK%"
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_BALL_OF_BANDAGES, type = "collectible" }] = {
+                kr = {
+                    "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
+                    "현재 탄환 무시 확률: %CHRONUS_BLOCK%"
+                },
+                en = {
+                    "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
+                    "Current projectile ignore chance: %CHRONUS_BLOCK%"
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_SMART_FLY, type = "collectible" }] = {
+                kr = {
+                    "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
+                    "현재 탄환 무시 확률: %CHRONUS_BLOCK%"
+                },
+                en = {
+                    "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
+                    "Current projectile ignore chance: %CHRONUS_BLOCK%"
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_BEST_BUD, type = "collectible" }] = {
+                kr = {
+                    "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
+                    "현재 탄환 무시 확률: %CHRONUS_BLOCK%"
+                },
+                en = {
+                    "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
+                    "Current projectile ignore chance: %CHRONUS_BLOCK%"
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_BIG_FAN, type = "collectible" }] = {
+                kr = {
+                    "적의 탄환에 맞을 때 2% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
+                    "현재 탄환 무시 확률: %CHRONUS_BLOCK%"
+                },
+                en = {
+                    "2% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
+                    "Current projectile ignore chance: %CHRONUS_BLOCK%"
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_PUNCHING_BAG, type = "collectible" }] = {
+                kr = {
+                    "적의 탄환에 맞을 때 2% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
+                    "현재 탄환 무시 확률: %CHRONUS_BLOCK%"
+                },
+                en = {
+                    "2% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
+                    "Current projectile ignore chance: %CHRONUS_BLOCK%"
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_SWORN_PROTECTOR, type = "collectible" }] = {
+                kr = {
+                    "적의 탄환에 맞을 때 5% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
+                    "현재 탄환 무시 확률: %CHRONUS_BLOCK%"
+                },
+                en = {
+                    "5% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
+                    "Current projectile ignore chance: %CHRONUS_BLOCK%"
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_FRIEND_ZONE, type = "collectible" }] = {
+                kr = {
+                    "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
+                    "현재 탄환 무시 확률: %CHRONUS_BLOCK%"
+                },
+                en = {
+                    "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
+                    "Current projectile ignore chance: %CHRONUS_BLOCK%"
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_LOST_FLY, type = "collectible" }] = {
+                kr = {
+                    "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
+                    "현재 탄환 무시 확률: %CHRONUS_BLOCK%"
+                },
+                en = {
+                    "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
+                    "Current projectile ignore chance: %CHRONUS_BLOCK%"
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_HUSHY, type = "collectible" }] = {
+                kr = {
+                    "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
+                    "현재 탄환 무시 확률: %CHRONUS_BLOCK%"
+                },
+                en = {
+                    "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
+                    "Current projectile ignore chance: %CHRONUS_BLOCK%"
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_MOMS_RAZOR, type = "collectible" }] = {
+                kr = {
+                    "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
+                    "{{BleedingOut}} 공격이 적에게 피해를 주면 10% 확률로 출혈시킵니다. (흡수할 때마다 누적)",
+                    "현재 탄환 무시 확률: %CHRONUS_BLOCK%"
+                },
+                en = {
+                    "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
+                    "{{BleedingOut}} 10% chance to make an enemy bleed when an attack damages it (stacks with each absorbed copy).",
+                    "Current projectile ignore chance: %CHRONUS_BLOCK%"
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_ANGRY_FLY, type = "collectible" }] = {
+                kr = {
+                    "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
+                    "현재 탄환 무시 확률: %CHRONUS_BLOCK%"
+                },
+                en = {
+                    "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
+                    "Current projectile ignore chance: %CHRONUS_BLOCK%"
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_LEPROSY, type = "collectible" }] = {
+                kr = {
+                    "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
+                    "현재 탄환 무시 확률: %CHRONUS_BLOCK%"
+                },
+                en = {
+                    "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
+                    "Current projectile ignore chance: %CHRONUS_BLOCK%"
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_SLIPPED_RIB, type = "collectible" }] = {
+                kr = {
+                    "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
+                    "현재 탄환 무시 확률: %CHRONUS_BLOCK%"
+                },
+                en = {
+                    "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
+                    "Current projectile ignore chance: %CHRONUS_BLOCK%"
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_POINTY_RIB, type = "collectible" }] = {
+                kr = {
+                    "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
+                    "현재 탄환 무시 확률: %CHRONUS_BLOCK%"
+                },
+                en = {
+                    "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
+                    "Current projectile ignore chance: %CHRONUS_BLOCK%"
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_PSY_FLY, type = "collectible" }] = {
+                kr = {
+                    "적의 탄환에 맞을 때 5% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
+                    "현재 탄환 무시 확률: %CHRONUS_BLOCK%"
+                },
+                en = {
+                    "5% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
+                    "Current projectile ignore chance: %CHRONUS_BLOCK%"
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_TINYTOMA, type = "collectible" }] = {
+                kr = {
+                    "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
+                    "현재 탄환 무시 확률: %CHRONUS_BLOCK%"
+                },
+                en = {
+                    "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
+                    "Current projectile ignore chance: %CHRONUS_BLOCK%"
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_HEADLESS_BABY, type = "collectible" }] = {
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_AQUARIUS) .. "물병자리를 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_AQUARIUS) .. "Aquarius (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_CAINS_OTHER_EYE, type = "collectible" }] = {
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_RUBBER_CEMENT) .. "고무 접착제를 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_RUBBER_CEMENT) .. "Rubber Cement (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_PAPA_FLY, type = "collectible" }] = {
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_HIVE_MIND) .. "군체의식을 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_HIVE_MIND) .. "Hive Mind (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_SHADE, type = "collectible" }] = {
+                kr = eidCollectibleIcon(CollectibleType.COLLECTIBLE_LUSTY_BLOOD) .. "욕망의 피를 얻습니다. (최초 1회)",
+                en = "Gains " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_LUSTY_BLOOD) .. "Lusty Blood (first time only)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_OBSESSED_FAN, type = "collectible" }] = {
+                kr = {
+                    "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
+                    "현재 탄환 무시 확률: %CHRONUS_BLOCK%"
+                },
+                en = {
+                    "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
+                    "Current projectile ignore chance: %CHRONUS_BLOCK%"
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_GEMINI, type = "collectible" }] = {
+                kr = "접촉한 적에게 초당 6의 피해를 줍니다. (흡수할 때마다 누적)",
+                en = "Deals 6 contact damage per second to touching enemies (stacks with each absorbed copy)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_CUBE_BABY, type = "collectible" }] = {
+                kr = "{{Freezing}} 공격이 적에게 피해를 주면 10% 확률로 적을 2초간 얼려 멈춥니다. (흡수할 때마다 누적)",
+                en = "{{Freezing}} 10% chance to freeze an enemy in place for 2 seconds when an attack damages it (stacks with each absorbed copy)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_LIL_SPEWER, type = "collectible" }] = {
+                kr = "공격이 적에게 피해를 주면 25% 확률로 적 위치에 빨간 장판이 생깁니다. (흡수할 때마다 누적)",
+                en = "25% chance to leave red creep under an enemy when an attack damages it (stacks with each absorbed copy)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_GB_BUG, type = "collectible" }] = {
+                kr = {
+                    "흡수 시 지금까지 흡수한 다른 패밀리어 중 무작위로 절반을 되돌려줍니다.",
+                    "되돌아온 패밀리어는 다시 흡수되지 않습니다."
+                },
+                en = {
+                    "When absorbed, returns a random half of the other absorbed familiars.",
+                    "Returned familiars are not absorbed again."
+                }
+            },
+            [{ id = CollectibleType.COLLECTIBLE_BUM_FRIEND, type = "collectible" }] = {
+                kr = "방 클리어 시 10% 확률로 랜덤 픽업을 드랍합니다. (흡수할 때마다 누적)",
+                en = "10% chance to drop a random pickup on room clear (stacks with each absorbed copy)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_LIL_CHEST, type = "collectible" }] = {
+                kr = "{{Chest}} 방 클리어 시 10% 확률로 상자를 드랍합니다. (흡수할 때마다 누적)",
+                en = "{{Chest}} 10% chance to drop a chest on room clear (stacks with each absorbed copy)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_RELIC, type = "collectible" }] = {
+                kr = "{{SoulHeart}} 방 6개 클리어마다 소울하트를 드랍합니다. (흡수할 때마다 1개씩 추가)",
+                en = "{{SoulHeart}} Drops a soul heart every 6 room clears (one more per absorbed copy)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_MYSTERY_SACK, type = "collectible" }] = {
+                kr = "방 6개 클리어마다 랜덤 픽업을 드랍합니다. (흡수할 때마다 1개씩 추가)",
+                en = "Drops a random pickup every 6 room clears (one more per absorbed copy)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_RUNE_BAG, type = "collectible" }] = {
+                kr = "{{Rune}} 방 7개 클리어마다 룬을 드랍합니다. (흡수할 때마다 1개씩 추가)",
+                en = "{{Rune}} Drops a rune every 7 room clears (one more per absorbed copy)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_PASCHAL_CANDLE, type = "collectible" }] = {
+                kr = "{{Tears}} 방 클리어 시마다 연사 +0.03 (흡수할 때마다 누적)",
+                en = "{{Tears}} +0.03 fire rate per room clear (stacks with each absorbed copy)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_HOLY_WATER, type = "collectible" }] = {
+                kr = "피격 시 캐릭터 위치에 성수 장판이 생깁니다. (흡수할 때마다 1개씩 추가, 최대 4개)",
+                en = "Leaves holy water creep at the player's position when hit (one more per absorbed copy, up to 4)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_DRY_BABY, type = "collectible" }] = {
+                kr = "피격 시 25% 확률로 " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_NECRONOMICON) .. "네크로노미콘이 발동합니다. (흡수할 때마다 누적)",
+                en = "25% chance to trigger " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_NECRONOMICON) .. "The Necronomicon when hit (stacks with each absorbed copy)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_MILK, type = "collectible" }] = {
+                kr = "{{Tears}} 스테이지에서 처음 피격 시 그 스테이지 동안 연사 +1 (흡수할 때마다 누적)",
+                en = "{{Tears}} +1 fire rate for the rest of the floor after the first hit on it (stacks with each absorbed copy)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_BIRD_CAGE, type = "collectible" }] = {
+                kr = "피격 시 가장 가까운 적에게 45의 피해를 줍니다. (흡수할 때마다 누적)",
+                en = "Deals 45 damage to the nearest enemy when hit (stacks with each absorbed copy)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_MYSTERY_EGG, type = "collectible" }] = {
+                kr = "{{Friendly}} 피격 시 매혹된 아군 파리를 소환합니다. (흡수할 때마다 1마리씩 추가, 최대 5마리)",
+                en = "{{Friendly}} Spawns a charmed fly when hit (one more per absorbed copy, up to 5)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_MY_SHADOW, type = "collectible" }] = {
+                kr = "{{Friendly}} 피격 시 검은색 아군 애벌레를 소환합니다. (흡수할 때마다 1마리씩 추가, 최대 3마리)",
+                en = "{{Friendly}} Spawns a friendly black charger when hit (one more per absorbed copy, up to 3)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_HALLOWED_GROUND, type = "collectible" }] = {
+                kr = "피격 시 근처에 하얀 똥을 설치합니다.",
+                en = "Places a white poop nearby when hit."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_LOST_SOUL, type = "collectible" }] = {
+                kr = "{{EternalHeart}} 피격 없이 스테이지를 넘어가면 이터널하트를 드랍합니다. (흡수할 때마다 1개씩 추가)",
+                en = "{{EternalHeart}} Drops an eternal heart after leaving a floor without getting hit (one more per absorbed copy)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_BLOODSHOT_EYE, type = "collectible" }] = {
+                kr = "피눈물 눈알이 플레이어 위치에 고정됩니다.",
+                en = "Bloodshot Eye is fixed to the player's position."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_MONGO_BABY, type = "collectible" }] = {
+                kr = "방에 들어갈 때마다 미니 아이작을 흡수한 수만큼 채워줍니다.",
+                en = "Refills Minisaacs up to the number of absorbed copies on each room entry."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_BUDDY_IN_A_BOX, type = "collectible" }] = {
+                kr = "스테이지마다 다른 패밀리어 하나의 흡수 효과를 무작위로 얻습니다. (흡수할 때마다 1개씩 추가)",
+                en = "Each floor, gains the absorbed effect of one random other familiar (one more per absorbed copy)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_LIL_DELIRIUM, type = "collectible" }] = {
+                kr = "스테이지마다 다른 패밀리어 하나의 흡수 효과를 무작위로 얻습니다. (흡수할 때마다 1개씩 추가)",
+                en = "Each floor, gains the absorbed effect of one random other familiar (one more per absorbed copy)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_BOX_OF_FRIENDS, type = "collectible" }] = {
+                kr = "사용 시 그 방에서 흡수한 패밀리어의 효과가 2배가 됩니다. (" .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_DEMON_BABY) .. "악마 아기는 소환되지 않음)",
+                en = "On use, absorbed familiar effects are doubled for the room (no " .. eidCollectibleIcon(CollectibleType.COLLECTIBLE_DEMON_BABY) .. "Demon Baby)."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_MONSTER_MANUAL, type = "collectible" }] = {
+                kr = "소환된 패밀리어를 흡수해 그 스테이지 동안 효과를 얻습니다.",
+                en = "Absorbs the summoned familiar and keeps its effect for the floor."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_SACRIFICIAL_ALTAR, type = "collectible" }] = {
+                kr = "사용 시 흡수한 패밀리어를 최대 2마리 제물로 바쳐 악마방 아이템을 생성합니다.",
+                en = "On use, sacrifices up to 2 absorbed familiars to spawn devil room items."
+            },
+            [{ id = TrinketType.TRINKET_THE_TWINS, type = "trinket" }] = {
+                kr = "방 입장 시 50% 확률로 그 방에서 흡수한 패밀리어 하나의 효과가 2배가 됩니다.",
+                en = "50% chance on room entry to double one absorbed familiar's effect for the room."
             },
             -- Blacklisted items
             [{ id = CollectibleType.COLLECTIBLE_1UP, type = "collectible" }] = {
@@ -904,6 +1378,18 @@ ConchBlessing.ItemData = {
                 en = "Cannot be absorbed by " .. eidOwnCollectibleIcon("Chronus") .. "Chronus."
             },
             [{ id = CollectibleType.COLLECTIBLE_KNIFE_PIECE_2, type = "collectible" }] = {
+                kr = eidOwnCollectibleIcon("Chronus") .. "크로노스에 흡수되지 않습니다.",
+                en = "Cannot be absorbed by " .. eidOwnCollectibleIcon("Chronus") .. "Chronus."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_DAMOCLES_PASSIVE, type = "collectible" }] = {
+                kr = eidOwnCollectibleIcon("Chronus") .. "크로노스에 흡수되지 않습니다.",
+                en = "Cannot be absorbed by " .. eidOwnCollectibleIcon("Chronus") .. "Chronus."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_STRAW_MAN, type = "collectible" }] = {
+                kr = eidOwnCollectibleIcon("Chronus") .. "크로노스에 흡수되지 않습니다.",
+                en = "Cannot be absorbed by " .. eidOwnCollectibleIcon("Chronus") .. "Chronus."
+            },
+            [{ id = CollectibleType.COLLECTIBLE_BLOOD_OATH, type = "collectible" }] = {
                 kr = eidOwnCollectibleIcon("Chronus") .. "크로노스에 흡수되지 않습니다.",
                 en = "Cannot be absorbed by " .. eidOwnCollectibleIcon("Chronus") .. "Chronus."
             },
@@ -2323,7 +2809,7 @@ local function loadAllItems()
 						local targetId, targetIsTrinket = resolveTargetId(targetKey)
 						if type(targetId) == "number" and targetId > 0 then
 								ConchBlessing._synergyByTarget[targetId] = ConchBlessing._synergyByTarget[targetId] or {}
-							table.insert(ConchBlessing._synergyByTarget[targetId], { key = key, text = text })
+							table.insert(ConchBlessing._synergyByTarget[targetId], { key = key, text = text, targetIsTrinket = targetIsTrinket })
 								ConchBlessing._synergyByMod[data.id] = ConchBlessing._synergyByMod[data.id] or {}
 							table.insert(ConchBlessing._synergyByMod[data.id], { target = targetId, targetIsTrinket = targetIsTrinket, text = text })
 							end
@@ -2334,15 +2820,39 @@ local function loadAllItems()
             end
 
             -- Helper: check if any player has a collectible or trinket with given ID
-			local function anyPlayerHas(id)
+			-- Synergy text may carry %TOKEN% placeholders that an item fills with a live
+			-- value at render time (ConchBlessing.EIDDynamicTokens[TOKEN] returns a string).
+			-- An unknown token or a failing resolver leaves the text as written.
+			local function expandDynamicTokens(text)
+				local function expand(line)
+					if type(line) ~= "string" or not line:find("%", 1, true) then return line end
+					return (line:gsub("%%([%u_]+)%%", function(name)
+						local resolver = ConchBlessing.EIDDynamicTokens and ConchBlessing.EIDDynamicTokens[name]
+						if type(resolver) ~= "function" then return nil end
+						local ok, value = pcall(resolver)
+						if ok and value ~= nil then return tostring(value) end
+						return nil
+					end))
+				end
+				if type(text) == "table" then
+					local lines = {}
+					for i = 1, #text do lines[i] = expand(text[i]) end
+					return lines
+				end
+				return expand(text)
+			end
+
+			-- isTrinket: true checks only trinkets, false only collectibles, nil both.
+			-- Trinket and collectible ids overlap (The Twins and Tooth Picks are both 183).
+			local function anyPlayerHas(id, isTrinket)
 				if type(id) ~= "number" then return false end
                 local game = Game()
                 local n = game:GetNumPlayers()
                 for i = 0, n - 1 do
                     local p = game:GetPlayer(i)
                     if p then
-                        if p:HasCollectible(id) then return true end
-                        if p:HasTrinket(id) then return true end
+                        if isTrinket ~= true and p:HasCollectible(id) then return true end
+                        if isTrinket ~= false and p:HasTrinket(id) then return true end
                     end
                 end
                 return false
@@ -2518,8 +3028,11 @@ local function loadAllItems()
                         if targets then
 						for _, entry in ipairs(targets) do
 							local d = ConchBlessing.ItemData[entry.key]
-							if d and d.id and anyPlayerHas(d.id) and shouldAppendSynergy(d.id, subId) then
-								local t = (type(entry.text) == "table" and (entry.text[lang] or entry.text.en)) or entry.text
+							local typeMatches = entry.targetIsTrinket == nil
+								or (entry.targetIsTrinket == true and descObj.ObjVariant == 350)
+								or (entry.targetIsTrinket == false and descObj.ObjVariant == 100)
+							if typeMatches and d and d.id and anyPlayerHas(d.id) and shouldAppendSynergy(d.id, subId) then
+								local t = expandDynamicTokens((type(entry.text) == "table" and (entry.text[lang] or entry.text.en)) or entry.text)
 								local iconToken
 								if entry.targetIsTrinket == true then
 									iconToken = "{{Trinket" .. tostring(subId) .. "}}"
@@ -2550,8 +3063,8 @@ local function loadAllItems()
                         local asMod = ConchBlessing._synergyByMod and ConchBlessing._synergyByMod[subId]
                         if asMod then
                             for _, entry in ipairs(asMod) do
-                                if anyPlayerHas(entry.target) and shouldAppendSynergy(subId, entry.target) then
-                                    local t = (type(entry.text) == "table" and (entry.text[lang] or entry.text.en)) or entry.text
+                                if anyPlayerHas(entry.target, entry.targetIsTrinket) and shouldAppendSynergy(subId, entry.target) then
+                                    local t = expandDynamicTokens((type(entry.text) == "table" and (entry.text[lang] or entry.text.en)) or entry.text)
                                     local iconToken
                                     -- Use the explicitly stored targetIsTrinket flag from synergy definition
                                     eidDebugOnce("[EID Synergy] Processing target ID: " .. tostring(entry.target) .. ", targetIsTrinket flag: " .. tostring(entry.targetIsTrinket))
@@ -2767,5 +3280,13 @@ do
     local ok, err = pcall(require, "scripts.dev.stat_rounding_probe")
     if not ok then
         ConchBlessing.printError("[StatRoundingProbe] load failed: " .. tostring(err))
+    end
+end
+
+-- Dev tooling: registers the conch_chronus test bench. Safe to remove.
+do
+    local ok, err = pcall(require, "scripts.dev.chronus_probe")
+    if not ok then
+        ConchBlessing.printError("[ChronusProbe] load failed: " .. tostring(err))
     end
 end

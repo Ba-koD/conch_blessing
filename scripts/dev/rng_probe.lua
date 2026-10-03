@@ -248,6 +248,98 @@ function probe.angelsCrown(samples)
     end
 end
 
+-- -------------------------------------------------------------------- chronus
+function probe.chronus(samples)
+    header("Chronus projectile block and blue fly / spider spawns")
+    local t = ConchBlessing.chronus and ConchBlessing.chronus._test
+    if not t then out("SKIPPED (module not loaded)") return end
+
+    local rng = RNG()
+    local seed = Random()
+    if seed == 0 then seed = 1 end
+    rng:SetSeed(seed, 35)
+
+    local function measure(chance)
+        return quietly(function()
+            local hits = 0
+            for _ = 1, samples do
+                if rng:RandomFloat() < chance then hits = hits + 1 end
+            end
+            return hits / samples
+        end)
+    end
+
+    local everyOnce, sum = {}, 0
+    for familiarId, perCopy in pairs(t.PROJECTILE_BLOCK_PERCENT) do
+        everyOnce[familiarId] = 1
+        sum = sum + perCopy
+    end
+    local cases = {
+        { "one 1% familiar", { [CollectibleType.COLLECTIBLE_HALO_OF_FLIES] = 1 } },
+        { "Sworn Protector + Psy Fly", { [CollectibleType.COLLECTIBLE_SWORN_PROTECTOR] = 1, [CollectibleType.COLLECTIBLE_PSY_FLY] = 1 } },
+        { "every listed familiar once", everyOnce },
+    }
+    out(string.format("  block table sums to %g%% with one copy of each", sum))
+    for _, case in ipairs(cases) do
+        local chance = t.getProjectileBlockChance(case[2])
+        out(string.format("  block %-28s configured=%6.2f%%  measured=%7.3f%%",
+            case[1], chance * 100, measure(chance) * 100))
+    end
+    for stacks = 1, 3 do
+        local chance = t.getSpawnChance(stacks)
+        out(string.format("  spawn %d stack(s)  configured=%6.2f%%  measured=%7.3f%%",
+            stacks, chance * 100, measure(chance) * 100))
+    end
+
+    if not t.getStackedChance then return end
+    for familiarId, perCopy in pairs(t.PROC_CHANCE_PERCENT) do
+        local chance = t.getStackedChance(perCopy, 1)
+        out(string.format("  proc  familiar %-4d 1 copy  configured=%6.2f%%  measured=%7.3f%%",
+            familiarId, chance * 100, measure(chance) * 100))
+    end
+    for familiarId, interval in pairs(t.CLEAR_REWARD_INTERVAL) do
+        out(string.format("  clear familiar %-4d one drop every %d rooms per copy", familiarId, interval))
+    end
+
+    local randomInt = function(n) return rng:RandomInt(n) end
+    local copies, pick = 6, 3
+    local counts = quietly(function()
+        local c = {}
+        for i = 1, copies do c[i] = 0 end
+        local list = {}
+        for i = 1, copies do list[i] = i end
+        for _ = 1, samples // 4 do
+            for _, idx in ipairs(t.pickRandomCopies(list, pick, randomInt)) do
+                c[idx] = c[idx] + 1
+            end
+        end
+        return c
+    end)
+    local lo, hi = math.huge, -math.huge
+    for i = 1, copies do
+        local rate = counts[i] / (samples // 4)
+        lo, hi = math.min(lo, rate), math.max(hi, rate)
+    end
+    out(string.format("  GB Bug %d of %d copies  expected=%6.2f%% each  measured=%7.3f%%..%7.3f%%",
+        pick, copies, pick / copies * 100, lo * 100, hi * 100))
+
+    local pool = t.getFloorPickPool()
+    local hits = quietly(function()
+        local h = {}
+        for _, pickId in ipairs(t.pickFromPool(pool, samples, randomInt)) do
+            h[pickId] = (h[pickId] or 0) + 1
+        end
+        return h
+    end)
+    lo, hi = math.huge, -math.huge
+    for _, id in ipairs(pool) do
+        local rate = (hits[id] or 0) / samples
+        lo, hi = math.min(lo, rate), math.max(hi, rate)
+    end
+    out(string.format("  floor pick pool=%d  expected=%6.3f%% each  measured=%7.3f%%..%7.3f%%",
+        #pool, 100 / #pool, lo * 100, hi * 100))
+end
+
 -- --------------------------------------------------------------- death spiral
 function probe.injectableDeath()
     header("Injectable Steroids instant death (cumulative over one floor)")
@@ -305,6 +397,7 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, cmd, params)
     probe.timeMoney(samples, luck)
     probe.aMinus(samples)
     probe.angelsCrown(samples)
+    probe.chronus(samples)
     probe.injectableDeath()
     out("")
     out("conch_rng: done")
