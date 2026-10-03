@@ -47,7 +47,6 @@ ConchBlessing.chronus.data = ConchBlessing.chronus.data or {
     -- in-room timer, which restarts at every room entry. Shortened from 10s to 8s
     -- for more margin before the aura can drop while staying in one room.
     starOfBethlehemSpawnIntervalFrames = 240,
-    starOfBethlehemRetryIntervalFrames = 30,
     blacklist = {
         [CollectibleType.COLLECTIBLE_ONE_UP] = true,
         [CollectibleType.COLLECTIBLE_ISAACS_HEART] = true,
@@ -1121,7 +1120,7 @@ function ConchBlessing.chronus._updateIncubusAnchors(player)
 end
 
 -- Aura familiars keep their aura visible and hide only the body. In the vanilla
--- anm2s spritesheet 0 is the body for both; Succubus draws its aura from sheet 1.
+-- anm2s spritesheet 0 is the body; Censer and Succubus draw their halo from sheet 1.
 local AURA_FAMILIAR_BODY_SHEETS = { 0 }
 
 local function hideFamiliarBody(fam, sheets)
@@ -1393,13 +1392,8 @@ local function spawnInvisibleCenser(player)
     local fam = ent and ent:ToFamiliar() or nil
     if not fam then return nil end
     fam:ClearEntityFlags(EntityFlag.FLAG_APPEAR)
-    local spr = fam:GetSprite()
-    local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
-    -- Replace all sprite layers
-    for i = 0, 10 do
-        pcall(function() spr:ReplaceSpritesheet(i, path) end)
-    end
-    pcall(function() spr:LoadGraphics() end)
+    hideFamiliarBody(fam, AURA_FAMILIAR_BODY_SHEETS)
+    hideFamiliarShadow(fam)
     fam.DepthOffset = tonumber(ConchBlessing.chronus.data.anchorDepthOffset) or 0
     fam:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
     fam.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
@@ -1493,38 +1487,33 @@ function ConchBlessing.chronus._ensureStarOfBethlehemStack(player, forceRespawn)
 
     local frame = Game():GetFrameCount()
     local interval = math.max(1, math.floor(tonumber(ConchBlessing.chronus.data.starOfBethlehemSpawnIntervalFrames) or 300))
-    local retryInterval = math.max(1, math.floor(tonumber(ConchBlessing.chronus.data.starOfBethlehemRetryIntervalFrames) or 30))
     local nextSpawnFrame = tonumber(pdata.__chronusNextStarOfBethlehemSpawnFrame)
-    local nextRetryFrame = tonumber(pdata.__chronusNextStarOfBethlehemRetryFrame)
-    local countMismatch = #pdata.__chronusStarsOfBethlehem ~= target
-    local shouldRespawn = forceRespawn == true
-        or nextSpawnFrame == nil
-        or frame >= nextSpawnFrame
-        or (countMismatch and (nextRetryFrame == nil or frame >= nextRetryFrame))
-    if not shouldRespawn then return end
-
-    for _, fam in ipairs(pdata.__chronusStarsOfBethlehem) do
-        if fam and fam:Exists() then fam:Remove() end
+    -- Missing entities are replenished on every update, without deleting healthy
+    -- peers or waiting for a retry timer. An existing star can still lose its
+    -- native aura without a removal event, so retain the bounded refresh fallback.
+    local refresh = forceRespawn == true or (nextSpawnFrame ~= nil and frame >= nextSpawnFrame)
+    if refresh then
+        for _, fam in ipairs(pdata.__chronusStarsOfBethlehem) do
+            if fam and fam:Exists() then fam:Remove() end
+        end
+        pdata.__chronusStarsOfBethlehem = {}
     end
-    pdata.__chronusStarsOfBethlehem = {}
+    trimPinned(pdata.__chronusStarsOfBethlehem, target)
+    local previousCount = #pdata.__chronusStarsOfBethlehem
 
     while #pdata.__chronusStarsOfBethlehem < target do
         local fam = spawnInvisibleStarOfBethlehem(player)
         if not fam then break end
         table.insert(pdata.__chronusStarsOfBethlehem, fam)
     end
-    pdata.__chronusNextStarOfBethlehemSpawnFrame = frame + interval
-    if #pdata.__chronusStarsOfBethlehem ~= target then
-        pdata.__chronusNextStarOfBethlehemRetryFrame = frame + retryInterval
-    else
-        pdata.__chronusNextStarOfBethlehemRetryFrame = nil
+    if refresh or nextSpawnFrame == nil then
+        pdata.__chronusNextStarOfBethlehemSpawnFrame = frame + interval
     end
-    dbg(string.format(
-        "[Chronus] Respawned %d Stars of Bethlehem (target: %d, next: %d)",
-        #pdata.__chronusStarsOfBethlehem,
-        target,
-        pdata.__chronusNextStarOfBethlehemSpawnFrame
-    ))
+    if refresh or #pdata.__chronusStarsOfBethlehem ~= previousCount then
+        dbg(string.format(
+            "[Chronus] Ensured %d Stars of Bethlehem (target: %d, next: %d)",
+            #pdata.__chronusStarsOfBethlehem, target, pdata.__chronusNextStarOfBethlehemSpawnFrame))
+    end
 end
 
 function ConchBlessing.chronus._updateStarOfBethlehemAnchors(player)
@@ -2017,16 +2006,11 @@ ConchBlessing.chronus.onFamiliarUpdate = function(_, fam)
     -- Handle Censer (fixed to player position)
     if f.Variant == FamiliarVariant.CENSER and fd.__chronusCenser then
         if not fd.__chronusCenserSpr then
-            local spr = f:GetSprite()
-            local path = tostring(ConchBlessing.chronus.data.spriteNullPath or "gfx/ui/null.png")
-            -- Replace all sprite layers
-            for i = 0, 10 do
-                pcall(function() spr:ReplaceSpritesheet(i, path) end)
-            end
-            pcall(function() spr:LoadGraphics() end)
+            hideFamiliarBody(f, AURA_FAMILIAR_BODY_SHEETS)
             fd.__chronusCenserSpr = true
-            dbg("Censer sprite initialized (all layers, fixed position)")
+            dbg("Censer sprite initialized (body hidden, aura kept, fixed position)")
         end
+        hideFamiliarShadow(f)
         f:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
         f.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
         f.GridCollisionClass = GridCollisionClass.COLLISION_NONE

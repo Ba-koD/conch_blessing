@@ -107,11 +107,11 @@ local SCENARIOS = {
     },
     {
         key = "pinned",
-        about = "Bloodshot Eye, Mongo Baby x3, Succubus, Star of Bethlehem",
+        about = "Bloodshot Eye, Mongo Baby x3, Censer, Succubus, Star of Bethlehem x2",
         give = { { C.COLLECTIBLE_BLOODSHOT_EYE, 1 }, { C.COLLECTIBLE_MONGO_BABY, 3 }, { C.COLLECTIBLE_SUCCUBUS, 1 },
-            { C.COLLECTIBLE_STAR_OF_BETHLEHEM, 1 } },
+            { C.COLLECTIBLE_CENSER, 1 }, { C.COLLECTIBLE_STAR_OF_BETHLEHEM, 2 } },
         enemies = { "fatty", 2 },
-        checks = { "no Bloodshot Eye body, but it shoots from you; Succubus/Star aura visible, no body/shadow",
+        checks = { "no Bloodshot Eye body, but it shoots from you; Censer/Succubus/Star aura visible, no body/shadow",
             "3 Minisaacs; after one dies, the next room refills to 3" },
     },
     {
@@ -744,10 +744,10 @@ local function buildPlan(plan)
     end)
 
     -- pinned familiars -------------------------------------------------------------------
-    section("pinned", "Succubus / Star auras around you with no body or shadow; no Bloodshot Eye body")
+    section("pinned", "Censer / Succubus / Star auras around you with no body or shadow; no Bloodshot Eye body")
     act(function(player)
         giveAll(player, { { C.COLLECTIBLE_BLOODSHOT_EYE, 1 }, { C.COLLECTIBLE_MONGO_BABY, 3 },
-            { C.COLLECTIBLE_SUCCUBUS, 1 }, { C.COLLECTIBLE_STAR_OF_BETHLEHEM, 1 } })
+            { C.COLLECTIBLE_SUCCUBUS, 1 }, { C.COLLECTIBLE_CENSER, 1 }, { C.COLLECTIBLE_STAR_OF_BETHLEHEM, 2 } })
     end)
     wait(60)
     eqCheck("hidden Bloodshot Eye pinned", function()
@@ -759,6 +759,51 @@ local function buildPlan(plan)
     eqCheck("Succubus aura pinned", function()
         return countEntities(EntityType.ENTITY_FAMILIAR, FamiliarVariant.SUCCUBUS, -1,
             function(e) return e:GetData().__chronusSuccubus end) end, 1)
+    check("Censer body hidden and native halo retained", function(player)
+        local familiar = (player:GetData().__chronusCensers or {})[1]
+        if not familiar or not familiar:Exists() then return false, "Censer anchor missing" end
+        local sprite = familiar:GetSprite()
+        if type(sprite.GetLayer) ~= "function" then return nil, "layer inspection unavailable; see LOOK" end
+        local ok, body, halo = pcall(function()
+            return sprite:GetLayer(0):GetSpritesheetPath(), sprite:GetLayer(1):GetSpritesheetPath()
+        end)
+        if not ok then return nil, "layer path inspection unavailable; see LOOK" end
+        body, halo = tostring(body):lower():gsub("\\", "/"), tostring(halo):lower():gsub("\\", "/")
+        return body:match("gfx/ui/null%.png$") ~= nil and halo:match("censer halo%.png$") ~= nil
+            and familiar.Visible, "body=" .. body .. "; halo=" .. halo
+    end)
+    eqCheck("two Star aura anchors", function(player)
+        return #(player:GetData().__chronusStarsOfBethlehem or {}) end, 2)
+    act(function(player, ctx)
+        local data = player:GetData()
+        local stars = data.__chronusStarsOfBethlehem or {}
+        ctx.starDamage = player.Damage
+        ctx.starCompasses = owns(player, C.COLLECTIBLE_COMPASS)
+        ctx.starSurvivor = stars[2]
+        if stars[1] then stars[1]:Remove() end
+        ConchBlessing.chronus._ensureStarOfBethlehemStack(player)
+        ctx.starRecoveredImmediately = #(data.__chronusStarsOfBethlehem or {}) == 2
+        ctx.starPeerPreserved = ctx.starSurvivor and ctx.starSurvivor:Exists()
+            and data.__chronusStarsOfBethlehem[1] == ctx.starSurvivor
+    end)
+    check("missing Star refilled immediately; healthy peer retained", function(_, ctx)
+        return ctx.starRecoveredImmediately and ctx.starPeerPreserved,
+            "refill=" .. tostring(ctx.starRecoveredImmediately) .. "; peer=" .. tostring(ctx.starPeerPreserved)
+    end)
+    check("Star recovery adds no damage or conversion reward", function(player, ctx)
+        return math.abs(player.Damage - ctx.starDamage) < 0.001 and owns(player, C.COLLECTIBLE_COMPASS) == ctx.starCompasses,
+            string.format("damage %.4f -> %.4f; Compass %d -> %d", ctx.starDamage, player.Damage,
+                ctx.starCompasses, owns(player, C.COLLECTIBLE_COMPASS))
+    end)
+    act(function(player, ctx)
+        player:GetData().__chronusNextStarOfBethlehemSpawnFrame = Game():GetFrameCount()
+        ConchBlessing.chronus._ensureStarOfBethlehemStack(player)
+        ctx.starAuraRefreshed = ctx.starSurvivor and not ctx.starSurvivor:Exists()
+            and #(player:GetData().__chronusStarsOfBethlehem or {}) == 2
+    end)
+    check("native inactive-aura refresh retained", function(_, ctx)
+        return ctx.starAuraRefreshed, "refreshed=" .. tostring(ctx.starAuraRefreshed)
+    end)
 
     -- floor picks ---------------------------------------------------------------------------
     section("floor", nil)
