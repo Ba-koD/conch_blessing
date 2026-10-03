@@ -533,22 +533,11 @@ if EID then
             local currentDeathChance = ConchBlessing.injectablsteroids.data.currentInstantDeathPercent
             local floorUseCount = ConchBlessing.injectablsteroids.data.currentFloorUseCount
             
-            -- Get current language for localization (auto-detect from EID/game)
-            local ConchBlessing_Config = require("scripts.conch_blessing_config")
-            local currentLang = ConchBlessing_Config.GetCurrentLanguage()
-            
-            -- Add death chance info to description
-            local deathChanceText = ""
-            if currentLang == "kr" then
-                deathChanceText = "#{{ColorRed}}현재 즉사 확률: " .. tostring(currentDeathChance) .. "%{{CR}}"
-                if floorUseCount > 0 then
-                    deathChanceText = deathChanceText .. " (이번 층 사용: " .. tostring(floorUseCount) .. "회)"
-                end
-            else
-                deathChanceText = "#{{ColorRed}}Current Death Chance: " .. tostring(currentDeathChance) .. "%{{CR}}"
-                if floorUseCount > 0 then
-                    deathChanceText = deathChanceText .. " (Used this floor: " .. tostring(floorUseCount) .. " times)"
-                end
+            -- Add death chance info to description (text: ui.injectable_steroids in scripts/locale)
+            local Locale = ConchBlessing.Locale
+            local deathChanceText = Locale.text("ui.injectable_steroids.death_chance", tostring(currentDeathChance))
+            if floorUseCount > 0 then
+                deathChanceText = deathChanceText .. Locale.text("ui.injectable_steroids.floor_uses", tostring(floorUseCount))
             end
             
             -- Append to existing description

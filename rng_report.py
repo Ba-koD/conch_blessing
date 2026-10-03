@@ -40,6 +40,8 @@ SRC = {
     "money": "scripts/items/familiars/time_money.lua",
     "aminus": "scripts/items/trinkets/a_minus.lua",
     "crown": "scripts/items/trinkets/angels_crown.lua",
+    "chronus": "scripts/items/collectibles/chronus.lua",
+    "liveeye": "scripts/items/collectibles/live_eye.lua",
 }
 
 _cache: dict[str, list[str]] = {}
@@ -85,6 +87,58 @@ def cite(key: str, needle: str) -> str:
         if needle in ln:
             return f"`{SRC[key]}:{i + 1}`"
     sys.exit(f"ERROR: snippet {needle!r} not found in {SRC[key]}")
+
+
+def const_table(key: str, name: str) -> list[tuple[str, float, str]]:
+    """Return [(entry, value, "file:line")] for `local name = { [X.ENTRY] = n, ... }`."""
+    src_lines = lines(key)
+    start = next((i for i, ln in enumerate(src_lines)
+                  if re.match(r"^\s*(?:local\s+)?" + re.escape(name) + r"\s*=\s*\{", ln)), None)
+    if start is None:
+        sys.exit(f"ERROR: table {name!r} not found in {SRC[key]}")
+    rows = []
+    for i in range(start + 1, len(src_lines)):
+        ln = src_lines[i]
+        if re.match(r"^\s*\}", ln):
+            break
+        m = re.match(r"^\s*\[[\w.]*?(\w+)\]\s*=\s*(-?[\d.]+)\s*,?", ln)
+        if m:
+            rows.append((m.group(1), float(m.group(2)), f"`{SRC[key]}:{i + 1}`"))
+    if not rows:
+        sys.exit(f"ERROR: table {name!r} in {SRC[key]} has no numeric entries")
+    return rows
+
+
+def const_list(key: str, name: str) -> tuple[list[str], str]:
+    """Return ([entry, ...], "file:line") for `local name = { X.ENTRY, ... }`."""
+    src_lines = lines(key)
+    start = next((i for i, ln in enumerate(src_lines)
+                  if re.match(r"^\s*(?:local\s+)?" + re.escape(name) + r"\s*=\s*\{", ln)), None)
+    if start is None:
+        sys.exit(f"ERROR: list {name!r} not found in {SRC[key]}")
+    entries = []
+    for ln in src_lines[start + 1:]:
+        if re.match(r"^\s*\}", ln):
+            break
+        m = re.match(r"^\s*[\w.]*?(\w+)\s*,?\s*(?:--.*)?$", ln)
+        if m:
+            entries.append(m.group(1))
+    if not entries:
+        sys.exit(f"ERROR: list {name!r} in {SRC[key]} has no entries")
+    return entries, f"`{SRC[key]}:{start + 1}`"
+
+
+def pick_random_copies(copies: list, count: int, randint) -> list:
+    """Transcribes chronus.lua pickRandomCopies: a partial Fisher-Yates shuffle,
+    randint(n) returning 0..n-1 like RNG:RandomInt."""
+    work = list(copies)
+    n = len(work)
+    picked = []
+    for i in range(1, min(max(0, count), n) + 1):
+        j = i + randint(n - i + 1)
+        work[i - 1], work[j - 1] = work[j - 1], work[i - 1]
+        picked.append(work[i - 1])
+    return picked
 
 
 # --------------------------------------------------------------------------- model
@@ -416,6 +470,124 @@ def build(samples: int, seed: int) -> str:
                      f"{1 - (1 - one_mod) ** n:.1%}",
                      f"{1 - (1 - both_mod) ** n:.1%}"])
     w("\n".join(table(["Treasure Rooms", "one modifier", "both"], rows)))
+    w("")
+
+    # 9 --------------------------------------------------------------------------
+    block = const_table("chronus", "PROJECTILE_BLOCK_PERCENT")
+    per_stack, per_stack_cite = const("chronus", "SPAWN_CHANCE_PER_STACK")
+    w("## 9. Chronus projectile block and blue fly / spider spawns")
+    w("")
+    w("Absorbed barrier familiars add a flat percentage per absorbed copy to one chance")
+    w("of ignoring an enemy projectile hit, capped at 100% "
+      f"({cite('chronus', 'return math.min(1, percent / 100)')}). The roll is")
+    w("`RandomFloat() < chance` on the Chronus collectible RNG, uniform on `[0, 1)`, so the")
+    w("effective odds equal the configured sum.")
+    w("")
+    rows = [[entry.replace("COLLECTIBLE_", ""), f"{value:g}%", where] for entry, value, where in block]
+    w("\n".join(table(["Familiar", "Per copy", "Source"], rows)))
+    w("")
+    every_once = sum(v for _, v, _ in block)
+    w(f"One copy of every listed familiar adds up to **{every_once:g}%**.")
+    w("")
+    rows = []
+    for label, pct in (("one 1% familiar", 1.0), ("Sworn Protector + Psy Fly", 10.0),
+                       ("every listed familiar once", every_once)):
+        p = min(1.0, pct / 100)
+        hits = sum(1 for _ in range(samples) if rng.random() < p)
+        rows.append([label, f"**{p:.1%}**", f"{hits / samples:.3%}"])
+    w("\n".join(table(["Absorbed", "Exact P", "Measured"], rows)))
+    w("")
+    w(f"Blue fly (Rotten Baby, 7 Seals) and blue spider (Juicy Sack, Sissy Longlegs) spawns")
+    w(f"add {per_stack:.0%} per absorbed copy ({per_stack_cite}), capped at 100%. Each")
+    w("physical attack claims one roll before the RNG, so a piercing tear or a beam rolls")
+    w("once across all of its targets, and a familiar body (the spawned flies and spiders")
+    w("themselves) cannot claim one.")
+    w("")
+    rows = []
+    for stacks in (1, 2, 3):
+        p = min(1.0, per_stack * stacks)
+        hits = sum(1 for _ in range(samples) if rng.random() < p)
+        rows.append([str(stacks), f"**{p:.0%}**", f"{hits / samples:.3%}"])
+    w("\n".join(table(["Absorbed copies", "Exact P per attack", "Measured"], rows)))
+    w("")
+
+    # 10 -------------------------------------------------------------------------
+    procs = const_table("chronus", "PROC_CHANCE_PERCENT")
+    intervals = const_table("chronus", "CLEAR_REWARD_INTERVAL")
+    paschal, paschal_cite = const("chronus", "PASCHAL_TEARS_PER_CLEAR")
+    effects, effects_cite = const_list("chronus", "FLOOR_PICK_EFFECTS")
+    w("## 10. Chronus chance effects, room-clear drops, GB Bug and floor picks")
+    w("")
+    w("Each chance effect adds its percentage per absorbed copy, capped at 100% "
+      f"({cite('chronus', 'return math.min(1, stacked / 100)')}), rolled as")
+    w("`RandomFloat() < chance` on the familiar's own collectible RNG. Attack procs claim one")
+    w("roll per physical attack before the RNG; room-clear drops roll once per cleared room;")
+    w("Dry Baby rolls once per hit taken.")
+    w("")
+    rows = []
+    for entry, pct, where in procs:
+        p1 = min(1.0, pct / 100)
+        hits = sum(1 for _ in range(samples) if rng.random() < p1)
+        rows.append([entry.replace("COLLECTIBLE_", ""), f"{pct:g}%", f"**{p1:.0%}**",
+                     f"{hits / samples:.3%}", f"{min(1.0, 2 * pct / 100):.0%}",
+                     f"{min(1.0, 3 * pct / 100):.0%}", where])
+    w("\n".join(table(["Familiar", "Per copy", "1 copy", "Measured", "2 copies", "3 copies", "Source"], rows)))
+    w("")
+    w("Counter drops are not random: each cleared room advances a saved counter, and every")
+    w("absorbed copy adds one drop when it reaches the interval.")
+    w("")
+    rows = [[entry.replace("COLLECTIBLE_", ""), f"{value:g}", f"{1 / value:.3f}", where]
+            for entry, value, where in intervals]
+    w("\n".join(table(["Familiar", "Rooms per drop", "Drops per room per copy", "Source"], rows)))
+    w("")
+    w(f"Paschal Candle adds {paschal:g} tears per copy for every room clear, uncapped "
+      f"({paschal_cite}); it is stored as whole hundredths, so it never drifts.")
+    w("")
+    n_copies, n_pick = 6, 3
+    counts = [0] * n_copies
+    trials = max(1, samples // 4)
+    for _ in range(trials):
+        for idx in pick_random_copies(list(range(n_copies)), n_pick, lambda k: rng.randrange(k)):
+            counts[idx] += 1
+    spread = max(counts) / trials - min(counts) / trials
+    w("GB Bug hands back `floor(N / 2)` of the `N` other absorbed copies, chosen without")
+    w(f"replacement by a partial Fisher-Yates shuffle ({cite('chronus', 'local j = i + randomInt(n - i + 1)')}),")
+    w(f"so each copy returns with probability `floor(N/2) / N`. With N = {n_copies} every copy")
+    w(f"should return {n_pick / n_copies:.0%} of the time; over {trials} trials the per-copy rate")
+    w(f"ranges {min(counts) / trials:.3%} to {max(counts) / trials:.3%} (spread {spread:.3%}).")
+    w("")
+    block_entries = [entry for entry, _, _ in const_table("chronus", "PROJECTILE_BLOCK_PERCENT")]
+    pool = sorted(set(effects) | set(block_entries))
+    w(f"Buddy in a Box / Lil Delirium draw one familiar per copy and floor, with replacement,")
+    w(f"uniformly from {len(pool)} candidates: the {len(effects)} effect familiars in")
+    w(f"`FLOOR_PICK_EFFECTS` ({effects_cite}) plus the {len(block_entries)} projectile-block familiars,")
+    w(f"each at **{1 / len(pool):.3%}** per pick.")
+    w("")
+    pretty, pretty_cite = const("chronus", "PRETTY_FLY_BLOCK_PERCENT")
+    altar, altar_cite = const("chronus", "ALTAR_MAX_SACRIFICES")
+    w("Temporary familiars reuse the same draws. A Pretty Fly pill fly absorbed under")
+    w(f"REPENTOGON adds **{pretty:g}%** to the projectile block above ({pretty_cite}). When The Twins")
+    w("duplicates, it picks one absorbed effect familiar uniformly with its trinket RNG. Sacrificial")
+    w(f"Altar takes up to {altar:g} copies ({altar_cite}), owned familiars first and the rest from the")
+    w("absorbed pool through the same partial Fisher-Yates draw as GB Bug.")
+    w("")
+
+    # 11 -------------------------------------------------------------------------
+    base, base_cite = const("liveeye", "missForgiveBaseChance")
+    per_luck, per_luck_cite = const("liveeye", "missForgiveLuckBonus")
+    w("## 11. Live Eye miss forgiveness")
+    w("")
+    w(f"A tear that misses lowers the damage multiplier unless a roll forgives it: base {base:.0%}")
+    w(f"({base_cite}) plus {per_luck:.0%} per point of luck ({per_luck_cite}), clamped to `[0, 1]`")
+    w(f"({cite('liveeye', 'return math.max(0, math.min(1, chance))')}). The roll is `RandomFloat() < chance` on")
+    w("the Live Eye collectible RNG of the tear's owner, so the effective odds equal the formula.")
+    w("")
+    rows = []
+    for luck in (-10, -5, -2, 0, 1, 3, 5, 8, 10, 15):
+        p = max(0.0, min(1.0, base + per_luck * luck))
+        hits = sum(1 for _ in range(samples) if rng.random() < p)
+        rows.append([str(luck), f"**{p:.0%}**", f"{hits / samples:.3%}"])
+    w("\n".join(table(["Luck", "Exact P (no loss)", "Measured"], rows)))
     w("")
 
     return "\n".join(md) + "\n"

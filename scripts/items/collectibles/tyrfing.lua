@@ -167,17 +167,8 @@ if EID then
                 accDmg = data.accumulatedDamage or 0
             end
             
-            -- Get current language
-            local ConchBlessing_Config = require("scripts.conch_blessing_config")
-            local currentLang = ConchBlessing_Config.GetCurrentLanguage()
-            
-            -- Add accumulated damage info to description
-            local infoText = ""
-            if currentLang == "kr" then
-                infoText = "#{{Damage}} 누적 공격력: +" .. string.format("%.2f", accDmg)
-            else
-                infoText = "#{{Damage}} Accumulated damage: +" .. string.format("%.2f", accDmg)
-            end
+            -- Add accumulated damage info to description (text: ui.tyrfing in scripts/locale)
+            local infoText = ConchBlessing.Locale.text("ui.tyrfing.accumulated_damage", string.format("%.2f", accDmg))
             
             -- Append to existing description
             descObj.Description = descObj.Description .. infoText
