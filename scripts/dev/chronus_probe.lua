@@ -107,11 +107,11 @@ local SCENARIOS = {
     },
     {
         key = "pinned",
-        about = "Bloodshot Eye, Mongo Baby x3, Succubus, Star of Bethlehem",
+        about = "Bloodshot Eye, Mongo Baby x3, Censer, Succubus, Star of Bethlehem x2",
         give = { { C.COLLECTIBLE_BLOODSHOT_EYE, 1 }, { C.COLLECTIBLE_MONGO_BABY, 3 }, { C.COLLECTIBLE_SUCCUBUS, 1 },
-            { C.COLLECTIBLE_STAR_OF_BETHLEHEM, 1 } },
+            { C.COLLECTIBLE_CENSER, 1 }, { C.COLLECTIBLE_STAR_OF_BETHLEHEM, 2 } },
         enemies = { "fatty", 2 },
-        checks = { "no Bloodshot Eye body, but it shoots from you; Succubus/Star aura visible, no body/shadow",
+        checks = { "no Bloodshot Eye body, but it shoots from you; Censer/Succubus/Star aura visible, no body/shadow",
             "3 Minisaacs; after one dies, the next room refills to 3" },
     },
     {
@@ -295,7 +295,7 @@ function probe.help()
     for _, scenario in ipairs(SCENARIOS) do
         out(string.format("  %-9s %s", scenario.key, scenario.about))
     end
-    out("helpers: status | hurtme | clearsim [n] | enemies [n] | give <id> [n] | drop")
+    out("helpers: aura (automatic Boss Rush check) | status | hurtme | clearsim [n] | enemies [n] | give <id> [n] | drop")
 end
 
 function probe.run(scenario, player)
@@ -422,6 +422,7 @@ local function buildPlan(plan)
     local act, wait, check, section, waitUntil = plan.act, plan.wait, plan.check, plan.section, plan.waitUntil
     local eqCheck, atLeast = plan.eq, plan.atLeast
 
+    if not probe._auraOnly then
     -- setup ----------------------------------------------------------------
     section("setup", nil)
     act(function(player, ctx)
@@ -563,7 +564,6 @@ local function buildPlan(plan)
         player:AddCacheFlags(CacheFlag.CACHE_FAMILIARS)
         player:EvaluateItems()
         player:AddCollectible(CHRONUS_ID, 0, false)
-        if ConchBlessing.Config then ConchBlessing.Config.debugMode = ctx.savedDebugMode end
     end)
     wait(10)
 
@@ -744,10 +744,10 @@ local function buildPlan(plan)
     end)
 
     -- pinned familiars -------------------------------------------------------------------
-    section("pinned", "Succubus / Star auras around you with no body or shadow; no Bloodshot Eye body")
+    section("pinned", "Censer / Succubus / Star auras around you with no body or shadow; no Bloodshot Eye body")
     act(function(player)
         giveAll(player, { { C.COLLECTIBLE_BLOODSHOT_EYE, 1 }, { C.COLLECTIBLE_MONGO_BABY, 3 },
-            { C.COLLECTIBLE_SUCCUBUS, 1 }, { C.COLLECTIBLE_STAR_OF_BETHLEHEM, 1 } })
+            { C.COLLECTIBLE_SUCCUBUS, 1 }, { C.COLLECTIBLE_CENSER, 1 }, { C.COLLECTIBLE_STAR_OF_BETHLEHEM, 2 } })
     end)
     wait(60)
     eqCheck("hidden Bloodshot Eye pinned", function()
@@ -759,6 +759,51 @@ local function buildPlan(plan)
     eqCheck("Succubus aura pinned", function()
         return countEntities(EntityType.ENTITY_FAMILIAR, FamiliarVariant.SUCCUBUS, -1,
             function(e) return e:GetData().__chronusSuccubus end) end, 1)
+    check("Censer body hidden and native halo retained", function(player)
+        local familiar = (player:GetData().__chronusCensers or {})[1]
+        if not familiar or not familiar:Exists() then return false, "Censer anchor missing" end
+        local sprite = familiar:GetSprite()
+        if type(sprite.GetLayer) ~= "function" then return nil, "layer inspection unavailable; see LOOK" end
+        local ok, body, halo = pcall(function()
+            return sprite:GetLayer(0):GetSpritesheetPath(), sprite:GetLayer(1):GetSpritesheetPath()
+        end)
+        if not ok then return nil, "layer path inspection unavailable; see LOOK" end
+        body, halo = tostring(body):lower():gsub("\\", "/"), tostring(halo):lower():gsub("\\", "/")
+        return body:match("gfx/ui/null%.png$") ~= nil and halo:match("censer halo%.png$") ~= nil
+            and familiar.Visible, "body=" .. body .. "; halo=" .. halo
+    end)
+    eqCheck("two Star aura anchors", function(player)
+        return #(player:GetData().__chronusStarsOfBethlehem or {}) end, 2)
+    act(function(player, ctx)
+        local data = player:GetData()
+        local stars = data.__chronusStarsOfBethlehem or {}
+        ctx.starDamage = player.Damage
+        ctx.starCompasses = owns(player, C.COLLECTIBLE_COMPASS)
+        ctx.starSurvivor = stars[2]
+        if stars[1] then stars[1]:Remove() end
+        ConchBlessing.chronus._ensureStarOfBethlehemStack(player)
+        ctx.starRecoveredImmediately = #(data.__chronusStarsOfBethlehem or {}) == 2
+        ctx.starPeerPreserved = ctx.starSurvivor and ctx.starSurvivor:Exists()
+            and data.__chronusStarsOfBethlehem[1] == ctx.starSurvivor
+    end)
+    check("missing Star refilled immediately; healthy peer retained", function(_, ctx)
+        return ctx.starRecoveredImmediately and ctx.starPeerPreserved,
+            "refill=" .. tostring(ctx.starRecoveredImmediately) .. "; peer=" .. tostring(ctx.starPeerPreserved)
+    end)
+    check("Star recovery adds no damage or conversion reward", function(player, ctx)
+        return math.abs(player.Damage - ctx.starDamage) < 0.001 and owns(player, C.COLLECTIBLE_COMPASS) == ctx.starCompasses,
+            string.format("damage %.4f -> %.4f; Compass %d -> %d", ctx.starDamage, player.Damage,
+                ctx.starCompasses, owns(player, C.COLLECTIBLE_COMPASS))
+    end)
+    act(function(player, ctx)
+        player:GetData().__chronusNextStarOfBethlehemSpawnFrame = Game():GetFrameCount()
+        ConchBlessing.chronus._ensureStarOfBethlehemStack(player)
+        ctx.starAuraRefreshed = ctx.starSurvivor and not ctx.starSurvivor:Exists()
+            and #(player:GetData().__chronusStarsOfBethlehem or {}) == 2
+    end)
+    check("native inactive-aura refresh retained", function(_, ctx)
+        return ctx.starAuraRefreshed, "refreshed=" .. tostring(ctx.starAuraRefreshed)
+    end)
 
     -- floor picks ---------------------------------------------------------------------------
     section("floor", nil)
@@ -992,12 +1037,109 @@ local function buildPlan(plan)
     end)
     eqCheck("granted Aquarius taken back", function(p) return owns(p, C.COLLECTIBLE_AQUARIUS) end, 0)
     eqCheck("ledger cleared", function() return totalAbsorbed() end, 0)
+    else
+        section("setup", nil)
+        act(function(_, ctx)
+            ctx.savedDebugMode = ConchBlessing.Config and ConchBlessing.Config.debugMode
+            if ConchBlessing.Config then ConchBlessing.Config.debugMode = false end
+            ConchBlessing.chronus._runReady = true
+        end)
+    end
+    probe._auraOnly = nil
+
+    -- Actual native aura stats, rather than merely counting Star entities.
+    section("Star aura: Boss Rush", "Star aura should remain visible around the player in Boss Rush; timer/stat checks do not prove the visual")
+    act(function(player, ctx)
+        local config = Isaac.GetItemConfig()
+        for id = 1, C.NUM_COLLECTIBLES - 1 do
+            local item = config:GetCollectible(id)
+            if item and item.Type == ItemType.ITEM_FAMILIAR then
+                while player:HasCollectible(id, true) do player:RemoveCollectible(id) end
+            end
+        end
+        -- Chronus loss restores temporary familiar effects too. Clear those
+        -- previous scenarios before measuring a single new absorption.
+        for id in pairs(ConchBlessing.chronus._test.readTemporaryFamiliarEffects(player)) do
+            player:GetEffects():RemoveCollectibleEffect(id, -1)
+        end
+        ctx.starAuraAPI = type(player.GetHallowedGroundCountdown) == "function"
+            and type(player.SetHallowedGroundCountdown) == "function"
+        Isaac.ExecuteCommand("goto s.bossrush")
+    end)
+    waitUntil(function() return Game():GetRoom():GetType() == RoomType.ROOM_BOSSRUSH end, 120)
+    eqCheck("entered real Boss Rush", function() return Game():GetRoom():GetType() end, RoomType.ROOM_BOSSRUSH)
+    waitUntil(function(player, ctx)
+        return not ctx.starAuraAPI or player:GetHallowedGroundCountdown() <= 0
+    end, 120)
+    act(function(player)
+        player:AddCollectible(CHRONUS_ID, 0, false)
+    end)
+    wait(10)
+    check("isolated baseline has no absorption damage", function(player)
+        local state = ConchBlessing.getUnifiedMultiplierState(player, ConchBlessing.stats.unifiedMultipliers)
+        local entry = state and state.itemAdditions and state.itemAdditions[CHRONUS_ID]
+        local damage = entry and entry.Damage and entry.Damage.cumulative or 0
+        return totalAbsorbed() == 0 and math.abs(damage) < 0.001,
+            string.format("absorbed=%d; registered damage=%.4f", totalAbsorbed(), damage)
+    end)
+    act(function(player, ctx)
+        player:AddCacheFlags(CacheFlag.CACHE_DAMAGE | CacheFlag.CACHE_FIREDELAY | CacheFlag.CACHE_TEARFLAG)
+        player:EvaluateItems()
+        ctx.starAuraBaseDamage = player.Damage
+        ctx.starAuraBaseDelay = player.MaxFireDelay
+        player:AddCollectible(C.COLLECTIBLE_STAR_OF_BETHLEHEM, 0, false)
+    end)
+    waitUntil(function(player, ctx)
+        return absorbed(player, C.COLLECTIBLE_STAR_OF_BETHLEHEM) == 1
+            and (not ctx.starAuraAPI or player:GetHallowedGroundCountdown() > 0)
+    end, 120)
+    check("native aura active in Boss Rush", function(player, ctx)
+        if not ctx.starAuraAPI then return nil, "optional REPENTOGON aura API unavailable" end
+        local countdown = player:GetHallowedGroundCountdown()
+        return countdown > 0 and absorbed(player, C.COLLECTIBLE_STAR_OF_BETHLEHEM) == 1,
+            "countdown=" .. countdown .. "; absorbed=" .. absorbed(player, C.COLLECTIBLE_STAR_OF_BETHLEHEM)
+    end)
+    check("native aura raises damage beyond flat +2 and improves fire rate", function(player, ctx)
+        if not ctx.starAuraAPI then return nil, "optional REPENTOGON aura API unavailable" end
+        return player.Damage > ctx.starAuraBaseDamage + 2.001 and player.MaxFireDelay < ctx.starAuraBaseDelay - 0.001,
+            string.format("damage %.4f -> %.4f; fire delay %.4f -> %.4f", ctx.starAuraBaseDamage,
+                player.Damage, ctx.starAuraBaseDelay, player.MaxFireDelay)
+    end)
+    wait(45)
+    check("native aura remains active beyond its renewed grace period", function(player, ctx)
+        if not ctx.starAuraAPI then return nil, "optional REPENTOGON aura API unavailable" end
+        return player:GetHallowedGroundCountdown() > 0 and player.Damage > ctx.starAuraBaseDamage + 2.001,
+            "countdown=" .. player:GetHallowedGroundCountdown() .. "; damage=" .. player.Damage
+    end)
+    act(function(player)
+        -- Losing the converted reward removes its exact absorbed source and +2.
+        while player:HasCollectible(C.COLLECTIBLE_COMPASS, true) do player:RemoveCollectible(C.COLLECTIBLE_COMPASS) end
+    end)
+    waitUntil(function(player, ctx)
+        return absorbed(player, C.COLLECTIBLE_STAR_OF_BETHLEHEM) == 0
+            and (not ctx.starAuraAPI or player:GetHallowedGroundCountdown() <= 0)
+    end, 120)
+    check("reward loss expires the native aura and its independent +2", function(player, ctx)
+        if not ctx.starAuraAPI then return nil, "optional REPENTOGON aura API unavailable" end
+        return player:GetHallowedGroundCountdown() <= 0
+            and math.abs(player.Damage - ctx.starAuraBaseDamage) < 0.001
+            and math.abs(player.MaxFireDelay - ctx.starAuraBaseDelay) < 0.001,
+            string.format("countdown=%d; damage %.4f -> %.4f; fire delay %.4f -> %.4f",
+                player:GetHallowedGroundCountdown(), ctx.starAuraBaseDamage, player.Damage,
+                ctx.starAuraBaseDelay, player.MaxFireDelay)
+    end)
+    act(function(_, ctx)
+        if ConchBlessing.Config then ConchBlessing.Config.debugMode = ctx.savedDebugMode end
+    end)
 end
 
 -- Manual setups and helpers, reached as `conch_chronus <action>`.
 local function handleCommand(action, words, player)
     local scenario = findScenario(action)
-    if scenario then
+    if action == "aura" then
+        probe._auraOnly = true
+        if not TestBench.start("conch_chronus", true) then probe._auraOnly = nil end
+    elseif scenario then
         probe.run(scenario, player)
     elseif action == "status" then
         probe.status(player)
