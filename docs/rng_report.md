@@ -366,3 +366,23 @@ duplicates, it picks one absorbed effect familiar uniformly with its trinket RNG
 Altar takes up to 2 copies (`scripts/items/collectibles/chronus.lua:2984`), owned familiars first and the rest from the
 absorbed pool through the same partial Fisher-Yates draw as GB Bug.
 
+## 11. Live Eye miss forgiveness
+
+A tear that misses lowers the damage multiplier unless a roll forgives it: base 50%
+(`scripts/items/collectibles/live_eye.lua:11`) plus 5% per point of luck (`scripts/items/collectibles/live_eye.lua:12`), clamped to `[0, 1]`
+(`scripts/items/collectibles/live_eye.lua:26`). The roll is `RandomFloat() < chance` on
+the Live Eye collectible RNG of the tear's owner, so the effective odds equal the formula.
+
+| Luck | Exact P (no loss) | Measured |
+|---|---|---|
+| -10 | **0%** | 0.000% |
+| -5 | **25%** | 25.034% |
+| -2 | **40%** | 39.865% |
+| 0 | **50%** | 49.827% |
+| 1 | **55%** | 55.032% |
+| 3 | **65%** | 65.130% |
+| 5 | **75%** | 75.126% |
+| 8 | **90%** | 89.829% |
+| 10 | **100%** | 100.000% |
+| 15 | **100%** | 100.000% |
+

@@ -41,6 +41,7 @@ SRC = {
     "aminus": "scripts/items/trinkets/a_minus.lua",
     "crown": "scripts/items/trinkets/angels_crown.lua",
     "chronus": "scripts/items/collectibles/chronus.lua",
+    "liveeye": "scripts/items/collectibles/live_eye.lua",
 }
 
 _cache: dict[str, list[str]] = {}
@@ -569,6 +570,24 @@ def build(samples: int, seed: int) -> str:
     w("duplicates, it picks one absorbed effect familiar uniformly with its trinket RNG. Sacrificial")
     w(f"Altar takes up to {altar:g} copies ({altar_cite}), owned familiars first and the rest from the")
     w("absorbed pool through the same partial Fisher-Yates draw as GB Bug.")
+    w("")
+
+    # 11 -------------------------------------------------------------------------
+    base, base_cite = const("liveeye", "missForgiveBaseChance")
+    per_luck, per_luck_cite = const("liveeye", "missForgiveLuckBonus")
+    w("## 11. Live Eye miss forgiveness")
+    w("")
+    w(f"A tear that misses lowers the damage multiplier unless a roll forgives it: base {base:.0%}")
+    w(f"({base_cite}) plus {per_luck:.0%} per point of luck ({per_luck_cite}), clamped to `[0, 1]`")
+    w(f"({cite('liveeye', 'return math.max(0, math.min(1, chance))')}). The roll is `RandomFloat() < chance` on")
+    w("the Live Eye collectible RNG of the tear's owner, so the effective odds equal the formula.")
+    w("")
+    rows = []
+    for luck in (-10, -5, -2, 0, 1, 3, 5, 8, 10, 15):
+        p = max(0.0, min(1.0, base + per_luck * luck))
+        hits = sum(1 for _ in range(samples) if rng.random() < p)
+        rows.append([str(luck), f"**{p:.0%}**", f"{hits / samples:.3%}"])
+    w("\n".join(table(["Luck", "Exact P (no loss)", "Measured"], rows)))
     w("")
 
     return "\n".join(md) + "\n"

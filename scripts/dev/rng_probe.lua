@@ -158,6 +158,7 @@ function probe.flatChances(luck)
         { "SOFLAM target",     hook("soflam", "getProcChance") },
         { "Ice Breath freeze", hook("icebreath", "getFreezeChance") },
         { "Fire Breath burn",  hook("firebreath", "getBurnChance") },
+        { "Live Eye miss kept", hook("liveeye", "getMissForgiveChance") },
     }
     for _, row in ipairs(rows) do
         if row[2] then
@@ -340,6 +341,30 @@ function probe.chronus(samples)
         #pool, 100 / #pool, lo * 100, hi * 100))
 end
 
+-- ------------------------------------------------------------------- live eye
+function probe.liveEye(samples, luck)
+    header("Live Eye miss forgiveness")
+    local t = ConchBlessing.liveeye and ConchBlessing.liveeye._test
+    if not t then out("SKIPPED (module not loaded)") return end
+    local rng = RNG()
+    local seed = Random()
+    if seed == 0 then seed = 1 end
+    rng:SetSeed(seed, 35)
+    local cases = { -10, 0, 5, 10 }
+    if luck ~= nil then cases[#cases + 1] = luck end
+    for _, l in ipairs(cases) do
+        local chance = t.getMissForgiveChance({ Luck = l })
+        local kept = quietly(function()
+            local n = 0
+            for _ = 1, samples do
+                if rng:RandomFloat() < chance then n = n + 1 end
+            end
+            return n
+        end)
+        out(string.format("  Luck %-4s configured=%6.2f%%  measured=%7.3f%%", tostring(l), chance * 100, kept / samples * 100))
+    end
+end
+
 -- --------------------------------------------------------------- death spiral
 function probe.injectableDeath()
     header("Injectable Steroids instant death (cumulative over one floor)")
@@ -398,6 +423,7 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, cmd, params)
     probe.aMinus(samples)
     probe.angelsCrown(samples)
     probe.chronus(samples)
+    probe.liveEye(samples, luck)
     probe.injectableDeath()
     out("")
     out("conch_rng: done")

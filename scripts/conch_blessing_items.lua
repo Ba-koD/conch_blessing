@@ -154,10 +154,14 @@ ConchBlessing.ItemData = {
         eid ={
             kr = {"몬스터를 적중시킬때 마다 {{Damage}}데미지 배수가 0.1씩 증가합니다.",
             "#몬스터에 맞지 않으면 {{Damage}}데미지 배수가 0.15씩 감소합니다.",
-            "#{{Damage}} 최대/최소 데미지 배수 (x3.0/x0.75)"},
+            "#{{Luck}} 맞지 않아도 50% 확률로 감소하지 않습니다. (행운 1당 +5%, 행운 10 이상 100%)",
+            "#{{Damage}} 최대/최소 데미지 배수 (x3.0/x0.75)",
+            "#눈물이 아닌 공격을 사용하면 {{Damage}}데미지 배수가 x1.5로 고정됩니다."},
             en = {"{{Damage}} Damage multiplier increases by 0.1 as you hit enemies.",
             "#{{Damage}} Damage multiplier decreases by 0.15 as you miss enemies.",
-            "#{{Damage}} Damage multiplier is capped at 3.0 and cannot go below 0.75."},
+            "#{{Luck}} 50% chance for a miss not to lower it (+5% per luck, 100% at 10 luck or more).",
+            "#{{Damage}} Damage multiplier is capped at 3.0 and cannot go below 0.75.",
+            "#With a non-tear attack, the {{Damage}}damage multiplier is fixed at x1.5."},
         },
         pool = {
             -- Use default values (weight=1.0, decrease_by=1, remove_on=0.1)
@@ -186,6 +190,7 @@ ConchBlessing.ItemData = {
         callbacks = {
             pickup = "liveeye.onPickup",
             evaluateCache = "liveeye.onEvaluateCache",
+            postPlayerUpdate = "liveeye.onPlayerUpdate",
             fireTear = "liveeye.onFireTear",
             tearCollision = "liveeye.onTearCollision",
             tearRemoved = "liveeye.onTearRemoved",
@@ -193,8 +198,8 @@ ConchBlessing.ItemData = {
         },
         synergies = {
             [{ id = CollectibleType.COLLECTIBLE_ROCK_BOTTOM, type = "collectible" }] = {
-                kr = "획득하는 즉시 데미지 배수가 최대치가 됩니다",
-                en = "When obtained, damage multiplier is set to the maximum value"
+                kr = "데미지 배수가 최대치인 x3.0으로 고정됩니다. (눈물이 아닌 공격이어도 동일)",
+                en = "The damage multiplier is fixed at the maximum, x3.0 (also with a non-tear attack)."
             },
         }
     },
@@ -3288,5 +3293,13 @@ do
     local ok, err = pcall(require, "scripts.dev.chronus_probe")
     if not ok then
         ConchBlessing.printError("[ChronusProbe] load failed: " .. tostring(err))
+    end
+end
+
+-- Dev tooling: registers the conch_liveeye test bench. Safe to remove.
+do
+    local ok, err = pcall(require, "scripts.dev.liveeye_probe")
+    if not ok then
+        ConchBlessing.printError("[LiveEyeProbe] load failed: " .. tostring(err))
     end
 end
