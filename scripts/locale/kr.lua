@@ -147,7 +147,7 @@ return {
             synergies = {
                 twisted_pair = "37.5% 데미지의 공격을 2개 추가합니다.",
                 succubus = "내 주변으로 오라가 고정됩니다.",
-                incubus = "75% 데미지의 공격을 1개 추가합니다..",
+                incubus = "75% 데미지의 공격을 1개 추가합니다.",
                 seraphim = {
                     "공중, 지형관통 효과를 얻습니다.",
                     "{c:SACRED_HEART} 신성한 심장을 획득합니다. (최초 1회)",
