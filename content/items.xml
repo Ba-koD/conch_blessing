@@ -7,7 +7,7 @@
     <passive id="4" name="Oral Steroids" gfx="oral_steroids.png" quality="2" tags="offensive" cache="damage firedelay range luck" shopprice="20" devilprice="1"/>
     <active id="5" name="Injectable Steroids" gfx="injectable_steroids.png" quality="3" tags="offensive" cache="damage firedelay range luck" shopprice="15" devilprice="2" maxcharges="12" chargetype="normal" initcharge="6"/>
     <passive id="6" name="Dragon" gfx="dragon.png" quality="4" tags="offensive" cache="flying tearflag" shopprice="20" devilprice="2"/>
-    <passive id="7" name="Chronus" gfx="chronus.png" quality="4" tags="offensive" cache="damage firedelay"/>
+    <passive id="7" name="Cronus" gfx="cronus.png" quality="4" tags="offensive" cache="damage firedelay"/>
     <active id="8" name="Appraisal Certificate" gfx="appraisal_certificate.png" quality="3" tags="offensive" shopprice="20" devilprice="2" maxcharges="0"/>
     <passive id="9" name="Money = Tear" gfx="money_tear.png" quality="4" tags="offensive" cache="tears" shopprice="20"/>
     <passive id="10" name="Utility Belt" gfx="utility_belt.png" quality="3" tags="utility" shopprice="15"/>

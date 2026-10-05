@@ -17,8 +17,8 @@ local MR_MEGA_ID = (CollectibleType and (CollectibleType.COLLECTIBLE_MR_MEGA or 
 ConchBlessing.soflam.data = {
     baseProcPercent     = 10,      -- base 10% chance
     luckProcPerPoint    = 5,       -- +5% per luck point
-    bombDamageMultiplier = 10,     -- Base 10x player damage
-    mrMegaDamageMultiplier = 2,    -- Mr. Mega synergy: x2 missile damage (=> total 20x)
+    bombDamageMultiplier = 3,      -- Base 3x player damage
+    mrMegaDamageMultiplier = 2,    -- Mr. Mega synergy: x2 missile damage (=> total 6x)
     mrMegaRadiusMultiplier = 1.5,  -- Mr. Mega synergy: x1.5 explosion radius
     lockOnDelayFrames   = 45,     -- 1.5 seconds lock-on phase
     rocketTravelFrames  = 0,      -- Fallback max frames for rocket fall
@@ -178,10 +178,10 @@ local function spawnRocketEffect(position, spawner, inheritedProvenance)
 end
 
 -- ===================================================================
--- Detonation: Epic Fetus-style explosion (base 10x damage, Mr. Mega synergy supported)
+-- Detonation: Epic Fetus-style explosion (base 3x damage, Mr. Mega synergy supported)
 -- ===================================================================
 local function detonateAtPosition(player, position, inheritedProvenance)
-    local damage = (player.Damage or 3.5) * (ConchBlessing.soflam.data.bombDamageMultiplier or 10)
+    local damage = (player.Damage or 3.5) * (ConchBlessing.soflam.data.bombDamageMultiplier or 3)
     local game = Game()
     local mrMegaCount = getCollectibleCount(player, MR_MEGA_ID)
     if mrMegaCount > 0 then
@@ -307,7 +307,7 @@ local function queueStrike(player, npc, inheritedProvenance)
 
     -- Spawn the target crosshair for 2 seconds
     local crosshair = spawnTargetCrosshair(position, player, inheritedProvenance)
-    
+
     local sfx = SFXManager()
     sfx:Play(SoundEffect.SOUND_BIRD_FLAP, 0.6, 0, false, 1.5)
 

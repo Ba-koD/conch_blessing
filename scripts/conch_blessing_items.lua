@@ -368,10 +368,10 @@ ConchBlessing.ItemData = {
         type = "passive",
         id = Isaac.GetItemIdByName("Pig"),
     },
-    CHRONUS = {
+    CRONUS = {
 		type = "passive",
-		id = Isaac.GetItemIdByName("Chronus"),
-		gfx = "chronus.png",
+		id = Isaac.GetItemIdByName("Cronus"),
+		gfx = "cronus.png",
 		pool = {
 			RoomType.ROOM_ANGEL,
 			RoomType.ROOM_DEVIL,
@@ -382,23 +382,23 @@ ConchBlessing.ItemData = {
 		cache = "damage firedelay",
 		flag = "negative",
         origin = { id = CollectibleType.COLLECTIBLE_BFFS, type = "collectible" },
-		script = "scripts/items/collectibles/chronus",
+		script = "scripts/items/collectibles/cronus",
 		callbacks = {
-			pickup = "chronus.onPickup",
-			postPlayerUpdate = "chronus.onPlayerUpdate",
-			evaluateCache = "chronus.onEvaluateCache",
-			gameStarted = "chronus.onGameStarted",
-            familiarUpdate = "chronus.onFamiliarUpdate",
-            fireTear = "chronus.onFireTear",
-            entityTakeDmg = "chronus.onEntityTakeDamage",
-            postEntityTakeDmg = "chronus.onPostEntityTakeDamage",
-            postNewRoom = "chronus.onNewRoom",
-            postNewLevel = "chronus.onNewLevel",
-            postRoomClear = "chronus.onRoomClear",
-            prePlayerCollision = "chronus.onPrePlayerCollision",
-            postUpdate = "chronus.onPostUpdate",
-            postRender = "chronus.onPostRender",
-            preGameExit = "chronus.onPreGameExit"
+			pickup = "cronus.onPickup",
+			postPlayerUpdate = "cronus.onPlayerUpdate",
+			evaluateCache = "cronus.onEvaluateCache",
+			gameStarted = "cronus.onGameStarted",
+            familiarUpdate = "cronus.onFamiliarUpdate",
+            fireTear = "cronus.onFireTear",
+            entityTakeDmg = "cronus.onEntityTakeDamage",
+            postEntityTakeDmg = "cronus.onPostEntityTakeDamage",
+            postNewRoom = "cronus.onNewRoom",
+            postNewLevel = "cronus.onNewLevel",
+            postRoomClear = "cronus.onRoomClear",
+            prePlayerCollision = "cronus.onPrePlayerCollision",
+            postUpdate = "cronus.onPostUpdate",
+            postRender = "cronus.onPostRender",
+            preGameExit = "cronus.onPreGameExit"
 		},
 		synergies = {
             [{ id = CollectibleType.COLLECTIBLE_TWISTED_PAIR, type = "collectible" }] = "twisted_pair",
@@ -552,6 +552,8 @@ ConchBlessing.ItemData = {
         script = "scripts/items/collectibles/appraisal_certificate",
         callbacks = {
             use = "appraisal.onUseItem",
+            preUseItem = "appraisal.onPreUseItem",
+            inputAction = "appraisal.onInputAction",
         },
         synergies = {
             [{ type = "trinket", name = "Atropos" }] = "atropos"
@@ -1447,6 +1449,9 @@ local function loadAllItems()
                     end,
                     function(descObj)
                         local lang = resolveModLang()
+                        -- Base item descriptions can show live values even when
+                        -- the player has no synergy item yet.
+                        descObj.Description = expandDynamicTokens(descObj.Description)
                         -- 0) Dynamic specials scaling for our items (EID text):
                         --    If this is our item and it has specials, multiply matching numbers by scale
                         --    Scale rules (trinket): Golden +1x, Mom's Box +1x; both => x3. Only exact specials values are scaled.
@@ -1846,11 +1851,11 @@ do
     end
 end
 
--- Dev tooling: registers the conch_chronus test bench. Safe to remove.
+-- Dev tooling: registers the conch_cronus test bench. Safe to remove.
 do
-    local ok, err = pcall(require, "scripts.dev.chronus_probe")
+    local ok, err = pcall(require, "scripts.dev.cronus_probe")
     if not ok then
-        ConchBlessing.printError("[ChronusProbe] load failed: " .. tostring(err))
+        ConchBlessing.printError("[CronusProbe] load failed: " .. tostring(err))
     end
 end
 
@@ -1867,5 +1872,13 @@ do
     local ok, err = pcall(require, "scripts.dev.locale_probe")
     if not ok then
         ConchBlessing.printError("[LocaleProbe] load failed: " .. tostring(err))
+    end
+end
+
+-- Dev tooling: registers the conch_appraisal test bench. Safe to remove.
+do
+    local ok, err = pcall(require, "scripts.dev.appraisal_probe")
+    if not ok then
+        ConchBlessing.printError("[AppraisalProbe] load failed: " .. tostring(err))
     end
 end

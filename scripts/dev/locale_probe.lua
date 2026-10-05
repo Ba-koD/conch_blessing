@@ -136,6 +136,14 @@ local function build(plan)
             local first = Locale.get("items.LIVE_EYE.eid", lang)[1]
             return describe(ConchBlessing.ItemData.LIVE_EYE.id):find(first, 1, true) == 1, first
         end)
+        plan.check(lang .. ": Cronus base EID shows its live projectile-ignore chance", function()
+            if not EID then return nil, "EID is not installed" end
+            local template = Locale.get("items.CRONUS.eid", lang)[3]
+            local chance = ConchBlessing.EIDDynamicTokens.CRONUS_BLOCK()
+            local expected = template:gsub("%%CRONUS_BLOCK%%", function() return chance end)
+            local description = describe(ConchBlessing.ItemData.CRONUS.id)
+            return contains(description, expected) and not contains(description, "%CRONUS_BLOCK%"), expected
+        end)
         plan.check(lang .. ": Dead Eye shows the conch-mode line for Live Eye", function()
             if not EID then return nil, "EID is not installed" end
             local data = ConchBlessing.ItemData.LIVE_EYE
