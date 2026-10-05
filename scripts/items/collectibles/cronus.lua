@@ -2637,6 +2637,35 @@ ConchBlessing.cronus.onPrePlayerCollision = function(_, player, collider)
     bump("gemini")
 end
 
+-- A hit the projectile block ignored, just enough to notice: a short pale flash on
+-- the player, a small spark where the shot struck, and the Holy Mantle chime played
+-- quiet and higher so it reads lighter than a real mantle break. Cosmetic only.
+local BLOCK_FEEDBACK = {
+    FLASH = Color(1, 1, 1, 1, 0.3, 0.32, 0.42),
+    FLASH_FRAMES = 6,
+    SPARK_SCALE = Vector(0.6, 0.6),
+    SPARK_REACH = 10, -- From the player's centre toward the shot.
+    SPARK_HEIGHT = -18,
+    SOUND_VOLUME = 0.3,
+    SOUND_PITCH = 1.3,
+}
+
+local function showProjectileBlock(player, source)
+    player:SetColor(BLOCK_FEEDBACK.FLASH, BLOCK_FEEDBACK.FLASH_FRAMES, 1, true, false)
+    local shot = source and source.Entity
+    local toward = shot and (shot.Position - player.Position) or Vector.Zero
+    if toward:Length() > BLOCK_FEEDBACK.SPARK_REACH then toward = toward:Resized(BLOCK_FEEDBACK.SPARK_REACH) end
+    local spark = Isaac.Spawn(EntityType.ENTITY_EFFECT, EffectVariant.IMPACT, 0,
+        player.Position + toward, Vector.Zero, player)
+    if spark then
+        spark.SpriteScale = BLOCK_FEEDBACK.SPARK_SCALE
+        spark.PositionOffset = Vector(0, BLOCK_FEEDBACK.SPARK_HEIGHT)
+        spark.DepthOffset = 10
+        bump("blockSparks")
+    end
+    SFXManager():Play(SoundEffect.SOUND_HOLY_MANTLE, BLOCK_FEEDBACK.SOUND_VOLUME, 0, false, BLOCK_FEEDBACK.SOUND_PITCH)
+end
+
 -- Pre-damage: the projectile block for the Cronus owner, plus the base-game
 -- fallback for enemy hits when the REPENTOGON applied-damage callback is missing
 -- (that fallback runs before damage is final and may count a cancelled hit).
@@ -2650,6 +2679,7 @@ ConchBlessing.cronus.onEntityTakeDamage = function(_, entity, amount, flags, sou
             if chance > 0 and player:GetCollectibleRNG(CRONUS_ID):RandomFloat() < chance then
                 dbg(string.format("Projectile hit ignored (chance %.0f%%)", chance * 100))
                 bump("projectileBlocks")
+                showProjectileBlock(player, source)
                 return false
             end
         end
@@ -3470,6 +3500,11 @@ local TRANSFER_ICON_SIZE = 32
 local TRANSFER_GRAIN = 2
 local TRANSFER_GRID = TRANSFER_ICON_SIZE // TRANSFER_GRAIN
 local TRANSFER_INTACT_COLOR = Color(1, 1, 1, 1, 0, 0, 0)
+-- Copies of one familiar absorbed at once, or familiars released at once, play as
+-- one effect: their icons in a grid of at most MAX_PER_ROW per row, rows kept even
+-- and each centred, the short row at the bottom. Grids crumble into coarser grains
+-- so a full grid stays within a few hundred draws.
+local GROUP = { MAX_ICONS = 12, MAX_PER_ROW = 6, PITCH = 28, GRAIN = 4 }
 local transferEffects = {}
 -- Once the dust reaches the body, a familiar whose synergy has a live-value line
 -- (%TOKEN%) shows the new total briefly where the caption was, rising a little.
@@ -3683,25 +3718,40 @@ local function newGrain(hx, hy, rowFraction, r1, r2, r3)
     }
 end
 
-local function buildGrains(seed)
+local function buildGrains(seed, size)
+    size = size or TRANSFER_GRAIN
     local grains = {}
     local half = TRANSFER_ICON_SIZE / 2
-    for j = 0, TRANSFER_GRID - 1 do
-        for i = 0, TRANSFER_GRID - 1 do
-            local cx = TRANSFER_GRAIN * i + TRANSFER_GRAIN / 2
-            local cy = TRANSFER_GRAIN * j + TRANSFER_GRAIN / 2
+    local cells = TRANSFER_ICON_SIZE // size
+    for j = 0, cells - 1 do
+        for i = 0, cells - 1 do
+            local cx = size * i + size / 2
+            local cy = size * j + size / 2
             -- hx/hy: from the icon centre; ox/oy: from the sprite render position.
-            local grain = newGrain(cx - half, cy - half, j / (TRANSFER_GRID - 1),
+            local grain = newGrain(cx - half, cy - half, j / (cells - 1),
                 grainNoise(seed, i, j, 1), grainNoise(seed, i, j, 2), grainNoise(seed, i, j, 3))
             grain.hx, grain.hy = cx - half, cy - half
             grain.ox, grain.oy = cx - half, cy - half - 8
-            grain.topLeft = Vector(TRANSFER_GRAIN * i, TRANSFER_GRAIN * j)
-            grain.bottomRight = Vector(TRANSFER_ICON_SIZE - TRANSFER_GRAIN * (i + 1),
-                TRANSFER_ICON_SIZE - TRANSFER_GRAIN * (j + 1))
+            grain.topLeft = Vector(size * i, size * j)
+            grain.bottomRight = Vector(TRANSFER_ICON_SIZE - size * (i + 1), TRANSFER_ICON_SIZE - size * (j + 1))
             grains[#grains + 1] = grain
         end
     end
     return grains
+end
+
+-- Icon offsets from the bottom row's centre: rows of at most MAX_PER_ROW, kept even
+-- (8 -> 4 + 4, 7 -> 4 + 3), each row centred, the last and shortest at the bottom.
+local function gridOffsets(n)
+    local rows = math.ceil(n / GROUP.MAX_PER_ROW)
+    local cols = math.ceil(n / rows)
+    local offsets = {}
+    for k = 1, n do
+        local row, col = (k - 1) // cols, (k - 1) % cols
+        local inRow = math.min(cols, n - row * cols)
+        offsets[k] = { (col - (inRow - 1) / 2) * GROUP.PITCH, (row - (rows - 1)) * GROUP.PITCH }
+    end
+    return offsets, rows
 end
 
 -- Places each letter relative to the caption's top centre (x/y: the letter's
@@ -3801,14 +3851,37 @@ end
 function ConchBlessing.cronus._queueTransferEffect(player, itemId, reverse, captionText)
     if not player then return end
     local hash = GetPtrHash(player)
-    local queued = 0
+    local frame = Game():GetFrameCount()
+    reverse = reverse == true
+    local queued, group = 0, nil
     for _, effect in ipairs(transferEffects) do
-        if effect.hash == hash then queued = queued + 1 end
+        if effect.hash == hash then
+            queued = queued + 1
+            -- Queued in the same update and not started: copies of one familiar
+            -- absorbed together, or any familiars released together, share a grid.
+            if effect.tick == 0 and effect.frame == frame and effect.reverse == reverse
+                and #effect.icons < GROUP.MAX_ICONS
+                and (reverse or (effect.itemId == itemId and effect.captionText == captionText)) then
+                group = effect
+            end
+        end
     end
-    if queued >= TRANSFER_MAX_PER_PLAYER then return end
-    local ok, sprite = pcall(newTransferSprite, itemId)
-    if not ok or not sprite then return end
-    local seed = (tonumber(itemId) or 0) * 7919 + Game():GetFrameCount() * 104729 + #transferEffects * 31
+    if not group and queued >= TRANSFER_MAX_PER_PLAYER then return end
+    local sprite = group and not reverse and group.icons[1].sprite
+    if not sprite then
+        local ok, loaded = pcall(newTransferSprite, itemId)
+        if not ok or not loaded then return end
+        sprite = loaded
+    end
+    if group then
+        local icons = group.icons
+        if #icons == 1 then icons[1].grains = buildGrains(group.seed, GROUP.GRAIN) end
+        icons[#icons + 1] = { sprite = sprite, itemId = itemId,
+            grains = buildGrains(group.seed + #icons * 7919, GROUP.GRAIN) }
+        group.offsets, group.rows = gridOffsets(#icons)
+        return
+    end
+    local seed = (tonumber(itemId) or 0) * 7919 + frame * 104729 + #transferEffects * 31
     local caption, valueTemplates
     if getCaptionAtlas() then
         local lang = require("scripts.conch_blessing_config").GetCurrentLanguage()
@@ -3817,10 +3890,13 @@ function ConchBlessing.cronus._queueTransferEffect(player, itemId, reverse, capt
         if not reverse then valueTemplates = transferValueTemplates(itemId, lang) end
     end
     -- A player's effects play one at a time in queue order (updateTransferEffects).
+    local offsets, rows = gridOffsets(1)
     transferEffects[#transferEffects + 1] = {
-        player = player, hash = hash, sprite = sprite, grains = buildGrains(seed),
+        player = player, hash = hash, frame = frame, seed = seed, itemId = itemId, captionText = captionText,
+        icons = { { sprite = sprite, itemId = itemId, grains = buildGrains(seed) } },
+        offsets = offsets, rows = rows,
         caption = caption, valueTemplates = valueTemplates,
-        reverse = reverse == true, tick = 0,
+        reverse = reverse, tick = 0,
     }
 end
 
@@ -3960,7 +4036,6 @@ end
 
 local function renderTransfer(effect, paused)
     local player = effect.player
-    local sprite = effect.sprite
     local base = Isaac.WorldToScreen(player.Position + player.PositionOffset)
     if not effect.reverse and effect.tick >= TRANSFER_TOTAL then
         renderTransferValue(effect, base, paused)
@@ -3973,8 +4048,9 @@ local function renderTransfer(effect, paused)
     -- One line fits between the icon and the head; raise the group for the rest.
     local captionHeight = effect.caption and (#effect.caption.lines - 1) * captionData.lineHeight or 0
     local iconCenter = base + Vector(0, TRANSFER_ICON_CENTER_Y - captionHeight)
-    -- Keep the readable sprite/caption group on screen near the top of a room.
-    iconCenter.Y = math.max(18, iconCenter.Y)
+    -- Keep the readable icons/caption group on screen near the top of a room; a
+    -- grid's upper rows sit above iconCenter, the bottom row's centre.
+    iconCenter.Y = math.max(18 + (effect.rows - 1) * GROUP.PITCH, iconCenter.Y)
     local bob = t > TRANSFER_APPEAR and t < TRANSFER_APPEAR + TRANSFER_HOLD
         and math.sin((t - TRANSFER_APPEAR) * 0.6) or 0
     -- The icon's bottom edge is its centre + 16; the caption hangs just below.
@@ -3984,34 +4060,41 @@ local function renderTransfer(effect, paused)
     if t < TRANSFER_APPEAR + TRANSFER_HOLD then
         local a = math.min(1, t / TRANSFER_APPEAR)
         local scale = 0.4 + 0.6 * easeOut(a)
-        sprite.Scale = Vector(scale, scale)
-        sprite.Color = Color(1, 1, 1, a, 0, 0, 0)
-        sprite:Render(iconCenter + Vector(0, 8 * scale + bob))
+        local size, color = Vector(scale, scale), Color(1, 1, 1, a, 0, 0, 0)
+        for k, icon in ipairs(effect.icons) do
+            local offset = effect.offsets[k]
+            icon.sprite.Scale = size
+            icon.sprite.Color = color
+            icon.sprite:Render(Vector(iconCenter.X + offset[1], iconCenter.Y + offset[2] + 8 * scale + bob))
+        end
         return
     end
 
-    sprite.Scale = Vector.One
     local s = t - TRANSFER_APPEAR - TRANSFER_HOLD
-    local cx, cy = iconCenter.X, iconCenter.Y
     local bx, by = base.X, base.Y + TRANSFER_BODY_Y
-    local intact = false
-    for _, grain in ipairs(effect.grains) do
-        local u = s - grain.delay
-        if u < grain.flight then
-            local x, y = cx + grain.hx, cy + grain.hy
-            if u <= 0 then
-                if not intact then
-                    sprite.Color = TRANSFER_INTACT_COLOR
-                    intact = true
+    for k, icon in ipairs(effect.icons) do
+        local sprite = icon.sprite
+        sprite.Scale = Vector.One
+        local cx, cy = iconCenter.X + effect.offsets[k][1], iconCenter.Y + effect.offsets[k][2]
+        local intact = false
+        for _, grain in ipairs(icon.grains) do
+            local u = s - grain.delay
+            if u < grain.flight then
+                local x, y = cx + grain.hx, cy + grain.hy
+                if u <= 0 then
+                    if not intact then
+                        sprite.Color = TRANSFER_INTACT_COLOR
+                        intact = true
+                    end
+                else
+                    local alpha, glow
+                    x, y, alpha, glow = transferDust(grain, u, x, y, bx, by)
+                    if grain.sparkle then glow = glow + 0.4 end
+                    sprite.Color = Color(1, 1, 1, alpha, glow * 0.55, glow * 0.25, glow)
+                    intact = false
                 end
-            else
-                local alpha, glow
-                x, y, alpha, glow = transferDust(grain, u, x, y, bx, by)
-                if grain.sparkle then glow = glow + 0.4 end
-                sprite.Color = Color(1, 1, 1, alpha, glow * 0.55, glow * 0.25, glow)
-                intact = false
+                sprite:Render(Vector(x - grain.ox, y - grain.oy), grain.topLeft, grain.bottomRight)
             end
-            sprite:Render(Vector(x - grain.ox, y - grain.oy), grain.topLeft, grain.bottomRight)
         end
     end
 end
@@ -4132,6 +4215,15 @@ ConchBlessing.cronus._test = {
             end
         end
         return 0, 0, 0, 0
+    end,
+    gridOffsets = gridOffsets,
+    -- Every queued effect for the probe: direction, icon count and grid rows.
+    transferGroups = function()
+        local groups = {}
+        for _, effect in ipairs(transferEffects) do
+            groups[#groups + 1] = { reverse = effect.reverse, icons = #effect.icons, rows = effect.rows }
+        end
+        return groups
     end,
     -- What the renderer actually drew since the last reset: readable letters
     -- (and where), the most caption draws in one dust frame, and the last value line.
