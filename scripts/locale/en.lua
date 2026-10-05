@@ -148,13 +148,13 @@ return {
             name = "Pig",
             description = "Pig",
         },
-        CRONUS = {
-            name = "Cronus",
+        KRONOS = {
+            name = "Kronos",
             description = "Devours its offspring",
             eid = {
                 "Absorbs familiars to gain their unique abilities and 2 damage.",
                 "#Some familiars cannot be absorbed according to the exclusion list.",
-                "#Current projectile ignore chance: %CRONUS_BLOCK%",
+                "#Current projectile ignore chance: %KRONOS_BLOCK%",
             },
             synergies = {
                 twisted_pair = "Adds 2 additional 37.5% damage attacks.",
@@ -185,7 +185,7 @@ return {
                 ghost_baby = "Gains {c:CONTINUUM} Continuum.",
                 rotten_baby = {
                     "50% chance to spawn a friendly blue fly when an attack damages an enemy (adds up with {c:7_SEALS} 7 Seals, up to 100%).",
-                    "Current blue fly chance: %CRONUS_FLY%",
+                    "Current blue fly chance: %KRONOS_FLY%",
                 },
                 little_steven = "Gains homing effect.",
                 rainbow_baby = "Gains {c:FRUIT_CAKE} Fruit Cake (first time only).",
@@ -210,14 +210,14 @@ return {
                 yo_listen = "Gains {c:XRAY_VISION} X-Ray Vision (first time only).",
                 daddy_longlegs = {
                     "10% chance for a leg to stomp when an attack damages an enemy, dealing 2x damage around it (stacks with each absorbed copy).",
-                    "Current stomp chance: %CRONUS_STOMP%",
+                    "Current stomp chance: %KRONOS_STOMP%",
                 },
                 sister_maggy = "Gains {c:CRICKETS_HEAD} Cricket's Head (first time only).",
                 little_chubby = "Gains {c:MARS} Mars (first time only).",
                 big_chubby = {
                     "Gains {c:MARS} Mars (first time only).",
                     "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
-                    "Current projectile ignore chance: %CRONUS_BLOCK%",
+                    "Current projectile ignore chance: %KRONOS_BLOCK%",
                 },
                 peeper = "Gains {c:MOMS_EYE} Mom's Eye (first time only).",
                 bbf = "Gains {c:FIRE_MIND} Fire Mind (first time only).",
@@ -234,112 +234,112 @@ return {
                 fruity_plum = "Gains {c:KIDNEY_STONE} Kidney Stone (first time only).",
                 ["7_seals"] = {
                     "50% chance to spawn a friendly blue fly when an attack damages an enemy (adds up with {c:ROTTEN_BABY} Rotten Baby, up to 100%).",
-                    "Current blue fly chance: %CRONUS_FLY%",
+                    "Current blue fly chance: %KRONOS_FLY%",
                 },
                 juicy_sack = {
                     "50% chance to spawn a friendly blue spider when an attack damages an enemy (adds up with {c:SISSY_LONGLEGS} Sissy Longlegs, up to 100%).",
-                    "Current blue spider chance: %CRONUS_SPIDER%",
+                    "Current blue spider chance: %KRONOS_SPIDER%",
                 },
                 sissy_longlegs = {
                     "50% chance to spawn a friendly blue spider when an attack damages an enemy (adds up with {c:JUICY_SACK} Juicy Sack, up to 100%).",
-                    "Current blue spider chance: %CRONUS_SPIDER%",
+                    "Current blue spider chance: %KRONOS_SPIDER%",
                 },
                 intruder = "Grants slowing effect to all attacks.",
                 worm_friend = "Grants slowing effect to all attacks.",
                 halo_of_flies = {
                     "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
-                    "Current projectile ignore chance: %CRONUS_BLOCK%",
+                    "Current projectile ignore chance: %KRONOS_BLOCK%",
                 },
                 distant_admiration = {
                     "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
-                    "Current projectile ignore chance: %CRONUS_BLOCK%",
+                    "Current projectile ignore chance: %KRONOS_BLOCK%",
                 },
                 cube_of_meat = {
                     "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
-                    "Current projectile ignore chance: %CRONUS_BLOCK%",
+                    "Current projectile ignore chance: %KRONOS_BLOCK%",
                 },
                 forever_alone = {
                     "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
-                    "Current projectile ignore chance: %CRONUS_BLOCK%",
+                    "Current projectile ignore chance: %KRONOS_BLOCK%",
                 },
                 sacrificial_dagger = {
                     "2% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
-                    "Current projectile ignore chance: %CRONUS_BLOCK%",
+                    "Current projectile ignore chance: %KRONOS_BLOCK%",
                 },
                 guppys_hairball = {
                     "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
-                    "Current projectile ignore chance: %CRONUS_BLOCK%",
+                    "Current projectile ignore chance: %KRONOS_BLOCK%",
                 },
                 guillotine = {
                     "+1 {{Damage}}damage and +0.5 {{Tears}}fire rate (stacks with each absorbed copy).",
                     "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
-                    "Current projectile ignore chance: %CRONUS_BLOCK%",
+                    "Current projectile ignore chance: %KRONOS_BLOCK%",
                 },
                 ball_of_bandages = {
                     "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
-                    "Current projectile ignore chance: %CRONUS_BLOCK%",
+                    "Current projectile ignore chance: %KRONOS_BLOCK%",
                 },
                 smart_fly = {
                     "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
-                    "Current projectile ignore chance: %CRONUS_BLOCK%",
+                    "Current projectile ignore chance: %KRONOS_BLOCK%",
                 },
                 best_bud = {
                     "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
-                    "Current projectile ignore chance: %CRONUS_BLOCK%",
+                    "Current projectile ignore chance: %KRONOS_BLOCK%",
                 },
                 big_fan = {
                     "2% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
-                    "Current projectile ignore chance: %CRONUS_BLOCK%",
+                    "Current projectile ignore chance: %KRONOS_BLOCK%",
                 },
                 punching_bag = {
                     "2% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
-                    "Current projectile ignore chance: %CRONUS_BLOCK%",
+                    "Current projectile ignore chance: %KRONOS_BLOCK%",
                 },
                 sworn_protector = {
                     "5% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
-                    "Current projectile ignore chance: %CRONUS_BLOCK%",
+                    "Current projectile ignore chance: %KRONOS_BLOCK%",
                 },
                 friend_zone = {
                     "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
-                    "Current projectile ignore chance: %CRONUS_BLOCK%",
+                    "Current projectile ignore chance: %KRONOS_BLOCK%",
                 },
                 lost_fly = {
                     "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
-                    "Current projectile ignore chance: %CRONUS_BLOCK%",
+                    "Current projectile ignore chance: %KRONOS_BLOCK%",
                 },
                 hushy = {
                     "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
-                    "Current projectile ignore chance: %CRONUS_BLOCK%",
+                    "Current projectile ignore chance: %KRONOS_BLOCK%",
                 },
                 moms_razor = {
                     "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
                     "{{BleedingOut}} 10% chance to make an enemy bleed when an attack damages it (stacks with each absorbed copy).",
-                    "Current projectile ignore chance: %CRONUS_BLOCK%",
-                    "Current bleed chance: %CRONUS_BLEED%",
+                    "Current projectile ignore chance: %KRONOS_BLOCK%",
+                    "Current bleed chance: %KRONOS_BLEED%",
                 },
                 angry_fly = {
                     "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
-                    "Current projectile ignore chance: %CRONUS_BLOCK%",
+                    "Current projectile ignore chance: %KRONOS_BLOCK%",
                 },
                 leprosy = {
                     "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
-                    "Current projectile ignore chance: %CRONUS_BLOCK%",
+                    "Current projectile ignore chance: %KRONOS_BLOCK%",
                 },
                 slipped_rib = {
                     "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
-                    "Current projectile ignore chance: %CRONUS_BLOCK%",
+                    "Current projectile ignore chance: %KRONOS_BLOCK%",
                 },
                 pointy_rib = {
                     "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
-                    "Current projectile ignore chance: %CRONUS_BLOCK%",
+                    "Current projectile ignore chance: %KRONOS_BLOCK%",
                 },
                 psy_fly = {
                     "5% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
-                    "Current projectile ignore chance: %CRONUS_BLOCK%",
+                    "Current projectile ignore chance: %KRONOS_BLOCK%",
                 },
                 tinytoma = {
                     "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
-                    "Current projectile ignore chance: %CRONUS_BLOCK%",
+                    "Current projectile ignore chance: %KRONOS_BLOCK%",
                 },
                 headless_baby = "Gains {c:AQUARIUS} Aquarius (first time only).",
                 cains_other_eye = "Gains {c:RUBBER_CEMENT} Rubber Cement (first time only).",
@@ -347,16 +347,16 @@ return {
                 shade = "Gains {c:LUSTY_BLOOD} Lusty Blood (first time only).",
                 obsessed_fan = {
                     "1% chance to ignore damage from enemy projectiles (stacks with each absorbed copy).",
-                    "Current projectile ignore chance: %CRONUS_BLOCK%",
+                    "Current projectile ignore chance: %KRONOS_BLOCK%",
                 },
                 gemini = "Deals 6 contact damage per second to touching enemies (stacks with each absorbed copy).",
                 cube_baby = {
                     "{{Freezing}} 10% chance to freeze an enemy in place for 2 seconds when an attack damages it (stacks with each absorbed copy).",
-                    "Current freeze chance: %CRONUS_FREEZE%",
+                    "Current freeze chance: %KRONOS_FREEZE%",
                 },
                 lil_spewer = {
                     "25% chance to leave red creep under an enemy when an attack damages it (stacks with each absorbed copy).",
-                    "Current creep chance: %CRONUS_CREEP%",
+                    "Current creep chance: %KRONOS_CREEP%",
                 },
                 gb_bug = {
                     "When absorbed, returns a random half of the other absorbed familiars.",
@@ -364,11 +364,11 @@ return {
                 },
                 bum_friend = {
                     "10% chance to drop a random pickup on room clear (stacks with each absorbed copy).",
-                    "Current pickup drop chance: %CRONUS_PICKUP_DROP%",
+                    "Current pickup drop chance: %KRONOS_PICKUP_DROP%",
                 },
                 lil_chest = {
                     "{{Chest}} 10% chance to drop a chest on room clear (stacks with each absorbed copy).",
-                    "Current chest drop chance: %CRONUS_CHEST_DROP%",
+                    "Current chest drop chance: %KRONOS_CHEST_DROP%",
                 },
                 relic = "{{SoulHeart}} Drops a soul heart every 6 room clears (one more per absorbed copy).",
                 mystery_sack = "Drops a random pickup every 6 room clears (one more per absorbed copy).",
@@ -377,7 +377,7 @@ return {
                 holy_water = "Leaves holy water creep at the player's position when hit (one more per absorbed copy, up to 4).",
                 dry_baby = {
                     "25% chance to trigger {c:NECRONOMICON} The Necronomicon when hit (stacks with each absorbed copy).",
-                    "Current Necronomicon chance: %CRONUS_NECRONOMICON%",
+                    "Current Necronomicon chance: %KRONOS_NECRONOMICON%",
                 },
                 milk = "{{Tears}} +1 fire rate for the rest of the floor after the first hit on it (stacks with each absorbed copy).",
                 bird_cage = "Deals 45 damage to the nearest enemy when hit (stacks with each absorbed copy).",
@@ -390,19 +390,19 @@ return {
                 buddy_in_a_box = "Each floor, gains the absorbed effect of one random other familiar (one more per absorbed copy).",
                 lil_delirium = "Each floor, gains the absorbed effect of one random other familiar (one more per absorbed copy).",
                 box_of_friends = "On use, absorbed familiar effects are doubled for the room (no {c:DEMON_BABY} Demon Baby).",
-                monster_manual = "Absorbs familiars summoned before or after obtaining Cronus, granting +2 Damage and their effects or item conversions for the floor. Room entry does not grant the absorption again.",
+                monster_manual = "Absorbs familiars summoned before or after obtaining Kronos, granting +2 Damage and their effects or item conversions for the floor. Room entry does not grant the absorption again.",
                 sacrificial_altar = "On use, sacrifices up to 2 absorbed familiars to spawn devil room items.",
                 trinket_the_twins = "50% chance on room entry to double one absorbed familiar's effect for the room.",
-                ["1up"] = "Cannot be absorbed by {own:CRONUS} Cronus.",
-                isaacs_heart = "Cannot be absorbed by {own:CRONUS} Cronus.",
-                dead_cat = "Cannot be absorbed by {own:CRONUS} Cronus.",
-                key_piece_1 = "Cannot be absorbed by {own:CRONUS} Cronus.",
-                key_piece_2 = "Cannot be absorbed by {own:CRONUS} Cronus.",
-                knife_piece_1 = "Cannot be absorbed by {own:CRONUS} Cronus.",
-                knife_piece_2 = "Cannot be absorbed by {own:CRONUS} Cronus.",
-                damocles_passive = "Cannot be absorbed by {own:CRONUS} Cronus.",
-                straw_man = "Cannot be absorbed by {own:CRONUS} Cronus.",
-                blood_oath = "Cannot be absorbed by {own:CRONUS} Cronus.",
+                ["1up"] = "Cannot be absorbed by {own:KRONOS} Kronos.",
+                isaacs_heart = "Cannot be absorbed by {own:KRONOS} Kronos.",
+                dead_cat = "Cannot be absorbed by {own:KRONOS} Kronos.",
+                key_piece_1 = "Cannot be absorbed by {own:KRONOS} Kronos.",
+                key_piece_2 = "Cannot be absorbed by {own:KRONOS} Kronos.",
+                knife_piece_1 = "Cannot be absorbed by {own:KRONOS} Kronos.",
+                knife_piece_2 = "Cannot be absorbed by {own:KRONOS} Kronos.",
+                damocles_passive = "Cannot be absorbed by {own:KRONOS} Kronos.",
+                straw_man = "Cannot be absorbed by {own:KRONOS} Kronos.",
+                blood_oath = "Cannot be absorbed by {own:KRONOS} Kronos.",
             },
         },
         APPRAISAL_CERTIFICATE = {
@@ -674,7 +674,7 @@ return {
         },
     },
     ui = {
-        cronus = {
+        kronos = {
             transfer_damage = "Damage +2",
             transfer_return = "Familiar returned",
             transfer_pretty_fly = "Projectile ignore chance +%s%%",

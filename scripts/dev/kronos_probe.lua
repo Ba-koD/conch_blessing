@@ -1,19 +1,19 @@
--- Cronus test bench: sets up one in-game scenario per absorbed-familiar feature
+-- Kronos test bench: sets up one in-game scenario per absorbed-familiar feature
 -- so each can be checked by hand. Run `restart` between scenarios to keep them
 -- apart; they stack otherwise.
 --
--- Console:  conch_cronus                 restart the run, test every feature on its own
+-- Console:  conch_kronos                 restart the run, test every feature on its own
 --                                         (PASS/FAIL/SKIP to console + log.txt), then restart
 --                                         again so nothing leaks into play (test_bench.lua)
---           conch_cronus help            list the manual scenarios and helpers
---           conch_cronus <scenario>      give Cronus + the scenario's familiars
---           conch_cronus status          print the Cronus run save
---           conch_cronus caption         preview the localized caption without changing the run
---           conch_cronus hurtme          take one half-heart hit (never lethal)
---           conch_cronus clearsim [n]    run the room-clear reward n times (default 1)
---           conch_cronus enemies [n]     spawn n Fatties (default 3)
---           conch_cronus give <id> [n]   give collectible <id> n times
---           conch_cronus drop            remove Cronus (familiars come back)
+--           conch_kronos help            list the manual scenarios and helpers
+--           conch_kronos <scenario>      give Kronos + the scenario's familiars
+--           conch_kronos status          print the Kronos run save
+--           conch_kronos caption         preview the localized caption without changing the run
+--           conch_kronos hurtme          take one half-heart hit (never lethal)
+--           conch_kronos clearsim [n]    run the room-clear reward n times (default 1)
+--           conch_kronos enemies [n]     spawn n Fatties (default 3)
+--           conch_kronos give <id> [n]   give collectible <id> n times
+--           conch_kronos drop            remove Kronos (familiars come back)
 --
 -- Player 0 only. This file is dev tooling: it only runs from the console.
 
@@ -21,12 +21,12 @@ local TestBench = require("scripts.dev.test_bench")
 
 local probe = {}
 
-local CRONUS_ID = Isaac.GetItemIdByName("Cronus")
+local KRONOS_ID = Isaac.GetItemIdByName("Kronos")
 local C = CollectibleType
 
 local function out(line)
     Isaac.ConsoleOutput(tostring(line) .. "\n")
-    Isaac.DebugString("[CronusProbe] " .. tostring(line))
+    Isaac.DebugString("[KronosProbe] " .. tostring(line))
 end
 
 -- Spawned targets get this much HP so stomps, Necronomicon and Bird Cage hits
@@ -82,7 +82,7 @@ local SCENARIOS = {
     },
     {
         key = "hurt",
-        about = "effects of getting hit; then use: conch_cronus hurtme",
+        about = "effects of getting hit; then use: conch_kronos hurtme",
         give = { { C.COLLECTIBLE_HOLY_WATER, 4 }, { C.COLLECTIBLE_DRY_BABY, 4 }, { C.COLLECTIBLE_MILK, 1 },
             { C.COLLECTIBLE_BIRD_CAGE, 1 }, { C.COLLECTIBLE_MYSTERY_EGG, 2 }, { C.COLLECTIBLE_MY_SHADOW, 2 },
             { C.COLLECTIBLE_HALLOWED_GROUND, 1 } },
@@ -93,7 +93,7 @@ local SCENARIOS = {
     },
     {
         key = "clear",
-        about = "room-clear drops; then use: conch_cronus clearsim 7",
+        about = "room-clear drops; then use: conch_kronos clearsim 7",
         give = { { C.COLLECTIBLE_BUM_FRIEND, 10 }, { C.COLLECTIBLE_LIL_CHEST, 10 }, { C.COLLECTIBLE_RELIC, 1 },
             { C.COLLECTIBLE_MYSTERY_SACK, 1 }, { C.COLLECTIBLE_RUNE_BAG, 1 }, { C.COLLECTIBLE_PASCHAL_CANDLE, 1 } },
         checks = { "every clear: 1 random pickup + 1 chest", "6th clear: + soul heart + random pickup; 7th: + rune",
@@ -119,7 +119,7 @@ local SCENARIOS = {
         key = "floor",
         about = "Buddy in a Box x2 + Lil Delirium: random effect per floor",
         give = { { C.COLLECTIBLE_BUDDY_IN_A_BOX, 2 }, { C.COLLECTIBLE_LIL_DELIRIUM, 1 } },
-        checks = { "conch_cronus status: 3 floor picks", "stage 2 then status: picks rerolled, serial +1" },
+        checks = { "conch_kronos status: 3 floor picks", "stage 2 then status: picks rerolled, serial +1" },
     },
     {
         key = "items",
@@ -134,7 +134,7 @@ local SCENARIOS = {
         about = "Lost Soul x2: hit-free floor pays eternal hearts",
         give = { { C.COLLECTIBLE_LOST_SOUL, 2 } },
         checks = { "stage 2 without a hit: 2 eternal hearts in the first room (or the next one)",
-            "then conch_cronus hurtme, stage 3: nothing" },
+            "then conch_kronos hurtme, stage 3: nothing" },
     },
     {
         key = "actives",
@@ -167,12 +167,12 @@ local function itemName(id)
     return (tostring(name):gsub("^#", ""):gsub("_NAME$", ""))
 end
 
-local function ensureCronus(player)
+local function ensureKronos(player)
     -- A mid-run `luamod` reload drops the game-start gate; the run is live here.
-    ConchBlessing.cronus._runReady = true
-    if not player:HasCollectible(CRONUS_ID) then
-        player:AddCollectible(CRONUS_ID, 0, false)
-        out("  gave Cronus")
+    ConchBlessing.kronos._runReady = true
+    if not player:HasCollectible(KRONOS_ID) then
+        player:AddCollectible(KRONOS_ID, 0, false)
+        out("  gave Kronos")
     end
 end
 
@@ -200,9 +200,9 @@ local function spawnEnemies(kind, count)
 end
 
 local function getRunSave(player)
-    ConchBlessing.cronus._getAbsorbedCount(player, C.COLLECTIBLE_BROTHER_BOBBY) -- creates the table
+    ConchBlessing.kronos._getAbsorbedCount(player, C.COLLECTIBLE_BROTHER_BOBBY) -- creates the table
     local run = ConchBlessing.SaveManager.GetRunSave(nil)
-    return run and run.cronus or nil
+    return run and run.kronos or nil
 end
 
 function probe.legacyDaddy(player)
@@ -212,7 +212,7 @@ function probe.legacyDaddy(player)
     local key = "fam_" .. daddy
     local before = player:GetCollectibleNum(holy, true)
     player:AddCollectible(holy, 0, false)
-    rs.absorbed[key] = { count = ConchBlessing.cronus._getAbsorbedCount(player, daddy) + 1, id = daddy }
+    rs.absorbed[key] = { count = ConchBlessing.kronos._getAbsorbedCount(player, daddy) + 1, id = daddy }
     rs.totalAbsorbed = (rs.totalAbsorbed or 0) + 1
     rs.itemGrants = rs.itemGrants or {}
     rs.itemGrantTotals = rs.itemGrantTotals or {}
@@ -239,25 +239,25 @@ end
 
 function probe.status(player)
     local rs = getRunSave(player)
-    if not rs then out("no Cronus run save") return end
+    if not rs then out("no Kronos run save") return end
     local function sortedKeys(t)
         local keys = {}
         for k in pairs(t or {}) do keys[#keys + 1] = k end
         table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
         return keys
     end
-    out(string.format("== Cronus status (held: %s, total absorbed %d) ==",
-        tostring(player:HasCollectible(CRONUS_ID)), tonumber(rs.totalAbsorbed) or 0))
+    out(string.format("== Kronos status (held: %s, total absorbed %d) ==",
+        tostring(player:HasCollectible(KRONOS_ID)), tonumber(rs.totalAbsorbed) or 0))
     local state = ConchBlessing.getUnifiedMultiplierState(player)
-    local entry = state and state.itemAdditions and state.itemAdditions[CRONUS_ID]
-        and state.itemAdditions[CRONUS_ID].Damage
+    local entry = state and state.itemAdditions and state.itemAdditions[KRONOS_ID]
+        and state.itemAdditions[KRONOS_ID].Damage
     local damage = state and state.statMultipliers and state.statMultipliers.Damage
-    out(string.format("  damage actual=%.4f expectedCronus=%.4f registeredCronus=%s disabled=%s providerTotalAdd=%s",
+    out(string.format("  damage actual=%.4f expectedKronos=%.4f registeredKronos=%s disabled=%s providerTotalAdd=%s",
         player.Damage, ((tonumber(rs.totalAbsorbed) or 0)
-            + ConchBlessing.cronus._getTemporaryDamageCopies(player)) * ConchBlessing.cronus.STATS.DAMAGE_PER_FAMILIAR,
+            + ConchBlessing.kronos._getTemporaryDamageCopies(player)) * ConchBlessing.kronos.STATS.DAMAGE_PER_FAMILIAR,
         tostring(entry and entry.cumulative), tostring(entry and entry.disabled),
         tostring(damage and damage.totalAdditions)))
-    for id, count in pairs(ConchBlessing.cronus._test.readTemporaryFamiliarEffects(player)) do
+    for id, count in pairs(ConchBlessing.kronos._test.readTemporaryFamiliarEffects(player)) do
         out(string.format("  live familiar effect %d x%d", id, count))
     end
     for key, count in pairs(rs.tempFloor and rs.tempFloor.counts or {}) do
@@ -268,7 +268,7 @@ function probe.status(player)
         local entry = rs.absorbed[key]
         local id = entry.id or tonumber(tostring(key):match("%d+"))
         out(string.format("  absorbed %-26s x%d  effect=%d", itemName(id) .. " (" .. id .. ")",
-            entry.count or 0, ConchBlessing.cronus._getEffectCount(player, id)))
+            entry.count or 0, ConchBlessing.kronos._getEffectCount(player, id)))
     end
     local picks = rs.floorPicks
     if type(picks) == "table" and type(picks.ids) == "table" then
@@ -292,7 +292,7 @@ function probe.status(player)
 end
 
 function probe.help()
-    out("conch_cronus <scenario>  manual setups (run `restart` between them)")
+    out("conch_kronos <scenario>  manual setups (run `restart` between them)")
     for _, scenario in ipairs(SCENARIOS) do
         out(string.format("  %-9s %s", scenario.key, scenario.about))
     end
@@ -300,8 +300,8 @@ function probe.help()
 end
 
 function probe.run(scenario, player)
-    out("== conch_cronus " .. scenario.key .. ": " .. scenario.about .. " ==")
-    ensureCronus(player)
+    out("== conch_kronos " .. scenario.key .. ": " .. scenario.about .. " ==")
+    ensureKronos(player)
     for _, entry in ipairs(scenario.give or {}) do
         give(player, entry[1], entry[2])
     end
@@ -314,7 +314,7 @@ function probe.run(scenario, player)
 end
 
 -- ------------------------------------------------------------------ automatic run
--- The plan below is run by scripts/dev/test_bench.lua: `conch_cronus` restarts
+-- The plan below is run by scripts/dev/test_bench.lua: `conch_kronos` restarts
 -- the run, walks every feature on its own (gives familiars, fires tears, takes
 -- hits, uses the temporary-familiar sources, reloads the room for The Twins),
 -- prints PASS/FAIL/SKIP and LOOK lines, and restarts the run again.
@@ -322,7 +322,7 @@ end
 local TARGET_HP = 1000
 
 local function counters()
-    return ConchBlessing.cronus._counters or {}
+    return ConchBlessing.kronos._counters or {}
 end
 
 local function snapshotCounters(ctx)
@@ -336,11 +336,11 @@ end
 
 local function runSave()
     local run = ConchBlessing.SaveManager.GetRunSave(nil)
-    return run and run.cronus or {}
+    return run and run.kronos or {}
 end
 
 local function absorbed(player, id)
-    return ConchBlessing.cronus._getAbsorbedCount(player, id)
+    return ConchBlessing.kronos._getAbsorbedCount(player, id)
 end
 
 local function owns(player, id)
@@ -429,10 +429,10 @@ local function buildPlan(plan)
     act(function(player, ctx)
         ctx.savedDebugMode = ConchBlessing.Config and ConchBlessing.Config.debugMode
         if ConchBlessing.Config then ConchBlessing.Config.debugMode = false end
-        ConchBlessing.cronus._runReady = true
+        ConchBlessing.kronos._runReady = true
         player:AddMaxHearts(12, false)
         player:AddHearts(24)
-        player:AddCollectible(CRONUS_ID, 0, false)
+        player:AddCollectible(KRONOS_ID, 0, false)
         spawnTarget(player, ctx)
     end)
     wait(10)
@@ -451,10 +451,10 @@ local function buildPlan(plan)
     end
     act(function(player, ctx)
         ctx.damageBefore = player.Damage
-        while player:HasCollectible(CRONUS_ID) do player:RemoveCollectible(CRONUS_ID) end
+        while player:HasCollectible(KRONOS_ID) do player:RemoveCollectible(KRONOS_ID) end
     end)
     wait(10)
-    check("losing Cronus removes all three +2 bonuses", function(player, ctx)
+    check("losing Kronos removes all three +2 bonuses", function(player, ctx)
         return math.abs(player.Damage - ctx.damageBefore + 6) < 0.001,
             string.format("damage %.4f -> %.4f", ctx.damageBefore, player.Damage)
     end)
@@ -462,13 +462,13 @@ local function buildPlan(plan)
         for _, id in ipairs({ C.COLLECTIBLE_GUARDIAN_ANGEL, C.COLLECTIBLE_ROTTEN_BABY, C.COLLECTIBLE_BROTHER_BOBBY }) do
             while player:HasCollectible(id, true) do player:RemoveCollectible(id) end
         end
-        player:AddCollectible(CRONUS_ID, 0, false)
+        player:AddCollectible(KRONOS_ID, 0, false)
     end)
     wait(10)
 
-    section("temp: Manual before Cronus", nil)
+    section("temp: Manual before Kronos", nil)
     act(function(player, ctx)
-        player:RemoveCollectible(CRONUS_ID)
+        player:RemoveCollectible(KRONOS_ID)
         ctx.manualEffects = {}
     end)
     wait(10)
@@ -482,27 +482,27 @@ local function buildPlan(plan)
         end)
         wait(3)
         act(function(player, ctx)
-            ctx.manualEffects = ConchBlessing.cronus._test.readTemporaryFamiliarEffects(player)
+            ctx.manualEffects = ConchBlessing.kronos._test.readTemporaryFamiliarEffects(player)
             for id in pairs(ctx.manualEffects) do
-                local conversion = ConchBlessing.cronus.data.familiarToItemMap[id]
+                local conversion = ConchBlessing.kronos.data.familiarToItemMap[id]
                 if conversion and conversion.itemId then ctx.manualConversion = true end
             end
         end)
     end
     check("Manual stays vanilla before acquisition", function(player, ctx)
-        return sumValues(ctx.manualEffects) > 0 and not player:HasCollectible(CRONUS_ID),
+        return sumValues(ctx.manualEffects) > 0 and not player:HasCollectible(KRONOS_ID),
             string.format("%d live effects", sumValues(ctx.manualEffects))
     end)
-    act(function(player) player:AddCollectible(CRONUS_ID, 0, false) end)
+    act(function(player) player:AddCollectible(KRONOS_ID, 0, false) end)
     wait(20)
-    check("Manual used before Cronus is absorbed", function(_, ctx)
+    check("Manual used before Kronos is absorbed", function(_, ctx)
         local credited = sumValues(runSave().tempFloor and runSave().tempFloor.counts)
         return credited == sumValues(ctx.manualEffects) and credited > 0,
             string.format("%d summoned, %d credited", sumValues(ctx.manualEffects), credited)
     end)
     check("every Manual absorption registers +2", function(player, ctx)
         local state = ConchBlessing.getUnifiedMultiplierState(player, ConchBlessing.stats.unifiedMultipliers)
-        local entry = state and state.itemAdditions and state.itemAdditions[CRONUS_ID]
+        local entry = state and state.itemAdditions and state.itemAdditions[KRONOS_ID]
         local actual = entry and entry.Damage and entry.Damage.cumulative or 0
         local expected = sumValues(ctx.manualEffects) * 2
         return math.abs(actual - expected) < 0.001,
@@ -511,7 +511,7 @@ local function buildPlan(plan)
     check("Manual grants each configured conversion", function(player, ctx)
         local checked = 0
         for id, count in pairs(ctx.manualEffects) do
-            local conversion = ConchBlessing.cronus.data.familiarToItemMap[id]
+            local conversion = ConchBlessing.kronos.data.familiarToItemMap[id]
             if conversion and conversion.itemId then
                 checked = checked + 1
                 local expected = conversion.maxGrants == 0 and count or math.min(count, conversion.maxGrants or 0)
@@ -548,11 +548,11 @@ local function buildPlan(plan)
         Game():StartRoomTransition(ctx.room, Direction.NO_DIRECTION, RoomTransitionAnim.FADE)
     end)
     wait(20)
-    act(function(player) player:RemoveCollectible(CRONUS_ID) end)
+    act(function(player) player:RemoveCollectible(KRONOS_ID) end)
     wait(10)
-    check("Manual conversions removed with Cronus", function(player, ctx)
+    check("Manual conversions removed with Kronos", function(player, ctx)
         for id in pairs(ctx.manualEffects) do
-            local conversion = ConchBlessing.cronus.data.familiarToItemMap[id]
+            local conversion = ConchBlessing.kronos.data.familiarToItemMap[id]
             if conversion and conversion.itemId and owns(player, conversion.itemId) > 0 then
                 return false, "converted item remains: " .. conversion.itemId
             end
@@ -561,39 +561,39 @@ local function buildPlan(plan)
     end)
     act(function(player, ctx)
         for id in pairs(ctx.manualEffects) do player:GetEffects():RemoveCollectibleEffect(id, -1) end
-        ConchBlessing.SaveManager.GetFloorSave(player).cronusManual = nil
+        ConchBlessing.SaveManager.GetFloorSave(player).kronosManual = nil
         player:AddCacheFlags(CacheFlag.CACHE_FAMILIARS)
         player:EvaluateItems()
-        player:AddCollectible(CRONUS_ID, 0, false)
+        player:AddCollectible(KRONOS_ID, 0, false)
     end)
     wait(10)
 
     -- absorb + dust visual ----------------------------------------------------
     section("absorb", "3 item icons show localized ability captions in a clean pixel font directly below them; when the icon crumbles, every letter crumbles into the same dust and swirls into the body; after Halo of Flies, a gold 'current projectile ignore chance' line shows briefly")
     check("absorption caption atlas loads", function()
-        local ready, glyphs, reason = ConchBlessing.cronus._test.captionStatus()
+        local ready, glyphs, reason = ConchBlessing.kronos._test.captionStatus()
         return ready, string.format("LanaPixel atlas; glyphs=%d; error=%s", glyphs, reason)
     end)
     act(function(player)
-        ConchBlessing.cronus._test.resetCaptionEvidence()
+        ConchBlessing.kronos._test.resetCaptionEvidence()
         giveAll(player, { { C.COLLECTIBLE_BROTHER_BOBBY, 1 }, { C.COLLECTIBLE_HALO_OF_FLIES, 1 }, { C.COLLECTIBLE_LITTLE_CHUBBY, 1 } })
     end)
     wait(5)
     check("queued absorption caption has letters and dust grains", function()
-        local lines, letters, grains, merge = ConchBlessing.cronus._test.transferCaptionSnapshot()
+        local lines, letters, grains, merge = ConchBlessing.kronos._test.transferCaptionSnapshot()
         return lines > 0 and letters > 0 and grains >= letters,
             string.format("lines=%d; letters=%d; grains=%d; grain size=%dpx", lines, letters, grains, merge * 2)
     end)
-    wait(ConchBlessing.cronus._test.TRANSFER_TOTAL * 3 + 10)
+    wait(ConchBlessing.kronos._test.TRANSFER_TOTAL * 3 + 10)
     check("caption rendered readable letters, then crumbled them into grains", function()
-        local readable, x, y, dustPeak = ConchBlessing.cronus._test.transferCaptionEvidence()
+        local readable, x, y, dustPeak = ConchBlessing.kronos._test.transferCaptionEvidence()
         return readable and dustPeak > 0,
             string.format("readable=%s at x=%d y=%d; most caption draws in one dust frame=%d", tostring(readable), x, y, dustPeak)
     end)
-    wait(ConchBlessing.cronus._test.VALUE_TOTAL + 10)
+    wait(ConchBlessing.kronos._test.VALUE_TOTAL + 10)
     check("after Halo of Flies is absorbed, its live projectile ignore chance shows", function(player)
-        local value = select(5, ConchBlessing.cronus._test.transferCaptionEvidence())
-        local expected = ConchBlessing.EIDDynamicTokens.CRONUS_BLOCK(player)
+        local value = select(5, ConchBlessing.kronos._test.transferCaptionEvidence())
+        local expected = ConchBlessing.EIDDynamicTokens.KRONOS_BLOCK(player)
         return value ~= nil and value:find(expected, 1, true) ~= nil,
             string.format("shown=%s; live=%s", tostring(value), tostring(expected))
     end)
@@ -610,7 +610,7 @@ local function buildPlan(plan)
     end)
     wait(5)
     check("familiars GB Bug returns together share one release grid", function()
-        local groups = ConchBlessing.cronus._test.transferGroups()
+        local groups = ConchBlessing.kronos._test.transferGroups()
         local released, detail = 0, {}
         for _, group in ipairs(groups) do
             detail[#detail + 1] = string.format("%s x%d", group.reverse and "release" or "absorb", group.icons)
@@ -686,8 +686,8 @@ local function buildPlan(plan)
             position, Vector.Zero, nil)
     end)
     check("EID token shows the live chance", function()
-        local resolver = ConchBlessing.EIDDynamicTokens and ConchBlessing.EIDDynamicTokens.CRONUS_BLOCK
-        if type(resolver) ~= "function" then return false, "no CRONUS_BLOCK resolver" end
+        local resolver = ConchBlessing.EIDDynamicTokens and ConchBlessing.EIDDynamicTokens.KRONOS_BLOCK
+        if type(resolver) ~= "function" then return false, "no KRONOS_BLOCK resolver" end
         local value = resolver()
         return value == "100%", "token = " .. tostring(value)
     end)
@@ -749,7 +749,7 @@ local function buildPlan(plan)
         ctx.cards = countEntities(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_TAROTCARD)
         ctx.paschal = tonumber(runSave().paschalHundredths) or 0
         local center = Game():GetRoom():GetCenterPos()
-        for _ = 1, 7 do ConchBlessing.cronus.onRoomClear(nil, nil, center) end
+        for _ = 1, 7 do ConchBlessing.kronos.onRoomClear(nil, nil, center) end
     end)
     wait(10)
     atLeast("7 chests (Lil Chest 100%)", function(_, ctx)
@@ -788,15 +788,15 @@ local function buildPlan(plan)
     wait(60)
     eqCheck("hidden Bloodshot Eye pinned", function()
         return countEntities(EntityType.ENTITY_FAMILIAR, FamiliarVariant.BLOODSHOT_EYE, -1,
-            function(e) return e:GetData().__cronusBloodshotEye and not e.Visible end) end, 1)
+            function(e) return e:GetData().__kronosBloodshotEye and not e.Visible end) end, 1)
     eqCheck("3 Minisaacs from Mongo Baby", function()
         return countEntities(EntityType.ENTITY_FAMILIAR, FamiliarVariant.MINISAAC, -1,
-            function(e) return e:GetData().__cronusMongoMinisaac end) end, 3)
+            function(e) return e:GetData().__kronosMongoMinisaac end) end, 3)
     eqCheck("Succubus aura pinned", function()
         return countEntities(EntityType.ENTITY_FAMILIAR, FamiliarVariant.SUCCUBUS, -1,
-            function(e) return e:GetData().__cronusSuccubus end) end, 1)
+            function(e) return e:GetData().__kronosSuccubus end) end, 1)
     check("Censer body hidden and native halo retained", function(player)
-        local familiar = (player:GetData().__cronusCensers or {})[1]
+        local familiar = (player:GetData().__kronosCensers or {})[1]
         if not familiar or not familiar:Exists() then return false, "Censer anchor missing" end
         local sprite = familiar:GetSprite()
         if type(sprite.GetLayer) ~= "function" then return nil, "layer inspection unavailable; see LOOK" end
@@ -809,18 +809,18 @@ local function buildPlan(plan)
             and familiar.Visible, "body=" .. body .. "; halo=" .. halo
     end)
     eqCheck("two Star aura anchors", function(player)
-        return #(player:GetData().__cronusStarsOfBethlehem or {}) end, 2)
+        return #(player:GetData().__kronosStarsOfBethlehem or {}) end, 2)
     act(function(player, ctx)
         local data = player:GetData()
-        local stars = data.__cronusStarsOfBethlehem or {}
+        local stars = data.__kronosStarsOfBethlehem or {}
         ctx.starDamage = player.Damage
         ctx.starCompasses = owns(player, C.COLLECTIBLE_COMPASS)
         ctx.starSurvivor = stars[2]
         if stars[1] then stars[1]:Remove() end
-        ConchBlessing.cronus._ensureStarOfBethlehemStack(player)
-        ctx.starRecoveredImmediately = #(data.__cronusStarsOfBethlehem or {}) == 2
+        ConchBlessing.kronos._ensureStarOfBethlehemStack(player)
+        ctx.starRecoveredImmediately = #(data.__kronosStarsOfBethlehem or {}) == 2
         ctx.starPeerPreserved = ctx.starSurvivor and ctx.starSurvivor:Exists()
-            and data.__cronusStarsOfBethlehem[1] == ctx.starSurvivor
+            and data.__kronosStarsOfBethlehem[1] == ctx.starSurvivor
     end)
     check("missing Star refilled immediately; healthy peer retained", function(_, ctx)
         return ctx.starRecoveredImmediately and ctx.starPeerPreserved,
@@ -832,10 +832,10 @@ local function buildPlan(plan)
                 ctx.starCompasses, owns(player, C.COLLECTIBLE_COMPASS))
     end)
     act(function(player, ctx)
-        player:GetData().__cronusNextStarOfBethlehemSpawnFrame = Game():GetFrameCount()
-        ConchBlessing.cronus._ensureStarOfBethlehemStack(player)
+        player:GetData().__kronosNextStarOfBethlehemSpawnFrame = Game():GetFrameCount()
+        ConchBlessing.kronos._ensureStarOfBethlehemStack(player)
         ctx.starAuraRefreshed = ctx.starSurvivor and not ctx.starSurvivor:Exists()
-            and #(player:GetData().__cronusStarsOfBethlehem or {}) == 2
+            and #(player:GetData().__kronosStarsOfBethlehem or {}) == 2
     end)
     check("native inactive-aura refresh retained", function(_, ctx)
         return ctx.starAuraRefreshed, "refreshed=" .. tostring(ctx.starAuraRefreshed)
@@ -875,13 +875,13 @@ local function buildPlan(plan)
     -- temporary familiars -------------------------------------------------------------------------
     section("temp: Box of Friends", "a Box of Friends icon dissolves into you; no Demon Baby appears")
     act(function(player, ctx)
-        ctx.daddyEffect = ConchBlessing.cronus._getEffectCount(player, C.COLLECTIBLE_DADDY_LONGLEGS)
+        ctx.daddyEffect = ConchBlessing.kronos._getEffectCount(player, C.COLLECTIBLE_DADDY_LONGLEGS)
         player:UseActiveItem(C.COLLECTIBLE_BOX_OF_FRIENDS, UseFlag.USE_NOANIM, -1)
     end)
     wait(20)
-    eqCheck("room doubling active", function() return ConchBlessing.cronus._getRoomTemporary().double end, 1)
+    eqCheck("room doubling active", function() return ConchBlessing.kronos._getRoomTemporary().double end, 1)
     check("effects count twice", function(player, ctx)
-        local now = ConchBlessing.cronus._getEffectCount(player, C.COLLECTIBLE_DADDY_LONGLEGS)
+        local now = ConchBlessing.kronos._getEffectCount(player, C.COLLECTIBLE_DADDY_LONGLEGS)
         return now == ctx.daddyEffect * 2, string.format("Daddy Longlegs effect %d -> %d", ctx.daddyEffect, now)
     end)
     eqCheck("no Demon Baby familiar", function()
@@ -977,7 +977,7 @@ local function buildPlan(plan)
         waitUntil(function(_, ctx) return ctx.twinsHit or ctx.rooms > ctx.roomsBefore end, 120)
         wait(15)
         act(function(_, ctx)
-            if next(ConchBlessing.cronus._getRoomTemporary().twins) or next(ConchBlessing.cronus._getRoomTemporary().counts) then
+            if next(ConchBlessing.kronos._getRoomTemporary().twins) or next(ConchBlessing.kronos._getRoomTemporary().counts) then
                 ctx.twinsHit = true
             end
         end)
@@ -1059,12 +1059,12 @@ local function buildPlan(plan)
                 tonsils, delta(ctx, "hurts"), ctx.tonsilHits, totalAbsorbed() - ctx.total)
     end)
 
-    -- losing Cronus -----------------------------------------------------------------------------
+    -- losing Kronos -----------------------------------------------------------------------------
     section("drop", "every absorbed familiar comes back out of your body in reverse dust")
     act(function(player, ctx)
         ctx.total = totalAbsorbed()
         ctx.owned = ownedFamiliarItems(player)
-        while player:HasCollectible(CRONUS_ID, true) do player:RemoveCollectible(CRONUS_ID) end
+        while player:HasCollectible(KRONOS_ID, true) do player:RemoveCollectible(KRONOS_ID) end
     end)
     wait(30)
     check("absorbed familiars returned", function(player, ctx)
@@ -1078,7 +1078,7 @@ local function buildPlan(plan)
         act(function(_, ctx)
             ctx.savedDebugMode = ConchBlessing.Config and ConchBlessing.Config.debugMode
             if ConchBlessing.Config then ConchBlessing.Config.debugMode = false end
-            ConchBlessing.cronus._runReady = true
+            ConchBlessing.kronos._runReady = true
         end)
     end
     probe._auraOnly = nil
@@ -1093,14 +1093,14 @@ local function buildPlan(plan)
                 while player:HasCollectible(id, true) do player:RemoveCollectible(id) end
             end
         end
-        -- Cronus loss restores temporary familiar effects too. Clear those
+        -- Kronos loss restores temporary familiar effects too. Clear those
         -- previous scenarios before measuring a single new absorption.
-        for id in pairs(ConchBlessing.cronus._test.readTemporaryFamiliarEffects(player)) do
+        for id in pairs(ConchBlessing.kronos._test.readTemporaryFamiliarEffects(player)) do
             player:GetEffects():RemoveCollectibleEffect(id, -1)
         end
-        -- The Monster Manual section's floor credit outlives Cronus on this floor;
-        -- clear it like that section does, or the new Cronus credits it again.
-        ConchBlessing.SaveManager.GetFloorSave(player).cronusManual = nil
+        -- The Monster Manual section's floor credit outlives Kronos on this floor;
+        -- clear it like that section does, or the new Kronos credits it again.
+        ConchBlessing.SaveManager.GetFloorSave(player).kronosManual = nil
         ctx.starAuraAPI = type(player.GetHallowedGroundCountdown) == "function"
             and type(player.SetHallowedGroundCountdown) == "function"
         Isaac.ExecuteCommand("goto s.bossrush")
@@ -1111,16 +1111,16 @@ local function buildPlan(plan)
         return not ctx.starAuraAPI or player:GetHallowedGroundCountdown() <= 0
     end, 120)
     act(function(player)
-        player:AddCollectible(CRONUS_ID, 0, false)
+        player:AddCollectible(KRONOS_ID, 0, false)
     end)
     wait(10)
     check("isolated baseline has no absorption damage", function(player)
         local state = ConchBlessing.getUnifiedMultiplierState(player, ConchBlessing.stats.unifiedMultipliers)
-        local entry = state and state.itemAdditions and state.itemAdditions[CRONUS_ID]
+        local entry = state and state.itemAdditions and state.itemAdditions[KRONOS_ID]
         local damage = entry and entry.Damage and entry.Damage.cumulative or 0
         return totalAbsorbed() == 0 and math.abs(damage) < 0.001,
             string.format("absorbed=%d; registered damage=%.4f; copies: %s", totalAbsorbed(), damage,
-                ConchBlessing.cronus._test.damageCopiesBreakdown(player))
+                ConchBlessing.kronos._test.damageCopiesBreakdown(player))
     end)
     act(function(player, ctx)
         player:AddCacheFlags(CacheFlag.CACHE_DAMAGE | CacheFlag.CACHE_FIREDELAY | CacheFlag.CACHE_TEARFLAG)
@@ -1173,35 +1173,35 @@ local function buildPlan(plan)
     end)
 end
 
--- Manual setups and helpers, reached as `conch_cronus <action>`.
+-- Manual setups and helpers, reached as `conch_kronos <action>`.
 local function handleCommand(action, words, player)
     local scenario = findScenario(action)
     if action == "aura" then
         probe._auraOnly = true
-        if not TestBench.start("conch_cronus", true) then probe._auraOnly = nil end
+        if not TestBench.start("conch_kronos", true) then probe._auraOnly = nil end
     elseif scenario then
         probe.run(scenario, player)
     elseif action == "grid" then
         -- Three copies of one familiar absorbed together, then eight familiars
         -- released together: two grid effects, nothing granted or removed.
-        local cronus = ConchBlessing.cronus
-        for _ = 1, 3 do cronus._queueTransferEffect(player, C.COLLECTIBLE_BROTHER_BOBBY, false) end
+        local kronos = ConchBlessing.kronos
+        for _ = 1, 3 do kronos._queueTransferEffect(player, C.COLLECTIBLE_BROTHER_BOBBY, false) end
         for _, id in ipairs({ C.COLLECTIBLE_LITTLE_STEVEN, C.COLLECTIBLE_GUARDIAN_ANGEL, C.COLLECTIBLE_ROTTEN_BABY,
             C.COLLECTIBLE_HALO_OF_FLIES, C.COLLECTIBLE_DEMON_BABY, C.COLLECTIBLE_SISTER_MAGGY,
             C.COLLECTIBLE_ABEL, C.COLLECTIBLE_LITTLE_CHUBBY }) do
-            cronus._queueTransferEffect(player, id, true)
+            kronos._queueTransferEffect(player, id, true)
         end
         local parts = {}
-        for _, group in ipairs(cronus._test.transferGroups()) do
+        for _, group in ipairs(kronos._test.transferGroups()) do
             parts[#parts + 1] = string.format("%s x%d in %d row(s)", group.reverse and "release" or "absorb", group.icons, group.rows)
         end
         out("visual-only grid preview queued: " .. table.concat(parts, ", "))
         out("LOOK: three Brother Bobby icons side by side crumble into you together; then eight icons in two centred rows of four come out of you together")
     elseif action == "caption" then
-        local test = ConchBlessing.cronus._test
+        local test = ConchBlessing.kronos._test
         local ready, glyphCount, reason = test.captionStatus()
         test.resetCaptionEvidence()
-        ConchBlessing.cronus._queueTransferEffect(player, tonumber(words[2]) or C.COLLECTIBLE_BROTHER_BOBBY, false)
+        ConchBlessing.kronos._queueTransferEffect(player, tonumber(words[2]) or C.COLLECTIBLE_BROTHER_BOBBY, false)
         local lines, letters, grains, merge = test.transferCaptionSnapshot()
         out(string.format("caption atlas=%s; glyphs=%d; lines=%d; letters=%d; grains=%d; grain size=%dpx; error=%s",
             tostring(ready), glyphCount, lines, letters, grains, merge * 2, reason))
@@ -1214,24 +1214,24 @@ local function handleCommand(action, words, player)
         player:TakeDamage(1, DamageFlag.DAMAGE_NOKILL, EntityRef(player), 30)
         out("hit taken (no kill). Effects run on the next update.")
     elseif action == "clearsim" then
-        ConchBlessing.cronus._runReady = true
+        ConchBlessing.kronos._runReady = true
         local count = math.max(1, math.floor(tonumber(words[2]) or 1))
         local center = Game():GetRoom():GetCenterPos()
         for _ = 1, count do
-            ConchBlessing.cronus.onRoomClear(nil, nil, center)
+            ConchBlessing.kronos.onRoomClear(nil, nil, center)
         end
         out(string.format("ran the room-clear reward %d time(s)", count))
     elseif action == "enemies" then
         spawnEnemies("fatty", math.max(1, math.floor(tonumber(words[2]) or 3)))
     elseif action == "give" then
         local id = tonumber(words[2])
-        if not id then out("usage: conch_cronus give <id> [count]") return true end
+        if not id then out("usage: conch_kronos give <id> [count]") return true end
         give(player, id, math.max(1, math.floor(tonumber(words[3]) or 1)))
     elseif action == "drop" then
-        while player:HasCollectible(CRONUS_ID, true) do
-            player:RemoveCollectible(CRONUS_ID)
+        while player:HasCollectible(KRONOS_ID, true) do
+            player:RemoveCollectible(KRONOS_ID)
         end
-        out("Cronus removed: absorbed familiars return with the reverse visual, granted items are taken back")
+        out("Kronos removed: absorbed familiars return with the reverse visual, granted items are taken back")
     else
         return false
     end
@@ -1239,8 +1239,8 @@ local function handleCommand(action, words, player)
 end
 
 TestBench.register({
-    command = "conch_cronus",
-    tag = "CronusProbe",
+    command = "conch_kronos",
+    tag = "KronosProbe",
     duration = "about 2 minutes",
     build = buildPlan,
     onSection = snapshotCounters,
@@ -1252,21 +1252,21 @@ TestBench.register({
 -- count. Console pause leaves this pending until closed.
 ConchBlessing:AddCallback(ModCallbacks.MC_POST_UPDATE, function()
     if not probe._captionWaiting then return end
-    local readable, x, y, dustPeak = ConchBlessing.cronus._test.transferCaptionEvidence()
+    local readable, x, y, dustPeak = ConchBlessing.kronos._test.transferCaptionEvidence()
     if readable and not probe._captionReadable then
         out(string.format("caption render PASS: readable letters drawn from the atlas at x=%d y=%d", x, y))
         probe._captionReadable = true
     end
-    if dustPeak > 0 and Game():GetFrameCount() - probe._captionWaiting > ConchBlessing.cronus._test.TRANSFER_TOTAL then
+    if dustPeak > 0 and Game():GetFrameCount() - probe._captionWaiting > ConchBlessing.kronos._test.TRANSFER_TOTAL then
         out(string.format("caption dust PASS: up to %d caption draws in one frame while crumbling", dustPeak))
         out("LOOK: the caption sat right under the icon, then every letter broke into dust that swirled into the body")
         probe._captionWaiting = nil
-    elseif Game():GetFrameCount() - probe._captionWaiting > ConchBlessing.cronus._test.TRANSFER_TOTAL + 60 then
+    elseif Game():GetFrameCount() - probe._captionWaiting > ConchBlessing.kronos._test.TRANSFER_TOTAL + 60 then
         out(string.format("caption render FAIL: readable=%s; dust draws=%d", tostring(readable), dustPeak))
         probe._captionWaiting = nil
     end
 end)
 ConchBlessing:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, function() probe._captionWaiting = nil end)
 
-ConchBlessing.cronusProbe = probe
+ConchBlessing.kronosProbe = probe
 return probe

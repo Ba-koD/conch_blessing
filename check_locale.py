@@ -16,8 +16,8 @@ Prints every problem and exits 1 if there is one. It checks that
   * %TOKEN% values in item text are registered in ConchBlessing.EIDDynamicTokens
   * ui strings mirror English (ui.mcm is English-only), use only %s and %% as
     format directives, and take as many %s arguments as English does
-  * every character Cronus's absorption captions can show has a glyph in
-    scripts/items/collectibles/cronus_caption_glyphs.lua (generate_caption_glyphs.py)
+  * every character Kronos's absorption captions can show has a glyph in
+    scripts/items/collectibles/kronos_caption_glyphs.lua (generate_caption_glyphs.py)
 """
 import os
 import re
@@ -38,8 +38,8 @@ ITEM_FIELDS = ("name", "description", "eid", "synergies", "specials")
 ICON = re.compile(r"\{(\w+):([^{}]+)\}")
 DYNAMIC = re.compile(r"%([A-Z_]+)%")
 ENUM_TABLES = {"c": ("CollectibleType", "COLLECTIBLE_"), "t": ("TrinketType", "TRINKET_"), "card": ("Card", "CARD_")}
-CAPTION_GLYPHS_PATH = os.path.join(ROOT, "scripts", "items", "collectibles", "cronus_caption_glyphs.lua")
-# Characters LanaPixel lacks that the caption draws as another glyph (CAPTION.FALLBACK in cronus.lua).
+CAPTION_GLYPHS_PATH = os.path.join(ROOT, "scripts", "items", "collectibles", "kronos_caption_glyphs.lua")
+# Characters LanaPixel lacks that the caption draws as another glyph (CAPTION.FALLBACK in kronos.lua).
 CAPTION_FALLBACK = {"\u2212"}
 
 errors = []
@@ -158,11 +158,11 @@ def read_caption_glyphs():
 
 
 def caption_sources(table):
-    """The strings Cronus's absorption caption can draw: its synergy lines and ui.cronus.transfer_*."""
-    cronus = table.get("items", {}).get("CRONUS", {})
-    yield from strings(cronus.get("synergies", {}) if isinstance(cronus, dict) else {}, "items.CRONUS.synergies")
-    for path, text in strings(table.get("ui", {}).get("cronus", {}), "ui.cronus"):
-        if path.startswith("ui.cronus.transfer_"):
+    """The strings Kronos's absorption caption can draw: its synergy lines and ui.kronos.transfer_*."""
+    kronos = table.get("items", {}).get("KRONOS", {})
+    yield from strings(kronos.get("synergies", {}) if isinstance(kronos, dict) else {}, "items.KRONOS.synergies")
+    for path, text in strings(table.get("ui", {}).get("kronos", {}), "ui.kronos"):
+        if path.startswith("ui.kronos.transfer_"):
             yield path, text
 
 
@@ -346,7 +346,7 @@ def main():
                 plain = re.sub(r"\{\{.*?\}\}", "", ICON.sub("", text))
                 missing = sorted({ch for ch in plain if ch >= " " and ord(ch) not in glyphs and ch not in CAPTION_FALLBACK})
                 if missing:
-                    error("%s.lua: %s: Cronus captions have no glyph for %s; run python generate_caption_glyphs.py"
+                    error("%s.lua: %s: Kronos captions have no glyph for %s; run python generate_caption_glyphs.py"
                           % (lang, path, " ".join("%s (U+%04X)" % (ch, ord(ch)) for ch in missing)))
 
     return finish(tables, registry)
