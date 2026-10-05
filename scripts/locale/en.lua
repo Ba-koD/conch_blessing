@@ -25,7 +25,7 @@ return {
             eid = {
                 "{{Damage}} Damage multiplier increases by 0.1 as you hit enemies.",
                 "#{{Damage}} Damage multiplier decreases by 0.15 as you miss enemies.",
-                "#{{Luck}} 50% chance for a miss not to lower it (+5% per luck, 100% at 10 luck or more).",
+                "#{{Luck}} 50% chance not to decrease. (5% per luck)",
                 "#{{Damage}} Damage multiplier is capped at 3.0 and cannot go below 0.75.",
                 "#With a non-tear attack, the {{Damage}}damage multiplier is fixed at x1.5.",
             },
