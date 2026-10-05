@@ -466,7 +466,7 @@ return {
                 "Replaces your tears with lasers",
                 "#When your attack damages an enemy: 10% chance to designate the target (+{{Luck}}Luck x5%)",
                 "#After 1.5 seconds, {c:EPIC_FETUS} Epic Fetus missiles strike one-by-one equal to your current multishot count",
-                "#Missile deals 10 times of your {{Damage}}Damage",
+                "#Missile deals 3 times your {{Damage}}Damage",
                 "#{{Warning}} Requires REPENTOGON!",
             },
             synergies = {
