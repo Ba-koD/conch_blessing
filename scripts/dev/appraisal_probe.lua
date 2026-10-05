@@ -260,7 +260,11 @@ local function build(plan)
     plan.act(function() observing = nil end)
 end
 
-ConchBlessing:AddCallback(ModCallbacks.MC_USE_ITEM, function()
+-- Appraisal's own MC_USE_ITEM handler returns its result table, and the engine
+-- stops running later callbacks once one returns a value; count uses early.
+local callbackPriority = rawget(_G, "CallbackPriority")
+local OBSERVE_PRIORITY = type(callbackPriority) == "table" and tonumber(callbackPriority.IMPORTANT) or -200
+ConchBlessing:AddPriorityCallback(ModCallbacks.MC_USE_ITEM, OBSERVE_PRIORITY, function()
     if observing and TestBench.isRunning() then observing.uses = observing.uses + 1 end
 end, ConchBlessing.ItemData.APPRAISAL_CERTIFICATE.id)
 

@@ -4217,6 +4217,24 @@ ConchBlessing.cronus._test = {
         return 0, 0, 0, 0
     end,
     gridOffsets = gridOffsets,
+    -- Where the absorbed-familiar damage copies come from, for probe diagnostics.
+    damageCopiesBreakdown = function(player)
+        local rs = getRunSave(player) or {}
+        local function sum(t)
+            local n = 0
+            for _, v in pairs(type(t) == "table" and t or {}) do n = n + (tonumber(v) or 0) end
+            return n
+        end
+        local floor = type(rs.tempFloor) == "table" and rs.tempFloor.serial == (tonumber(rs.floorSerial) or 0)
+            and rs.tempFloor.counts or nil
+        local twins = 0
+        for famId, times in pairs(roomTemp.twins) do
+            twins = twins + ConchBlessing.cronus._getAbsorbedCount(player, famId) * times
+        end
+        return string.format("permanent=%s room=%d floor=%d lilith=%d twins=%d prettyFlies=%s double=%s",
+            tostring(rs.totalAbsorbed or 0), sum(roomTemp.counts), sum(floor), sum(rs.tempPermanent), twins,
+            tostring(rs.prettyFlies or 0), tostring(roomTemp.double))
+    end,
     -- Every queued effect for the probe: direction, icon count and grid rows.
     transferGroups = function()
         local groups = {}

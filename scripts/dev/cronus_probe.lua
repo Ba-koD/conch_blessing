@@ -1098,6 +1098,9 @@ local function buildPlan(plan)
         for id in pairs(ConchBlessing.cronus._test.readTemporaryFamiliarEffects(player)) do
             player:GetEffects():RemoveCollectibleEffect(id, -1)
         end
+        -- The Monster Manual section's floor credit outlives Cronus on this floor;
+        -- clear it like that section does, or the new Cronus credits it again.
+        ConchBlessing.SaveManager.GetFloorSave(player).cronusManual = nil
         ctx.starAuraAPI = type(player.GetHallowedGroundCountdown) == "function"
             and type(player.SetHallowedGroundCountdown) == "function"
         Isaac.ExecuteCommand("goto s.bossrush")
@@ -1116,7 +1119,8 @@ local function buildPlan(plan)
         local entry = state and state.itemAdditions and state.itemAdditions[CRONUS_ID]
         local damage = entry and entry.Damage and entry.Damage.cumulative or 0
         return totalAbsorbed() == 0 and math.abs(damage) < 0.001,
-            string.format("absorbed=%d; registered damage=%.4f", totalAbsorbed(), damage)
+            string.format("absorbed=%d; registered damage=%.4f; copies: %s", totalAbsorbed(), damage,
+                ConchBlessing.cronus._test.damageCopiesBreakdown(player))
     end)
     act(function(player, ctx)
         player:AddCacheFlags(CacheFlag.CACHE_DAMAGE | CacheFlag.CACHE_FIREDELAY | CacheFlag.CACHE_TEARFLAG)
