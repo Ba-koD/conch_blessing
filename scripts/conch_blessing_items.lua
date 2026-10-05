@@ -552,6 +552,8 @@ ConchBlessing.ItemData = {
         script = "scripts/items/collectibles/appraisal_certificate",
         callbacks = {
             use = "appraisal.onUseItem",
+            preUseItem = "appraisal.onPreUseItem",
+            inputAction = "appraisal.onInputAction",
         },
         synergies = {
             [{ type = "trinket", name = "Atropos" }] = "atropos"
@@ -1867,5 +1869,13 @@ do
     local ok, err = pcall(require, "scripts.dev.locale_probe")
     if not ok then
         ConchBlessing.printError("[LocaleProbe] load failed: " .. tostring(err))
+    end
+end
+
+-- Dev tooling: registers the conch_appraisal test bench. Safe to remove.
+do
+    local ok, err = pcall(require, "scripts.dev.appraisal_probe")
+    if not ok then
+        ConchBlessing.printError("[AppraisalProbe] load failed: " .. tostring(err))
     end
 end

@@ -381,9 +381,9 @@ return {
             name = "Appraisal Certificate",
             description = "Is this a loot?",
             eid = {
-                "Consumes {{Coin}} 30 to absorb all currently held trinkets and enter a dedicated space separate from the {c:DEATH_CERTIFICATE} Death Certificate dimension, containing every available trinket.",
+                "Consumes {{Coin}} 30 to absorb all currently held trinkets and enter the {c:DEATH_CERTIFICATE} Death Certificate dimension containing every trinket except {own:ATROPOS} Atropos.",
                 "#An always-open door back to the original room is on the left side of the first room.",
-                "#{c:GLOWING_HOUR_GLASS} Glowing Hourglass cannot be used inside the dedicated space.",
+                "#{c:GLOWING_HOUR_GLASS} Glowing Hourglass cannot be used inside the Appraisal rooms.",
             },
             synergies = {
                 atropos = {
