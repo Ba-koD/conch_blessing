@@ -144,11 +144,14 @@ local function getRoomTransitionMode()
     return nil
 end
 
+-- The canonical call keeps Death Certificate's own use presentation (hold-up,
+-- sound and its room transition) so entry looks and sounds like the real item;
+-- only the costume, announcer and HUD name, which would say "Death Certificate",
+-- are suppressed. showAppraisalHoldUp then swaps the held sprite to Appraisal.
 local function getDeathCertificateUseFlags()
     local useFlag = rawget(_G, "UseFlag")
     if type(useFlag) ~= "table" then return nil end
     local required = {
-        "USE_NOANIM",
         "USE_NOCOSTUME",
         "USE_NOANNOUNCER",
         "USE_NOHUD",
@@ -3592,6 +3595,13 @@ issueCanonicalEntry = function(session)
         )
     end)
     M._canonicalEntryPlayer = nil
+    if transitioned then
+        -- Cosmetic: the player holds up Appraisal Certificate, not Death Certificate.
+        local appraisal = ConchBlessing.ItemData.APPRAISAL_CERTIFICATE
+        if appraisal and appraisal.id and type(player.AnimateCollectible) == "function" then
+            pcall(player.AnimateCollectible, player, appraisal.id, "UseItem", "PlayerPickup")
+        end
+    end
     local transitionModeAfter = getRoomTransitionMode()
     if session.entryCommitted == true and getCurrentGalleryContext(session) then
         return true -- The engine may deliver the entrance callback synchronously.
