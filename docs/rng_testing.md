@@ -66,7 +66,7 @@ The measured helpers are module-scope locals, so each item file exposes them thr
 | `time_money.lua` | `chooseCoinSubtype` |
 | `a_minus.lua` | `computeRandomSplit` |
 | `angels_crown.lua` | `getBlessedChance`, `rollBlessed` |
-| `chronus.lua` | `getProjectileBlockChance`, `getSpawnChance`, `getStackedChance`, `pickRandomCopies`, `pickFromPool`, `getFloorPickPool` (+ their constant tables) |
+| `cronus.lua` | `getProjectileBlockChance`, `getSpawnChance`, `getStackedChance`, `pickRandomCopies`, `pickFromPool`, `getFloorPickPool` (+ their constant tables) |
 | `live_eye.lua` | `getMissForgiveChance` |
 
 `rollStat` was hoisted from a per-call closure to a module function so the probe

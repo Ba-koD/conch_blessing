@@ -249,10 +249,10 @@ function probe.angelsCrown(samples)
     end
 end
 
--- -------------------------------------------------------------------- chronus
-function probe.chronus(samples)
-    header("Chronus projectile block and blue fly / spider spawns")
-    local t = ConchBlessing.chronus and ConchBlessing.chronus._test
+-- -------------------------------------------------------------------- cronus
+function probe.cronus(samples)
+    header("Cronus projectile block and blue fly / spider spawns")
+    local t = ConchBlessing.cronus and ConchBlessing.cronus._test
     if not t then out("SKIPPED (module not loaded)") return end
 
     local rng = RNG()
@@ -422,7 +422,7 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, cmd, params)
     probe.timeMoney(samples, luck)
     probe.aMinus(samples)
     probe.angelsCrown(samples)
-    probe.chronus(samples)
+    probe.cronus(samples)
     probe.liveEye(samples, luck)
     probe.injectableDeath()
     out("")

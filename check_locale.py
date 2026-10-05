@@ -16,6 +16,8 @@ Prints every problem and exits 1 if there is one. It checks that
   * %TOKEN% values in item text are registered in ConchBlessing.EIDDynamicTokens
   * ui strings mirror English (ui.mcm is English-only), use only %s and %% as
     format directives, and take as many %s arguments as English does
+  * every character Cronus's absorption captions can show has a glyph in
+    scripts/items/collectibles/cronus_caption_glyphs.lua (generate_caption_glyphs.py)
 """
 import os
 import re
@@ -36,6 +38,9 @@ ITEM_FIELDS = ("name", "description", "eid", "synergies", "specials")
 ICON = re.compile(r"\{(\w+):([^{}]+)\}")
 DYNAMIC = re.compile(r"%([A-Z_]+)%")
 ENUM_TABLES = {"c": ("CollectibleType", "COLLECTIBLE_"), "t": ("TrinketType", "TRINKET_"), "card": ("Card", "CARD_")}
+CAPTION_GLYPHS_PATH = os.path.join(ROOT, "scripts", "items", "collectibles", "cronus_caption_glyphs.lua")
+# Characters LanaPixel lacks that the caption draws as another glyph (CAPTION.FALLBACK in cronus.lua).
+CAPTION_FALLBACK = {"\u2212"}
 
 errors = []
 
@@ -143,6 +148,22 @@ def read_dynamic_tokens():
                 tokens.update(re.findall(r"EIDDynamicTokens\.([A-Z_]+)\s*=[^=]", src))
                 tokens.update(re.findall(r"EIDDynamicTokens\[\"([A-Z_]+)\"\]\s*=[^=]", src))
     return tokens
+
+
+def read_caption_glyphs():
+    if not os.path.exists(CAPTION_GLYPHS_PATH):
+        return None
+    with open(CAPTION_GLYPHS_PATH, encoding="utf-8") as handle:
+        return {int(code) for code in re.findall(r"^\s*\[(\d+)\] = \{", handle.read(), re.M)}
+
+
+def caption_sources(table):
+    """The strings Cronus's absorption caption can draw: its synergy lines and ui.cronus.transfer_*."""
+    cronus = table.get("items", {}).get("CRONUS", {})
+    yield from strings(cronus.get("synergies", {}) if isinstance(cronus, dict) else {}, "items.CRONUS.synergies")
+    for path, text in strings(table.get("ui", {}).get("cronus", {}), "ui.cronus"):
+        if path.startswith("ui.cronus.transfer_"):
+            yield path, text
 
 
 def read_languages():
@@ -315,6 +336,18 @@ def main():
         for path in en_ui:
             if not english_only(path) and path not in ui:
                 error("%s.lua: %s is missing" % (lang, path))
+
+    glyphs = read_caption_glyphs()
+    if glyphs is None:
+        error("%s is missing; run python generate_caption_glyphs.py" % os.path.relpath(CAPTION_GLYPHS_PATH, ROOT))
+    else:
+        for lang, table in tables.items():
+            for path, text in caption_sources(table):
+                plain = re.sub(r"\{\{.*?\}\}", "", ICON.sub("", text))
+                missing = sorted({ch for ch in plain if ch >= " " and ord(ch) not in glyphs and ch not in CAPTION_FALLBACK})
+                if missing:
+                    error("%s.lua: %s: Cronus captions have no glyph for %s; run python generate_caption_glyphs.py"
+                          % (lang, path, " ".join("%s (U+%04X)" % (ch, ord(ch)) for ch in missing)))
 
     return finish(tables, registry)
 
