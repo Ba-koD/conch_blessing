@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the glyph table Cronus captions draw from.
+"""Build the glyph table Kronos captions draw from.
 
 Captions use the game's own LanaPixel font (resources/font/cjk/lanapixel.fnt in
 Repentance+). They are drawn from its atlas through a Sprite rather than the Font
@@ -27,7 +27,7 @@ import lua_data  # noqa: E402
 FONT = os.path.normpath(os.path.join(ROOT, "..", "..", "extracted_resources", "resources", "font", "cjk", "lanapixel.fnt"))
 ATLAS_RUNTIME_PATH = "font/cjk/lanapixel_0.png"
 LOCALE_DIR = os.path.join(ROOT, "scripts", "locale")
-OUTPUT = os.path.join(ROOT, "scripts", "items", "collectibles", "cronus_caption_glyphs.lua")
+OUTPUT = os.path.join(ROOT, "scripts", "items", "collectibles", "kronos_caption_glyphs.lua")
 CELL = 2  # dust grain size in pixels, the same as the item sprite's grains
 ALWAYS = "".join(chr(c) for c in range(32, 127))  # digits and signs for live values
 

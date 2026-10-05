@@ -368,10 +368,10 @@ ConchBlessing.ItemData = {
         type = "passive",
         id = Isaac.GetItemIdByName("Pig"),
     },
-    CRONUS = {
+    KRONOS = {
 		type = "passive",
-		id = Isaac.GetItemIdByName("Cronus"),
-		gfx = "cronus.png",
+		id = Isaac.GetItemIdByName("Kronos"),
+		gfx = "kronos.png",
 		pool = {
 			RoomType.ROOM_ANGEL,
 			RoomType.ROOM_DEVIL,
@@ -382,23 +382,23 @@ ConchBlessing.ItemData = {
 		cache = "damage firedelay",
 		flag = "negative",
         origin = { id = CollectibleType.COLLECTIBLE_BFFS, type = "collectible" },
-		script = "scripts/items/collectibles/cronus",
+		script = "scripts/items/collectibles/kronos",
 		callbacks = {
-			pickup = "cronus.onPickup",
-			postPlayerUpdate = "cronus.onPlayerUpdate",
-			evaluateCache = "cronus.onEvaluateCache",
-			gameStarted = "cronus.onGameStarted",
-            familiarUpdate = "cronus.onFamiliarUpdate",
-            fireTear = "cronus.onFireTear",
-            entityTakeDmg = "cronus.onEntityTakeDamage",
-            postEntityTakeDmg = "cronus.onPostEntityTakeDamage",
-            postNewRoom = "cronus.onNewRoom",
-            postNewLevel = "cronus.onNewLevel",
-            postRoomClear = "cronus.onRoomClear",
-            prePlayerCollision = "cronus.onPrePlayerCollision",
-            postUpdate = "cronus.onPostUpdate",
-            postRender = "cronus.onPostRender",
-            preGameExit = "cronus.onPreGameExit"
+			pickup = "kronos.onPickup",
+			postPlayerUpdate = "kronos.onPlayerUpdate",
+			evaluateCache = "kronos.onEvaluateCache",
+			gameStarted = "kronos.onGameStarted",
+            familiarUpdate = "kronos.onFamiliarUpdate",
+            fireTear = "kronos.onFireTear",
+            entityTakeDmg = "kronos.onEntityTakeDamage",
+            postEntityTakeDmg = "kronos.onPostEntityTakeDamage",
+            postNewRoom = "kronos.onNewRoom",
+            postNewLevel = "kronos.onNewLevel",
+            postRoomClear = "kronos.onRoomClear",
+            prePlayerCollision = "kronos.onPrePlayerCollision",
+            postUpdate = "kronos.onPostUpdate",
+            postRender = "kronos.onPostRender",
+            preGameExit = "kronos.onPreGameExit"
 		},
 		synergies = {
             [{ id = CollectibleType.COLLECTIBLE_TWISTED_PAIR, type = "collectible" }] = "twisted_pair",
@@ -1851,11 +1851,11 @@ do
     end
 end
 
--- Dev tooling: registers the conch_cronus test bench. Safe to remove.
+-- Dev tooling: registers the conch_kronos test bench. Safe to remove.
 do
-    local ok, err = pcall(require, "scripts.dev.cronus_probe")
+    local ok, err = pcall(require, "scripts.dev.kronos_probe")
     if not ok then
-        ConchBlessing.printError("[CronusProbe] load failed: " .. tostring(err))
+        ConchBlessing.printError("[KronosProbe] load failed: " .. tostring(err))
     end
 end
 

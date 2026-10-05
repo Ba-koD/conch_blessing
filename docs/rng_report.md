@@ -266,40 +266,40 @@ least one blessing is `1 - (1 - p)^n`:
 | 5 | 76.3% | 86.5% |
 | 8 | 90.0% | 95.9% |
 
-## 9. Cronus projectile block and blue fly / spider spawns
+## 9. Kronos projectile block and blue fly / spider spawns
 
 Absorbed barrier familiars add a flat percentage per absorbed copy to one chance
-of ignoring an enemy projectile hit, capped at 100% (`scripts/items/collectibles/cronus.lua:2344`). The roll is
-`RandomFloat() < chance` on the Cronus collectible RNG, uniform on `[0, 1)`, so the
+of ignoring an enemy projectile hit, capped at 100% (`scripts/items/collectibles/kronos.lua:2354`). The roll is
+`RandomFloat() < chance` on the Kronos collectible RNG, uniform on `[0, 1)`, so the
 effective odds equal the configured sum.
 
 | Familiar | Per copy | Source |
 |---|---|---|
-| HALO_OF_FLIES | 1% | `scripts/items/collectibles/cronus.lua:2154` |
-| DISTANT_ADMIRATION | 1% | `scripts/items/collectibles/cronus.lua:2155` |
-| CUBE_OF_MEAT | 1% | `scripts/items/collectibles/cronus.lua:2156` |
-| FOREVER_ALONE | 1% | `scripts/items/collectibles/cronus.lua:2157` |
-| SACRIFICIAL_DAGGER | 2% | `scripts/items/collectibles/cronus.lua:2158` |
-| GUPPYS_HAIRBALL | 1% | `scripts/items/collectibles/cronus.lua:2159` |
-| GUILLOTINE | 1% | `scripts/items/collectibles/cronus.lua:2160` |
-| BALL_OF_BANDAGES | 1% | `scripts/items/collectibles/cronus.lua:2161` |
-| SMART_FLY | 1% | `scripts/items/collectibles/cronus.lua:2162` |
-| BEST_BUD | 1% | `scripts/items/collectibles/cronus.lua:2163` |
-| BIG_FAN | 2% | `scripts/items/collectibles/cronus.lua:2164` |
-| PUNCHING_BAG | 2% | `scripts/items/collectibles/cronus.lua:2165` |
-| SWORN_PROTECTOR | 5% | `scripts/items/collectibles/cronus.lua:2166` |
-| FRIEND_ZONE | 1% | `scripts/items/collectibles/cronus.lua:2167` |
-| LOST_FLY | 1% | `scripts/items/collectibles/cronus.lua:2168` |
-| HUSHY | 1% | `scripts/items/collectibles/cronus.lua:2169` |
-| BIG_CHUBBY | 1% | `scripts/items/collectibles/cronus.lua:2170` |
-| MOMS_RAZOR | 1% | `scripts/items/collectibles/cronus.lua:2171` |
-| ANGRY_FLY | 1% | `scripts/items/collectibles/cronus.lua:2172` |
-| LEPROSY | 1% | `scripts/items/collectibles/cronus.lua:2173` |
-| SLIPPED_RIB | 1% | `scripts/items/collectibles/cronus.lua:2174` |
-| POINTY_RIB | 1% | `scripts/items/collectibles/cronus.lua:2175` |
-| PSY_FLY | 5% | `scripts/items/collectibles/cronus.lua:2176` |
-| TINYTOMA | 1% | `scripts/items/collectibles/cronus.lua:2177` |
-| OBSESSED_FAN | 1% | `scripts/items/collectibles/cronus.lua:2178` |
+| HALO_OF_FLIES | 1% | `scripts/items/collectibles/kronos.lua:2164` |
+| DISTANT_ADMIRATION | 1% | `scripts/items/collectibles/kronos.lua:2165` |
+| CUBE_OF_MEAT | 1% | `scripts/items/collectibles/kronos.lua:2166` |
+| FOREVER_ALONE | 1% | `scripts/items/collectibles/kronos.lua:2167` |
+| SACRIFICIAL_DAGGER | 2% | `scripts/items/collectibles/kronos.lua:2168` |
+| GUPPYS_HAIRBALL | 1% | `scripts/items/collectibles/kronos.lua:2169` |
+| GUILLOTINE | 1% | `scripts/items/collectibles/kronos.lua:2170` |
+| BALL_OF_BANDAGES | 1% | `scripts/items/collectibles/kronos.lua:2171` |
+| SMART_FLY | 1% | `scripts/items/collectibles/kronos.lua:2172` |
+| BEST_BUD | 1% | `scripts/items/collectibles/kronos.lua:2173` |
+| BIG_FAN | 2% | `scripts/items/collectibles/kronos.lua:2174` |
+| PUNCHING_BAG | 2% | `scripts/items/collectibles/kronos.lua:2175` |
+| SWORN_PROTECTOR | 5% | `scripts/items/collectibles/kronos.lua:2176` |
+| FRIEND_ZONE | 1% | `scripts/items/collectibles/kronos.lua:2177` |
+| LOST_FLY | 1% | `scripts/items/collectibles/kronos.lua:2178` |
+| HUSHY | 1% | `scripts/items/collectibles/kronos.lua:2179` |
+| BIG_CHUBBY | 1% | `scripts/items/collectibles/kronos.lua:2180` |
+| MOMS_RAZOR | 1% | `scripts/items/collectibles/kronos.lua:2181` |
+| ANGRY_FLY | 1% | `scripts/items/collectibles/kronos.lua:2182` |
+| LEPROSY | 1% | `scripts/items/collectibles/kronos.lua:2183` |
+| SLIPPED_RIB | 1% | `scripts/items/collectibles/kronos.lua:2184` |
+| POINTY_RIB | 1% | `scripts/items/collectibles/kronos.lua:2185` |
+| PSY_FLY | 5% | `scripts/items/collectibles/kronos.lua:2186` |
+| TINYTOMA | 1% | `scripts/items/collectibles/kronos.lua:2187` |
+| OBSESSED_FAN | 1% | `scripts/items/collectibles/kronos.lua:2188` |
 
 One copy of every listed familiar adds up to **36%**.
 
@@ -310,7 +310,7 @@ One copy of every listed familiar adds up to **36%**.
 | every listed familiar once | **36.0%** | 35.946% |
 
 Blue fly (Rotten Baby, 7 Seals) and blue spider (Juicy Sack, Sissy Longlegs) spawns
-add 50% per absorbed copy (`scripts/items/collectibles/cronus.lua:2185`), capped at 100%. Each
+add 50% per absorbed copy (`scripts/items/collectibles/kronos.lua:2195`), capped at 100%. Each
 physical attack claims one roll before the RNG, so a piercing tear or a beam rolls
 once across all of its targets, and a familiar body (the spawned flies and spiders
 themselves) cannot claim one.
@@ -321,49 +321,49 @@ themselves) cannot claim one.
 | 2 | **100%** | 100.000% |
 | 3 | **100%** | 100.000% |
 
-## 10. Cronus chance effects, room-clear drops, GB Bug and floor picks
+## 10. Kronos chance effects, room-clear drops, GB Bug and floor picks
 
-Each chance effect adds its percentage per absorbed copy, capped at 100% (`scripts/items/collectibles/cronus.lua:2294`), rolled as
+Each chance effect adds its percentage per absorbed copy, capped at 100% (`scripts/items/collectibles/kronos.lua:2304`), rolled as
 `RandomFloat() < chance` on the familiar's own collectible RNG. Attack procs claim one
 roll per physical attack before the RNG; room-clear drops roll once per cleared room;
 Dry Baby rolls once per hit taken.
 
 | Familiar | Per copy | 1 copy | Measured | 2 copies | 3 copies | Source |
 |---|---|---|---|---|---|---|
-| DADDY_LONGLEGS | 10% | **10%** | 9.951% | 20% | 30% | `scripts/items/collectibles/cronus.lua:2210` |
-| MOMS_RAZOR | 10% | **10%** | 10.031% | 20% | 30% | `scripts/items/collectibles/cronus.lua:2211` |
-| CUBE_BABY | 10% | **10%** | 10.028% | 20% | 30% | `scripts/items/collectibles/cronus.lua:2212` |
-| LIL_SPEWER | 25% | **25%** | 25.083% | 50% | 75% | `scripts/items/collectibles/cronus.lua:2213` |
-| DRY_BABY | 25% | **25%** | 24.854% | 50% | 75% | `scripts/items/collectibles/cronus.lua:2214` |
-| BUM_FRIEND | 10% | **10%** | 10.082% | 20% | 30% | `scripts/items/collectibles/cronus.lua:2215` |
-| LIL_CHEST | 10% | **10%** | 10.008% | 20% | 30% | `scripts/items/collectibles/cronus.lua:2216` |
+| DADDY_LONGLEGS | 10% | **10%** | 9.951% | 20% | 30% | `scripts/items/collectibles/kronos.lua:2220` |
+| MOMS_RAZOR | 10% | **10%** | 10.031% | 20% | 30% | `scripts/items/collectibles/kronos.lua:2221` |
+| CUBE_BABY | 10% | **10%** | 10.028% | 20% | 30% | `scripts/items/collectibles/kronos.lua:2222` |
+| LIL_SPEWER | 25% | **25%** | 25.083% | 50% | 75% | `scripts/items/collectibles/kronos.lua:2223` |
+| DRY_BABY | 25% | **25%** | 24.854% | 50% | 75% | `scripts/items/collectibles/kronos.lua:2224` |
+| BUM_FRIEND | 10% | **10%** | 10.082% | 20% | 30% | `scripts/items/collectibles/kronos.lua:2225` |
+| LIL_CHEST | 10% | **10%** | 10.008% | 20% | 30% | `scripts/items/collectibles/kronos.lua:2226` |
 
 Counter drops are not random: each cleared room advances a saved counter, and every
 absorbed copy adds one drop when it reaches the interval.
 
 | Familiar | Rooms per drop | Drops per room per copy | Source |
 |---|---|---|---|
-| RELIC | 6 | 0.167 | `scripts/items/collectibles/cronus.lua:2220` |
-| MYSTERY_SACK | 6 | 0.167 | `scripts/items/collectibles/cronus.lua:2221` |
-| RUNE_BAG | 7 | 0.143 | `scripts/items/collectibles/cronus.lua:2222` |
+| RELIC | 6 | 0.167 | `scripts/items/collectibles/kronos.lua:2230` |
+| MYSTERY_SACK | 6 | 0.167 | `scripts/items/collectibles/kronos.lua:2231` |
+| RUNE_BAG | 7 | 0.143 | `scripts/items/collectibles/kronos.lua:2232` |
 
-Paschal Candle adds 0.03 tears per copy for every room clear, uncapped (`scripts/items/collectibles/cronus.lua:15`); it is stored as whole hundredths, so it never drifts.
+Paschal Candle adds 0.03 tears per copy for every room clear, uncapped (`scripts/items/collectibles/kronos.lua:15`); it is stored as whole hundredths, so it never drifts.
 
 GB Bug hands back `floor(N / 2)` of the `N` other absorbed copies, chosen without
-replacement by a partial Fisher-Yates shuffle (`scripts/items/collectibles/cronus.lua:2316`),
+replacement by a partial Fisher-Yates shuffle (`scripts/items/collectibles/kronos.lua:2326`),
 so each copy returns with probability `floor(N/2) / N`. With N = 6 every copy
 should return 50% of the time; over 50000 trials the per-copy rate
 ranges 49.836% to 50.204% (spread 0.368%).
 
 Buddy in a Box / Lil Delirium draw one familiar per copy and floor, with replacement,
 uniformly from 55 candidates: the 30 effect familiars in
-`FLOOR_PICK_EFFECTS` (`scripts/items/collectibles/cronus.lua:2256`) plus the 25 projectile-block familiars,
+`FLOOR_PICK_EFFECTS` (`scripts/items/collectibles/kronos.lua:2266`) plus the 25 projectile-block familiars,
 each at **1.818%** per pick.
 
 Temporary familiars reuse the same draws. A Pretty Fly pill fly absorbed under
-REPENTOGON adds **5%** to the projectile block above (`scripts/items/collectibles/cronus.lua:2181`). When The Twins
+REPENTOGON adds **5%** to the projectile block above (`scripts/items/collectibles/kronos.lua:2191`). When The Twins
 duplicates, it picks one absorbed effect familiar uniformly with its trinket RNG. Sacrificial
-Altar takes up to 2 copies (`scripts/items/collectibles/cronus.lua:2995`), owned familiars first and the rest from the
+Altar takes up to 2 copies (`scripts/items/collectibles/kronos.lua:3035`), owned familiars first and the rest from the
 absorbed pool through the same partial Fisher-Yates draw as GB Bug.
 
 ## 11. Live Eye miss forgiveness

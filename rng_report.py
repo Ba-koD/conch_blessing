@@ -40,7 +40,7 @@ SRC = {
     "money": "scripts/items/familiars/time_money.lua",
     "aminus": "scripts/items/trinkets/a_minus.lua",
     "crown": "scripts/items/trinkets/angels_crown.lua",
-    "cronus": "scripts/items/collectibles/cronus.lua",
+    "kronos": "scripts/items/collectibles/kronos.lua",
     "liveeye": "scripts/items/collectibles/live_eye.lua",
 }
 
@@ -129,7 +129,7 @@ def const_list(key: str, name: str) -> tuple[list[str], str]:
 
 
 def pick_random_copies(copies: list, count: int, randint) -> list:
-    """Transcribes cronus.lua pickRandomCopies: a partial Fisher-Yates shuffle,
+    """Transcribes kronos.lua pickRandomCopies: a partial Fisher-Yates shuffle,
     randint(n) returning 0..n-1 like RNG:RandomInt."""
     work = list(copies)
     n = len(work)
@@ -473,14 +473,14 @@ def build(samples: int, seed: int) -> str:
     w("")
 
     # 9 --------------------------------------------------------------------------
-    block = const_table("cronus", "PROJECTILE_BLOCK_PERCENT")
-    per_stack, per_stack_cite = const("cronus", "SPAWN_CHANCE_PER_STACK")
-    w("## 9. Cronus projectile block and blue fly / spider spawns")
+    block = const_table("kronos", "PROJECTILE_BLOCK_PERCENT")
+    per_stack, per_stack_cite = const("kronos", "SPAWN_CHANCE_PER_STACK")
+    w("## 9. Kronos projectile block and blue fly / spider spawns")
     w("")
     w("Absorbed barrier familiars add a flat percentage per absorbed copy to one chance")
     w("of ignoring an enemy projectile hit, capped at 100% "
-      f"({cite('cronus', 'return math.min(1, percent / 100)')}). The roll is")
-    w("`RandomFloat() < chance` on the Cronus collectible RNG, uniform on `[0, 1)`, so the")
+      f"({cite('kronos', 'return math.min(1, percent / 100)')}). The roll is")
+    w("`RandomFloat() < chance` on the Kronos collectible RNG, uniform on `[0, 1)`, so the")
     w("effective odds equal the configured sum.")
     w("")
     rows = [[entry.replace("COLLECTIBLE_", ""), f"{value:g}%", where] for entry, value, where in block]
@@ -512,14 +512,14 @@ def build(samples: int, seed: int) -> str:
     w("")
 
     # 10 -------------------------------------------------------------------------
-    procs = const_table("cronus", "PROC_CHANCE_PERCENT")
-    intervals = const_table("cronus", "CLEAR_REWARD_INTERVAL")
-    paschal, paschal_cite = const("cronus", "PASCHAL_TEARS_PER_CLEAR")
-    effects, effects_cite = const_list("cronus", "FLOOR_PICK_EFFECTS")
-    w("## 10. Cronus chance effects, room-clear drops, GB Bug and floor picks")
+    procs = const_table("kronos", "PROC_CHANCE_PERCENT")
+    intervals = const_table("kronos", "CLEAR_REWARD_INTERVAL")
+    paschal, paschal_cite = const("kronos", "PASCHAL_TEARS_PER_CLEAR")
+    effects, effects_cite = const_list("kronos", "FLOOR_PICK_EFFECTS")
+    w("## 10. Kronos chance effects, room-clear drops, GB Bug and floor picks")
     w("")
     w("Each chance effect adds its percentage per absorbed copy, capped at 100% "
-      f"({cite('cronus', 'return math.min(1, stacked / 100)')}), rolled as")
+      f"({cite('kronos', 'return math.min(1, stacked / 100)')}), rolled as")
     w("`RandomFloat() < chance` on the familiar's own collectible RNG. Attack procs claim one")
     w("roll per physical attack before the RNG; room-clear drops roll once per cleared room;")
     w("Dry Baby rolls once per hit taken.")
@@ -551,20 +551,20 @@ def build(samples: int, seed: int) -> str:
             counts[idx] += 1
     spread = max(counts) / trials - min(counts) / trials
     w("GB Bug hands back `floor(N / 2)` of the `N` other absorbed copies, chosen without")
-    w(f"replacement by a partial Fisher-Yates shuffle ({cite('cronus', 'local j = i + randomInt(n - i + 1)')}),")
+    w(f"replacement by a partial Fisher-Yates shuffle ({cite('kronos', 'local j = i + randomInt(n - i + 1)')}),")
     w(f"so each copy returns with probability `floor(N/2) / N`. With N = {n_copies} every copy")
     w(f"should return {n_pick / n_copies:.0%} of the time; over {trials} trials the per-copy rate")
     w(f"ranges {min(counts) / trials:.3%} to {max(counts) / trials:.3%} (spread {spread:.3%}).")
     w("")
-    block_entries = [entry for entry, _, _ in const_table("cronus", "PROJECTILE_BLOCK_PERCENT")]
+    block_entries = [entry for entry, _, _ in const_table("kronos", "PROJECTILE_BLOCK_PERCENT")]
     pool = sorted(set(effects) | set(block_entries))
     w(f"Buddy in a Box / Lil Delirium draw one familiar per copy and floor, with replacement,")
     w(f"uniformly from {len(pool)} candidates: the {len(effects)} effect familiars in")
     w(f"`FLOOR_PICK_EFFECTS` ({effects_cite}) plus the {len(block_entries)} projectile-block familiars,")
     w(f"each at **{1 / len(pool):.3%}** per pick.")
     w("")
-    pretty, pretty_cite = const("cronus", "PRETTY_FLY_BLOCK_PERCENT")
-    altar, altar_cite = const("cronus", "ALTAR_MAX_SACRIFICES")
+    pretty, pretty_cite = const("kronos", "PRETTY_FLY_BLOCK_PERCENT")
+    altar, altar_cite = const("kronos", "ALTAR_MAX_SACRIFICES")
     w("Temporary familiars reuse the same draws. A Pretty Fly pill fly absorbed under")
     w(f"REPENTOGON adds **{pretty:g}%** to the projectile block above ({pretty_cite}). When The Twins")
     w("duplicates, it picks one absorbed effect familiar uniformly with its trinket RNG. Sacrificial")

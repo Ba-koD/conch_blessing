@@ -133,13 +133,13 @@ return {
             name = "해",
             description = "해",
         },
-        CRONUS = {
+        KRONOS = {
             name = "크로노스",
             description = "자식을 삼키다",
             eid = {
                 "패밀리어를 흡수하여 고유능력과 데미지 2를 얻습니다",
                 "#일부 패밀리어는 제외 목록에 따라 흡수되지 않습니다",
-                "#현재 탄환 무시 확률: %CRONUS_BLOCK%",
+                "#현재 탄환 무시 확률: %KRONOS_BLOCK%",
             },
             synergies = {
                 twisted_pair = "37.5% 데미지의 공격을 2개 추가합니다.",
@@ -170,7 +170,7 @@ return {
                 ghost_baby = "{c:CONTINUUM} 연속체를 얻습니다.",
                 rotten_baby = {
                     "공격이 적에게 피해를 주면 50% 확률로 아군 파리를 소환합니다. ({c:7_SEALS} 7개의 도장과 합산, 최대 100%)",
-                    "현재 아군 파리 소환 확률: %CRONUS_FLY%",
+                    "현재 아군 파리 소환 확률: %KRONOS_FLY%",
                 },
                 little_steven = "유도 효과를 얻습니다.",
                 rainbow_baby = "{c:FRUIT_CAKE} 과일 케이크를 얻습니다. (최초 1회)",
@@ -195,14 +195,14 @@ return {
                 yo_listen = "{c:XRAY_VISION} 엑스레이 투시를 얻습니다. (최초 1회)",
                 daddy_longlegs = {
                     "공격이 적에게 피해를 주면 10% 확률로 다리가 내려찍어 주변 적에게 공격력 x2의 피해를 줍니다. (흡수할 때마다 누적)",
-                    "현재 내려찍기 확률: %CRONUS_STOMP%",
+                    "현재 내려찍기 확률: %KRONOS_STOMP%",
                 },
                 sister_maggy = "{c:CRICKETS_HEAD} 크리켓의 머리를 얻습니다. (최초 1회)",
                 little_chubby = "{c:MARS} 화성을 얻습니다. (최초 1회)",
                 big_chubby = {
                     "{c:MARS} 화성을 얻습니다. (최초 1회)",
                     "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
-                    "현재 탄환 무시 확률: %CRONUS_BLOCK%",
+                    "현재 탄환 무시 확률: %KRONOS_BLOCK%",
                 },
                 peeper = "{c:MOMS_EYE} 엄마의 눈알을 얻습니다. (최초 1회)",
                 bbf = "{c:FIRE_MIND} 불타는 마음을 얻습니다. (최초 1회)",
@@ -219,112 +219,112 @@ return {
                 fruity_plum = "{c:KIDNEY_STONE} 신장 결석을 얻습니다. (최초 1회)",
                 ["7_seals"] = {
                     "공격이 적에게 피해를 주면 50% 확률로 아군 파리를 소환합니다. ({c:ROTTEN_BABY} 썩은 아기와 합산, 최대 100%)",
-                    "현재 아군 파리 소환 확률: %CRONUS_FLY%",
+                    "현재 아군 파리 소환 확률: %KRONOS_FLY%",
                 },
                 juicy_sack = {
                     "공격이 적에게 피해를 주면 50% 확률로 아군 거미를 소환합니다. ({c:SISSY_LONGLEGS} 눈나 거미와 합산, 최대 100%)",
-                    "현재 아군 거미 소환 확률: %CRONUS_SPIDER%",
+                    "현재 아군 거미 소환 확률: %KRONOS_SPIDER%",
                 },
                 sissy_longlegs = {
                     "공격이 적에게 피해를 주면 50% 확률로 아군 거미를 소환합니다. ({c:JUICY_SACK} 축축한 알집과 합산, 최대 100%)",
-                    "현재 아군 거미 소환 확률: %CRONUS_SPIDER%",
+                    "현재 아군 거미 소환 확률: %KRONOS_SPIDER%",
                 },
                 intruder = "모든 공격에 느림 효과를 부여합니다.",
                 worm_friend = "모든 공격에 느림 효과를 부여합니다.",
                 halo_of_flies = {
                     "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
-                    "현재 탄환 무시 확률: %CRONUS_BLOCK%",
+                    "현재 탄환 무시 확률: %KRONOS_BLOCK%",
                 },
                 distant_admiration = {
                     "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
-                    "현재 탄환 무시 확률: %CRONUS_BLOCK%",
+                    "현재 탄환 무시 확률: %KRONOS_BLOCK%",
                 },
                 cube_of_meat = {
                     "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
-                    "현재 탄환 무시 확률: %CRONUS_BLOCK%",
+                    "현재 탄환 무시 확률: %KRONOS_BLOCK%",
                 },
                 forever_alone = {
                     "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
-                    "현재 탄환 무시 확률: %CRONUS_BLOCK%",
+                    "현재 탄환 무시 확률: %KRONOS_BLOCK%",
                 },
                 sacrificial_dagger = {
                     "적의 탄환에 맞을 때 2% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
-                    "현재 탄환 무시 확률: %CRONUS_BLOCK%",
+                    "현재 탄환 무시 확률: %KRONOS_BLOCK%",
                 },
                 guppys_hairball = {
                     "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
-                    "현재 탄환 무시 확률: %CRONUS_BLOCK%",
+                    "현재 탄환 무시 확률: %KRONOS_BLOCK%",
                 },
                 guillotine = {
                     "{{Damage}}공격력 +1, {{Tears}}연사 +0.5 (흡수할 때마다 누적)",
                     "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
-                    "현재 탄환 무시 확률: %CRONUS_BLOCK%",
+                    "현재 탄환 무시 확률: %KRONOS_BLOCK%",
                 },
                 ball_of_bandages = {
                     "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
-                    "현재 탄환 무시 확률: %CRONUS_BLOCK%",
+                    "현재 탄환 무시 확률: %KRONOS_BLOCK%",
                 },
                 smart_fly = {
                     "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
-                    "현재 탄환 무시 확률: %CRONUS_BLOCK%",
+                    "현재 탄환 무시 확률: %KRONOS_BLOCK%",
                 },
                 best_bud = {
                     "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
-                    "현재 탄환 무시 확률: %CRONUS_BLOCK%",
+                    "현재 탄환 무시 확률: %KRONOS_BLOCK%",
                 },
                 big_fan = {
                     "적의 탄환에 맞을 때 2% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
-                    "현재 탄환 무시 확률: %CRONUS_BLOCK%",
+                    "현재 탄환 무시 확률: %KRONOS_BLOCK%",
                 },
                 punching_bag = {
                     "적의 탄환에 맞을 때 2% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
-                    "현재 탄환 무시 확률: %CRONUS_BLOCK%",
+                    "현재 탄환 무시 확률: %KRONOS_BLOCK%",
                 },
                 sworn_protector = {
                     "적의 탄환에 맞을 때 5% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
-                    "현재 탄환 무시 확률: %CRONUS_BLOCK%",
+                    "현재 탄환 무시 확률: %KRONOS_BLOCK%",
                 },
                 friend_zone = {
                     "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
-                    "현재 탄환 무시 확률: %CRONUS_BLOCK%",
+                    "현재 탄환 무시 확률: %KRONOS_BLOCK%",
                 },
                 lost_fly = {
                     "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
-                    "현재 탄환 무시 확률: %CRONUS_BLOCK%",
+                    "현재 탄환 무시 확률: %KRONOS_BLOCK%",
                 },
                 hushy = {
                     "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
-                    "현재 탄환 무시 확률: %CRONUS_BLOCK%",
+                    "현재 탄환 무시 확률: %KRONOS_BLOCK%",
                 },
                 moms_razor = {
                     "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
                     "{{BleedingOut}} 공격이 적에게 피해를 주면 10% 확률로 출혈시킵니다. (흡수할 때마다 누적)",
-                    "현재 탄환 무시 확률: %CRONUS_BLOCK%",
-                    "현재 출혈 확률: %CRONUS_BLEED%",
+                    "현재 탄환 무시 확률: %KRONOS_BLOCK%",
+                    "현재 출혈 확률: %KRONOS_BLEED%",
                 },
                 angry_fly = {
                     "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
-                    "현재 탄환 무시 확률: %CRONUS_BLOCK%",
+                    "현재 탄환 무시 확률: %KRONOS_BLOCK%",
                 },
                 leprosy = {
                     "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
-                    "현재 탄환 무시 확률: %CRONUS_BLOCK%",
+                    "현재 탄환 무시 확률: %KRONOS_BLOCK%",
                 },
                 slipped_rib = {
                     "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
-                    "현재 탄환 무시 확률: %CRONUS_BLOCK%",
+                    "현재 탄환 무시 확률: %KRONOS_BLOCK%",
                 },
                 pointy_rib = {
                     "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
-                    "현재 탄환 무시 확률: %CRONUS_BLOCK%",
+                    "현재 탄환 무시 확률: %KRONOS_BLOCK%",
                 },
                 psy_fly = {
                     "적의 탄환에 맞을 때 5% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
-                    "현재 탄환 무시 확률: %CRONUS_BLOCK%",
+                    "현재 탄환 무시 확률: %KRONOS_BLOCK%",
                 },
                 tinytoma = {
                     "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
-                    "현재 탄환 무시 확률: %CRONUS_BLOCK%",
+                    "현재 탄환 무시 확률: %KRONOS_BLOCK%",
                 },
                 headless_baby = "{c:AQUARIUS} 물병자리를 얻습니다. (최초 1회)",
                 cains_other_eye = "{c:RUBBER_CEMENT} 고무 접착제를 얻습니다. (최초 1회)",
@@ -332,16 +332,16 @@ return {
                 shade = "{c:LUSTY_BLOOD} 욕망의 피를 얻습니다. (최초 1회)",
                 obsessed_fan = {
                     "적의 탄환에 맞을 때 1% 확률로 피해를 무시합니다. (흡수할 때마다 누적)",
-                    "현재 탄환 무시 확률: %CRONUS_BLOCK%",
+                    "현재 탄환 무시 확률: %KRONOS_BLOCK%",
                 },
                 gemini = "접촉한 적에게 초당 6의 피해를 줍니다. (흡수할 때마다 누적)",
                 cube_baby = {
                     "{{Freezing}} 공격이 적에게 피해를 주면 10% 확률로 적을 2초간 얼려 멈춥니다. (흡수할 때마다 누적)",
-                    "현재 빙결 확률: %CRONUS_FREEZE%",
+                    "현재 빙결 확률: %KRONOS_FREEZE%",
                 },
                 lil_spewer = {
                     "공격이 적에게 피해를 주면 25% 확률로 적 위치에 빨간 장판이 생깁니다. (흡수할 때마다 누적)",
-                    "현재 장판 생성 확률: %CRONUS_CREEP%",
+                    "현재 장판 생성 확률: %KRONOS_CREEP%",
                 },
                 gb_bug = {
                     "흡수 시 지금까지 흡수한 다른 패밀리어 중 무작위로 절반을 되돌려줍니다.",
@@ -349,11 +349,11 @@ return {
                 },
                 bum_friend = {
                     "방 클리어 시 10% 확률로 랜덤 픽업을 드랍합니다. (흡수할 때마다 누적)",
-                    "현재 픽업 드랍 확률: %CRONUS_PICKUP_DROP%",
+                    "현재 픽업 드랍 확률: %KRONOS_PICKUP_DROP%",
                 },
                 lil_chest = {
                     "{{Chest}} 방 클리어 시 10% 확률로 상자를 드랍합니다. (흡수할 때마다 누적)",
-                    "현재 상자 드랍 확률: %CRONUS_CHEST_DROP%",
+                    "현재 상자 드랍 확률: %KRONOS_CHEST_DROP%",
                 },
                 relic = "{{SoulHeart}} 방 6개 클리어마다 소울하트를 드랍합니다. (흡수할 때마다 1개씩 추가)",
                 mystery_sack = "방 6개 클리어마다 랜덤 픽업을 드랍합니다. (흡수할 때마다 1개씩 추가)",
@@ -362,7 +362,7 @@ return {
                 holy_water = "피격 시 캐릭터 위치에 성수 장판이 생깁니다. (흡수할 때마다 1개씩 추가, 최대 4개)",
                 dry_baby = {
                     "피격 시 25% 확률로 {c:NECRONOMICON} 네크로노미콘이 발동합니다. (흡수할 때마다 누적)",
-                    "현재 네크로노미콘 발동 확률: %CRONUS_NECRONOMICON%",
+                    "현재 네크로노미콘 발동 확률: %KRONOS_NECRONOMICON%",
                 },
                 milk = "{{Tears}} 스테이지에서 처음 피격 시 그 스테이지 동안 연사 +1 (흡수할 때마다 누적)",
                 bird_cage = "피격 시 가장 가까운 적에게 45의 피해를 줍니다. (흡수할 때마다 누적)",
@@ -378,16 +378,16 @@ return {
                 monster_manual = "크로노스 획득 전후에 소환한 패밀리어를 흡수해 그 스테이지 동안 데미지 +2와 고유 효과 또는 변환 아이템을 얻습니다. 방 이동으로 같은 흡수 보상을 다시 얻지 않습니다.",
                 sacrificial_altar = "사용 시 흡수한 패밀리어를 최대 2마리 제물로 바쳐 악마방 아이템을 생성합니다.",
                 trinket_the_twins = "방 입장 시 50% 확률로 그 방에서 흡수한 패밀리어 하나의 효과가 2배가 됩니다.",
-                ["1up"] = "{own:CRONUS} 크로노스에 흡수되지 않습니다.",
-                isaacs_heart = "{own:CRONUS} 크로노스에 흡수되지 않습니다.",
-                dead_cat = "{own:CRONUS} 크로노스에 흡수되지 않습니다.",
-                key_piece_1 = "{own:CRONUS} 크로노스에 흡수되지 않습니다.",
-                key_piece_2 = "{own:CRONUS} 크로노스에 흡수되지 않습니다.",
-                knife_piece_1 = "{own:CRONUS} 크로노스에 흡수되지 않습니다.",
-                knife_piece_2 = "{own:CRONUS} 크로노스에 흡수되지 않습니다.",
-                damocles_passive = "{own:CRONUS} 크로노스에 흡수되지 않습니다.",
-                straw_man = "{own:CRONUS} 크로노스에 흡수되지 않습니다.",
-                blood_oath = "{own:CRONUS} 크로노스에 흡수되지 않습니다.",
+                ["1up"] = "{own:KRONOS} 크로노스에 흡수되지 않습니다.",
+                isaacs_heart = "{own:KRONOS} 크로노스에 흡수되지 않습니다.",
+                dead_cat = "{own:KRONOS} 크로노스에 흡수되지 않습니다.",
+                key_piece_1 = "{own:KRONOS} 크로노스에 흡수되지 않습니다.",
+                key_piece_2 = "{own:KRONOS} 크로노스에 흡수되지 않습니다.",
+                knife_piece_1 = "{own:KRONOS} 크로노스에 흡수되지 않습니다.",
+                knife_piece_2 = "{own:KRONOS} 크로노스에 흡수되지 않습니다.",
+                damocles_passive = "{own:KRONOS} 크로노스에 흡수되지 않습니다.",
+                straw_man = "{own:KRONOS} 크로노스에 흡수되지 않습니다.",
+                blood_oath = "{own:KRONOS} 크로노스에 흡수되지 않습니다.",
             },
         },
         APPRAISAL_CERTIFICATE = {
@@ -659,7 +659,7 @@ return {
         },
     },
     ui = {
-        cronus = {
+        kronos = {
             transfer_damage = "데미지 +2",
             transfer_return = "패밀리어 반환",
             transfer_pretty_fly = "탄환 무시 확률 +%s%%",
