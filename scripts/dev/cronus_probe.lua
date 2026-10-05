@@ -296,7 +296,7 @@ function probe.help()
     for _, scenario in ipairs(SCENARIOS) do
         out(string.format("  %-9s %s", scenario.key, scenario.about))
     end
-    out("helpers: aura (automatic Boss Rush check) | caption (visual only) | status | hurtme | clearsim [n] | enemies [n] | give <id> [n] | drop")
+    out("helpers: aura (automatic Boss Rush check) | caption (visual only) | grid (visual only) | status | hurtme | clearsim [n] | enemies [n] | give <id> [n] | drop")
 end
 
 function probe.run(scenario, player)
@@ -603,12 +603,23 @@ local function buildPlan(plan)
     eqCheck("Little Chubby granted Mars", function(p) return owns(p, C.COLLECTIBLE_MARS) end, 1)
 
     -- GB Bug ------------------------------------------------------------------
-    section("gb", "3 reverse dust swirls come OUT of your body; 3 real familiars appear")
+    section("gb", "after GB Bug is absorbed, the 3 returned familiars come OUT of your body together as one grid of icons; 3 real familiars appear")
     act(function(player, ctx)
         giveAll(player, { { C.COLLECTIBLE_GUARDIAN_ANGEL, 1 }, { C.COLLECTIBLE_LITTLE_STEVEN, 1 },
             { C.COLLECTIBLE_ROTTEN_BABY, 1 }, { C.COLLECTIBLE_GB_BUG, 1 } })
     end)
-    wait(150)
+    wait(5)
+    check("familiars GB Bug returns together share one release grid", function()
+        local groups = ConchBlessing.cronus._test.transferGroups()
+        local released, detail = 0, {}
+        for _, group in ipairs(groups) do
+            detail[#detail + 1] = string.format("%s x%d", group.reverse and "release" or "absorb", group.icons)
+            if group.reverse then released = released + 1 end
+        end
+        local grid = groups[#groups]
+        return released == 1 and grid and grid.reverse and grid.icons == 3, table.concat(detail, ", ")
+    end)
+    wait(145)
     eqCheck("GB Bug absorbed", function(p) return absorbed(p, C.COLLECTIBLE_GB_BUG) end, 1)
     eqCheck("half of 6 returned (3 left absorbed)", function() return totalAbsorbed() - 1 end, 3)
     eqCheck("3 copies spared", function() return sumValues(runSave().spared) end, 3)
@@ -662,6 +673,7 @@ local function buildPlan(plan)
     end)
     wait(30)
     eqCheck("projectile hit ignored", function(_, ctx) return delta(ctx, "projectileBlocks") end, 1)
+    eqCheck("ignored hit shows its spark", function(_, ctx) return delta(ctx, "blockSparks") end, 1)
     check("no health lost", function(player, ctx)
         local now = player:GetHearts() + player:GetSoulHearts()
         return now == ctx.hearts, string.format("hearts %d -> %d", ctx.hearts, now)
@@ -673,7 +685,6 @@ local function buildPlan(plan)
         Isaac.Spawn(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_COLLECTIBLE, C.COLLECTIBLE_HALO_OF_FLIES,
             position, Vector.Zero, nil)
     end)
-    eqCheck("ignored hit shows its spark", function(_, ctx) return delta(ctx, "blockSparks") end, 1)
     check("EID token shows the live chance", function()
         local resolver = ConchBlessing.EIDDynamicTokens and ConchBlessing.EIDDynamicTokens.CRONUS_BLOCK
         if type(resolver) ~= "function" then return false, "no CRONUS_BLOCK resolver" end
@@ -1166,6 +1177,22 @@ local function handleCommand(action, words, player)
         if not TestBench.start("conch_cronus", true) then probe._auraOnly = nil end
     elseif scenario then
         probe.run(scenario, player)
+    elseif action == "grid" then
+        -- Three copies of one familiar absorbed together, then eight familiars
+        -- released together: two grid effects, nothing granted or removed.
+        local cronus = ConchBlessing.cronus
+        for _ = 1, 3 do cronus._queueTransferEffect(player, C.COLLECTIBLE_BROTHER_BOBBY, false) end
+        for _, id in ipairs({ C.COLLECTIBLE_LITTLE_STEVEN, C.COLLECTIBLE_GUARDIAN_ANGEL, C.COLLECTIBLE_ROTTEN_BABY,
+            C.COLLECTIBLE_HALO_OF_FLIES, C.COLLECTIBLE_DEMON_BABY, C.COLLECTIBLE_SISTER_MAGGY,
+            C.COLLECTIBLE_ABEL, C.COLLECTIBLE_LITTLE_CHUBBY }) do
+            cronus._queueTransferEffect(player, id, true)
+        end
+        local parts = {}
+        for _, group in ipairs(cronus._test.transferGroups()) do
+            parts[#parts + 1] = string.format("%s x%d in %d row(s)", group.reverse and "release" or "absorb", group.icons, group.rows)
+        end
+        out("visual-only grid preview queued: " .. table.concat(parts, ", "))
+        out("LOOK: three Brother Bobby icons side by side crumble into you together; then eight icons in two centred rows of four come out of you together")
     elseif action == "caption" then
         local test = ConchBlessing.cronus._test
         local ready, glyphCount, reason = test.captionStatus()
