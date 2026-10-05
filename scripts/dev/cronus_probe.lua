@@ -651,7 +651,7 @@ local function buildPlan(plan)
     atLeast("blue spider", function(_, ctx) return delta(ctx, "spiders") end, 1)
 
     -- projectile barrier ----------------------------------------------------------
-    section("barrier", nil)
+    section("barrier", "the ignored shot shows a small white spark at your side, you flash pale for a moment, and a quiet high chime plays")
     act(function(player) giveAll(player, { { C.COLLECTIBLE_SWORN_PROTECTOR, 20 } }) end)
     wait(40)
     act(function(player, ctx)
@@ -673,6 +673,7 @@ local function buildPlan(plan)
         Isaac.Spawn(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_COLLECTIBLE, C.COLLECTIBLE_HALO_OF_FLIES,
             position, Vector.Zero, nil)
     end)
+    eqCheck("ignored hit shows its spark", function(_, ctx) return delta(ctx, "blockSparks") end, 1)
     check("EID token shows the live chance", function()
         local resolver = ConchBlessing.EIDDynamicTokens and ConchBlessing.EIDDynamicTokens.CRONUS_BLOCK
         if type(resolver) ~= "function" then return false, "no CRONUS_BLOCK resolver" end

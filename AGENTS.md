@@ -217,6 +217,7 @@ Core subsystem map:
 ## Stats, Config, And Debug
 
 - Use `ConchBlessing.stats.unifiedMultipliers` for stat changes. Avoid raw stat overwrites unless the existing item pattern requires it.
+- A projectile hit Cronus ignores gets only light, cosmetic feedback, just enough to notice: a short pale player flash, a small `IMPACT` spark toward the shot, and the Holy Mantle chime played quiet and higher (it must not read as a real Holy Mantle break).
 - Every Cronus absorption contributes a flat +2 damage independently of the familiar's special effect or item conversion. Removing or expiring an absorption removes exactly that contribution. Reconcile the current permanent/temporary absorption ledger against StatsAPI's actual registered contribution, including continue, room/floor expiry, reward loss, and Cronus loss; do not trust event deltas alone or re-credit a respawn.
 - Cronus conversion limits apply only to granting the converted item. Reaching a once-only or other grant cap must never block later familiar absorption, its flat +2 damage, or its independent absorbed effects.
 - Cronus aura anchors hide only the native familiar body and preserve aura rendering. Replenish missing anchors against the absorbed-effect count without waiting on a retry timer or removing healthy peers; entity absence and a still-existing entity's inactive native aura are separate conditions, so keep an explicitly bounded compatibility refresh when the latter has no semantic API.

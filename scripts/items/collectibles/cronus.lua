@@ -2637,6 +2637,35 @@ ConchBlessing.cronus.onPrePlayerCollision = function(_, player, collider)
     bump("gemini")
 end
 
+-- A hit the projectile block ignored, just enough to notice: a short pale flash on
+-- the player, a small spark where the shot struck, and the Holy Mantle chime played
+-- quiet and higher so it reads lighter than a real mantle break. Cosmetic only.
+local BLOCK_FEEDBACK = {
+    FLASH = Color(1, 1, 1, 1, 0.3, 0.32, 0.42),
+    FLASH_FRAMES = 6,
+    SPARK_SCALE = Vector(0.6, 0.6),
+    SPARK_REACH = 10, -- From the player's centre toward the shot.
+    SPARK_HEIGHT = -18,
+    SOUND_VOLUME = 0.3,
+    SOUND_PITCH = 1.3,
+}
+
+local function showProjectileBlock(player, source)
+    player:SetColor(BLOCK_FEEDBACK.FLASH, BLOCK_FEEDBACK.FLASH_FRAMES, 1, true, false)
+    local shot = source and source.Entity
+    local toward = shot and (shot.Position - player.Position) or Vector.Zero
+    if toward:Length() > BLOCK_FEEDBACK.SPARK_REACH then toward = toward:Resized(BLOCK_FEEDBACK.SPARK_REACH) end
+    local spark = Isaac.Spawn(EntityType.ENTITY_EFFECT, EffectVariant.IMPACT, 0,
+        player.Position + toward, Vector.Zero, player)
+    if spark then
+        spark.SpriteScale = BLOCK_FEEDBACK.SPARK_SCALE
+        spark.PositionOffset = Vector(0, BLOCK_FEEDBACK.SPARK_HEIGHT)
+        spark.DepthOffset = 10
+        bump("blockSparks")
+    end
+    SFXManager():Play(SoundEffect.SOUND_HOLY_MANTLE, BLOCK_FEEDBACK.SOUND_VOLUME, 0, false, BLOCK_FEEDBACK.SOUND_PITCH)
+end
+
 -- Pre-damage: the projectile block for the Cronus owner, plus the base-game
 -- fallback for enemy hits when the REPENTOGON applied-damage callback is missing
 -- (that fallback runs before damage is final and may count a cancelled hit).
@@ -2650,6 +2679,7 @@ ConchBlessing.cronus.onEntityTakeDamage = function(_, entity, amount, flags, sou
             if chance > 0 and player:GetCollectibleRNG(CRONUS_ID):RandomFloat() < chance then
                 dbg(string.format("Projectile hit ignored (chance %.0f%%)", chance * 100))
                 bump("projectileBlocks")
+                showProjectileBlock(player, source)
                 return false
             end
         end
