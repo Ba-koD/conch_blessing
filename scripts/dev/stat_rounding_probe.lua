@@ -2,11 +2,11 @@
 -- the multiplied stat, and that a multiplier never scales an already rounded
 -- value (5.1 x2 = 10.2 -> Ceil 11, never 6 x2 = 12).
 --
--- Console:  conch_round          test with a x2 multiplier on player 0
---           conch_round 1.5      custom multiplier
---           conch_round p1       another player index
---           conch_round sweep    stress sweep (see below)
---           conch_round sweep 6  sweep stacking up to 6 sources
+-- Console:  conch_test rounding          test with a x2 multiplier on player 0
+--           conch_test rounding 1.5      custom multiplier
+--           conch_test rounding p1       another player index
+--           conch_test rounding sweep    stress sweep (see below)
+--           conch_test rounding sweep 6  sweep stacking up to 6 sources
 --
 -- Hold at least one of Ceil/Round/Floor first; the command prints their IDs
 -- for `giveitem c<ID>`. A stat whose value is already an integer cannot tell
@@ -155,7 +155,7 @@ end
 -- --------------------------------------------------------- test multiplier
 local function setTestMultiplier(um, T, player, multiplier)
     for _, flag in ipairs(STAT_ORDER) do
-        um:SetPlayerMultiplier(player, SOURCE_KEY, T.STATS[flag].name, multiplier, "conch_round probe")
+        um:SetPlayerMultiplier(player, SOURCE_KEY, T.STATS[flag].name, multiplier, "conch_test rounding probe")
     end
 end
 
@@ -255,18 +255,18 @@ end
 local function setup(playerIndex, header)
     local T = ConchBlessing.statRounding and ConchBlessing.statRounding._test
     if not T then
-        out("conch_round: SKIPPED (stat_rounding module not loaded)")
+        out("conch_test rounding: SKIPPED (stat_rounding module not loaded)")
         return nil
     end
     local um = ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers
     if not (um and type(um.SetPlayerMultiplier) == "function"
         and type(um.RemovePlayerMultiplier) == "function"
         and type(um.SetPlayerAdditiveMultiplier) == "function") then
-        out("conch_round: SKIPPED (StatsAPI player multipliers unavailable)")
+        out("conch_test rounding: SKIPPED (StatsAPI player multipliers unavailable)")
         return nil
     end
     if playerIndex >= Game():GetNumPlayers() then
-        out(string.format("conch_round: no player %d", playerIndex))
+        out(string.format("conch_test rounding: no player %d", playerIndex))
         return nil
     end
     local player = Isaac.GetPlayer(playerIndex)
@@ -281,7 +281,7 @@ local function setup(playerIndex, header)
 
     local function yn(held, id) return (held and "yes" or "no") .. " (c" .. tostring(id) .. ")" end
     out("")
-    out(string.format("conch_round: player %d %s, %s", playerIndex, player:GetName(), header))
+    out(string.format("conch_test rounding: player %d %s, %s", playerIndex, player:GetName(), header))
     out(string.format("held: Ceil %s  Round %s  Floor %s",
         yn(ctx.hasCeil, T.ITEM_IDS[T.MODE_CEIL]),
         yn(ctx.hasRound, T.ITEM_IDS[T.MODE_ROUND]),
@@ -315,12 +315,12 @@ function probe.run(multiplier, playerIndex)
         ctx.after = evaluatePass(T, player)
     end)
     if not ok then
-        out("conch_round: ERROR " .. tostring(err))
-        if not cleanOk then out("conch_round: CLEANUP ERROR " .. tostring(cleanErr)) end
+        out("conch_test rounding: ERROR " .. tostring(err))
+        if not cleanOk then out("conch_test rounding: CLEANUP ERROR " .. tostring(cleanErr)) end
         return
     end
     if not cleanOk then
-        out("conch_round: CLEANUP ERROR " .. tostring(cleanErr))
+        out("conch_test rounding: CLEANUP ERROR " .. tostring(cleanErr))
         return
     end
 
@@ -341,7 +341,7 @@ function probe.run(multiplier, playerIndex)
             verdict,
             #problems > 0 and ("  [" .. table.concat(problems, ", ") .. "]") or ""))
     end
-    out(string.format("conch_round: PASS %d  FAIL %d  INCONCLUSIVE %d  n/a %d  NO DATA %d  | other issues %d",
+    out(string.format("conch_test rounding: PASS %d  FAIL %d  INCONCLUSIVE %d  n/a %d  NO DATA %d  | other issues %d",
         counts.PASS or 0, counts.FAIL or 0, counts.INCONCLUSIVE or 0,
         counts["n/a"] or 0, counts["NO DATA"] or 0, counts.issues))
     if (counts.INCONCLUSIVE or 0) > 0 then
@@ -380,9 +380,9 @@ end
 local function pushStack(um, T, player, style, m, k, flag)
     local name = T.STATS[flag].name
     if style == "mult" then
-        um:SetPlayerMultiplier(player, sweepKey(k), name, m, "conch_round sweep")
+        um:SetPlayerMultiplier(player, sweepKey(k), name, m, "conch_test rounding sweep")
     else
-        um:SetPlayerAdditiveMultiplier(player, SOURCE_KEY, name, m, "conch_round sweep")
+        um:SetPlayerAdditiveMultiplier(player, SOURCE_KEY, name, m, "conch_test rounding sweep")
     end
 end
 
@@ -392,7 +392,7 @@ local function popStack(um, T, player, style, m, k, flag)
         um:RemovePlayerMultiplier(player, sweepKey(k), name)
     else
         -- One additive stack adds m - 1; adding 2 - m takes exactly one back off.
-        um:SetPlayerAdditiveMultiplier(player, SOURCE_KEY, name, 2 - m, "conch_round sweep")
+        um:SetPlayerAdditiveMultiplier(player, SOURCE_KEY, name, 2 - m, "conch_test rounding sweep")
     end
 end
 
@@ -623,8 +623,8 @@ function probe.sweep(stacks, playerIndex)
         end
         final = evaluatePass(T, player)
     end)
-    if not ok then out("conch_round sweep: ERROR " .. tostring(err)) end
-    if not cleanOk then out("conch_round sweep: CLEANUP ERROR " .. tostring(cleanErr)) end
+    if not ok then out("conch_test rounding sweep: ERROR " .. tostring(err)) end
+    if not cleanOk then out("conch_test rounding sweep: CLEANUP ERROR " .. tostring(cleanErr)) end
     if not (ok and cleanOk) then return end
 
     if #traces > 0 then
@@ -650,7 +650,7 @@ function probe.sweep(stacks, playerIndex)
     end
     local elapsed = startTime and (Isaac.GetTime() - startTime) or nil
     out(string.format(
-        "conch_round sweep: %d cases | PASS %d  same %d  FAIL %d  INCONCLUSIVE %d  skip %d  NO DATA %d | issues %d | %d evaluations%s",
+        "conch_test rounding sweep: %d cases | PASS %d  same %d  FAIL %d  INCONCLUSIVE %d  skip %d  NO DATA %d | issues %d | %d evaluations%s",
         totals.cases, totals.PASS, totals.same, totals.FAIL, totals.INCONCLUSIVE, totals.skip,
         totals["NO DATA"], totals.issues, evaluations,
         elapsed and string.format(" in %d ms", elapsed) or ""))
@@ -674,21 +674,25 @@ function probe.sweep(stacks, playerIndex)
     end
 end
 
-ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, cmd, params)
-    if string.lower(tostring(cmd)) ~= "conch_round" then return end
+function probe.execute(params)
 
     local number = nil
     local playerIndex = 0
     local sweep = false
+    local playerSeen = false
     for word in string.gmatch(tostring(params or ""), "%S+") do
         local lower = string.lower(word)
         local index = string.match(lower, "^p(%d+)$")
-        if index then
+        if index and not playerSeen then
             playerIndex = tonumber(index)
-        elseif lower == "sweep" then
+            playerSeen = true
+        elseif lower == "sweep" and not sweep then
             sweep = true
-        elseif tonumber(word) then
+        elseif tonumber(word) and not number then
             number = tonumber(word)
+        else
+            out("Usage: conch_test rounding [multiplier | sweep [stacks]] [pN]")
+            return
         end
     end
 
@@ -696,7 +700,7 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, cmd, params)
         -- In sweep mode the number is the stack depth.
         local stacks = number and math.floor(number) or SWEEP_DEFAULT_STACKS
         if stacks < 1 or stacks > SWEEP_MAX_STACKS then
-            out(string.format("conch_round sweep: stacks must be 1-%d", SWEEP_MAX_STACKS))
+            out(string.format("conch_test rounding sweep: stacks must be 1-%d", SWEEP_MAX_STACKS))
             return
         end
         probe.sweep(stacks, playerIndex)
@@ -705,11 +709,11 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, cmd, params)
 
     local multiplier = number or DEFAULT_MULTIPLIER
     if not (multiplier > 0 and multiplier < math.huge) then
-        out("conch_round: multiplier must be a positive number")
+        out("conch_test rounding: multiplier must be a positive number")
         return
     end
     probe.run(multiplier, playerIndex)
-end)
+end
 
 ConchBlessing.statRoundingProbe = probe
 return probe

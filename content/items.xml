@@ -18,7 +18,7 @@
     <passive id="15" name="SOFLAM" gfx="soflam.png" quality="4" tags="offensive" cache="weapon" shopprice="25" devilprice="2"/>
     <passive id="16" name="Two Faced Penny" gfx="two_faced_penny.png" quality="4" tags="utility" shopprice="15"/>
     <active id="17" name="Inf D6" gfx="inf_d6.png" quality="0" tags="utility" hidden="true" shopprice="999" maxcharges="0" chargetype="normal"/>
-    <active id="18" name="Severed Oath" gfx="severed_oath.png" quality="3" tags="utility" shopprice="15" devilprice="2" maxcharges="4" chargetype="normal" initcharge="0"/>
+    <active id="18" name="Severed Oath" gfx="severed_oath.png" quality="3" tags="utility" shopprice="15" devilprice="2" maxcharges="4" chargetype="normal" initcharge="4"/>
     <passive id="19" name="Ceil" gfx="ceil.png" quality="4" tags="offensive stars" cache="speed firedelay damage range shotspeed luck" shopprice="20" devilprice="2"/>
     <passive id="20" name="Round" gfx="round.png" quality="3" tags="offensive stars" cache="speed firedelay damage range shotspeed luck" shopprice="15" devilprice="2"/>
     <passive id="21" name="Floor" gfx="floor.png" quality="2" tags="offensive stars" cache="speed firedelay damage range shotspeed luck" shopprice="15" devilprice="1"/>

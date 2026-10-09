@@ -1,4 +1,4 @@
--- Live Eye test bench: `conch_liveeye` restarts the run, checks that a missed
+-- Live Eye test bench: `conch_test live_eye detail` restarts the run, checks that a missed
 -- tear can be forgiven (50% + 5% per luck), that only unforgiven misses lower
 -- the damage multiplier, that a non-tear attack fixes it at x1.5 and Rock Bottom
 -- at x3.0, then restarts the run again (scripts/dev/test_bench.lua).
@@ -146,7 +146,7 @@ local function build(plan)
 end
 
 TestBench.register({
-    command = "conch_liveeye",
+    command = "conch_test live_eye detail",
     tag = "LiveEyeProbe",
     duration = "about 15 seconds",
     build = build,

@@ -397,8 +397,7 @@ ConchBlessing.ItemData = {
             postRoomClear = "kronos.onRoomClear",
             prePlayerCollision = "kronos.onPrePlayerCollision",
             postUpdate = "kronos.onPostUpdate",
-            postRender = "kronos.onPostRender",
-            preGameExit = "kronos.onPreGameExit"
+            postRender = "kronos.onPostRender"
 		},
 		synergies = {
             [{ id = CollectibleType.COLLECTIBLE_TWISTED_PAIR, type = "collectible" }] = "twisted_pair",
@@ -676,6 +675,8 @@ ConchBlessing.ItemData = {
         callbacks = {
             postPlayerUpdate = "icebreath.onPlayerUpdate",
             postEffectUpdate = "icebreath.onEffectUpdate",
+            entityTakeDmg = "icebreath.onEntityTakeDamage",
+            postEntityTakeDmg = "icebreath.onPostEntityTakeDamage",
             weaponFired = "icebreath.onWeaponFired",
             tearUpdate = "icebreath.onTearUpdate",
             tearCollision = "icebreath.onTearCollision"
@@ -700,6 +701,7 @@ ConchBlessing.ItemData = {
             postPlayerUpdate = "firebreath.onPlayerUpdate",
             weaponFired = "firebreath.onWeaponFired",
             postEffectUpdate = "firebreath.onEffectUpdate",
+            postEntityTakeDmg = "firebreath.onPostEntityTakeDamage",
             tearUpdate = "firebreath.onTearUpdate",
             tearCollision = "firebreath.onTearCollision"
         }
@@ -784,7 +786,7 @@ ConchBlessing.ItemData = {
         devilprice = 2,
         maxcharges = 4,
         chargetype = "normal",
-        initcharge = 0,
+        initcharge = 4,
         gfx = "severed_oath.png",
         origin = { id = CollectibleType.COLLECTIBLE_MEAT_CLEAVER, type = "collectible" },
         flag = "positive",
@@ -1840,10 +1842,10 @@ end)
 -- Ensure minus chain evolution logic is loaded
 pcall(function() require("scripts.items.trinkets.minus_chain") end)
 
--- Dev tooling: registers the conch_rng console probe. Safe to remove.
+-- Dev tooling: registers the conch_test rng console probe. Safe to remove.
 pcall(function() require("scripts.dev.rng_probe") end)
 
--- Dev tooling: registers the conch_round console probe. Safe to remove.
+-- Dev tooling: registers the conch_test rounding console probe. Safe to remove.
 do
     local ok, err = pcall(require, "scripts.dev.stat_rounding_probe")
     if not ok then
@@ -1851,7 +1853,7 @@ do
     end
 end
 
--- Dev tooling: registers the conch_kronos test bench. Safe to remove.
+-- Dev tooling: registers the conch_test kronos detail test bench. Safe to remove.
 do
     local ok, err = pcall(require, "scripts.dev.kronos_probe")
     if not ok then
@@ -1859,7 +1861,7 @@ do
     end
 end
 
--- Dev tooling: registers the conch_liveeye test bench. Safe to remove.
+-- Dev tooling: registers the conch_test live_eye detail test bench. Safe to remove.
 do
     local ok, err = pcall(require, "scripts.dev.liveeye_probe")
     if not ok then
@@ -1867,7 +1869,7 @@ do
     end
 end
 
--- Dev tooling: registers the conch_locale test bench. Safe to remove.
+-- Dev tooling: registers the conch_test locale test bench. Safe to remove.
 do
     local ok, err = pcall(require, "scripts.dev.locale_probe")
     if not ok then
@@ -1875,10 +1877,18 @@ do
     end
 end
 
--- Dev tooling: registers the conch_appraisal test bench. Safe to remove.
+-- Dev tooling: registers the conch_test appraisal detail test bench. Safe to remove.
 do
     local ok, err = pcall(require, "scripts.dev.appraisal_probe")
     if not ok then
         ConchBlessing.printError("[AppraisalProbe] load failed: " .. tostring(err))
+    end
+end
+
+-- Load after detailed benches so conch_test can include them in its suite.
+do
+    local ok, err = pcall(require, "scripts.dev.item_probe")
+    if not ok then
+        ConchBlessing.printError("[ItemProbe] load failed: " .. tostring(err))
     end
 end

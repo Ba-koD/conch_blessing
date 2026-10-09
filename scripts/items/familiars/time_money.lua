@@ -1,3 +1,4 @@
+local TimerClock = require("scripts.lib.timer_clock")
 ConchBlessing.timemoney = {}
 
 local SaveManager = ConchBlessing.SaveManager or require("scripts.lib.save_manager")
@@ -47,6 +48,12 @@ local function ensureState()
 	ConchBlessing.timemoney.state = ConchBlessing.timemoney.state or { perPlayer = {} }
 	return ConchBlessing.timemoney.state
 end
+
+TimerClock.onRebase("timemoney", function(delta)
+    for _, state in pairs(ensureState().perPlayer) do
+        state.lastDropFrame = (state.lastDropFrame or 0) + delta
+    end
+end)
 
 local function getPlayerState(player)
 	local s = ensureState()
@@ -120,7 +127,7 @@ local function loadFromSave(player)
 			-- interval instead of carrying that unrelated frame into this session.
 			remainingFrames = getDropIntervalFrames()
 		end
-		local currentFrame = Game():GetFrameCount()
+		local currentFrame = TimerClock.now()
 		rebaseDropTimer(ps, remainingFrames, currentFrame)
 		writeDropTimerRecord(rec, ps, currentFrame)
 	end
@@ -134,7 +141,7 @@ local function saveToSave(player)
 	local ps = getPlayerState(player)
 	save.timeMoney[key] = save.timeMoney[key] or {}
 	local rec = save.timeMoney[key]
-	writeDropTimerRecord(rec, ps, Game():GetFrameCount())
+	writeDropTimerRecord(rec, ps, TimerClock.now())
 	rec.lastItemCount = ps.lastItemCount
 	rec.data = {
 		framesPerSecond = ConchBlessing.timemoney.data.framesPerSecond,
@@ -158,7 +165,7 @@ do
 		mod:AddCallback(callbackKey, function(_, saveData)
 			local runData = saveData and saveData.game and saveData.game.run
 			local perPlayer = ensureState().perPlayer
-			local currentFrame = Game():GetFrameCount()
+			local currentFrame = TimerClock.now()
 			for _, playerRun in pairs(runData or {}) do
 				for key, rec in pairs((playerRun and playerRun.timeMoney) or {}) do
 					local ps = perPlayer[key]
@@ -260,7 +267,7 @@ end
 -- Periodic drop based on current money
 local function tryPeriodicDrop(player)
 	local game = Game()
-	local frame = game:GetFrameCount()
+	local frame = TimerClock.now()
 	local ps = getPlayerState(player)
 	local intervalFrames = getDropIntervalFrames()
 	if intervalFrames <= 0 then return end
@@ -396,10 +403,9 @@ function ConchBlessing.timemoney.onEvaluateCache(_, player, cacheFlag)
 	local var = getFamiliarVariant()
 	if not id or not var then return end
 	local count = player:GetCollectibleNum(id)
-	if count and count > 0 then
-		local rng = player:GetCollectibleRNG(id)
-		player:CheckFamiliar(var, count, rng)
-	end
+	-- The zero-count call is what removes our remaining engine familiar.
+	local rng = player:GetCollectibleRNG(id)
+	player:CheckFamiliar(var, count or 0, rng)
 end
 
 function ConchBlessing.timemoney.onGameStarted(_, isContinued)
@@ -411,7 +417,7 @@ function ConchBlessing.timemoney.onGameStarted(_, isContinued)
 			loadFromSave(p)
 		else
 			local ps = getPlayerState(p)
-			ps.lastDropFrame = game:GetFrameCount()
+			ps.lastDropFrame = TimerClock.now()
 			ps.lastItemCount = p:GetCollectibleNum(getItemId() or 0)
 			saveToSave(p)
 		end
@@ -429,6 +435,8 @@ function ConchBlessing.timemoney.onPlayerUpdate(_)
 		local curCount = p:GetCollectibleNum(id)
 		if curCount > (ps.lastItemCount or 0) then
 			tryInitialDrop(p, curCount - (ps.lastItemCount or 0))
+		end
+		if curCount ~= (ps.lastItemCount or 0) then
 			ps.lastItemCount = curCount
 			saveToSave(p)
 		end

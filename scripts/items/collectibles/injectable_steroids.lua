@@ -18,6 +18,38 @@ ConchBlessing.injectablsteroids.data = {
 
 local SaveManager = require("scripts.lib.save_manager")
 
+-- Risk is intentionally shared by all holders, but belongs to this floor's
+-- SaveManager state so Continue/Hourglass cannot silently reset it.
+local function saveFloorRisk()
+    local save = SaveManager.GetFloorSave and SaveManager.GetFloorSave(nil)
+    if not save then return end
+    local data = ConchBlessing.injectablsteroids.data
+    save.injectableSteroidsRisk = {
+        chance = data.currentInstantDeathPercent,
+        uses = data.currentFloorUseCount,
+    }
+    SaveManager.Save()
+end
+
+local function restoreFloorRisk()
+    local save = SaveManager.GetFloorSave and SaveManager.GetFloorSave(nil)
+    local risk = save and save.injectableSteroidsRisk
+    local data = ConchBlessing.injectablsteroids.data
+    local chance = risk and tonumber(risk.chance)
+    local uses = risk and tonumber(risk.uses)
+    data.currentInstantDeathPercent = chance and chance == chance and chance < math.huge and chance >= data.baseInstantDeathPercent
+        and chance or data.baseInstantDeathPercent
+    data.currentFloorUseCount = uses and uses == uses and uses < math.huge and uses >= 0 and math.floor(uses) or 0
+end
+
+local function deathRandomFloat(rng)
+    if rng and type(rng.RandomFloat) == "function" then
+        local ok, value = pcall(rng.RandomFloat, rng)
+        if ok and type(value) == "number" and value >= 0 and value < 1 then return value end
+    end
+    return math.random()
+end
+
 local json = nil
 pcall(function() json = require("json") end)
 if not json then
@@ -38,6 +70,12 @@ if not json then
         decode = function(str) return {} end,
     }
 end
+
+local function rollInstantDeath(chance, rng)
+    local roll = deathRandomFloat(rng) * 100
+    return roll < math.max(0, math.min(100, tonumber(chance) or 0)), roll
+end
+ConchBlessing.injectablsteroids._test = { rollInstantDeath = rollInstantDeath }
 
 local function rebuildInjectableUnified(player, playerID)
     local um = ConchBlessing.stats.unifiedMultipliers
@@ -151,15 +189,16 @@ ConchBlessing.injectablsteroids.onUseItem = function(_, collectibleID, _rng, pla
     ConchBlessing.printDebug("Instant death chance: " .. tostring(instantDeathChance) .. "%")
     
     if instantDeathChance > 0 then
-        local deathRoll = math.random(1, 100)
-        ConchBlessing.printDebug("Death roll: " .. tostring(deathRoll) .. " (need <= " .. tostring(instantDeathChance) .. " for death)")
+        local instantDeath, deathRoll = rollInstantDeath(instantDeathChance, _rng)
+        ConchBlessing.printDebug("Death roll: " .. tostring(deathRoll) .. " (need < " .. tostring(instantDeathChance) .. " for death)")
         
-        if deathRoll <= instantDeathChance then
+        if instantDeath then
             -- Commit the use before entering the normal death/revival flow.
             ConchBlessing.injectablsteroids.data.currentFloorUseCount = ConchBlessing.injectablsteroids.data.currentFloorUseCount + 1
             ConchBlessing.injectablsteroids.data.currentInstantDeathPercent = ConchBlessing.injectablsteroids.data.currentInstantDeathPercent + ConchBlessing.injectablsteroids.data.instantDeathPercentIncrement
             ConchBlessing.printDebug("INSTANT DEATH TRIGGERED! Death chance increased to " .. tostring(ConchBlessing.injectablsteroids.data.currentInstantDeathPercent) .. "% for next use")
 
+            saveFloorRisk()
             -- Enter the engine death path directly; defenses and revivals remain engine-owned.
             player:Kill()
             
@@ -266,6 +305,7 @@ ConchBlessing.injectablsteroids.onUseItem = function(_, collectibleID, _rng, pla
     ConchBlessing.injectablsteroids.data.currentInstantDeathPercent = ConchBlessing.injectablsteroids.data.currentInstantDeathPercent + ConchBlessing.injectablsteroids.data.instantDeathPercentIncrement
     ConchBlessing.printDebug("Injectable Steroids used successfully! Death chance increased to " .. tostring(ConchBlessing.injectablsteroids.data.currentInstantDeathPercent) .. "% for next use (floor use count: " .. tostring(ConchBlessing.injectablsteroids.data.currentFloorUseCount) .. ")")
     
+    saveFloorRisk()
     ConchBlessing.printDebug("=== Injectable Steroids onUseItem END ===")
     
     return { Discharge = true, Remove = false, ShowAnim = true }
@@ -397,6 +437,7 @@ ConchBlessing.injectablsteroids.onGameStarted = function(_)
     
     -- SaveManager automatically loads data, no manual loading needed
     ConchBlessing.injectablsteroids._yellowIntensity = 0
+    restoreFloorRisk()
     
     ConchBlessing.printDebug("SaveManager.VERSION: " .. tostring(SaveManager.VERSION))
     ConchBlessing.printDebug("SaveManager.Debug: " .. tostring(SaveManager.Debug))
@@ -432,16 +473,13 @@ end
 
 -- Room clear callback: reduce instant death chance by 0.25%
 ConchBlessing.injectablsteroids.onRoomClear = function()
-    local player = Isaac.GetPlayer(0)
-    if not player then
-        return
+    local held = false
+    for i = 0, Game():GetNumPlayers() - 1 do
+        local player = Isaac.GetPlayer(i)
+        if player and player:HasCollectible(INJECTABLE_STEROIDS_ID) then held = true; break end
     end
-    
-    -- Only reduce if player has the item
-    if not player:HasCollectible(INJECTABLE_STEROIDS_ID) then
-        return
-    end
-    
+    if not held then return end
+
     local data = ConchBlessing.injectablsteroids.data
     local reductionAmount = 0.25
     local previousChance = data.currentInstantDeathPercent
@@ -452,6 +490,7 @@ ConchBlessing.injectablsteroids.onRoomClear = function()
             data.baseInstantDeathPercent,
             data.currentInstantDeathPercent - reductionAmount
         )
+        saveFloorRisk()
         ConchBlessing.printDebug("Injectable Steroids: Room cleared! Death chance reduced from " .. 
             tostring(previousChance) .. "% to " .. tostring(data.currentInstantDeathPercent) .. 
             "% (base: " .. tostring(data.baseInstantDeathPercent) .. "%)")
@@ -466,6 +505,7 @@ ConchBlessing.injectablsteroids.onNewLevel = function(_)
     -- Reset instant death chance and use count on new floor
     ConchBlessing.injectablsteroids.data.currentInstantDeathPercent = ConchBlessing.injectablsteroids.data.baseInstantDeathPercent
     ConchBlessing.injectablsteroids.data.currentFloorUseCount = 0
+    saveFloorRisk()
     ConchBlessing.printDebug("Injectable Steroids: New floor! Death chance reset to " .. tostring(ConchBlessing.injectablsteroids.data.currentInstantDeathPercent) .. "%")
 end
 
@@ -495,6 +535,9 @@ do
     local sm = SaveManager
     local mod = ConchBlessing and ConchBlessing.originalMod
     if sm and mod and mod.__SAVEMANAGER_UNIQUE_KEY and sm.SaveCallbacks then
+        if sm.SaveCallbacks.POST_GLOWING_HOURGLASS_RESET then
+            mod:AddCallback(sm.SaveCallbacks.POST_GLOWING_HOURGLASS_RESET, restoreFloorRisk)
+        end
         local callbackKey = sm.SaveCallbacks.PRE_DATA_SAVE
         mod:AddCallback(callbackKey, function(_, saveData)
             if saveData and saveData.game and saveData.game.run then
@@ -535,7 +578,7 @@ if EID then
             
             -- Add death chance info to description (text: ui.injectable_steroids in scripts/locale)
             local Locale = ConchBlessing.Locale
-            local deathChanceText = Locale.text("ui.injectable_steroids.death_chance", tostring(currentDeathChance))
+            local deathChanceText = Locale.text("ui.injectable_steroids.death_chance", Locale.formatPercent(tostring(currentDeathChance)))
             if floorUseCount > 0 then
                 deathChanceText = deathChanceText .. Locale.text("ui.injectable_steroids.floor_uses", tostring(floorUseCount))
             end

@@ -389,7 +389,7 @@ return {
                 mongo_baby = "Refills Minisaacs up to the number of absorbed copies on each room entry.",
                 buddy_in_a_box = "Each floor, gains the absorbed effect of one random other familiar (one more per absorbed copy).",
                 lil_delirium = "Each floor, gains the absorbed effect of one random other familiar (one more per absorbed copy).",
-                box_of_friends = "On use, absorbed familiar effects are doubled for the room (no {c:DEMON_BABY} Demon Baby).",
+                box_of_friends = "On use, doubles absorbed damage and unique abilities for the room. Ends on leaving or continuing the run; converted items are not granted again.",
                 monster_manual = "Absorbs familiars summoned before or after obtaining Kronos, granting +2 Damage and their effects or item conversions for the floor. Room entry does not grant the absorption again.",
                 sacrificial_altar = "On use, sacrifices up to 2 absorbed familiars to spawn devil room items.",
                 trinket_the_twins = "50% chance on room entry to double one absorbed familiar's effect for the room.",
@@ -462,7 +462,7 @@ return {
             description = "Cursed Demon Sword",
             eid = {
                 "Gain +0.05 {{Damage}}Damage per enemy killed.",
-                "#{{Warning}} Lose (50/stack) of accumulated damage when hit.",
+                "#{{Warning}} Lose 50% of accumulated damage when hit.",
             },
         },
         ICE_BREATH = {
@@ -508,7 +508,7 @@ return {
             name = "Two Faced Penny",
             description = "Probability is 100%!",
             eid = {
-                "After pickup, your next item is duplicated once.",
+                "After pickup, your next non-active item is duplicated once.",
                 "#Clear a floor without taking damage to gain that item again.",
             },
         },
@@ -523,7 +523,9 @@ return {
             name = "Severed Oath",
             description = "Cut the thread of fate",
             eid = {
-                "On use, separates cycling items in the room into individual items.",
+                "While held, adds 1 cycling choice to item pedestals on room entry.",
+                "#Stacks with existing cycling choices. Adds 2 if Severed Oath itself is golden-upgraded.",
+                "#On use, separates cycling items in the room into individual items.",
                 "#{{Warning}} Requires REPENTOGON!",
             },
         },
@@ -646,13 +648,11 @@ return {
             description = "Broken Destiny",
             eid = {
                 "Allows picking all optioned items",
-                "#Adds +1 option to all items.",
                 "#{{Warning}} REPENTOGON recommended",
             },
             synergies = {
                 death_certificate = {
                     "A door back to the original room opens on the left side of the first room in the Death Certificate dimension.",
-                    "#Drops a {card:FOOL} Fool card in the first room.",
                     "#After picking up an item, all other items in that room disappear, but you do not automatically return to the original room.",
                 },
             },
@@ -674,10 +674,20 @@ return {
         },
     },
     ui = {
+        percent = {
+            standard = "%s%%",
+            zero = "0%%",
+            unit1 = "%s tenths",
+            unit2 = "%s hundredths",
+            unit3 = "%s thousandths",
+            unit4 = "%s ten-thousandths",
+            separator = " ",
+            negative = "-%s",
+        },
         kronos = {
             transfer_damage = "Damage +2",
             transfer_return = "Familiar returned",
-            transfer_pretty_fly = "Projectile ignore chance +%s%%",
+            transfer_pretty_fly = "Projectile ignore chance +%s",
         },
         conch_mode = {
             transform = "Conch mode %s: transforms into {{item_name}}",
@@ -688,7 +698,7 @@ return {
             },
         },
         injectable_steroids = {
-            death_chance = "#{{ColorRed}}Current Death Chance: %s%%{{CR}}",
+            death_chance = "#{{ColorRed}}Current Death Chance: %s{{CR}}",
             floor_uses = " (Used this floor: %s times)",
         },
         sealed_demon_sword = {
@@ -703,8 +713,8 @@ return {
             no_active = "#{{ColorYellow}}No active - will move next acquired active{{CR}}",
         },
         void_dagger = {
-            proc_chance = "#{{ColorYellow}}Current Proc Chance: %s%%{{CR}}",
-            proc_detail = " (Base: %s%%, {{Luck}}x%s)",
+            proc_chance = "#{{ColorYellow}}Current Proc Chance: %s{{CR}}",
+            proc_detail = " (Base: %s, {{Luck}}x%s)",
         },
         mcm = {
             tab_general = "General",
@@ -713,6 +723,21 @@ return {
             spawn_title = "--- Spawn Settings ---",
             on = "ON",
             off = "OFF",
+            language = "Language: %s",
+            language_holiday = "Language: %s -> Urimal (October 9)",
+            language_auto = "Auto (EID / Game)",
+            language_en = "English",
+            language_kr = "Korean",
+            language_kr_standard = "Korean (Standard)",
+            language_urimal = "Urimal",
+            language_ja = "Japanese",
+            language_zh = "Chinese",
+            language_info = {
+                "Choose the language for Conch's Blessing.",
+                "Korean uses Urimal on October 9, then returns automatically.",
+                "Korean (Standard) keeps Korean even on October 9.",
+                "Choosing Urimal directly keeps it active on every date.",
+            },
             debug_mode = "Debug Mode: %s",
             debug_mode_info = {
                 "Enable debug output in the log and console.",

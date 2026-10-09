@@ -2,18 +2,18 @@
 -- so each can be checked by hand. Run `restart` between scenarios to keep them
 -- apart; they stack otherwise.
 --
--- Console:  conch_kronos                 restart the run, test every feature on its own
+-- Console:  conch_test kronos detail                 restart the run, test every feature on its own
 --                                         (PASS/FAIL/SKIP to console + log.txt), then restart
 --                                         again so nothing leaks into play (test_bench.lua)
---           conch_kronos help            list the manual scenarios and helpers
---           conch_kronos <scenario>      give Kronos + the scenario's familiars
---           conch_kronos status          print the Kronos run save
---           conch_kronos caption         preview the localized caption without changing the run
---           conch_kronos hurtme          take one half-heart hit (never lethal)
---           conch_kronos clearsim [n]    run the room-clear reward n times (default 1)
---           conch_kronos enemies [n]     spawn n Fatties (default 3)
---           conch_kronos give <id> [n]   give collectible <id> n times
---           conch_kronos drop            remove Kronos (familiars come back)
+--           conch_test kronos detail help            list the manual scenarios and helpers
+--           conch_test kronos detail <scenario>      give Kronos + the scenario's familiars
+--           conch_test kronos detail status          print the Kronos run save
+--           conch_test kronos detail caption         preview the localized caption without changing the run
+--           conch_test kronos detail hurtme          take one half-heart hit (never lethal)
+--           conch_test kronos detail clearsim [n]    run the room-clear reward n times (default 1)
+--           conch_test kronos detail enemies [n]     spawn n Fatties (default 3)
+--           conch_test kronos detail give <id> [n]   give collectible <id> n times
+--           conch_test kronos detail drop            remove Kronos (familiars come back)
 --
 -- Player 0 only. This file is dev tooling: it only runs from the console.
 
@@ -82,7 +82,7 @@ local SCENARIOS = {
     },
     {
         key = "hurt",
-        about = "effects of getting hit; then use: conch_kronos hurtme",
+        about = "effects of getting hit; then use: conch_test kronos detail hurtme",
         give = { { C.COLLECTIBLE_HOLY_WATER, 4 }, { C.COLLECTIBLE_DRY_BABY, 4 }, { C.COLLECTIBLE_MILK, 1 },
             { C.COLLECTIBLE_BIRD_CAGE, 1 }, { C.COLLECTIBLE_MYSTERY_EGG, 2 }, { C.COLLECTIBLE_MY_SHADOW, 2 },
             { C.COLLECTIBLE_HALLOWED_GROUND, 1 } },
@@ -93,7 +93,7 @@ local SCENARIOS = {
     },
     {
         key = "clear",
-        about = "room-clear drops; then use: conch_kronos clearsim 7",
+        about = "room-clear drops; then use: conch_test kronos detail clearsim 7",
         give = { { C.COLLECTIBLE_BUM_FRIEND, 10 }, { C.COLLECTIBLE_LIL_CHEST, 10 }, { C.COLLECTIBLE_RELIC, 1 },
             { C.COLLECTIBLE_MYSTERY_SACK, 1 }, { C.COLLECTIBLE_RUNE_BAG, 1 }, { C.COLLECTIBLE_PASCHAL_CANDLE, 1 } },
         checks = { "every clear: 1 random pickup + 1 chest", "6th clear: + soul heart + random pickup; 7th: + rune",
@@ -119,7 +119,7 @@ local SCENARIOS = {
         key = "floor",
         about = "Buddy in a Box x2 + Lil Delirium: random effect per floor",
         give = { { C.COLLECTIBLE_BUDDY_IN_A_BOX, 2 }, { C.COLLECTIBLE_LIL_DELIRIUM, 1 } },
-        checks = { "conch_kronos status: 3 floor picks", "stage 2 then status: picks rerolled, serial +1" },
+        checks = { "conch_test kronos detail status: 3 floor picks", "stage 2 then status: picks rerolled, serial +1" },
     },
     {
         key = "items",
@@ -134,7 +134,7 @@ local SCENARIOS = {
         about = "Lost Soul x2: hit-free floor pays eternal hearts",
         give = { { C.COLLECTIBLE_LOST_SOUL, 2 } },
         checks = { "stage 2 without a hit: 2 eternal hearts in the first room (or the next one)",
-            "then conch_kronos hurtme, stage 3: nothing" },
+            "then conch_test kronos detail hurtme, stage 3: nothing" },
     },
     {
         key = "actives",
@@ -292,7 +292,7 @@ function probe.status(player)
 end
 
 function probe.help()
-    out("conch_kronos <scenario>  manual setups (run `restart` between them)")
+    out("conch_test kronos detail <scenario>  manual setups (run `restart` between them)")
     for _, scenario in ipairs(SCENARIOS) do
         out(string.format("  %-9s %s", scenario.key, scenario.about))
     end
@@ -300,7 +300,7 @@ function probe.help()
 end
 
 function probe.run(scenario, player)
-    out("== conch_kronos " .. scenario.key .. ": " .. scenario.about .. " ==")
+    out("== conch_test kronos detail " .. scenario.key .. ": " .. scenario.about .. " ==")
     ensureKronos(player)
     for _, entry in ipairs(scenario.give or {}) do
         give(player, entry[1], entry[2])
@@ -314,7 +314,7 @@ function probe.run(scenario, player)
 end
 
 -- ------------------------------------------------------------------ automatic run
--- The plan below is run by scripts/dev/test_bench.lua: `conch_kronos` restarts
+-- The plan below is run by scripts/dev/test_bench.lua: `conch_test kronos detail` restarts
 -- the run, walks every feature on its own (gives familiars, fires tears, takes
 -- hits, uses the temporary-familiar sources, reloads the room for The Twins),
 -- prints PASS/FAIL/SKIP and LOOK lines, and restarts the run again.
@@ -436,6 +436,58 @@ local function buildPlan(plan)
         spawnTarget(player, ctx)
     end)
     wait(10)
+
+    -- Run before any absorbed powers or temporary summons can prevent hits.
+    -- Keep every native protection intact; isolate the fixture by ordering.
+    -- Tonsil stays vanilla: the engine keeps its count in a player field with no API,
+    -- so an absorbed Tonsil would just be respawned from that count.
+    section("vanilla: Tonsil", "take hits until a Tonsil familiar appears")
+    act(function(player, ctx)
+        ctx.total = totalAbsorbed()
+        player:AddMaxHearts(12, false)
+        player:AddHearts(24)
+        player:AddTrinket(TrinketType.TRINKET_TONSIL, false)
+        ctx.tonsilHits = 0
+        ctx.tonsilLanded = 0
+        ctx.tonsilBefore = countEntities(EntityType.ENTITY_FAMILIAR, FamiliarVariant.TONSIL)
+    end)
+    -- Tonsil needs 6-12 landed hits. The damage cooldown can read 0 while the
+    -- engine still ignores hits, so every attempt waits until the hit actually
+    -- registered (or 45 updates pass, after which the next attempt lands).
+    local function tonsilDone(ctx)
+        return countEntities(EntityType.ENTITY_FAMILIAR, FamiliarVariant.TONSIL) > ctx.tonsilBefore
+            or ctx.tonsilLanded >= 13
+    end
+    for _ = 1, 40 do
+        waitUntil(function(player, ctx)
+            return tonsilDone(ctx) or player:GetDamageCooldown() == 0
+        end, 180, "Tonsil damage cooldown expires")
+        act(function(player, ctx)
+            if tonsilDone(ctx) then return end
+            -- NOKILL rejects further damage at low health. Refill before each
+            -- attempt, rather than counting forty attempts as forty real hits.
+            player:AddHearts(24)
+            ctx.tonsilHits = ctx.tonsilHits + 1
+            ctx.hurtsBefore = counters().hurts or 0
+            ctx.tonsilAttemptFrame = Game():GetFrameCount()
+            local healthBefore = player:GetHearts() + player:GetSoulHearts()
+            player:TakeDamage(1, DamageFlag.DAMAGE_NOKILL, EntityRef(player), 2)
+            if player:GetHearts() + player:GetSoulHearts() < healthBefore then
+                ctx.tonsilLanded = ctx.tonsilLanded + 1
+            end
+        end)
+        waitUntil(function(_, ctx)
+            return tonsilDone(ctx) or (counters().hurts or 0) > (ctx.hurtsBefore or 0)
+                or Game():GetFrameCount() - ctx.tonsilAttemptFrame >= 45
+        end, 90, "Tonsil hit registered or retry delay elapsed")
+    end
+    check("Tonsil appears and is not absorbed", function(player, ctx)
+        local tonsils = countEntities(EntityType.ENTITY_FAMILIAR, FamiliarVariant.TONSIL) - ctx.tonsilBefore
+        player:TryRemoveTrinket(TrinketType.TRINKET_TONSIL)
+        return tonsils >= 1 and totalAbsorbed() == ctx.total,
+            string.format("Tonsil familiars +%d after %d health losses / %d hurt callbacks (%d attempts), absorbed +%d",
+                tonsils, ctx.tonsilLanded, delta(ctx, "hurts"), ctx.tonsilHits, totalAbsorbed() - ctx.total)
+    end)
 
     section("damage: all familiars", nil)
     for _, id in ipairs({ C.COLLECTIBLE_GUARDIAN_ANGEL, C.COLLECTIBLE_ROTTEN_BABY, C.COLLECTIBLE_BROTHER_BOBBY }) do
@@ -689,7 +741,8 @@ local function buildPlan(plan)
         local resolver = ConchBlessing.EIDDynamicTokens and ConchBlessing.EIDDynamicTokens.KRONOS_BLOCK
         if type(resolver) ~= "function" then return false, "no KRONOS_BLOCK resolver" end
         local value = resolver()
-        return value == "100%", "token = " .. tostring(value)
+        local expected = ConchBlessing.Locale.formatPercent(100)
+        return value == expected, "token = " .. tostring(value) .. " expected=" .. expected
     end)
     wait(90)
 
@@ -1022,43 +1075,6 @@ local function buildPlan(plan)
         end)
     end
 
-    -- Tonsil stays vanilla: the engine keeps its count in a player field with no API,
-    -- so an absorbed Tonsil would just be respawned from that count.
-    section("vanilla: Tonsil", "take hits until a Tonsil familiar appears")
-    act(function(player, ctx)
-        ctx.total = totalAbsorbed()
-        player:AddMaxHearts(12, false)
-        player:AddHearts(24)
-        player:AddTrinket(TrinketType.TRINKET_TONSIL, false)
-        ctx.tonsilHits = 0
-        ctx.tonsilBefore = countEntities(EntityType.ENTITY_FAMILIAR, FamiliarVariant.TONSIL)
-    end)
-    -- Tonsil needs 6-12 landed hits. The damage cooldown can read 0 while the
-    -- engine still ignores hits, so every attempt waits until the hit actually
-    -- registered (or 45 updates pass, after which the next attempt lands).
-    local function tonsilDone(ctx)
-        return countEntities(EntityType.ENTITY_FAMILIAR, FamiliarVariant.TONSIL) > ctx.tonsilBefore
-            or delta(ctx, "hurts") >= 13
-    end
-    for _ = 1, 40 do
-        act(function(player, ctx)
-            if tonsilDone(ctx) then return end
-            ctx.tonsilHits = ctx.tonsilHits + 1
-            ctx.hurtsBefore = counters().hurts or 0
-            player:TakeDamage(1, DamageFlag.DAMAGE_NOKILL, EntityRef(player), 2)
-        end)
-        waitUntil(function(_, ctx)
-            return tonsilDone(ctx) or (counters().hurts or 0) > (ctx.hurtsBefore or 0)
-        end, 45)
-    end
-    check("Tonsil appears and is not absorbed", function(player, ctx)
-        local tonsils = countEntities(EntityType.ENTITY_FAMILIAR, FamiliarVariant.TONSIL) - ctx.tonsilBefore
-        player:TryRemoveTrinket(TrinketType.TRINKET_TONSIL)
-        return tonsils >= 1 and totalAbsorbed() == ctx.total,
-            string.format("Tonsil familiars +%d after %d registered hits (%d attempts), absorbed +%d",
-                tonsils, delta(ctx, "hurts"), ctx.tonsilHits, totalAbsorbed() - ctx.total)
-    end)
-
     -- losing Kronos -----------------------------------------------------------------------------
     section("drop", "every absorbed familiar comes back out of your body in reverse dust")
     act(function(player, ctx)
@@ -1173,12 +1189,12 @@ local function buildPlan(plan)
     end)
 end
 
--- Manual setups and helpers, reached as `conch_kronos <action>`.
+-- Manual setups and helpers, reached as `conch_test kronos detail <action>`.
 local function handleCommand(action, words, player)
     local scenario = findScenario(action)
     if action == "aura" then
         probe._auraOnly = true
-        if not TestBench.start("conch_kronos", true) then probe._auraOnly = nil end
+        if not TestBench.start("conch_test kronos detail", true) then probe._auraOnly = nil end
     elseif scenario then
         probe.run(scenario, player)
     elseif action == "grid" then
@@ -1225,7 +1241,7 @@ local function handleCommand(action, words, player)
         spawnEnemies("fatty", math.max(1, math.floor(tonumber(words[2]) or 3)))
     elseif action == "give" then
         local id = tonumber(words[2])
-        if not id then out("usage: conch_kronos give <id> [count]") return true end
+        if not id then out("usage: conch_test kronos detail give <id> [count]") return true end
         give(player, id, math.max(1, math.floor(tonumber(words[3]) or 1)))
     elseif action == "drop" then
         while player:HasCollectible(KRONOS_ID, true) do
@@ -1239,7 +1255,7 @@ local function handleCommand(action, words, player)
 end
 
 TestBench.register({
-    command = "conch_kronos",
+    command = "conch_test kronos detail",
     tag = "KronosProbe",
     duration = "about 2 minutes",
     build = buildPlan,

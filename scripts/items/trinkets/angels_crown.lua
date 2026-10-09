@@ -132,9 +132,9 @@ end
 ---Mark one pedestal as an Angel's Crown deal. The reroll-persistent pickup save carries
 ---it through a D6 and is the scope SaveManager also restores on the Ascent.
 ---The marker names one pedestal and one quoted item instead of being a bare flag. The
----pickup save is indexed by pointer while the game runs, so a slot the engine later hands
----to a different pedestal must not inherit a deal, and the quoted item is what later
----proves whether the pedestal still holds what was actually for sale.
+---provider owns pickup identity across rerolls and room restoration. The quoted item
+---is what later proves whether the pedestal still holds what was actually for sale;
+---its initial seed is historical evidence because a reroll can replace that seed.
 local function markDeal(pickup)
     local save = SaveManager.GetRerollPickupSave(pickup, false)
     if type(save) ~= "table" then
@@ -160,9 +160,9 @@ local function dealMarkerFor(pickup)
         save[PICKUP_SAVE_KEY] = marker
     end
     if type(marker) ~= "table" then return nil end
-    -- A reroll keeps the pedestal's seed, so the identity holds across a D6, while a
-    -- pedestal some other item dropped into the room carries a seed of its own.
-    if marker.seed ~= pickup.InitSeed then return nil end
+    -- SaveManager owns the pedestal identity here. D6/D100 can change InitSeed;
+    -- RerollSave deliberately survives that change, unlike NoRerollSave. The
+    -- recorded seed is historical evidence, not a reason to discard this deal.
     return marker
 end
 
@@ -672,7 +672,12 @@ local function refreshRerolledDeals()
             else
                 -- A price the engine wiped is restated too: an unsettled deal is never
                 -- free, so a non-positive price means the contract was dropped somewhere.
-                if dealSubTypes[GetPtrHash(pickup)] ~= pickup.SubType or pickup.Price <= 0 then
+                if dealSubTypes[GetPtrHash(pickup)] ~= pickup.SubType
+                    or pickup.Price ~= resolveShopPrice(pickup.SubType)
+                    or pickup.AutoUpdatePrice ~= false
+                    or pickup.ShopItemId ~= -1
+                    or pickup.OptionsPickupIndex ~= 0
+                then
                     quoteDeal(pickup, marker)
                     ConchBlessing.printDebug(string.format(
                         "[Angel's Crown] deal restated after a reroll: item=%d price=%d",

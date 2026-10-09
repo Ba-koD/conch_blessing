@@ -61,6 +61,33 @@ function ConchBlessing_MCM.Setup(mod)
     ModConfigMenu.AddSpace(category, GENERAL)
     ModConfigMenu.AddText(category, GENERAL, text("options_title"))
 
+    local languageChoices = ConchBlessing_Config.LANGUAGE_CHOICES
+    ModConfigMenu.AddSetting(category, GENERAL, {
+        Type = ModConfigMenu.OptionType.NUMBER,
+        Minimum = 1,
+        Maximum = #languageChoices,
+        CurrentSetting = function()
+            local selected = ConchBlessing_Config.GetSelectedLanguage(mod)
+            for index, code in ipairs(languageChoices) do if code == selected then return index end end
+            return 1
+        end,
+        Display = function()
+            local selected = ConchBlessing_Config.GetSelectedLanguage(mod)
+            local label = text("language_" .. selected)
+            if selected ~= "urimal" and ConchBlessing_Config.GetCurrentLanguage() == "urimal" then
+                return text("language_holiday", label)
+            end
+            return text("language", label)
+        end,
+        OnChange = function(index)
+            local code = languageChoices[index]
+            if not code or not ConchBlessing_Config.SetLanguage(code, mod) then return end
+            ConchBlessing_MCM.saveConfigToSaveManager(mod)
+            if mod.EID and type(mod.EID.refreshLanguage) == "function" then mod.EID.refreshLanguage() end
+        end,
+        Info = lines("language_info")
+    })
+
     -- Debug mode toggle
     ModConfigMenu.AddSetting(category, GENERAL, {
         Type = ModConfigMenu.OptionType.BOOLEAN,

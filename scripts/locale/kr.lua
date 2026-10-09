@@ -374,7 +374,7 @@ return {
                 mongo_baby = "방에 들어갈 때마다 미니 아이작을 흡수한 수만큼 채워줍니다.",
                 buddy_in_a_box = "스테이지마다 다른 패밀리어 하나의 흡수 효과를 무작위로 얻습니다. (흡수할 때마다 1개씩 추가)",
                 lil_delirium = "스테이지마다 다른 패밀리어 하나의 흡수 효과를 무작위로 얻습니다. (흡수할 때마다 1개씩 추가)",
-                box_of_friends = "사용 시 그 방에서 흡수한 패밀리어의 효과가 2배가 됩니다. ({c:DEMON_BABY} 악마 아기는 소환되지 않음)",
+                box_of_friends = "사용 시 그 방에서 흡수 공격력과 고유능력이 2배가 됩니다. 방을 나가거나 이어하기 시 해제되며 변환 아이템은 추가 지급하지 않습니다.",
                 monster_manual = "크로노스 획득 전후에 소환한 패밀리어를 흡수해 그 스테이지 동안 데미지 +2와 고유 효과 또는 변환 아이템을 얻습니다. 방 이동으로 같은 흡수 보상을 다시 얻지 않습니다.",
                 sacrificial_altar = "사용 시 흡수한 패밀리어를 최대 2마리 제물로 바쳐 악마방 아이템을 생성합니다.",
                 trinket_the_twins = "방 입장 시 50% 확률로 그 방에서 흡수한 패밀리어 하나의 효과가 2배가 됩니다.",
@@ -447,7 +447,7 @@ return {
             description = "저주받은 마검",
             eid = {
                 "몬스터 처치 시마다 {{Damage}}공격력이 +0.05 증가합니다.",
-                "#{{Warning}} 피격 시 누적된 공격력의 (50/보유 개수)%를 잃습니다.",
+                "#{{Warning}} 피격 시 누적된 공격력의 50%를 잃습니다.",
             },
         },
         ICE_BREATH = {
@@ -493,7 +493,7 @@ return {
             name = "양면 동전",
             description = "확률은 100%!",
             eid = {
-                "획득 후 다음 아이템을 하나 더 획득합니다.",
+                "획득 후 다음 액티브가 아닌 아이템을 하나 더 획득합니다.",
                 "#피격 없이 층을 클리어하면 해당 아이템을 하나 더 획득합니다.",
             },
         },
@@ -508,7 +508,9 @@ return {
             name = "적사단지",
             description = "이어진 운명을 끊다",
             eid = {
-                "사용 시 방 안의 순환 아이템을 독립된 아이템으로 분리합니다.",
+                "소지 중 방 진입 시 아이템의 순환 선택지를 1개 추가합니다.",
+                "#기존 순환 선택지에 중첩됩니다. 적사단지 자체가 황금 강화되어 있으면 2개 추가합니다.",
+                "#사용 시 방 안의 순환 아이템을 독립된 아이템으로 분리합니다.",
                 "#{{Warning}} REPENTOGON이 필요합니다!",
             },
         },
@@ -631,13 +633,11 @@ return {
             description = "끊어진 운명",
             eid = {
                 "모든 선택지 아이템을 획득할 수 있게 합니다.",
-                "#모든 아이템에 선택지를 +1 합니다.",
                 "#{{Warning}} REPENTOGON 권장",
             },
             synergies = {
                 death_certificate = {
                     "사망 증명서 공간의 첫 방 왼쪽에 원래 방으로 돌아가는 문이 열립니다.",
-                    "#첫 방에 {card:FOOL} 바보 카드를 드랍합니다.",
                     "#아이템 하나를 획득하면 해당 방에 남은 아이템이 모두 사라지지만, 자동으로 원래 방으로 돌아가지는 않습니다.",
                 },
             },
@@ -659,10 +659,20 @@ return {
         },
     },
     ui = {
+        percent = {
+            standard = "%s%%",
+            zero = "0%%",
+            unit1 = "%s할",
+            unit2 = "%s푼",
+            unit3 = "%s리",
+            unit4 = "%s모",
+            separator = " ",
+            negative = "-%s",
+        },
         kronos = {
             transfer_damage = "데미지 +2",
             transfer_return = "패밀리어 반환",
-            transfer_pretty_fly = "탄환 무시 확률 +%s%%",
+            transfer_pretty_fly = "탄환 무시 확률 +%s",
         },
         conch_mode = {
             transform = "소라고둥 모드 %s시 {{item_name}}으로 변환",
@@ -673,7 +683,7 @@ return {
             },
         },
         injectable_steroids = {
-            death_chance = "#{{ColorRed}}현재 즉사 확률: %s%%{{CR}}",
+            death_chance = "#{{ColorRed}}현재 즉사 확률: %s{{CR}}",
             floor_uses = " (이번 층 사용: %s회)",
         },
         sealed_demon_sword = {
@@ -688,8 +698,8 @@ return {
             no_active = "#{{ColorYellow}}현재 액티브 없음 - 다음 획득 액티브를 이동{{CR}}",
         },
         void_dagger = {
-            proc_chance = "#{{ColorYellow}}현재 발동 확률: %s%%{{CR}}",
-            proc_detail = " (기본: %s%%, {{Luck}}x%s)",
+            proc_chance = "#{{ColorYellow}}현재 발동 확률: %s{{CR}}",
+            proc_detail = " (기본: %s, {{Luck}}x%s)",
         },
     },
 }

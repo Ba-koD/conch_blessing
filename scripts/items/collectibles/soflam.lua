@@ -103,12 +103,17 @@ local function getRocketCountFromMultishot(player)
     return math.max(1, math.floor(numTears + 0.5))
 end
 
+local function isLivePlayer(player)
+    return player and (type(player.Exists)~="function" or player:Exists())
+        and (type(player.IsDead)~="function" or not player:IsDead())
+end
+
 local function findPlayerByInitSeed(initSeed)
     if not initSeed then return nil end
     local n = Game():GetNumPlayers()
     for i = 0, n - 1 do
         local p = Isaac.GetPlayer(i)
-        if p and p.InitSeed == initSeed then
+        if isLivePlayer(p) and p.InitSeed == initSeed then
             return p
         end
     end
@@ -126,18 +131,31 @@ local function getBombRadiusFromDamage(damage)
     return 90
 end
 
+-- Failed/missing visual entities must not strand a strike. A bomb spawn failure
+-- uses the same damage/provenance fallback as runtimes without a countdown API.
+local function spawnAs(entityType,variant,position,spawner,method)
+    local ok,entity=pcall(Isaac.Spawn,entityType,variant,0,position,Vector.Zero,spawner)
+    if not ok then
+        if type(ConchBlessing.printError)=="function" then
+            ConchBlessing.printError("SOFLAM spawn failed; using fallback: "..tostring(entity))
+        end
+        return nil
+    end
+    if not entity then return nil end
+    if type(entity[method])=="function" then
+        local converted,value=pcall(entity[method],entity)
+        if converted and value then return value end
+    end
+    -- Do not leave a malformed test/provider entity behind after a failed cast.
+    if type(entity.Remove)=="function" then entity:Remove() end
+    return nil
+end
+
 -- ===================================================================
 -- Visual: spawn Epic Fetus-style crosshair target on the enemy
 -- ===================================================================
 local function spawnTargetCrosshair(position, spawner, inheritedProvenance)
-    local target = Isaac.Spawn(
-        EntityType.ENTITY_EFFECT,
-        EffectVariant.TARGET,   -- 30: the authentic crosshair
-        0,
-        position,
-        Vector.Zero,
-        spawner
-    ):ToEffect()
+    local target=spawnAs(EntityType.ENTITY_EFFECT,EffectVariant.TARGET,position,spawner,"ToEffect")
 
     if target then
         DamageProvenance.markTriggeredAttack(target, PROC_KEY, inheritedProvenance, PROC_ORIGIN)
@@ -156,14 +174,7 @@ end
 -- Visual: spawn Epic Fetus-style rocket falling from the sky
 -- ===================================================================
 local function spawnRocketEffect(position, spawner, inheritedProvenance)
-    local rocket = Isaac.Spawn(
-        EntityType.ENTITY_EFFECT,
-        EffectVariant.ROCKET,   -- 31: the falling rocket effect
-        0,
-        position,
-        Vector.Zero,
-        spawner
-    ):ToEffect()
+    local rocket=spawnAs(EntityType.ENTITY_EFFECT,EffectVariant.ROCKET,position,spawner,"ToEffect")
 
     if rocket then
         DamageProvenance.markTriggeredAttack(rocket, PROC_KEY, inheritedProvenance, PROC_ORIGIN)
@@ -217,14 +228,7 @@ local function detonateAtPosition(player, position, inheritedProvenance)
         end
     end
 
-    local bomb = Isaac.Spawn(
-        EntityType.ENTITY_BOMB,
-        bombVariant,
-        0,
-        position,
-        Vector.Zero,
-        player
-    ):ToBomb()
+    local bomb=spawnAs(EntityType.ENTITY_BOMB,bombVariant,position,player,"ToBomb")
 
     if bomb then
         DamageProvenance.markTriggeredAttack(bomb, PROC_KEY, inheritedProvenance, PROC_ORIGIN)
@@ -275,7 +279,12 @@ local function detonateAtPosition(player, position, inheritedProvenance)
             bomb:Remove()
         end
     else
-        -- Fallback to manual explosion if spawning a bomb fails.
+        -- Without a bomb instance its variant-specific natural radius is
+        -- unavailable. Use the standard natural bomb radius, including the
+        -- documented Mr. Mega bonus, while preserving exact damage and flags.
+        local radius=getBombRadiusFromDamage(100)
+        if mrMegaCount>0 then radius=radius*(ConchBlessing.soflam.data.mrMegaRadiusMultiplier or 1.5) end
+        local scale=radius/getBombRadiusFromDamage(damage)
         DamageProvenance.withTriggeredSource(player, PROC_KEY, inheritedProvenance, PROC_ORIGIN, function()
             game:BombExplosionEffects(
                 position,
@@ -283,7 +292,7 @@ local function detonateAtPosition(player, position, inheritedProvenance)
                 bombFlags,
                 Color.Default,
                 player,
-                1,
+                scale,
                 true,
                 true,
                 DamageFlag.DAMAGE_EXPLOSION
@@ -387,7 +396,7 @@ ConchBlessing.soflam.onEvaluateCache = function(_, player, cacheFlag)
 end
 
 local function tryProcFromAttack(player, attackEntity, npc, inheritedProvenance)
-    if not (player and attackEntity and npc and player:HasCollectible(SOFLAM_ID)) then return end
+    if not (isLivePlayer(player) and attackEntity and npc and player:HasCollectible(SOFLAM_ID)) then return end
 
     -- One physical attack gets exactly one SOFLAM roll. Claim before RNG so a
     -- failed Tech X/Brimstone/piercing hit cannot reroll on later damage ticks.
@@ -552,5 +561,7 @@ ConchBlessing.soflam.onGameStarted = function(_)
 end
 
 -- Test hooks for scripts/dev/rng_probe.lua. Pure helpers, no gameplay use.
-ConchBlessing.soflam._test = { getProcChance = getProcChance }
+ConchBlessing.soflam._test = { getProcChance = getProcChance,
+    getRocketCountFromMultishot = getRocketCountFromMultishot,
+    getBombRadiusFromDamage = getBombRadiusFromDamage }
 return ConchBlessing.soflam

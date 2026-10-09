@@ -3,7 +3,7 @@
 --   * loads those tables (English is the fallback for anything missing),
 --   * turns item icon tokens into EID markup,
 --   * fills ConchBlessing.ItemData's name/description/eid/synergies/specials in
---     the { en = ..., kr = ... } shape the EID and HUD code reads,
+--     the language-keyed tables the EID and HUD code read,
 --   * serves UI strings through Locale.text / Locale.textIn / Locale.linesIn.
 --
 -- Icon tokens, resolved when the text is read. A token is the markup alone, so
@@ -20,9 +20,9 @@ local Locale = {}
 Locale.FALLBACK = "en"
 -- One entry per scripts/locale/<lang>.lua. Only listed files are loaded, so a
 -- same-named file shipped by another mod is never picked up by probing.
-Locale.LANGUAGES = { "en", "kr" }
+Locale.LANGUAGES = { "en", "kr", "urimal" }
 
--- Every problem this module reported, kept for the conch_locale test bench.
+-- Every problem this module reported, kept for the conch_test locale test bench.
 Locale.problems = {}
 
 local function printError(message)
@@ -141,9 +141,40 @@ function Locale.textIn(lang, path, ...)
     return render(path, value, ...)
 end
 
---- Locale.textIn in the current language (EID setting, then game language).
+--- Locale.textIn in the effective mod language (selection and calendar policy).
 function Locale.text(path, ...)
     return Locale.textIn(currentLanguage(), path, ...)
+end
+
+--- Format a percentage-point value, not a ratio: 50 means 50% or 5할.
+--- Other locales keep the caller's existing precision (including string inputs).
+--- Urimal uses whole 할/푼/리/모, rounded once to the nearest 모 (0.01%).
+function Locale.formatPercent(value, lang)
+    lang = lang or currentLanguage()
+    local amount = tonumber(value)
+    if lang ~= "urimal" or not amount or amount ~= amount
+        or amount == math.huge or amount == -math.huge then
+        return Locale.textIn(lang, "ui.percent.standard", tostring(value))
+    end
+    local scaled = math.abs(amount) * 100
+    -- Keep very large/nonfinite values out of integer division and formatting.
+    if scaled >= 9007199254740991 then
+        return Locale.textIn(lang, "ui.percent.standard", tostring(value))
+    end
+    -- Decimal halfway values such as 9.995 can arrive a few binary ulps low.
+    local remaining = math.floor(scaled + 0.5 + 1e-9)
+    if remaining == 0 then return Locale.textIn(lang, "ui.percent.zero") end
+    local parts = {}
+    for index, size in ipairs({ 1000, 100, 10, 1 }) do
+        local count = math.floor(remaining / size)
+        if count > 0 then
+            parts[#parts + 1] = Locale.textIn(lang, "ui.percent.unit" .. index, string.format("%.0f", count))
+            remaining = remaining - count * size
+        end
+    end
+    local result = table.concat(parts, Locale.textIn(lang, "ui.percent.separator"))
+    if amount < 0 then result = Locale.textIn(lang, "ui.percent.negative", result) end
+    return result
 end
 
 --- A list of UI strings at a dotted path in lang (for example MCM info lines).

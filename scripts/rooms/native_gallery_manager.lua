@@ -1,3 +1,4 @@
+local NativeReturnDoor = require("scripts.rooms.native_return_door")
 local isc = require("scripts.lib.isaacscript-common")
 local NativeGalleryRooms = require("scripts.rooms.death_certificate_gallery_rooms")
 local GalleryExitDoor = require("scripts.rooms.gallery_exit_door")
@@ -1341,22 +1342,7 @@ local function stageAPIDoorReady(stageAPI)
         and type(stageAPI.SetDoorOpen) == "function"
 end
 
-local function getReturnDoorGeometry(room)
-    if not room or type(room.GetClampedPosition) ~= "function"
-        or type(room.GetCenterPos) ~= "function"
-        or type(room.IsPositionInRoom) ~= "function" then return nil end
-    -- Vanilla DC starts in a narrow vertical room. Its LEFT0 slot position
-    -- lies outside the usable room. Resolve the actual left boundary instead
-    -- of assuming that every requested slot exists in the current shape.
-    local center = room:GetCenterPos()
-    local boundary = room:GetClampedPosition(center - Vector(10000, 0), 0)
-    local index = room:GetGridIndex(boundary - Vector(20, 0))
-    local position = room:GetGridPosition(index)
-    if room:IsPositionInRoom(position, 0)
-        or not room:IsPositionInRoom(position + Vector(40, 0), 0)
-    then return nil end
-    return index, position
-end
+local getReturnDoorGeometry = NativeReturnDoor.leftWall
 
 local function removeReturnDoor(stageAPI, session)
     if not stageAPIDoorReady(stageAPI) then return false end
@@ -1492,25 +1478,7 @@ local function ensureReturnDoor(session, context)
     end
     local ok, err = pcall(function()
         local doorData = { token = session.token, visitId = session.visitId, kind = "gallery_return" }
-        local nominalIndex = room:GetGridIndex(room:GetDoorSlotPosition(DoorSlot.LEFT0))
-        if index == nominalIndex then
-            stageAPI.SpawnCustomDoor(DoorSlot.LEFT0, nil, nil, RETURN_DOOR_NAME,
-                doorData, nil, nil, RoomTransitionAnim.FADE)
-        else
-            -- Installed StageAPI 2.33's public CustomDoorGrid:Spawn contract
-            -- preserves the slot/orientation while accepting a physical index.
-            -- SpawnCustomDoor itself always uses the invalid nominal position.
-            if not stageAPI.CustomDoorGrid or type(stageAPI.CustomDoorGrid.Spawn) ~= "function"
-                or type(stageAPI.GetCustomGrids) ~= "function"
-                or #stageAPI.GetCustomGrids(index) ~= 0 then
-                error("actual return-door wall is unavailable or already owned")
-            end
-            stageAPI.CustomDoorGrid:Spawn(index, nil, false, {
-                Slot = DoorSlot.LEFT0, ExitSlot = DoorSlot.RIGHT0,
-                DoorDataName = RETURN_DOOR_NAME, Data = doorData,
-                TransitionAnim = RoomTransitionAnim.FADE,
-            })
-        end
+        local _, _, nominalIndex = NativeReturnDoor.spawn(stageAPI, room, RETURN_DOOR_NAME, doorData)
         debugPrint(string.format("return door physicalIndex=%d x=%.1f y=%.1f nominalIndex=%d",
             index, position.X, position.Y, nominalIndex))
     end)

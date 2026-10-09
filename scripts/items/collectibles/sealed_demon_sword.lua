@@ -60,29 +60,60 @@ local function anyPlayerHasSword()
     return nil
 end
 
--- Split bookkeeping, reset per room.
---
--- A half carries 40% of the parent's health, and TrySplit's damage argument is
--- dealt to anything it cannot split. So re-splitting a half does not double it,
--- it kills it. Timing cannot tell a half from a fresh spawn reliably -- halves
--- appear some frames later -- so compare health instead: the first health seen
--- for an enemy kind in this room is the baseline, and anything of that kind that
--- turns up well below it is a half.
+-- The engine exposes TrySplit but no split-result identity/getter. Keep the
+-- observed original-health baseline as a conservative fallback, and persist its
+-- whole room ledger: forgetting it on revisit used to treat a surviving half as
+-- a fresh original. Health alone is still not proof of parent/child identity;
+-- naturally weaker same-kind spawns may be skipped. Never lower that baseline.
 local SPLIT_BASELINE_RATIO = 0.9
 local MAX_SPLITS_PER_ROOM = 60
+local SPLIT_SAVE_KEY = "__ConchBlessingSealedDemonSword"
+local splitState, splitProvider
+local splitSaveErrorReported = false
 
-local splitState = {
-    handled = {},
-    baselineHP = {},
-    splits = 0,
-    budgetWarned = false,
-}
+local function bindSplitState()
+    local save, provider
+    local ok, err = pcall(function()
+        if StageAPI and type(StageAPI.InExtraRoom) == "function" and StageAPI.InExtraRoom() then
+            -- LevelRoom.PersistentData is the provider-owned room save; never
+            -- alias a virtual room with the native descriptor underneath it.
+            local room = StageAPI.GetCurrentRoom and StageAPI.GetCurrentRoom()
+            if not room or type(room.PersistentData) ~= "table" then error("StageAPI room save unavailable") end
+            save, provider = room.PersistentData, StageAPI
+        else
+            local level = Game():GetLevel()
+            local descriptor = level:GetCurrentRoomDesc()
+            if not descriptor or type(descriptor.ListIndex) ~= "number" then error("native room identity unavailable") end
+            save = SaveManager.GetRoomSave(nil, false, descriptor.ListIndex)
+        end
+        if type(save) ~= "table" then error("room save unavailable") end
+    end)
+    if not ok then
+        if not splitSaveErrorReported then
+            ConchBlessing.printError("[SealedDemonSword] Split state unavailable: " .. tostring(err))
+            splitSaveErrorReported = true
+        end
+        splitState, splitProvider = nil, nil
+        return false
+    end
+    splitSaveErrorReported = false
+    save[SPLIT_SAVE_KEY] = save[SPLIT_SAVE_KEY] or {handled={}, baselineHP={}, splits=0, budgetWarned=false}
+    splitState, splitProvider = save[SPLIT_SAVE_KEY], provider
+    splitState.handled = splitState.handled or {}
+    splitState.baselineHP = splitState.baselineHP or {}
+    splitState.splits = math.max(0, tonumber(splitState.splits) or 0)
+    return true
+end
 
-local function resetSplitState()
-    splitState.handled = {}
-    splitState.baselineHP = {}
-    splitState.splits = 0
-    splitState.budgetWarned = false
+local function persistSplitState()
+    SaveManager.Save()
+    if splitProvider and type(splitProvider.SaveModData) == "function" then splitProvider.SaveModData() end
+end
+
+local function splitIdentity(npc)
+    local seed = tonumber(npc.InitSeed)
+    if not seed or seed <= 0 then return nil end
+    return table.concat({npc.Type,npc.Variant,npc.SubType,seed}, ":")
 end
 
 -- Champions of the same kind carry a multiplied health pool, so they need their
@@ -138,6 +169,7 @@ ConchBlessing.sealeddemonsword.onUpdate = function()
     local player = anyPlayerHasSword()
     if not player then return end
 
+    if not splitState and not bindSplitState() then return end
     local budget = tonumber(ConchBlessing.sealeddemonsword.data.maxSplitsPerRoom)
         or MAX_SPLITS_PER_ROOM
     if splitState.splits >= budget then
@@ -145,17 +177,20 @@ ConchBlessing.sealeddemonsword.onUpdate = function()
             splitState.budgetWarned = true
             ConchBlessing.printDebug(
                 "[SealedDemonSword] Split budget reached for this room: " .. tostring(budget))
+            persistSplitState()
         end
         return
     end
 
+    local changed = false
     for _, entity in ipairs(Isaac.GetRoomEntities()) do
         local npc = entity:ToNPC()
         if npc and isSplitTarget(npc) then
-            local hash = GetPtrHash(npc)
-            if not splitState.handled[hash] then
+            local identity = splitIdentity(npc)
+            if identity and not splitState.handled[identity] then
                 -- Mark first either way: a failed split must not retry every frame.
-                splitState.handled[hash] = true
+                splitState.handled[identity] = true
+                changed = true
                 if not isSplitHalf(npc) and type(npc.TrySplit) == "function" then
                     local ok, err = pcall(function()
                         return npc:TrySplit(
@@ -174,13 +209,14 @@ ConchBlessing.sealeddemonsword.onUpdate = function()
             end
         end
     end
+    if changed then persistSplitState() end
 end
 
--- New room: forget the previous room's ledger, and run the base-game fallback
+-- New room: rebind its own ledger, and run the base-game fallback
 -- when TrySplit is unavailable (one room-wide cleave, missing later summons).
 ConchBlessing.sealeddemonsword.onNewRoom = function(_)
-    resetSplitState()
-    if hasRepentogon() then return end
+    splitState, splitProvider = nil, nil
+    if hasRepentogon() then bindSplitState(); return end
     local player = anyPlayerHasSword()
     if not player then return end
     local room = Game():GetRoom()
@@ -242,12 +278,12 @@ ConchBlessing.sealeddemonsword.onNPCDeath = function(_, npc)
                     -- Initialize Tyrfing data
                     local playerSave = SaveManager.GetRunSave(player)
                     playerSave.tyrfing = playerSave.tyrfing or {}
-                    playerSave.tyrfing.accumulatedDamage = 0 -- Tyrfing starts fresh
-                    playerSave.tyrfing.deathChance = 10 -- Base death chance for Tyrfing
+                    playerSave.tyrfing.accumulatedDamage = playerSave.tyrfing.accumulatedDamage or 0
                     
                     -- Remove Sealed Demon Sword and add Tyrfing
-                    player:RemoveCollectible(SEALED_DEMON_SWORD_ID)
-                    player:AddCollectible(TYRFING_ID, 0, false)
+                    local copies = player:GetCollectibleNum(SEALED_DEMON_SWORD_ID, true)
+                    for _ = 1, copies do player:RemoveCollectible(SEALED_DEMON_SWORD_ID) end
+                    for _ = 1, copies do player:AddCollectible(TYRFING_ID, 0, false) end
                     
                     -- Play transformation effect
                     SFXManager():Play(SoundEffect.SOUND_POWERUP_SPEWER, 1.0)
@@ -257,7 +293,7 @@ ConchBlessing.sealeddemonsword.onNPCDeath = function(_, npc)
                     playerSave.sealedDemonSword = nil
                     
                     SaveManager.Save()
-                    return
+                    -- Other players may reach the same threshold on this death.
                 end
                 
                 SaveManager.Save()
@@ -269,11 +305,26 @@ end
 -- Game started callback
 ConchBlessing.sealeddemonsword.onGameStarted = function(_)
     ConchBlessing.printDebug("[SealedDemonSword] Game started, restoring data...")
+    splitState, splitProvider = nil, nil
+    if hasRepentogon() then bindSplitState() end
     
     local player = Isaac.GetPlayer(0)
     if player and player:HasCollectible(SEALED_DEMON_SWORD_ID) then
         player:AddCacheFlags(CacheFlag.CACHE_SPEED)
         player:EvaluateItems()
+    end
+end
+
+-- SaveManager may replace room tables after MC_POST_NEW_ROOM during a
+-- Glowing Hourglass restore. Discard references only; the next update rebinds
+-- the restored room ledger instead of writing into the abandoned table.
+do
+    local mod = ConchBlessing.originalMod
+    local callback = SaveManager.SaveCallbacks and SaveManager.SaveCallbacks.POST_GLOWING_HOURGLASS_RESET
+    if mod and mod.__SAVEMANAGER_UNIQUE_KEY and callback and type(mod.AddCallback) == "function" then
+        mod:AddCallback(callback, function()
+            splitState, splitProvider = nil, nil
+        end)
     end
 end
 

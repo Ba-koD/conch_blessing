@@ -35,6 +35,12 @@ local function isValidCollectibleId(itemId)
     return type(itemId) == "number" and itemId > 0
 end
 
+local function isRewardCollectible(itemId)
+    if not isValidCollectibleId(itemId) or itemId == TWO_FACED_PENNY_ID then return false end
+    local config = Isaac.GetItemConfig():GetCollectible(itemId)
+    return config ~= nil and config.Type ~= ItemType.ITEM_ACTIVE
+end
+
 local function getPennyCount(player)
     if not player or not isValidCollectibleId(TWO_FACED_PENNY_ID) then
         return 0
@@ -141,6 +147,13 @@ end
 local function syncPennySlots(player, pData)
     local pennyCount = getPennyCount(player)
     pData.slots = pData.slots or {}
+    -- Reopen reservations made for an active by older code. Never remove an
+    -- already granted item, and never pay that invalid reservation on a new floor.
+    for _, slot in ipairs(pData.slots) do
+        if slot.itemId and not isRewardCollectible(slot.itemId) then
+            slot.itemId, slot.doubled = nil, false
+        end
+    end
 
     if pData.lastPennyCount == nil then
         pData.lastPennyCount = pennyCount
@@ -178,7 +191,7 @@ end
 
 local function grantItem(player, itemId, count, pData)
     count = tonumber(count) or 0
-    if count <= 0 or not isValidCollectibleId(itemId) then
+    if count <= 0 or not isRewardCollectible(itemId) then
         return
     end
 
@@ -190,7 +203,7 @@ local function grantItem(player, itemId, count, pData)
 end
 
 local function claimNextCollectible(player, pData, itemId)
-    if not isValidCollectibleId(itemId) or itemId == TWO_FACED_PENNY_ID then
+    if not isRewardCollectible(itemId) then
         return false
     end
 
@@ -228,7 +241,7 @@ local function claimNextCollectible(player, pData, itemId)
 end
 
 local function processObservedCollectible(player, pData, itemId, count)
-    if not isValidCollectibleId(itemId) or itemId == TWO_FACED_PENNY_ID then
+    if not isRewardCollectible(itemId) then
         return false
     end
 
@@ -311,7 +324,7 @@ function M.onNewFloor(_)
                 if not pData.tookDamageThisFloor then
                     local granted = false
                     for _, slot in ipairs(pData.slots or {}) do
-                        if isValidCollectibleId(slot.itemId) then
+                        if isRewardCollectible(slot.itemId) then
                             grantItem(player, slot.itemId, 1, pData)
                             granted = true
                         end

@@ -16,8 +16,26 @@ ConchBlessing.eternalflame.data = {
 
 local ETERNAL_FLAME_ID = Isaac.GetItemIdByName("Eternal Flame")
 
-local function supportsTearPoisonAPI(player)
-    return player and type(player.GetTearPoisonDamage) == "function" and type(player.SetTearPoisonDamage) == "function"
+local function getRewards(player)
+    local save = SaveManager.GetRunSave(player)
+    if not save then return nil end
+    save.eternalFlame = save.eternalFlame or {}
+    local rewards = save.eternalFlame
+    if rewards.earnedUnits == nil then
+        -- Old saves recorded only the total curses and last observed stack.
+        -- Freeze their last representable reward once; new removals use exact
+        -- acquisition-time units and never rescale that historical total.
+        rewards.earnedUnits = math.max(0, rewards.curseCount or 0)
+            * math.max(1, rewards.itemCount or 1)
+        if (rewards.curseCount or 0) > 0 then rewards.eternalHeartGiven = true end
+    end
+    return rewards
+end
+
+local function countBits(mask)
+    local count = 0
+    while mask > 0 do count = count + (mask & 1); mask = mask >> 1 end
+    return count
 end
 
 -- Execute curse removal and apply stat bonuses
@@ -42,7 +60,7 @@ local function executeCurseRemoval(player)
     
     if currentCurses > 0 then
         level:RemoveCurses(currentCurses)
-        removedCount = curseCount
+        removedCount = countBits(currentCurses & (~level:GetCurses()))
         
         local finalCurses = level:GetCurses()
         if finalCurses == 0 then
@@ -52,14 +70,27 @@ local function executeCurseRemoval(player)
         end
     end
     
-    if level:GetCurses() == 0 then
-        ConchBlessing.printDebug("Eternal Flame: Successfully removed all curses!")
+    if removedCount > 0 then
+        ConchBlessing.printDebug("Eternal Flame: Awarding rewards for " .. removedCount .. " removed curses")
         
         data.curseRemoved = true
         data.curseCount = data.curseCount + removedCount
         
-        player:AddCacheFlags(CacheFlag.CACHE_DAMAGE | CacheFlag.CACHE_FIREDELAY)
-        player:EvaluateItems()
+        -- Each holder earns exactly the copies owned at this removal, even in
+        -- co-op. A later pickup, loss or cache evaluation cannot rescale it.
+        for i = 0, Game():GetNumPlayers() - 1 do
+            local owner = Isaac.GetPlayer(i)
+            local copies = owner:GetCollectibleNum(ETERNAL_FLAME_ID, true)
+            if copies > 0 then
+                local rewards = assert(getRewards(owner), "Eternal Flame run save unavailable")
+                rewards.earnedUnits = rewards.earnedUnits + removedCount * copies
+                rewards.curseCount = (rewards.curseCount or 0) + removedCount
+                rewards.itemCount = copies
+                owner:AddCacheFlags(CacheFlag.CACHE_DAMAGE | CacheFlag.CACHE_FIREDELAY)
+                owner:EvaluateItems()
+            end
+        end
+        SaveManager.Save()
         
         local flameEffect = Isaac.Spawn(EntityType.ENTITY_EFFECT, 1, 0, player.Position, Vector.Zero, player)
         if flameEffect then
@@ -132,91 +163,25 @@ local function monitorCurseChanges(player)
     end
 end
 
--- Calculate stacking bonuses based on item count
-local function calculateStackingBonus(baseValue, itemCount)
-    if itemCount <= 1 then
-        return baseValue
-    else
-        local multiplier = 1.0 + (itemCount - 1)
-        return baseValue * multiplier
-    end
+-- Pickup callbacks only reset detection; rewards live in the player's run save.
+function ConchBlessing.eternalflame.onPickup()
+    ConchBlessing.eternalflame.data.curseRemoved = false
 end
 
--- Handle item pickup and update stacking data
-function ConchBlessing.eternalflame.onPickup(_, player, collectibleType, rng)
-    if collectibleType ~= ETERNAL_FLAME_ID then return end
-    
-    ConchBlessing.printDebug("Eternal Flame picked up by player")
-    
-    -- Update item count for stacking
-    local data = ConchBlessing.eternalflame.data
-    if data then
-        data.itemCount = player:GetCollectibleNum(ETERNAL_FLAME_ID)
-        data.curseRemoved = false
-        
-        ConchBlessing.printDebug("Eternal Flame: Item count updated to " .. data.itemCount .. " for stacking calculations")
-    end
-end
-
--- Apply stat bonuses when cache is evaluated
 function ConchBlessing.eternalflame.onEvaluateCache(_, player, cacheFlag)
-    if not player:HasCollectible(ETERNAL_FLAME_ID) then return end
-    
-    local data = ConchBlessing.eternalflame.data
-    if not data then return end
-    
-    -- Update item count for current evaluation
-    data.itemCount = player:GetCollectibleNum(ETERNAL_FLAME_ID)
-    
-    -- Give eternal heart on first evaluation (when item is first obtained)
-    if not data.eternalHeartGiven then
+    local rewards = getRewards(player)
+    if not rewards then return end
+    if player:HasCollectible(ETERNAL_FLAME_ID) and not rewards.eternalHeartGiven then
         player:AddEternalHearts(1)
-        data.eternalHeartGiven = true
-        ConchBlessing.printDebug("Eternal Flame: Added 1 eternal heart to player on first evaluation")
+        rewards.eternalHeartGiven = true
+        SaveManager.Save()
     end
-    
-    if cacheFlag ~= CacheFlag.CACHE_DAMAGE and cacheFlag ~= CacheFlag.CACHE_FIREDELAY then return end
-    
+    local units = rewards.earnedUnits
+    if units <= 0 then return end
     if cacheFlag == CacheFlag.CACHE_DAMAGE then
-        if data.curseCount > 0 then
-            local baseDamageBonus = calculateStackingBonus(data.baseDamageBonus, data.itemCount)
-            local totalDamageBonus = data.curseCount * baseDamageBonus
-            
-            -- Use stats system with addition
-            ConchBlessing.stats.damage.applyAddition(player, totalDamageBonus, nil)
-            
-            ConchBlessing.printDebug("Eternal Flame: Damage addition - Base bonus: " .. string.format("%.2f", baseDamageBonus) .. 
-                ", Total addition: " .. string.format("%.2f", totalDamageBonus) .. 
-                ", Item count: " .. data.itemCount)
-            
-            -- Save curse count to SaveManager
-            local playerSave = SaveManager.GetRunSave(player)
-            if playerSave then
-                if not playerSave.eternalFlame then
-                    playerSave.eternalFlame = {}
-                end
-                playerSave.eternalFlame.curseCount = data.curseCount
-                playerSave.eternalFlame.itemCount = data.itemCount
-                SaveManager.Save()
-                ConchBlessing.printDebug("Eternal Flame: Curse count and item count saved to SaveManager: " .. data.curseCount .. ", " .. data.itemCount)
-            end
-        end
-        
+        ConchBlessing.stats.damage.applyAddition(player, units * 3, nil)
     elseif cacheFlag == CacheFlag.CACHE_FIREDELAY then
-        if data.curseCount > 0 then
-            local currentMaxFireDelay = player.MaxFireDelay
-            local currentSPS = 30 / (currentMaxFireDelay + 1)
-            local baseFireDelayBonus = calculateStackingBonus(data.baseFireDelayBonus, data.itemCount)
-            local totalFireDelayBonus = data.curseCount * baseFireDelayBonus
-            
-            -- Use stats system with addition
-            ConchBlessing.stats.tears.applyAddition(player, totalFireDelayBonus, nil)
-            
-            ConchBlessing.printDebug("Eternal Flame: FireDelay addition - Base bonus: " .. string.format("%.2f", baseFireDelayBonus) .. 
-                ", Total addition: " .. string.format("%.2f", totalFireDelayBonus) .. 
-                ", SPS: " .. string.format("%.2f", currentSPS) .. " -> " .. string.format("%.2f", currentSPS + totalFireDelayBonus) .. 
-                ", Item count: " .. data.itemCount)
-        end
+        ConchBlessing.stats.tears.applyAddition(player, units, nil)
     end
 end
 
@@ -249,11 +214,34 @@ function ConchBlessing.eternalflame.onNewRoom()
     ConchBlessing.printDebug("Eternal Flame: New room entered, curse detection reset")
 end
 
+local function updateFlameEffects()
+    -- Update flame effects
+    if ConchBlessing.eternalflame.activeEffects then
+        for i = #ConchBlessing.eternalflame.activeEffects, 1, -1 do
+            local effectData = ConchBlessing.eternalflame.activeEffects[i]
+            if effectData and effectData.effect and effectData.effect:Exists() then
+                effectData.timer = effectData.timer - 1
+                if effectData.timer <= 0 then
+                    effectData.effect:Remove()
+                    table.remove(ConchBlessing.eternalflame.activeEffects, i)
+                end
+            else
+                table.remove(ConchBlessing.eternalflame.activeEffects, i)
+            end
+        end
+    end
+end
+
 -- Main update loop for curse management and effects
 function ConchBlessing.eternalflame.onUpdate(_)
-    local player = Isaac.GetPlayer(0)
-    if not player or not player:HasCollectible(ETERNAL_FLAME_ID) then return end
-    
+    updateFlameEffects()
+    local player
+    for i = 0, Game():GetNumPlayers() - 1 do
+        local candidate = Isaac.GetPlayer(i)
+        if candidate:HasCollectible(ETERNAL_FLAME_ID) then player = candidate; break end
+    end
+    if not player then resetCurseDetectionState(); return end
+
     local data = ConchBlessing.eternalflame.data
     if not data then return end
     
@@ -280,21 +268,7 @@ function ConchBlessing.eternalflame.onUpdate(_)
         end
     end
     
-    -- Update flame effects
-    if ConchBlessing.eternalflame.activeEffects then
-        for i = #ConchBlessing.eternalflame.activeEffects, 1, -1 do
-            local effectData = ConchBlessing.eternalflame.activeEffects[i]
-            if effectData and effectData.effect and effectData.effect:Exists() then
-                effectData.timer = effectData.timer - 1
-                if effectData.timer <= 0 then
-                    effectData.effect:Remove()
-                    table.remove(ConchBlessing.eternalflame.activeEffects, i)
-                end
-            else
-                table.remove(ConchBlessing.eternalflame.activeEffects, i)
-            end
-        end
-    end
+
 end
 
 -- Player update handler for callback registration
@@ -302,61 +276,17 @@ function ConchBlessing.eternalflame.onPlayerUpdate(_, player)
     if not player or not player:HasCollectible(ETERNAL_FLAME_ID) then return end
 end
 
--- Initialize data when game started
+-- SaveManager supplies the current run (including Continue/Hourglass state).
+-- Reapply earned rewards even when no copy remains in the inventory.
 ConchBlessing.eternalflame.onGameStarted = function(_)
-    local player = Isaac.GetPlayer(0)
-    if player then
-        local playerSave = SaveManager.GetRunSave(player)
-        
-        -- Check if this is a new game (no saved data)
-        if not playerSave or not playerSave.eternalFlame or not playerSave.eternalFlame.curseCount or playerSave.eternalFlame.curseCount == 0 then
-            -- New game - reset data
-            local data = ConchBlessing.eternalflame.data
-            if data then
-                data.curseCount = 0
-                data.itemCount = 0
-                data.curseRemoved = false
-                data.curseRemovalTimer = nil
-                data.pendingCurses = nil
-                data.pendingCurseCount = nil
-                data.eternalHeartGiven = false
-            end
-            
-            -- Clear saved data
-            if playerSave then
-                if not playerSave.eternalFlame then
-                    playerSave.eternalFlame = {}
-                end
-                playerSave.eternalFlame.curseCount = 0
-                playerSave.eternalFlame.itemCount = 0
-                SaveManager.Save()
-            end
-            
-            ConchBlessing.printDebug("Eternal Flame: New game detected, data reset to 0")
-        else
-            -- Continue game - load saved data
-            if playerSave.eternalFlame.curseCount then
-                local data = ConchBlessing.eternalflame.data
-                if data then
-                    data.curseCount = playerSave.eternalFlame.curseCount
-                    data.itemCount = playerSave.eternalFlame.itemCount or 0
-                    ConchBlessing.printDebug("Eternal Flame: Loaded curse count from SaveManager: " .. data.curseCount .. ", item count: " .. data.itemCount)
-                    
-                    -- Apply stats on game start if player has the item
-                    if player:HasCollectible(ETERNAL_FLAME_ID) then
-                        ConchBlessing.printDebug("Eternal Flame: Applying stats on game start for " .. data.curseCount .. " curses with " .. data.itemCount .. " items")
-                        player:AddCacheFlags(CacheFlag.CACHE_DAMAGE | CacheFlag.CACHE_FIREDELAY)
-                        player:EvaluateItems()
-                        ConchBlessing.printDebug("Eternal Flame: Stats applied on game start!")
-                    end
-                end
-            else
-                ConchBlessing.printDebug("Eternal Flame: No saved data, starting with 0 curse count")
-            end
+    resetCurseDetectionState()
+    ConchBlessing.eternalflame.activeEffects = {}
+    ConchBlessing.eternalflame.data.curseCount = 0
+    for i = 0, Game():GetNumPlayers() - 1 do
+        local player = Isaac.GetPlayer(i)
+        if getRewards(player) then
+            player:AddCacheFlags(CacheFlag.CACHE_DAMAGE | CacheFlag.CACHE_FIREDELAY)
+            player:EvaluateItems()
         end
-    else
-        ConchBlessing.printDebug("Eternal Flame: No player found on game start")
     end
-    
-    ConchBlessing.printDebug("Eternal Flame: onGameStarted called!")
 end

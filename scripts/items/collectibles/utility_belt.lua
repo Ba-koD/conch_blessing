@@ -127,7 +127,11 @@ ConchBlessing.utilitybelt.onPlayerUpdate = function(_, player)
     playerData._panicButton.hadItem = hasPanicButton
     
     -- If player doesn't have Utility Belt, don't process further
-    if not hasPanicButton then return end
+    if not hasPanicButton then
+        ConchBlessing.utilitybelt._pendingPlayers[playerHash] = nil
+        playerData._panicButton.lastPrimaryItem = player:GetActiveItem(ActiveSlot.SLOT_PRIMARY)
+        return
+    end
     
     local currentPrimary = player:GetActiveItem(ActiveSlot.SLOT_PRIMARY)
     local lastPrimary = playerData._panicButton.lastPrimaryItem or 0

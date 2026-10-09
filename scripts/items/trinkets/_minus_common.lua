@@ -65,8 +65,14 @@ function M.registerTrinket(cfg)
 
 	-- Ensure cache re-evaluation when trinket state changes
 	ConchBlessing.originalMod:AddCallback(ModCallbacks.MC_POST_PEFFECT_UPDATE, function(_, player)
-		-- If the player has this trinket, ensure caches are evaluated
-		if getCount(player, tid) > 0 then
+		local data = player:GetData()
+		data.__ConchBlessingMinusCacheCounts = data.__ConchBlessingMinusCacheCounts or {}
+		local counts = data.__ConchBlessingMinusCacheCounts
+		local count = getCount(player, tid)
+		-- Include the final transition to zero. Refreshing only while held
+		-- leaves the tears bonus cached after the last copy is dropped.
+		if count ~= (counts[tid] or 0) then
+			counts[tid] = count
 			player:AddCacheFlags(CacheFlag.CACHE_LUCK | CacheFlag.CACHE_FIREDELAY | CacheFlag.CACHE_DAMAGE)
 			player:EvaluateItems()
 		end
@@ -74,4 +80,3 @@ function M.registerTrinket(cfg)
 end
 
 return M
-

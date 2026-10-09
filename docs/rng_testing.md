@@ -5,7 +5,7 @@ extend the harness when a new one is added.
 
 There are two tools and they check each other. Neither is sufficient alone:
 
-| | `rng_report.py` | `conch_rng` console command |
+| | `rng_report.py` | `conch_test rng` console command |
 | --- | --- | --- |
 | Runs | Offline, no game needed | In game |
 | Models | The Lua expressions, transcribed | Calls the shipped Lua functions |
@@ -38,9 +38,9 @@ instead of quietly publishing a stale number. Every figure in the output cites t
 Open the console and type:
 
 ```
-conch_rng              # every probe, 100000 samples
-conch_rng 500000       # custom sample count
-conch_rng luck 20      # evaluate the luck-scaled chances at Luck 20
+conch_test rng              # every probe, 100000 samples
+conch_test rng 500000       # custom sample count
+conch_test rng luck 20      # evaluate the luck-scaled chances at Luck 20
 ```
 
 Output goes to the console and to `log.txt`. `scripts/dev/rng_probe.lua` registers a
@@ -61,6 +61,7 @@ The measured helpers are module-scope locals, so each item file exposes them thr
 | --- | --- |
 | `oral_steroids.lua`, `power_training.lua`, `injectable_steroids.lua` | `<module>.rollStat()` |
 | `void_dagger.lua` | `getShotsPerSecond`, `computeProcChanceFromS`, `applyLuckBonus` |
+| `injectable_steroids.lua` | `rollInstantDeath(chancePercent, rng)` (fractional chance boundaries) |
 | `soflam.lua` | `getProcChance` |
 | `ice_breath.lua` / `fire_breath.lua` | `getFreezeChance` / `getBurnChance` |
 | `time_money.lua` | `chooseCoinSubtype` |
@@ -83,7 +84,7 @@ copies of the same roll.
    handler.
 4. Add the matching section to `rng_report.py`, reading its constants with `const()`
    so the report follows the code.
-5. Regenerate `docs/rng_report.md` and compare against `conch_rng` in game.
+5. Regenerate `docs/rng_report.md` and compare against `conch_test rng` in game.
 
 ## Reading the numbers
 
@@ -104,13 +105,11 @@ copies of the same roll.
 
 ## Known findings
 
-Recorded here because they are measurement results, not design decisions. None have
-been changed.
+Recorded measurements, with fixes distinguished from remaining behavior:
 
-1. **The per-item minimum never protects the applied value.** Each item's
-   `math.max(minMultiplier, total)` sits in the dead product block. The live path
-   clamps only at zero, so Injectable Steroids reaches a 0x multiplier - no damage at
-   all - in roughly 1% of 3-to-5 stack runs.
+1. **Applied minimum multipliers are now enforced.** The live additive contribution
+   clamps Oral Steroids to 0.4, Power Training to 0.5, and Injectable Steroids to
+   0.25. Regression tests cover the shipped setters and remaining-roll removal.
 2. **Power Training and Injectable Steroids roll a `speed` multiplier they never
    apply.** It is drawn, written to the run save and dropped. The separate
    `speedDecrease` path is configured to `0`, so it is a no-op too.
@@ -118,6 +117,9 @@ been changed.
    seeded from the run, so a Glowing Hourglass rewind yields different values and
    multiplayer determinism is not guaranteed. `injectable_steroids.lua` builds a
    `combinedSeed` from the game seed and then never uses it.
-4. **`injectablsteroids.data.currentInstantDeathPercent` is module-global**, so it is
-   shared across players in co-op, and it lives outside SaveManager, so it resets on
-   continue.
+4. **Injectable death risk remains shared across co-op players by existing policy.**
+   It is now stored in the global floor save and restored on Continue/Hourglass
+   rather than living only in the module table. Fractional percentages use a
+   continuous `[0,100)` roll with strict `< chance`, using the supplied item RNG
+   where available. The in-game probe calls the shipped helper immediately below,
+   at, and above fractional boundaries; actual save/Continue needs a game run.

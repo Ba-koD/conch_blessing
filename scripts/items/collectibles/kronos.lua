@@ -542,11 +542,31 @@ local function getFloorPickCount(rs, famId)
 end
 
 -- Temporary familiars absorbed for the current room only: Box of Friends uses
--- (`double`, every effect count x2 per use), The Twins (`twins`, one absorbed
+-- (`double`, one extra base effect per use), The Twins (`twins`, one absorbed
 -- familiar's copies counted again) and room-scoped absorbed familiars (`counts`).
 -- Runtime only; it ends with the room. The table is cleared in place, never replaced.
-local roomTemp = { counts = {}, double = 0, twins = {} }
+local roomTemp = { counts = {}, double = 0, twins = {}, mongoCopies = {} }
+local pendingTempScans = {}
 local refreshEffectCaches
+
+local function clearRoomTemporaryState()
+    local had = roomTemp.double > 0 or next(roomTemp.counts) ~= nil
+        or next(roomTemp.twins) ~= nil or #roomTemp.mongoCopies > 0
+    roomTemp.double = 0
+    for key in pairs(roomTemp.counts) do roomTemp.counts[key] = nil end
+    for key in pairs(roomTemp.twins) do roomTemp.twins[key] = nil end
+    -- Only the extra Mongo copies produced by this room's multiplier belong to
+    -- this cleanup. Ordinary Minisaacs, including other items' ones, stay intact.
+    for i = #roomTemp.mongoCopies, 1, -1 do
+        local familiar = roomTemp.mongoCopies[i]
+        if familiar and familiar:Exists() then familiar:Remove() end
+        roomTemp.mongoCopies[i] = nil
+    end
+    for key, pending in pairs(pendingTempScans) do
+        if pending.roomScoped then pendingTempScans[key] = nil end
+    end
+    return had
+end
 
 -- Absorbed familiars that did not come from an owned collectible: Monster Manual
 -- (`tempFloor`, this floor) and Soul of Lilith (`tempPermanent`), plus the room ones.
@@ -563,13 +583,17 @@ local function getTemporaryCount(rs, famId)
     return count
 end
 
-function ConchBlessing.kronos._getEffectCount(player, famId)
+local function getEffectCountBeforeBox(player, famId)
     local rs = getRunSave(player)
     if not rs then return 0 end
     local absorbed = ConchBlessing.kronos._getAbsorbedCount(player, famId)
     local count = absorbed + getFloorPickCount(rs, famId) + getTemporaryCount(rs, famId)
         + absorbed * (roomTemp.twins[famId] or 0)
-    return count * (1 + roomTemp.double)
+    return count
+end
+
+function ConchBlessing.kronos._getEffectCount(player, famId)
+    return getEffectCountBeforeBox(player, famId) * (1 + roomTemp.double)
 end
 
 function ConchBlessing.kronos._getRoomTemporary()
@@ -1744,7 +1768,9 @@ ConchBlessing.kronos.onEvaluateCache = function(_, player, cacheFlag)
             bonusSPS = bonusSPS + stats.MILK_TEARS * effectCount(player, CollectibleType.COLLECTIBLE_MILK)
         end
         if rs then
-            bonusSPS = bonusSPS + (tonumber(rs.paschalHundredths) or 0) / 100
+            -- Earned Paschal tears are permanent while absorbed; Box only
+            -- multiplies their current application, never the saved earnings.
+            bonusSPS = bonusSPS + (tonumber(rs.paschalHundredths) or 0) / 100 * (1 + roomTemp.double)
         end
         if bonusSPS > 0 and ConchBlessing.stats and ConchBlessing.stats.tears and ConchBlessing.stats.tears.applyAddition then
             ConchBlessing.stats.tears.applyAddition(player, bonusSPS, nil)
@@ -1766,6 +1792,9 @@ ConchBlessing.kronos.onEvaluateCache = function(_, player, cacheFlag)
 end
 
 ConchBlessing.kronos.onGameStarted = function(_)
+    -- Continue and new runs never inherit a previous room's multiplier, even
+    -- when the module itself remained loaded across the menu boundary.
+    clearRoomTemporaryState()
     -- Floor-scoped run state (new-level rewards, floor picks) waits for this: the
     -- first MC_POST_NEW_LEVEL of a run fires before it, while SaveManager can still
     -- expose the previous run's table.
@@ -1791,6 +1820,7 @@ ConchBlessing.kronos.onGameStarted = function(_)
             end
         end
         
+        -- Discard any saved StatsAPI contribution from a previous room's Box.
         ConchBlessing.kronos._syncAbsorbedDamage(player)
         
         if rs.absorbedBonusDamage or rs.absorbActionBonusDamage then
@@ -1901,6 +1931,9 @@ function ConchBlessing.kronos._revertAll(player)
     local rs = getRunSave(player)
     if not rs or not rs.absorbed then return false end
     migrateRetiredGrants(player, rs)
+    -- Supersede pending absorption cosmetics; returning hundreds of copies must
+    -- not load hundreds of sprites or leave a minute-long animation backlog.
+    ConchBlessing.kronos._beginReleaseVisuals(player)
     ConchBlessing.kronos._restoreNonItemFamiliars(player, rs)
     local effectStateCleared = clearEffectState(rs)
     local hadAny = next(rs.itemGrants or {}) ~= nil
@@ -1916,8 +1949,8 @@ function ConchBlessing.kronos._revertAll(player)
             if famId then
                 for _ = 1, count do
                     player:AddCollectible(famId, 0, false)
-                    ConchBlessing.kronos._queueTransferEffect(player, famId, true)
                 end
+                ConchBlessing.kronos._queueTransferEffect(player, famId, true, nil, count)
                 dbg(string.format("[Kronos] Restored familiar: key=%s, ID=%d, count=%d", tostring(key), tonumber(famId) or 0, count))
             end
         end
@@ -1965,6 +1998,11 @@ function ConchBlessing.kronos._revertAll(player)
         rs.absorbedBonusDamage = nil
         rs.absorbActionBonusDamage = nil
         ConchBlessing.SaveManager.Save()
+        -- Conversions may own any vanilla cache (Sacred Heart includes shot
+        -- speed, range and tear flags). Recompute once AFTER the complete batch
+        -- and cleared ledger, not only damage before converted items are lost.
+        player:AddCacheFlags(CacheFlag.CACHE_ALL)
+        player:EvaluateItems()
         dbg("Reverted all Kronos effects and restored familiars")
         return true
     end
@@ -2780,7 +2818,7 @@ ConchBlessing.kronos.onRoomClear = function(_, _rng, spawnPosition)
         end
     end
 
-    local paschal = effectCount(player, CollectibleType.COLLECTIBLE_PASCHAL_CANDLE)
+    local paschal = getEffectCountBeforeBox(player, CollectibleType.COLLECTIBLE_PASCHAL_CANDLE)
     if paschal > 0 then
         local perClear = math.floor(ConchBlessing.kronos.STATS.PASCHAL_TEARS_PER_CLEAR * 100 + 0.5)
         rs.paschalHundredths = (tonumber(rs.paschalHundredths) or 0) + perClear * paschal
@@ -2848,12 +2886,14 @@ end
 
 ConchBlessing.kronos.onNewLevel = function()
     if not ConchBlessing.kronos._runReady then return end
+    ConchBlessing.kronos._resetRoomTemporary()
     local player = findKronosOwner()
     if not player then return end
     local rs = getRunSave(player)
     if not rs then return end
     local previous = tonumber(rs.floorSerial) or 0
-    -- Lost Soul: a floor left without a hit pays out in the next room that loads.
+    -- Lost Soul: a floor left without a hit pays out in the new floor's first
+    -- settled room, regardless of new-room/new-level callback order.
     local lostSoul = ConchBlessing.kronos._getEffectCount(player, CollectibleType.COLLECTIBLE_LOST_SOUL)
     if lostSoul > 0 and rs.hurtSerial ~= previous then
         rs.lostSoulRewardPending = (tonumber(rs.lostSoulRewardPending) or 0) + lostSoul
@@ -2901,10 +2941,14 @@ function ConchBlessing.kronos._topUpMongoMinisaacs(player)
             live = live + 1
         end
     end
-    for _ = live + 1, target do
+    local baseTarget = getEffectCountBeforeBox(player, CollectibleType.COLLECTIBLE_MONGO_BABY)
+    for index = live + 1, target do
         local ok, minisaac = pcall(player.AddMinisaac, player, player.Position, true)
         if ok and minisaac then
             minisaac:GetData().__kronosMongoMinisaac = true
+            if index > baseTarget and roomTemp.double > 0 then
+                roomTemp.mongoCopies[#roomTemp.mongoCopies + 1] = minisaac
+            end
         end
     end
 end
@@ -2969,8 +3013,8 @@ local function releaseCopies(player, rs, familiarIds, returnToPlayer)
                 if returnToPlayer then
                     player:AddCollectible(familiarId, 0, false)
                 end
-                ConchBlessing.kronos._queueTransferEffect(player, familiarId, true)
             end
+            ConchBlessing.kronos._queueTransferEffect(player, familiarId, true, nil, count)
             released = released + count
             dbg(string.format("%s familiar %d x%d (%d -> %d)", returnToPlayer and "Released" or "Sacrificed",
                 familiarId, count, before, after))
@@ -3033,7 +3077,6 @@ local SOURCE_MANUAL = "manual"
 local SOURCE_TWINS = "twins"
 local SOURCE_LILITH = "lilith"
 local ALTAR_MAX_SACRIFICES = 2
-local pendingTempScans = {}
 local pendingManualScans = {}
 local altarSnapshots = {}
 
@@ -3304,7 +3347,8 @@ end
 -- the player's next update covers that and is then dropped.
 local function scanNowAndNextUpdate(player, source)
     local found = ConchBlessing.kronos._absorbTemporary(player, source)
-    pendingTempScans[GetPtrHash(player)] = { source = source, foundBefore = found }
+    pendingTempScans[GetPtrHash(player)] = { source = source, foundBefore = found,
+        roomScoped = source == SOURCE_BOX or source == SOURCE_TWINS }
 end
 
 function ConchBlessing.kronos._processPendingTempScans(player)
@@ -3325,10 +3369,7 @@ function ConchBlessing.kronos._processPendingTempScans(player)
 end
 
 function ConchBlessing.kronos._resetRoomTemporary()
-    local had = roomTemp.double > 0 or next(roomTemp.counts) ~= nil or next(roomTemp.twins) ~= nil
-    roomTemp.double = 0
-    for key in pairs(roomTemp.counts) do roomTemp.counts[key] = nil end
-    for key in pairs(roomTemp.twins) do roomTemp.twins[key] = nil end
+    local had = clearRoomTemporaryState()
     if not had then return end
     local game = Game()
     for i = 0, game:GetNumPlayers() - 1 do
@@ -3352,8 +3393,8 @@ function ConchBlessing.kronos._restoreNonItemFamiliars(player, rs)
     if flies > 0 and type(player.AddPrettyFly) == "function" then
         for _ = 1, flies do
             player:AddPrettyFly()
-            ConchBlessing.kronos._queueTransferEffect(player, CollectibleType.COLLECTIBLE_HALO_OF_FLIES, true)
         end
+        ConchBlessing.kronos._queueTransferEffect(player, CollectibleType.COLLECTIBLE_HALO_OF_FLIES, true, nil, flies)
     end
     local restored = flies > 0
     local function giveBack(counts)
@@ -3364,9 +3405,7 @@ function ConchBlessing.kronos._restoreNonItemFamiliars(player, rs)
             if id and count > 0 then
                 player:GetEffects():AddCollectibleEffect(id, false, count)
                 restored = true
-                for _ = 1, count do
-                    ConchBlessing.kronos._queueTransferEffect(player, id, true)
-                end
+                ConchBlessing.kronos._queueTransferEffect(player, id, true, nil, count)
             end
         end
     end
@@ -3376,9 +3415,7 @@ function ConchBlessing.kronos._restoreNonItemFamiliars(player, rs)
     end
     local source = getManualSource(player)
     if source then source.absorbed = {} end
-    roomTemp.double = 0
-    for key in pairs(roomTemp.counts) do roomTemp.counts[key] = nil end
-    for key in pairs(roomTemp.twins) do roomTemp.twins[key] = nil end
+    clearRoomTemporaryState()
     if restored then
         player:AddCacheFlags(CacheFlag.CACHE_FAMILIARS)
     end
@@ -3392,6 +3429,7 @@ local function onUseBoxOfFriends(_, _item, _rng, player)
     scanNowAndNextUpdate(player, SOURCE_BOX)
     -- Pinned stand-ins are rebuilt at the doubled count on the next update.
     clearKronosRuntime(player)
+    ConchBlessing.kronos._topUpMongoMinisaacs(player)
     refreshEffectCaches()
 end
 
@@ -3424,7 +3462,7 @@ local function onPreUsePrettyFly(_, _pillEffect, pillColor, player)
     bump("prettyFlies", flies)
     for _ = 1, flies do
         ConchBlessing.kronos._queueTransferEffect(player, CollectibleType.COLLECTIBLE_HALO_OF_FLIES, false,
-            ConchBlessing.Locale.text("ui.kronos.transfer_pretty_fly", PRETTY_FLY_BLOCK_PERCENT))
+            ConchBlessing.Locale.text("ui.kronos.transfer_pretty_fly", ConchBlessing.Locale.formatPercent(PRETTY_FLY_BLOCK_PERCENT)))
     end
     return true
 end
@@ -3513,7 +3551,7 @@ local TRANSFER_INTACT_COLOR = Color(1, 1, 1, 1, 0, 0, 0)
 -- one effect: their icons in a grid of at most MAX_PER_ROW per row, rows kept even
 -- and each centred, the short row at the bottom. Grids crumble into coarser grains
 -- so a full grid stays within a few hundred draws.
-local GROUP = { MAX_ICONS = 12, MAX_PER_ROW = 6, PITCH = 28, GRAIN = 4 }
+local GROUP = { MAX_ICONS = 12, MAX_PER_ROW = 6, PITCH = 28, GRAIN = 4, RELEASE_GRAIN = 8 }
 local transferEffects = {}
 -- Once the dust reaches the body, a familiar whose synergy has a live-value line
 -- (%TOKEN%) shows the new total briefly where the caption was, rising a little.
@@ -3857,11 +3895,19 @@ local function buildCaption(lines, seed)
     return { lines = lines, letters = letters, height = height, grains = total, merge = merge }
 end
 
-function ConchBlessing.kronos._queueTransferEffect(player, itemId, reverse, captionText)
+function ConchBlessing.kronos._beginReleaseVisuals(player)
+    local hash = GetPtrHash(player)
+    for i = #transferEffects, 1, -1 do
+        if transferEffects[i].hash == hash then table.remove(transferEffects, i) end
+    end
+end
+
+function ConchBlessing.kronos._queueTransferEffect(player, itemId, reverse, captionText, copies)
     if not player then return end
     local hash = GetPtrHash(player)
     local frame = Game():GetFrameCount()
     reverse = reverse == true
+    copies = math.max(1, math.floor(tonumber(copies) or 1))
     local queued, group = 0, nil
     for _, effect in ipairs(transferEffects) do
         if effect.hash == hash then
@@ -3869,11 +3915,20 @@ function ConchBlessing.kronos._queueTransferEffect(player, itemId, reverse, capt
             -- Queued in the same update and not started: copies of one familiar
             -- absorbed together, or any familiars released together, share a grid.
             if effect.tick == 0 and effect.frame == frame and effect.reverse == reverse
-                and #effect.icons < GROUP.MAX_ICONS
+                and (reverse or #effect.icons < GROUP.MAX_ICONS)
                 and (reverse or (effect.itemId == itemId and effect.captionText == captionText)) then
                 group = effect
             end
         end
+    end
+    if group then group.copies = group.copies + copies end
+    if reverse and group then
+        -- One bounded release grid per update. Duplicate copies share their
+        -- icon; excess types still return through the inventory transaction.
+        for _, icon in ipairs(group.icons) do
+            if icon.itemId == itemId then icon.copies = icon.copies + copies; return end
+        end
+        if #group.icons >= GROUP.MAX_ICONS then return end
     end
     if not group and queued >= TRANSFER_MAX_PER_PLAYER then return end
     local sprite = group and not reverse and group.icons[1].sprite
@@ -3884,9 +3939,10 @@ function ConchBlessing.kronos._queueTransferEffect(player, itemId, reverse, capt
     end
     if group then
         local icons = group.icons
-        if #icons == 1 then icons[1].grains = buildGrains(group.seed, GROUP.GRAIN) end
-        icons[#icons + 1] = { sprite = sprite, itemId = itemId,
-            grains = buildGrains(group.seed + #icons * 7919, GROUP.GRAIN) }
+        local grainSize = reverse and GROUP.RELEASE_GRAIN or GROUP.GRAIN
+        if #icons == 1 then icons[1].grains = buildGrains(group.seed, grainSize) end
+        icons[#icons + 1] = { sprite = sprite, itemId = itemId, copies = copies,
+            grains = buildGrains(group.seed + #icons * 7919, grainSize) }
         group.offsets, group.rows = gridOffsets(#icons)
         return
     end
@@ -3902,7 +3958,9 @@ function ConchBlessing.kronos._queueTransferEffect(player, itemId, reverse, capt
     local offsets, rows = gridOffsets(1)
     transferEffects[#transferEffects + 1] = {
         player = player, hash = hash, frame = frame, seed = seed, itemId = itemId, captionText = captionText,
-        icons = { { sprite = sprite, itemId = itemId, grains = buildGrains(seed) } },
+        copies = copies,
+        icons = { { sprite = sprite, itemId = itemId, copies = copies,
+            grains = buildGrains(seed, reverse and GROUP.RELEASE_GRAIN or nil) } },
         offsets = offsets, rows = rows,
         caption = caption, valueTemplates = valueTemplates,
         reverse = reverse, tick = 0,
@@ -4156,6 +4214,11 @@ end
 
 ConchBlessing.kronos.onPostUpdate = function()
     processPendingHurts()
+    -- The engine enters the new floor's first room before MC_POST_NEW_LEVEL.
+    -- New-room payout alone therefore misses the reward queued by onNewLevel
+    -- until a second room is entered. Drain the saved reservation on the next
+    -- ordinary update as well, including a Continue with a pending reward.
+    ConchBlessing.kronos._payLostSoulReward()
     if #transferEffects > 0 then updateTransferEffects() end
     if #stompVisuals > 0 then updateStompVisuals() end
 end
@@ -4179,10 +4242,10 @@ ConchBlessing.kronos.onPostRender = function()
 end
 
 ConchBlessing.kronos.onPreGameExit = function()
+    -- Withdraw the temporary StatsAPI contribution before the provider's
+    -- default-priority save callback; clearing a Lua flag is not enough.
+    ConchBlessing.kronos._resetRoomTemporary()
     ConchBlessing.kronos._runReady = false
-    roomTemp.double = 0
-    for key in pairs(roomTemp.counts) do roomTemp.counts[key] = nil end
-    for key in pairs(roomTemp.twins) do roomTemp.twins[key] = nil end
     for key in pairs(pendingTempScans) do pendingTempScans[key] = nil end
     for key in pairs(pendingManualScans) do pendingManualScans[key] = nil end
     for key in pairs(altarSnapshots) do altarSnapshots[key] = nil end
@@ -4193,6 +4256,15 @@ end
 
 -- Test/diagnostic hooks for the RNG and Kronos probes.
 ConchBlessing.kronos._test = {
+    -- Read-only queue evidence for test isolation. Never drain or replace a
+    -- production queue to make a reusable test baseline appear clean.
+    pendingCounts = function()
+        local function count(t)
+            local n=0; for _ in pairs(t) do n=n+1 end; return n
+        end
+        return { hurts=count(pendingHurts), manualScans=count(pendingManualScans),
+            temporaryScans=count(pendingTempScans) }
+    end,
     getProjectileBlockChance = getProjectileBlockChance,
     getSpawnChance = getSpawnChance,
     getStackedChance = getStackedChance,
@@ -4248,7 +4320,10 @@ ConchBlessing.kronos._test = {
     transferGroups = function()
         local groups = {}
         for _, effect in ipairs(transferEffects) do
-            groups[#groups + 1] = { reverse = effect.reverse, icons = #effect.icons, rows = effect.rows }
+            local grains = 0
+            for _, icon in ipairs(effect.icons) do grains = grains + #icon.grains end
+            groups[#groups + 1] = { reverse = effect.reverse, icons = #effect.icons, rows = effect.rows,
+                copies = effect.copies, hash = effect.hash, iconGrains = grains }
         end
         return groups
     end,
@@ -4280,7 +4355,7 @@ local function chanceToken(chance)
     return function(player)
         player = player or findKronosOwner() or Isaac.GetPlayer(0)
         if not player then return nil end
-        return string.format("%g%%", math.floor(chance(player) * 1000 + 0.5) / 10)
+        return ConchBlessing.Locale.formatPercent(string.format("%g", math.floor(chance(player) * 1000 + 0.5) / 10))
     end
 end
 ConchBlessing.EIDDynamicTokens.KRONOS_BLOCK = chanceToken(function(player)
@@ -4317,6 +4392,16 @@ end
 
 -- The temporary-familiar sources are other items, cards and pills, so they are
 -- registered here with their own filters: ItemData callbacks filter by Kronos's id.
+-- StatsAPI writes to disk at the default exit priority. Register early here,
+-- outside ItemData's default-priority dispatcher. Old runtimes without priority
+-- support still reconcile the saved contribution at game start/player update.
+if type(ConchBlessing.AddPriorityCallback) == "function" and CallbackPriority
+    and type(CallbackPriority.EARLY) == "number" then
+    ConchBlessing:AddPriorityCallback(ModCallbacks.MC_PRE_GAME_EXIT, CallbackPriority.EARLY,
+        ConchBlessing.kronos.onPreGameExit)
+else
+    ConchBlessing:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, ConchBlessing.kronos.onPreGameExit)
+end
 ConchBlessing:AddCallback(ModCallbacks.MC_USE_ITEM, onUseBoxOfFriends, CollectibleType.COLLECTIBLE_BOX_OF_FRIENDS)
 ConchBlessing:AddCallback(ModCallbacks.MC_USE_ITEM, onUseMonsterManual, CollectibleType.COLLECTIBLE_MONSTER_MANUAL)
 ConchBlessing:AddCallback(ModCallbacks.MC_PRE_USE_ITEM, onPreUseMonsterManual, CollectibleType.COLLECTIBLE_MONSTER_MANUAL)

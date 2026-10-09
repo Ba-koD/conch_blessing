@@ -1,15 +1,14 @@
 -- RNG probe: measures the expected value of every random mechanic in the mod by
 -- sampling the shipped functions, not copies of them.
 --
--- Console:  conch_rng            run every probe with 100000 samples
---           conch_rng 500000     custom sample count
---           conch_rng luck 20    run the luck-dependent probes at Luck 20
+-- Console:  conch_test rng            run every probe with 100000 samples
+--           conch_test rng 500000     custom sample count
+--           conch_test rng luck 20    run the luck-dependent probes at Luck 20
 --
 -- Deterministic probes (proc chances) are evaluated, not sampled, because they are
 -- pure functions of Luck and MaxFireDelay. Distribution probes are sampled.
 --
--- This file is dev tooling. It registers one console command and touches no game
--- state; leaving it loaded costs a single MC_EXECUTE_CMD handler.
+-- Dev tooling, dispatched only through conch_test by item_probe.lua.
 
 local probe = {}
 
@@ -17,7 +16,7 @@ local DEFAULT_SAMPLES = 100000
 
 local function out(line)
     Isaac.ConsoleOutput(tostring(line) .. "\n")
-    ConchBlessing.printDebug("[RNG] " .. tostring(line))
+    Isaac.DebugString("[RNG] " .. tostring(line))
 end
 
 local function header(title)
@@ -368,20 +367,38 @@ end
 -- --------------------------------------------------------------- death spiral
 function probe.injectableDeath()
     header("Injectable Steroids instant death (cumulative over one floor)")
-    local d = ConchBlessing.injectablsteroids and ConchBlessing.injectablsteroids.data
-    if not d then out("SKIPPED (module not loaded)") return end
+    local module = ConchBlessing.injectablsteroids
+    local d = module and module.data
+    local roll = module and module._test and module._test.rollInstantDeath
+    if not d or not roll then out("SKIPPED (module/real death-roll helper not loaded)") return end
     out(string.format("  base=%.2f%% increment=%.2f%%/use current=%.2f%%",
         d.baseInstantDeathPercent, d.instantDeathPercentIncrement, d.currentInstantDeathPercent))
+    -- Deterministic quantiles exercise the shipped predicate without spending
+    -- the player's RNG stream, changing risk, or triggering the death callback.
+    for _, pct in ipairs({0, 1, 1.25, 3.75, 4, 99.75, 100}) do
+        local index, count, samples = 0, 0, 10000
+        local rng = { RandomFloat = function() return (index + 0.5) / samples end }
+        for i = 0, samples - 1 do
+            index = i
+            if roll(pct, rng) then count = count + 1 end
+        end
+        local expected = math.floor(pct * samples / 100 + 0.5)
+        out(string.format("  %s death predicate %.2f%%: actual=%d/%d expected=%d/%d",
+            count == expected and "PASS" or "FAIL", pct, count, samples, expected, samples))
+    end
+    local edge = 3.75 / 100
+    local atBoundary = roll(3.75, {RandomFloat=function() return edge end})
+    local belowBoundary = roll(3.75, {RandomFloat=function() return edge - 0.000001 end})
+    out(string.format("  %s death predicate exact boundary: below=%s at=%s (expected true/false)",
+        belowBoundary and not atBoundary and "PASS" or "FAIL", tostring(belowBoundary), tostring(atBoundary)))
     local survive, expectedUses = 1.0, 0.0
     for use = 1, 200 do
         local pct = math.min(100, d.baseInstantDeathPercent + d.instantDeathPercentIncrement * (use - 1))
-        -- math.random(1,100) is an integer draw, so a fractional pct truncates: the
-        -- room-clear decay does nothing until it crosses a whole percent.
-        local effective = math.floor(pct) / 100
+        local effective = pct / 100
         expectedUses = expectedUses + survive
         if use <= 10 then
-            out(string.format("  use %-3d raw %5.1f%% -> %3d%%  cumulative dead = %.2f%%",
-                use, pct, math.floor(pct), (1 - survive * (1 - effective)) * 100))
+            out(string.format("  use %-3d raw %5.2f%% -> %5.2f%%  cumulative dead = %.2f%%",
+                use, pct, pct, (1 - survive * (1 - effective)) * 100))
         end
         survive = survive * (1 - effective)
         if survive <= 0 then
@@ -393,9 +410,7 @@ function probe.injectableDeath()
 end
 
 -- ------------------------------------------------------------------- command
-ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, cmd, params)
-    if string.lower(tostring(cmd)) ~= "conch_rng" then return end
-
+function probe.run(params)
     local args = {}
     for word in string.gmatch(tostring(params or ""), "%S+") do
         args[#args + 1] = word
@@ -403,18 +418,26 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, cmd, params)
 
     local samples = DEFAULT_SAMPLES
     local luck = Isaac.GetPlayer(0).Luck
+    local samplesSeen, luckSeen = false, false
+    local function invalid()
+        out("Usage: conch_test rng [positive integer samples] [luck finite-number]")
+    end
     local i = 1
     while i <= #args do
-        if string.lower(args[i]) == "luck" and args[i + 1] then
-            luck = tonumber(args[i + 1]) or luck
+        if string.lower(args[i]) == "luck" then
+            local value=tonumber(args[i+1])
+            if luckSeen or not value or not (value>-math.huge and value<math.huge) then invalid(); return end
+            luck, luckSeen = value, true
             i = i + 2
         else
-            samples = tonumber(args[i]) or samples
+            local value=tonumber(args[i])
+            if samplesSeen or not value or not (value>0 and value<math.huge and value==math.floor(value)) then invalid(); return end
+            samples, samplesSeen = value, true
             i = i + 1
         end
     end
 
-    out(string.format("conch_rng: %d samples, Luck %s", samples, tostring(luck)))
+    out(string.format("conch_test rng: %d samples, Luck %s", samples, tostring(luck)))
     probe.statRolls(samples)
     probe.stacking(samples)
     probe.voidDagger()
@@ -426,8 +449,8 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, cmd, params)
     probe.liveEye(samples, luck)
     probe.injectableDeath()
     out("")
-    out("conch_rng: done")
-end)
+    out("conch_test rng: done")
+end
 
 ConchBlessing.rngProbe = probe
 return probe

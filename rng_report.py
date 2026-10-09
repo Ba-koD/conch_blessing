@@ -13,7 +13,7 @@ Usage
     python rng_report.py --samples 500000         # heavier Monte Carlo
     python rng_report.py --seed 1234              # different RNG stream
 
-The companion in-game probe (`conch_rng` from scripts/dev/rng_probe.lua) samples the
+The companion in-game probe (`conch_test rng` from scripts/dev/rng_probe.lua) samples the
 real Lua functions. This script models the same expressions offline, so agreement
 between the two is the actual check.
 """
@@ -312,17 +312,17 @@ def build(samples: int, seed: int) -> str:
     red, red_cite = const("inject", "reductionAmount")
     w("## 3. Injectable Steroids - instant death")
     w("")
-    w(f"`math.random(1,100) <= pct` ({cite('inject', 'local deathRoll')}), where")
+    w(f"`rollInstantDeath(pct, rng)` compares `RandomFloat() * 100 < pct` ({cite('inject', 'local function rollInstantDeath')}), where")
     w(f"`pct = {base_pct:g} + {inc_pct:g} * usesThisFloor` ({base_cite}), reset per floor and")
     w(f"reduced {red:g} per room clear, floored at the base ({red_cite}).")
     w("")
-    w(f"The draw is an integer 1-100, so a fractional chance truncates: the {red:g}")
-    w("per-room-clear decay changes nothing until it crosses a whole percent.")
+    w(f"The supplied use RNG draws continuously over [0,100), so each {red:g}% room-clear reduction")
+    w("changes the actual chance. Unsupported RNG objects fall back to `math.random()`. Floor risk is saved globally across holders.")
     w("")
     rows, survive, exp_uses, certain = [], 1.0, 0.0, None
     for k in range(1, 1000):
         pct = min(100.0, base_pct + inc_pct * (k - 1))
-        effective = math.floor(pct) / 100  # math.random(1,100) <= pct
+        effective = pct / 100  # uniform [0,100) < pct
         exp_uses += survive
         if k <= 10:
             rows.append([str(k), f"{pct:g}%", f"{effective:.0%}",

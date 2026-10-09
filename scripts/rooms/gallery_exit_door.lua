@@ -1,4 +1,4 @@
--- Appraisal's return door is vanilla's EXIT door (a frame with a lit EXIT sign that
+-- Appraisal and Atropos use vanilla's EXIT door (a frame with a lit EXIT sign that
 -- flickers) re-skinned green, the way Angel's Crown re-skins the Treasure Room door:
 -- vanilla's ANM2 and sheet layout, only the spritesheet swapped, so every animation
 -- the ANM2 drives keeps working. The sheet keeps vanilla's sign plate and every
@@ -19,17 +19,29 @@ end
 
 local function addCallbacks(stageAPI, doorName)
     local owner = "ConchBlessing.GalleryExitDoor." .. doorName
-    if type(stageAPI.UnregisterCallbacks) == "function" then stageAPI.UnregisterCallbacks(owner) end
-    stageAPI.AddCallback(owner, callbackId(stageAPI, "POST_SPAWN_CUSTOM_DOOR"), 0, function(_, _, sprite)
-        for layer = 0, LAYER_COUNT - 1 do
-            sprite:ReplaceSpritesheet(layer, SHEET)
+    local skinToken = {}
+    local function dress(data, sprite)
+        -- A live door may predate this Lua reload. Refresh only our sprite,
+        -- preserving the provider's wall orientation and transition state.
+        if type(sprite.GetFilename) == "function" and sprite:GetFilename() ~= GalleryExitDoor.ANM2 then
+            local rotation, offset = sprite.Rotation, sprite.Offset
+            sprite:Load(GalleryExitDoor.ANM2, false)
+            sprite.Rotation, sprite.Offset = rotation, offset
+            sprite:Play(OPENED, true)
         end
+        for layer = 0, LAYER_COUNT - 1 do sprite:ReplaceSpritesheet(layer, SHEET) end
         sprite:LoadGraphics()
+        data.__ConchBlessingExitDoorSkin = skinToken
+    end
+    if type(stageAPI.UnregisterCallbacks) == "function" then stageAPI.UnregisterCallbacks(owner) end
+    stageAPI.AddCallback(owner, callbackId(stageAPI, "POST_SPAWN_CUSTOM_DOOR"), 0, function(_, data, sprite)
+        dress(data, sprite)
     end, doorName)
     -- The sign's flicker lives in the non-looping Opened animation; replaying it keeps
     -- the sign flickering now and then. StageAPI drives no other animation on an
     -- always-open door.
-    stageAPI.AddCallback(owner, callbackId(stageAPI, "POST_CUSTOM_DOOR_UPDATE"), 0, function(_, _, sprite)
+    stageAPI.AddCallback(owner, callbackId(stageAPI, "POST_CUSTOM_DOOR_UPDATE"), 0, function(_, data, sprite)
+        if data.__ConchBlessingExitDoorSkin ~= skinToken then dress(data, sprite) end
         if sprite:IsFinished(OPENED) then sprite:Play(OPENED, true) end
     end, doorName)
 end
@@ -40,7 +52,7 @@ end
 function GalleryExitDoor.register(stageAPI, doorName)
     local ok, err = pcall(addCallbacks, stageAPI, doorName)
     if not ok then
-        ConchBlessing.printError("Appraisal exit-door sheet unavailable: " .. tostring(err))
+        ConchBlessing.printError(tostring(doorName) .. " exit-door sheet unavailable: " .. tostring(err))
     end
 end
 

@@ -215,9 +215,9 @@ if EID then
             
             -- Add proc chance info to description (text: ui.void_dagger in scripts/locale)
             local Locale = ConchBlessing.Locale
-            local procChanceText = Locale.text("ui.void_dagger.proc_chance", string.format("%.1f", pFinal * 100))
+            local procChanceText = Locale.text("ui.void_dagger.proc_chance", Locale.formatPercent(string.format("%.1f", pFinal * 100)))
                 .. Locale.text("ui.void_dagger.proc_detail",
-                    string.format("%.1f", pBase * 100), string.format("%.1f", luckFactor))
+                    Locale.formatPercent(string.format("%.1f", pBase * 100)), string.format("%.1f", luckFactor))
             
             -- Append to existing description
             descObj.Description = descObj.Description .. procChanceText

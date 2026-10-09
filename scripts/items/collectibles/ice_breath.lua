@@ -1,6 +1,7 @@
 ConchBlessing.icebreath = {}
 
 local WeaponAttackTracker = require("scripts.lib.weapon_attack_tracker")
+local DamageProvenance = require("scripts.lib.damage_provenance")
 local ICE_BREATH_ID = Isaac.GetItemIdByName("Ice Breath")
 
 -- API refs checked:
@@ -450,12 +451,58 @@ ConchBlessing.icebreath.onPlayerUpdate = function(_, player)
     end
 end
 
+local function applyHitStatus(npc, attack, breathData)
+    local source = breathData.source or attack
+    local damage = breathData.baseDamage or attack.CollisionDamage or 1
+    if math.random() < (breathData.freezeChance or ConchBlessing.icebreath.data.freezeChance) then
+        npc:AddFreeze(EntityRef(source), 60)
+        if EntityFlag and EntityFlag.FLAG_ICE then npc:AddEntityFlags(EntityFlag.FLAG_ICE) end
+        npc:SetColor(Color(0.5, 0.8, 1.0, 1.0, 0, 0, 0), 60, 1, false, true)
+    end
+end
+
+-- A blue candle can reduce CollisionDamage inside its native update, before
+-- POST_EFFECT_UPDATE can restore it. REPENTOGON's damage-argument override keeps
+-- this flame's captured damage at the actual hit, without a second TakeDamage
+-- call. Preserve multipliers already applied by an earlier damage callback.
+-- https://repentogon.com/enums/ModCallbacks.html#mc_entity_take_dmg
+ConchBlessing.icebreath.onEntityTakeDamage = function(_, entity, amount, _, source, _, extraSource)
+    if not DamageProvenance.hasAppliedDamageCallback() or not entity or amount <= 0 or not entity:ToNPC() then return end
+    local attack = DamageProvenance.getSourceEntity(source, extraSource)
+    if not attack or attack.Type ~= EntityType.ENTITY_EFFECT or attack.Variant ~= ICE_EFFECT_VARIANT then return end
+    local data = attack:GetData()
+    local breath = data and data.__ConchIceBreath
+    if not breath or breath.projectileMode == "entity_effect" or type(breath.baseDamage) ~= "number" then return end
+    local nativeDamage = attack.CollisionDamage
+    if type(nativeDamage) ~= "number" or nativeDamage <= 0 or breath.baseDamage <= 0 then return end
+    if math.abs(nativeDamage - breath.baseDamage) > 0.000001 then
+        return { Damage = amount * breath.baseDamage / nativeDamage }
+    end
+end
+
+-- Only accepted damage is an on-hit event. Nearby enemies and rejected hits
+-- must not reroll the status or keep extending its engine countdown.
+ConchBlessing.icebreath.onPostEntityTakeDamage = function(_, entity, amount, _, source, _, extraSource)
+    if not DamageProvenance.hasAppliedDamageCallback() or not entity or amount <= 0 then return end
+    local npc = entity:ToNPC()
+    if not npc then return end
+    local attack = DamageProvenance.getSourceEntity(source, extraSource)
+    if not attack or (attack.Type ~= EntityType.ENTITY_EFFECT and attack.Type ~= EntityType.ENTITY_TEAR) then return end
+    local data = attack:GetData()
+    local breathData = data and data.__ConchIceBreath
+    if not breathData or type(breathData.baseDamage) ~= "number" then return end
+    applyHitStatus(npc, attack, breathData)
+end
+
 ConchBlessing.icebreath.onEffectUpdate = function(_, effect)
     if not effect then return end
     local data = effect:GetData()
     if not data or not data.__ConchIceBreath then return end
 
     local breathData = data.__ConchIceBreath
+    -- Native candle updates may decay CollisionDamage. This item's contract is
+    -- its captured player-damage fraction for every hit, independent of age.
+    if type(breathData.baseDamage) == "number" then effect.CollisionDamage = breathData.baseDamage end
     if not updateProjectileMotion(effect, breathData) then
         effect:Remove()
         return
@@ -465,6 +512,8 @@ ConchBlessing.icebreath.onEffectUpdate = function(_, effect)
     interactProjectileWithGrids(effect, breathData)
 
     local applyManualDamage = (breathData.projectileMode == "entity_effect")
+    local appliedDamageAvailable = DamageProvenance.hasAppliedDamageCallback()
+    if not applyManualDamage and appliedDamageAvailable then return end
     local entities = Isaac.GetRoomEntities()
     for _, ent in ipairs(entities) do
         local npc = ent:ToNPC()
@@ -474,14 +523,11 @@ ConchBlessing.icebreath.onEffectUpdate = function(_, effect)
                 local source = breathData.source or effect
                 local damage = breathData.baseDamage or 1
                 if applyManualDamage then
-                    npc:TakeDamage(damage, 0, EntityRef(source), 0)
+                    -- Preserve the physical flame as the applied-damage source.
+                    npc:TakeDamage(damage, 0, EntityRef(effect), 0)
                 end
-                if math.random() < (breathData.freezeChance or ConchBlessing.icebreath.data.freezeChance) then
-                    npc:AddFreeze(EntityRef(source), 60)
-                    if EntityFlag and EntityFlag.FLAG_ICE then
-                        npc:AddEntityFlags(EntityFlag.FLAG_ICE)
-                    end
-                    npc:SetColor(Color(0.5, 0.8, 1.0, 1.0, 0, 0, 0), 60, 1, false, true)
+                if not appliedDamageAvailable then
+                    applyHitStatus(npc, effect, breathData)
                 end
             end
         end
@@ -504,23 +550,12 @@ ConchBlessing.icebreath.onTearUpdate = function(_, tear)
 end
 
 ConchBlessing.icebreath.onTearCollision = function(_, tear, collider, _)
-    if not (tear and collider) then return nil end
+    if DamageProvenance.hasAppliedDamageCallback() or not (tear and collider) then return nil end
     local data = tear:GetData()
-    if not data or not data.__ConchIceBreath then return nil end
-
+    local breathData = data and data.__ConchIceBreath
+    if not breathData then return nil end
     local npc = collider:ToNPC()
-    if not (npc and npc:IsVulnerableEnemy()) then return nil end
-
-    local breathData = data.__ConchIceBreath
-    local source = breathData.source or tear
-    if math.random() < (breathData.freezeChance or ConchBlessing.icebreath.data.freezeChance) then
-        npc:AddFreeze(EntityRef(source), 60)
-        if EntityFlag and EntityFlag.FLAG_ICE then
-            npc:AddEntityFlags(EntityFlag.FLAG_ICE)
-        end
-        npc:SetColor(Color(0.5, 0.8, 1.0, 1.0, 0, 0, 0), 60, 1, false, true)
-    end
-
+    if npc and npc:IsVulnerableEnemy() then applyHitStatus(npc, tear, breathData) end
     return nil
 end
 

@@ -1,3 +1,4 @@
+local TimerClock = require("scripts.lib.timer_clock")
 ConchBlessing.timepowertrinket = {}
 
 local SaveManager = ConchBlessing.SaveManager or require("scripts.lib.save_manager")
@@ -21,6 +22,12 @@ local function ensureState()
     ConchBlessing.timepowertrinket.state = ConchBlessing.timepowertrinket.state or { perPlayer = {} }
     return ConchBlessing.timepowertrinket.state
 end
+
+TimerClock.onRebase("timepowertrinket", function(delta)
+    for _, state in pairs(ensureState().perPlayer) do
+        state.pausedUntilFrame = (state.pausedUntilFrame or 0) + delta
+    end
+end)
 
 local function getPlayerState(player)
     local s = ensureState()
@@ -77,7 +84,7 @@ local function loadFromSave(player)
         end
         -- Legacy absolute frames cannot be related to a new gameplay session safely.
         local remainingFrames = math.max(0, math.min(getPauseDurationFrames(), math.floor(tonumber(rec.pauseFramesRemaining) or 0)))
-        local currentFrame = Game():GetFrameCount()
+        local currentFrame = TimerClock.now()
         ps.pausedUntilFrame = currentFrame + remainingFrames
         writePauseTimerRecord(rec, ps, currentFrame)
     end
@@ -95,7 +102,7 @@ local function saveToSave(player)
     local rec = save.timePower[key]
     rec.damageBonus = ps.damageBonus
     rec.permanentBonus = ps.permanentBonus
-    writePauseTimerRecord(rec, ps, Game():GetFrameCount())
+    writePauseTimerRecord(rec, ps, TimerClock.now())
     rec.data = {
         increasePerSecond = ConchBlessing.timepowertrinket.data.increasePerSecond,
         pauseSecondsOnHit = ConchBlessing.timepowertrinket.data.pauseSecondsOnHit,
@@ -113,7 +120,7 @@ do
         mod:AddCallback(callbackKey, function(_, saveData)
             local runData = saveData and saveData.game and saveData.game.run
             local perPlayer = ensureState().perPlayer
-            local currentFrame = Game():GetFrameCount()
+            local currentFrame = TimerClock.now()
             for _, playerRun in pairs(runData or {}) do
                 for key, rec in pairs((playerRun and playerRun.timePower) or {}) do
                     local ps = perPlayer[key]
@@ -157,7 +164,7 @@ function ConchBlessing.timepowertrinket.onEvaluateCache(_, player, cacheFlag)
 -- Update growth and handle drop-reset
 function ConchBlessing.timepowertrinket.onUpdate()
     local game = Game()
-    local frame = game:GetFrameCount()
+    local frame = TimerClock.now()
     local num = game:GetNumPlayers()
     for i = 0, num - 1 do
         local p = game:GetPlayer(i)
@@ -241,7 +248,7 @@ function ConchBlessing.timepowertrinket.onEntityTakeDamage(_, entity, amount, fl
         return
     end
     local ps = getPlayerState(player)
-    local frame = Game():GetFrameCount()
+    local frame = TimerClock.now()
     ps.pausedUntilFrame = math.max(ps.pausedUntilFrame or 0, frame + getPauseDurationFrames())
     saveToSave(player)
     return nil

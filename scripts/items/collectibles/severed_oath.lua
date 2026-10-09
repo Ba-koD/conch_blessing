@@ -20,19 +20,10 @@ local ACTIVE_SLOTS = {
     (ActiveSlot and (ActiveSlot.SLOT_POCKET2 or ActiveSlot.POCKET_SINGLE_USE)) or 3,
 }
 
-local CYCLE_MODIFIER_ITEMS = {
-    (CollectibleType and (CollectibleType.COLLECTIBLE_GLITCHED_CROWN or CollectibleType.GLITCHED_CROWN)) or 689,
-    (CollectibleType and (CollectibleType.COLLECTIBLE_BIRTHRIGHT or CollectibleType.BIRTHRIGHT)) or 619,
-    (CollectibleType and (CollectibleType.COLLECTIBLE_BINGE_EATER or CollectibleType.BINGE_EATER)) or 664,
-}
-
 M.data = M.data or {}
 M._cyclePickupStates = M._cyclePickupStates or {}
 M._cycleRoomKey = M._cycleRoomKey or nil
 M._pendingPoolChecks = M._pendingPoolChecks or {}
-M._continuedRun = M._continuedRun or false
-M._continuedStartRoomKey = M._continuedStartRoomKey or nil
-M._continuedBaselinePickupKeys = M._continuedBaselinePickupKeys or {}
 M._cycleRoomSnapshotReady = false
 M._gameStartResolved = false
 
@@ -56,18 +47,18 @@ end
 
 local function getCollectibleCycleValues(pickup)
     if not pickup or pickup.Variant ~= PickupVariant.PICKUP_COLLECTIBLE then
-        return {}
+        return {}, false
     end
 
     if type(pickup.GetCollectibleCycle) ~= "function" then
-        return {}
+        return {}, false
     end
 
     local ok, cycle = pcall(function()
         return pickup:GetCollectibleCycle()
     end)
     if not ok or type(cycle) ~= "table" then
-        return {}
+        return {}, false
     end
 
     local ids = {}
@@ -86,7 +77,7 @@ local function getCollectibleCycleValues(pickup)
         end
     end
 
-    return ids
+    return ids, true
 end
 
 local function getRawCycleItems(pickup)
@@ -163,7 +154,6 @@ local function ensureCycleRoomState()
     if M._cycleRoomKey ~= roomKey then
         M._cyclePickupStates = {}
         M._cycleRoomKey = roomKey
-        M._continuedBaselinePickupKeys = {}
         M._cycleRoomSnapshotReady = false
     end
 end
@@ -183,37 +173,22 @@ local function getPickupCycleKey(pickup)
     return nil
 end
 
-local function captureRoomPickupSnapshot(baselineExisting)
+local function captureRoomPickupSnapshot()
     ensureCycleRoomState()
 
     local pickups = {}
-    local baselinePickupKeys = {}
-    local baselineCount = 0
     for _, entity in ipairs(Isaac.GetRoomEntities()) do
         if entity.Type == EntityType.ENTITY_PICKUP
             and entity.Variant == PickupVariant.PICKUP_COLLECTIBLE then
             local pickup = entity:ToPickup()
             if pickup and pickup:Exists() then
                 table.insert(pickups, pickup)
-                if baselineExisting then
-                    local key = getPickupCycleKey(pickup)
-                    if key and not baselinePickupKeys[key] then
-                        baselinePickupKeys[key] = true
-                        baselineCount = baselineCount + 1
-                    end
-                end
             end
         end
     end
 
-    M._continuedBaselinePickupKeys = baselinePickupKeys
     M._cycleRoomSnapshotReady = true
-    return pickups, baselineCount
-end
-
-local function isContinuedBaselinePickup(pickup)
-    local key = getPickupCycleKey(pickup)
-    return key ~= nil and M._continuedBaselinePickupKeys[key] == true
+    return pickups
 end
 
 local function getPickupSaveState(pickup, create)
@@ -269,6 +244,7 @@ local function markSavedSplitPickup(pickup, itemId)
     save.splitItem = tonumber(itemId) or tonumber(pickup and pickup.SubType)
     save.poolType = nil
     save.bonusItem = nil
+    save.bonusItems = nil
     save.bonusSeen = nil
     saveManagerSave()
 end
@@ -284,16 +260,28 @@ local function clearSavedSplitPickup(pickup)
     saveManagerSave()
 end
 
+local function copyBonusItems(state)
+    local items = {}
+    if type(state and state.bonusItems) == "table" then
+        for _, id in ipairs(state.bonusItems) do
+            if isValidCollectibleId(id) then items[#items + 1] = id end
+        end
+    elseif isValidCollectibleId(state and state.bonusItem) then
+        items[1] = state.bonusItem -- Saves made before Golden Items support.
+    end
+    return items
+end
+
 local function getSavedBonusState(pickup)
     local save = getPickupSaveState(pickup, false)
-    if type(save) ~= "table" or not isValidCollectibleId(save.bonusItem) then
+    if type(save) ~= "table" or #copyBonusItems(save) == 0 then
         return nil
     end
     return save
 end
 
 local function markSavedBonusState(pickup, state)
-    if not (state and state.bonusItem) then
+    if not (state and state.bonusItems and #state.bonusItems > 0) then
         return
     end
 
@@ -305,6 +293,7 @@ local function markSavedBonusState(pickup, state)
     save.split = false
     save.poolType = tonumber(state.poolType) or 0
     save.bonusItem = tonumber(state.bonusItem)
+    save.bonusItems = copyBonusItems(state)
     save.bonusSeen = state.bonusSeen == true
     saveManagerSave()
 end
@@ -717,8 +706,7 @@ end
 
 local function logVerify(text)
     local message = "[Severed Oath][Verify] " .. tostring(text)
-    Isaac.DebugString(message)
-    ConchBlessing.print(message)
+    ConchBlessing.printDebug(message)
 end
 
 local function writePoolDump(text)
@@ -1104,33 +1092,31 @@ local function anyoneHoldsSeveredOath()
     return false
 end
 
-local function anyoneHasCycleModifier()
-    local game = Game()
+local function heldBonusCount()
+    -- Golden state belongs to the held active, never the target pedestal.
+    -- Epiphany's API is player/slot scoped; the standalone Golden Items fork
+    -- accepts only the ID and deliberately shares that upgrade across the run.
+    -- Use the owning provider's public query without editing its saved state.
+    local provider = Epiphany and type(Epiphany.HasGoldenItem) == "function" and Epiphany
+        or GoldenItems
+    local game, held = Game(), false
     for i = 0, game:GetNumPlayers() - 1 do
         local player = game:GetPlayer(i)
-        if player and type(player.HasCollectible) == "function" then
-            for _, itemId in ipairs(CYCLE_MODIFIER_ITEMS) do
-                if itemId and itemId > 0 and player:HasCollectible(itemId) then
-                    return true
+        if playerHoldsSeveredOath(player) then
+            held = true
+            if provider and type(provider.HasGoldenItem) == "function"
+                and type(player.GetActiveItem) == "function" then
+                for _, slot in ipairs(ACTIVE_SLOTS) do
+                    local readOk, itemId = pcall(player.GetActiveItem, player, slot)
+                    if readOk and itemId == SEVERED_OATH_ID then
+                        local ok, golden = pcall(provider.HasGoldenItem, provider, SEVERED_OATH_ID, player, slot)
+                        if ok and golden == true then return 2 end
+                    end
                 end
             end
         end
     end
-    return false
-end
-
--- Per-frame memoized wrapper: the modifier set only changes on pickup/drop, so the
--- answer is stable within a frame. Used by hot per-pickup paths to avoid re-scanning
--- every player's collectibles once per pedestal per frame.
-local function anyoneHasCycleModifierThisFrame()
-    local frame = Game():GetFrameCount()
-    local cache = M._cycleModifierCache
-    if cache and cache.frame == frame then
-        return cache.value
-    end
-    local value = anyoneHasCycleModifier()
-    M._cycleModifierCache = { frame = frame, value = value }
-    return value
+    return held and 1 or 0
 end
 
 local function getExtraCycleItem(pickup, data, excludedItems)
@@ -1316,13 +1302,15 @@ local function markPickupCycleState(pickup)
     end
 
     local savedBonusState = getSavedBonusState(pickup)
-    if type(savedBonusState) == "table" and isValidCollectibleId(savedBonusState.bonusItem) then
+    if type(savedBonusState) == "table" then
+        local bonusItems = copyBonusItems(savedBonusState)
         local state = {
             eligible = true,
             done = true,
             poolType = tonumber(savedBonusState.poolType) or getLastPoolType(),
             item = currentItem,
-            bonusItem = tonumber(savedBonusState.bonusItem),
+            bonusItems = bonusItems,
+            bonusItem = bonusItems[1],
             bonusSeen = savedBonusState.bonusSeen == true,
         }
         setPickupCycleState(pickup, state)
@@ -1344,22 +1332,6 @@ local function markPickupCycleState(pickup)
         return
     end
 
-    if isContinuedBaselinePickup(pickup) then
-        setPickupCycleState(pickup, {
-            eligible = false,
-            done = true,
-            poolType = getLastPoolType(),
-            item = currentItem,
-        })
-        logVerify(string.format(
-            "cycle-skip continued baseline seed=%s subtype=%s raw=%d",
-            tostring(pickup.InitSeed),
-            tostring(pickup.SubType),
-            #getRawCycleItems(pickup)
-        ))
-        return
-    end
-
     local eligible = anyoneHoldsSeveredOath()
     local state = {
         eligible = eligible,
@@ -1367,6 +1339,7 @@ local function markPickupCycleState(pickup)
         poolType = getLastPoolType(),
         item = currentItem,
         bonusItem = nil,
+        bonusItems = {},
         bonusSeen = false,
     }
     setPickupCycleState(pickup, state)
@@ -1383,15 +1356,10 @@ local function addHeldBonusCycle(pickup, data)
         return false, "missing_repentogon"
     end
 
-    local rawCycleItems = getRawCycleItems(pickup)
-    if anyoneHasCycleModifier() and #rawCycleItems <= 0 then
-        -- With a cycle modifier held (Glitched Crown/Binge Eater/Birthright), the
-        -- pedestal only becomes a rotating item once its native cycle exists. Add
-        -- our bonus once it is actually a cycle item; if a later native rebuild
-        -- drops the bonus, reAddDroppedBonus re-appends it every update, so this is
-        -- timing-independent (no frame counting needed).
-        return nil, "waiting_for_native_cycle"
-    end
+    -- This runs after the pedestal's update. Work from its actual queue, not a
+    -- whitelist of cycle-granting items (Birthright alone need not grant a cycle).
+    local rawCycleItems, readable = getCollectibleCycleValues(pickup)
+    if not readable then return false, "unreadable_cycle" end
 
     if type(pickup.AddCollectibleCycle) ~= "function" then
         return false, "missing_add_cycle"
@@ -1409,52 +1377,43 @@ local function addHeldBonusCycle(pickup, data)
     local ok, added = pcall(function()
         return pickup:AddCollectibleCycle(extraItem)
     end)
-    if ok and added ~= false then
+    local after = getCollectibleCycleValues(pickup)
+    local exact = #after == #rawCycleItems + 1 and after[#after] == extraItem
+    for i, id in ipairs(rawCycleItems) do exact = exact and after[i] == id end
+    if ok and added ~= false and exact then
         return true, extraItem
     end
 
     return false, "add_failed"
 end
 
-local function finishHeldBonusCycle(pickup, state)
-    if not pickup or not state or state.done then
+local function finishHeldBonusCycle(pickup, state, target)
+    if not pickup or not state then
         return
     end
 
     state.done = true
+    state.attemptedBonusCount = target
     writeCycleStateToPickup(pickup, state)
 
     local data = pickup:GetData()
-    local added, detail = addHeldBonusCycle(pickup, data)
-    if added == nil then
-        state.done = false
-        writeCycleStateToPickup(pickup, state)
-        return
-    end
-
-    writeCycleStateToPickup(pickup, state)
-    if added and type(detail) == "number" then
-        state.bonusItem = detail
-        state.bonusSeen = pickup.SubType == detail
-        writeCycleStateToPickup(pickup, state)
-        updateBonusSeen(pickup, state)
+    state.bonusItems = state.bonusItems or {}
+    for _ = #state.bonusItems + 1, target do
+        local added, detail = addHeldBonusCycle(pickup, data)
+        if not added then
+            ConchBlessing.printDebug(string.format(
+                "[Severed Oath] Skipped bonus cycle for pickup %d: %s (seed=%s).",
+                pickup.SubType, tostring(detail), tostring(pickup.InitSeed)))
+            break
+        end
+        state.bonusItems[#state.bonusItems + 1] = detail
+        state.bonusItem = state.bonusItems[1]
         markSavedBonusState(pickup, state)
-    end
-    if added then
         ConchBlessing.printDebug(string.format(
             "[Severed Oath] Added bonus cycle item to pickup %d (%s, seed=%s).",
-            pickup.SubType,
-            tostring(detail),
-            tostring(pickup.InitSeed)
-        ))
-    else
-        ConchBlessing.printDebug(string.format(
-            "[Severed Oath] Skipped bonus cycle for pickup %d: %s (seed=%s).",
-            pickup.SubType,
-            tostring(detail),
-            tostring(pickup.InitSeed)
-        ))
+            pickup.SubType, tostring(detail), tostring(pickup.InitSeed)))
     end
+    updateBonusSeen(pickup, state)
 end
 
 local function getSplitCycleItems(pickup)
@@ -1758,54 +1717,33 @@ end
 
 -- Self-heal: once we have committed a bonus item, keep it in the cycle every update.
 -- Glitched Crown re-initialises the pedestal on every display step, and can drop our
--- appended item; re-append it whenever it goes missing. This is timing-independent, so
--- even if the initial add lands at an unlucky frame the bonus is never permanently lost.
+-- owned choices. Inspect the actual cycle, including its displayed head; native
+-- rotations must never create another draw. Other mods need no item whitelist.
 local function reAddDroppedBonus(pickup, state)
-    if not (pickup and state and state.eligible and state.bonusItem) then
+    if not (pickup and state and state.eligible and state.bonusItems) then
         return
     end
-    if not isValidCollectibleId(state.bonusItem) then
+    if not isValidCollectibleId(pickup.SubType) then
         return
     end
     if pickup:GetData()[SPLIT_MARKER] then
         return
     end
-    if pickup.SubType == state.bonusItem then
-        return -- currently shown as the pedestal item, so it is present
-    end
-    -- The only thing that drops our appended bonus is a cycle modifier (Glitched
-    -- Crown/Binge Eater/Birthright) rebuilding the pedestal every display step. With
-    -- no such modifier held, the bonus can never leave the cycle, so reading and
-    -- scanning the cycle every frame is pure waste -- skip the expensive path.
-    if not anyoneHasCycleModifierThisFrame() then
+    if type(pickup.GetCollectibleCycle) ~= "function" or type(pickup.AddCollectibleCycle) ~= "function" then
         return
     end
-
-    local rawCycleItems = getRawCycleItems(pickup)
-    for _, itemId in ipairs(rawCycleItems) do
-        if itemId == state.bonusItem then
-            return -- still in the cycle
+    local tail, readable = getCollectibleCycleValues(pickup)
+    if not readable then return end
+    local present = { [pickup.SubType] = 1 }
+    for _, id in ipairs(tail) do present[id] = (present[id] or 0) + 1 end
+    local count = #tail
+    for _, id in ipairs(state.bonusItems) do
+        if (present[id] or 0) > 0 then
+            present[id] = present[id] - 1
+        elseif count < MAX_COLLECTIBLE_CYCLE_ITEMS then
+            local ok, added = pcall(pickup.AddCollectibleCycle, pickup, id)
+            if ok and added == true then count = count + 1 end
         end
-    end
-
-    if #rawCycleItems >= MAX_COLLECTIBLE_CYCLE_ITEMS then
-        return
-    end
-    if type(pickup.AddCollectibleCycle) ~= "function" then
-        return
-    end
-
-    local ok = pcall(function()
-        return pickup:AddCollectibleCycle(state.bonusItem)
-    end)
-    if ok then
-        logVerify(string.format(
-            "bonus-reheal seed=%s subtype=%s bonus=%s raw=%d",
-            tostring(pickup.InitSeed),
-            tostring(pickup.SubType),
-            tostring(state.bonusItem),
-            #rawCycleItems
-        ))
     end
 end
 
@@ -1817,28 +1755,33 @@ function M.onCollectibleCycleRewritten(pickup, replacements)
     end
 
     local state = getPickupCycleState(pickup)
-    local oldBonus = state and state.bonusItem or nil
-    local newBonus = oldBonus and replacements[oldBonus] or nil
-    if not newBonus or newBonus == oldBonus or not isValidCollectibleId(newBonus) then
-        return
+    if not (state and state.bonusItems) then return end
+    local changed = false
+    for i, oldBonus in ipairs(state.bonusItems) do
+        local newBonus = replacements[oldBonus]
+        if newBonus ~= oldBonus and isValidCollectibleId(newBonus) then
+            state.bonusItems[i] = newBonus
+            changed = true
+        end
     end
-
-    state.bonusItem = newBonus
+    if not changed then return end
+    state.bonusItem = state.bonusItems[1]
     writeCycleStateToPickup(pickup, state)
     markSavedBonusState(pickup, state)
     logVerify(string.format(
-        "cycle-upgrade bonus seed=%s old=%s new=%s",
+        "cycle-upgrade bonuses seed=%s items=%s",
         tostring(pickup.InitSeed),
-        tostring(oldBonus),
-        tostring(newBonus)
+        formatItemList(state.bonusItems)
     ))
 end
 
 function M.onPostPickupInit(_, pickup)
+    if M._gameStartResolved ~= true then return end
     markPickupCycleState(pickup)
 end
 
 function M.onPostPickupUpdate(_, pickup)
+    if M._gameStartResolved ~= true then return end
     if not pickup or pickup.Variant ~= PickupVariant.PICKUP_COLLECTIBLE then
         return
     end
@@ -1851,9 +1794,6 @@ function M.onPostPickupUpdate(_, pickup)
     writeCycleStateToPickup(pickup, state)
     reAddDroppedBonus(pickup, state)
 
-    if state.done then
-        return
-    end
     if pickup:GetData()[SPLIT_MARKER] then
         state.done = true
         writeCycleStateToPickup(pickup, state)
@@ -1865,27 +1805,30 @@ function M.onPostPickupUpdate(_, pickup)
         return
     end
 
-    finishHeldBonusCycle(pickup, state)
+    local target = heldBonusCount()
+    -- The provider may upgrade the held active after this pickup's callback.
+    -- Grow our contribution once from one to two; never roll it again on
+    -- rotation, owner loss, downgrade, revisit, or continue. Granted choices stay.
+    local attempted = state.attemptedBonusCount or #(state.bonusItems or {})
+    if not state.done or target > attempted then
+        finishHeldBonusCycle(pickup, state, target)
+    end
 end
 
 function M.onGameStarted(_, isContinued)
     M._cyclePickupStates = {}
     M._cycleRoomKey = nil
-    M._cycleModifierCache = nil
     M._pendingPoolChecks = {}
-    M._continuedRun = isContinued == true
-    M._continuedStartRoomKey = isContinued and getCurrentRoomKey() or nil
     M._gameStartResolved = true
 
-    local pickups, baselineCount = captureRoomPickupSnapshot(isContinued == true)
+    local pickups = captureRoomPickupSnapshot()
     for _, pickup in ipairs(pickups) do
         markPickupCycleState(pickup)
     end
     logVerify(string.format(
-        "game-start continued=%s pickups=%d baseline=%d",
+        "game-start continued=%s pickups=%d",
         tostring(isContinued == true),
-        #pickups,
-        baselineCount
+        #pickups
     ))
 
     local poolTypes = collectPoolTypesFromEntries({})
@@ -1898,26 +1841,11 @@ function M.onPostNewRoom()
         return
     end
 
-    local room = Game():GetRoom()
-    local roomKey = getCurrentRoomKey()
-    local isContinuedStartRoom = M._continuedStartRoomKey ~= nil
-        and roomKey == M._continuedStartRoomKey
-    if M._continuedStartRoomKey ~= nil and not isContinuedStartRoom then
-        M._continuedStartRoomKey = nil
-    end
-    local baselineExisting = M._continuedRun == true
-        and (isContinuedStartRoom or (room and not room:IsFirstVisit()))
-    local pickups, baselineCount = captureRoomPickupSnapshot(baselineExisting)
+    local pickups = captureRoomPickupSnapshot()
     for _, pickup in ipairs(pickups) do
         markPickupCycleState(pickup)
     end
-    logVerify(string.format(
-        "room-snapshot continued=%s firstVisit=%s pickups=%d baseline=%d",
-        tostring(M._continuedRun == true),
-        tostring(room and room:IsFirstVisit()),
-        #pickups,
-        baselineCount
-    ))
+    logVerify(string.format("room-snapshot pickups=%d", #pickups))
 end
 
 function M.onExecuteCmd(_, command, params)

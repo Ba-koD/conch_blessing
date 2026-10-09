@@ -7,7 +7,7 @@ local DamageUtils = ConchBlessing.DamageUtils or require("scripts.lib.damage_uti
 local EnemyUtils = require("scripts.lib.enemy_utils")
 
 -- Constants
-local DAMAGE_PER_KILL = 0.05 -- +0.05 damage per kill
+local DAMAGE_PER_KILL = 0.05 -- +0.05 damage per kill per currently owned copy
 local DAMAGE_LOSS_ON_HIT = 0.5 -- Lose 50% of accumulated damage on hit
 
 -- Data structure
@@ -85,12 +85,7 @@ ConchBlessing.tyrfing.onEntityTakeDamage = function(_, entity, amount, flags, so
     local currentDamage = data.accumulatedDamage or 0
     
     if currentDamage > 0 then
-        local stackCount = player:GetCollectibleNum(TYRFING_ID)
-        if stackCount < 1 then
-            stackCount = 1
-        end
-        local lossRate = DAMAGE_LOSS_ON_HIT / stackCount
-        local damageLost = currentDamage * lossRate
+        local damageLost = currentDamage * DAMAGE_LOSS_ON_HIT
         data.accumulatedDamage = currentDamage - damageLost
         
         ConchBlessing.printDebug(string.format("[Tyrfing] Player took damage! Lost %.2f damage (%.2f -> %.2f)", 
@@ -118,8 +113,10 @@ ConchBlessing.tyrfing.onNPCDeath = function(_, npc)
             if EnemyUtils.isMonsterKind(npc) then
                 local data = getSaveData(player)
                 
-                -- Add damage bonus per kill
-                data.accumulatedDamage = (data.accumulatedDamage or 0) + DAMAGE_PER_KILL
+                -- Earn each copy's contribution now; later inventory changes do
+                -- not rescale damage already accumulated.
+                local stackCount = player:GetCollectibleNum(TYRFING_ID)
+                data.accumulatedDamage = (data.accumulatedDamage or 0) + DAMAGE_PER_KILL * stackCount
                 
                 -- Only log every 10 kills to reduce spam
                 local shouldLog = math.random(1, 10) == 1
