@@ -2,6 +2,7 @@
 
 local UpgradeHighlight = ConchBlessing.UpgradeHighlight or {}
 ConchBlessing.UpgradeHighlight = UpgradeHighlight
+local PickupVisual = require("scripts.lib.upgrade_pickup_visual")
 
 local FLAG_ORDER = { "positive", "neutral", "negative" }
 local ROOM_SCAN_INTERVAL = 15
@@ -103,7 +104,7 @@ local function resetPickupColor(pickup, baseColor)
     end
     local sprite = pickup:GetSprite()
     if sprite then
-        sprite.Color = toColor(baseColor)
+        sprite.Color = baseColor
     end
 end
 
@@ -309,8 +310,15 @@ local function hasActivePulseForPickup(pickup)
     return UpgradeHighlight._activePickups and UpgradeHighlight._activePickups[key] ~= nil
 end
 
+local function isMorphing(pickup)
+    local upgrade = ConchBlessing.upgrade
+    if upgrade and upgrade.isAnimatingPickup and upgrade.isAnimatingPickup(pickup) then return true end
+    local template = ConchBlessing.template
+    return template and template.isAnimatingPickup and template.isAnimatingPickup(pickup) or false
+end
+
 local function startPickupPulse(pickup, info, frame)
-    if not pickup or not info or hasActivePulseForPickup(pickup) then
+    if not pickup or not info or isMorphing(pickup) or hasActivePulseForPickup(pickup) then
         return
     end
 
@@ -320,7 +328,7 @@ local function startPickupPulse(pickup, info, frame)
     end
 
     local sprite = pickup:GetSprite()
-    local baseColor = cloneColor(sprite and sprite.Color or nil)
+    local baseColor = PickupVisual.copyColor(sprite and sprite.Color or toColor(BASE_COLOR))
     local key = getPickupHash(pickup)
 
     UpgradeHighlight._activePickups = UpgradeHighlight._activePickups or {}
@@ -350,6 +358,9 @@ local function applyPickupPulse(pulse, frame)
     if not pickup or not pickup.Exists or not pickup:Exists() then
         return true
     end
+    -- A queued morph stops its pulse before capturing the original color.
+    -- Never write an old pulse over the animation's own color after that.
+    if isMorphing(pickup) then return true end
     local liveInfo = getPickupUpgradeInfo(pickup)
     if not liveInfo or liveInfo.originKey ~= pulse.originKey then
         resetPickupColor(pickup, pulse.baseColor)
@@ -365,7 +376,7 @@ local function applyPickupPulse(pulse, frame)
     end
 
     local intensity = getItemPulseIntensity(elapsed)
-    local base = pulse.baseColor or BASE_COLOR
+    local base = cloneColor(pulse.baseColor)
     local target = getModeTargetColor(pulse.mode, ITEM_TARGET_COLORS)
     local color = lerpColorTable(base, target, intensity)
 

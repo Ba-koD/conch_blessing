@@ -395,6 +395,14 @@ def parse_lua_file(file_path):
         if gfx_match:
             item_info['gfx'] = gfx_match.group(1)
             print(f"  GFX: {item_info['gfx']}")
+
+        # Native item-linked costume, relative to costumes2.xml's gfx root.
+        costume_match = re.search(r'\bcostume\s*=\s*"([^"]+)"', item_data)
+        if costume_match:
+            item_info['costume'] = costume_match.group(1)
+        priority_match = re.search(r'\bcostume_priority\s*=\s*(-?\d+)', item_data)
+        if priority_match:
+            item_info['costume_priority'] = int(priority_match.group(1))
         
         # extract pool (array form)
         pool_match = re.search(r'pool\s*=\s*{', item_data)
@@ -574,8 +582,8 @@ def parse_lua_file(file_path):
     
     return items
 
-def create_entities2_xml(items, output_path):
-    """create the entities2.xml file for familiars based on ItemData"""
+def create_entities2_xml(items, output_path, extra_entities=None):
+    """Generate familiar rows plus the separate, data-only entity definitions."""
     root = ET.Element("entities")
     root.set("anm2root", "gfx/")
     root.set("version", "5")
@@ -622,6 +630,26 @@ def create_entities2_xml(items, output_path):
         gibs_elem = ET.SubElement(entity_elem, "gibs")
         for k, default_val in defaults.items():
             gibs_elem.set(k, str(gibs_data.get(k, default_val)))
+
+    if extra_entities is None:
+        extra_entities = lua_data.load("scripts/entities/definitions.lua")
+    names = {entity.get('name') for entity in root}
+    allowed = {'name', 'id', 'variant', 'subtype', 'anm2path', 'collisionDamage',
+               'collisionMass', 'collisionRadius', 'friction',
+               'numGridCollisionPoints', 'shadowSize'}
+    for key, definition in extra_entities.items():
+        if not isinstance(definition, dict) or set(definition) - allowed:
+            raise ValueError(f"Invalid custom entity fields: {key}")
+        name, entity_type = definition.get('name'), definition.get('id')
+        if not isinstance(name, str) or not name.startswith('Conch Blessing ') or name in names:
+            raise ValueError(f"Invalid or duplicate custom entity name: {key}")
+        if type(entity_type) is not int or not 1 <= entity_type <= 4095:
+            raise ValueError(f"Invalid custom entity type: {key}")
+        path = definition.get('anm2path', '')
+        if not isinstance(path, str) or not path.endswith('.anm2') or '..' in path or ':' in path:
+            raise ValueError(f"Invalid custom entity animation: {key}")
+        names.add(name)
+        ET.SubElement(root, 'entity', {field: str(value) for field, value in definition.items()})
 
     # save the XML file
     xml_str = minidom.parseString(ET.tostring(root)).toprettyxml(indent="    ")
@@ -732,6 +760,66 @@ def create_items_xml(items, output_path):
         f.write(xml_str)
     
     print(f"items.xml created: {output_path}")
+
+def validate_costume_anm2(path):
+    """Reject unsafe native costume structure before it reaches the game."""
+    root = ET.parse(path).getroot()
+    sheets = {s.get('Id'): s.get('Path') for s in root.findall('./Content/Spritesheets/Spritesheet')}
+    layers = root.findall('./Content/Layers/Layer')
+    if not layers or not sheets:
+        raise ValueError(f"Costume requires textured layers (native RemoveCostume can crash): {path}")
+    layer_ids = {layer.get('Id') for layer in layers}
+    if len(layer_ids) != len(layers) or None in layer_ids:
+        raise ValueError(f"Invalid costume layer IDs: {path}")
+    for layer in layers:
+        sheet = sheets.get(layer.get('SpritesheetId'))
+        if not sheet or not os.path.isfile(os.path.join(os.path.dirname(path), sheet.replace('\\', '/'))):
+            raise ValueError(f"Missing costume texture for layer {layer.get('Id')}: {path}")
+    animations = root.findall('./Animations/Animation')
+    if not animations or root.find('Animations').get('DefaultAnimation') not in {a.get('Name') for a in animations}:
+        raise ValueError(f"Missing default costume animation: {path}")
+    for anim in animations:
+        frame_count = int(anim.get('FrameNum', '0'))
+        tracks = anim.findall('./LayerAnimations/LayerAnimation')
+        if frame_count <= 0 or not tracks or not anim.findall('./RootAnimation/Frame'):
+            raise ValueError(f"Incomplete costume animation {anim.get('Name')}: {path}")
+        for track in tracks:
+            frames = track.findall('Frame')
+            if track.get('LayerId') not in layer_ids or not frames:
+                raise ValueError(f"Invalid costume layer animation: {path}")
+            if sum(int(f.get('Delay', '0')) for f in frames) != frame_count:
+                raise ValueError(f"Costume layer duration differs from animation: {path}")
+            if any(int(f.get('Width', '0')) <= 0 or int(f.get('Height', '0')) <= 0 for f in frames):
+                raise ValueError(f"Empty costume frame: {path}")
+
+
+def create_costumes_xml(items, output_path):
+    """Bind costumes to the SAME local IDs/types as generated items.xml."""
+    root = ET.Element("costumes", anm2root="gfx/")
+    for local_id, (key, info) in enumerate(items.items()):
+        if 'costume' not in info:
+            continue
+        path = info['costume']
+        item_type = info.get('type') or ('active' if info.get('maxcharges') is not None else 'passive')
+        if (not isinstance(path, str) or not path.startswith('characters/')
+                or not path.endswith('.anm2') or '..' in path or '\\' in path
+                or item_type not in {'passive', 'active', 'familiar', 'trinket'}):
+            raise ValueError(f"Invalid costume definition for {key}: {path}")
+        if not os.path.isfile(os.path.join('resources', 'gfx', path)):
+            raise ValueError(f"Missing costume ANM2 for {key}: {path}")
+        validate_costume_anm2(os.path.join('resources', 'gfx', path))
+        costume = ET.SubElement(root, "costume", id=str(local_id), type=item_type, anm2path=path)
+        if 'costume_priority' in info:
+            priority = info['costume_priority']
+            if type(priority) is not int or not -2147483648 <= priority <= 2147483647:
+                raise ValueError(f"Invalid costume priority for {key}: {priority}")
+            costume.set('priority', str(priority))
+    xml_str = minidom.parseString(ET.tostring(root)).toprettyxml(indent="    ")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(xml_str)
+    print(f"costumes2.xml created: {output_path}")
+
 
 def create_death_items_anm2(items, output_path):
     """create the death_items.anm2 file for death animation"""
@@ -1043,6 +1131,7 @@ def main():
     
     # create the XML files
     create_items_xml(items, items_xml_path)
+    create_costumes_xml(items, "content/costumes2.xml")
     create_itempools_xml(items, itempools_xml_path)
     # Create entities2.xml for familiars/entities
     create_entities2_xml(items, entities2_xml_path)

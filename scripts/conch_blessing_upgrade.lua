@@ -237,6 +237,21 @@ local function _spawnEffects(list, pos)
     end
 end
 
+local function _trackJobPickup(job, pickup)
+    job.pickup = pickup
+    job.pickupPtr = EntityPtr(pickup)
+    job.pickupHash = GetPtrHash(pickup)
+end
+
+local function _jobMatchesPickup(job, pickup)
+    local live = job.pickupPtr and job.pickupPtr.Ref
+    -- During the exact Morph call, init callbacks can already see the new
+    -- wrapper while the old EntityPtr has expired. This short lease ends as
+    -- soon as Morph returns; ordinary updates require the live reference.
+    return pickup and pickup:Exists() and (job.morphing or (live and live:Exists()))
+        and GetPtrHash(pickup) == job.pickupHash
+end
+
 local function _isPickupPending(pickup)
     if not pickup then
         return false
@@ -248,7 +263,7 @@ local function _isPickupPending(pickup)
     end
 
     for _, job in ipairs(ConchBlessing._upgradeJobs) do
-        if job.pickup == pickup and (job.phase == 0 or job.phase == 1) then
+        if _jobMatchesPickup(job, pickup) and (job.phase == 0 or job.phase == 1) then
             return true
         end
     end
@@ -394,7 +409,29 @@ local function _buildCollectibleCyclePlan(pickup, resultType)
     return plan
 end
 
-local function _rebuildCollectibleCycle(pickup, fullCycle)
+-- Morph may reinitialize native lifetime/pointer bookkeeping even when its
+-- seed is preserved. Notify an exact job observer synchronously, while the
+-- pickup supplied to this canonical operation is still in hand. Never recover
+-- a replacement by scanning for matching positions, subtypes or seeds.
+local function _morphUpgradePickup(job, pickup, variant, subtype)
+    if job then job.morphing = true end
+    local ok, err = pcall(function()
+        pickup:Morph(EntityType.ENTITY_PICKUP, variant, subtype, true, true, true)
+    end)
+    if job then
+        job.morphing = false
+        _trackJobPickup(job, pickup)
+    end
+    -- Also rebind after a partial Morph failure so cancellation can clean up
+    -- the very entity that the failed operation may already have reinitialized.
+    if job and job.onPickupReinitialized then
+        local observed, observeError = pcall(job.onPickupReinitialized, pickup)
+        if not observed then return false, "pickup rebind failed: " .. tostring(observeError) end
+    end
+    return ok, err
+end
+
+local function _rebuildCollectibleCycle(pickup, fullCycle, job)
     if not pickup
         or type(pickup.RemoveCollectibleCycle) ~= "function"
         or type(pickup.AddCollectibleCycle) ~= "function"
@@ -409,16 +446,7 @@ local function _rebuildCollectibleCycle(pickup, fullCycle)
         return false, "collectible cycle exceeds capacity"
     end
 
-    local morphOk, morphError = pcall(function()
-        pickup:Morph(
-            EntityType.ENTITY_PICKUP,
-            PickupVariant.PICKUP_COLLECTIBLE,
-            displayedItemId,
-            true,
-            true,
-            true
-        )
-    end)
+    local morphOk, morphError = _morphUpgradePickup(job, pickup, PickupVariant.PICKUP_COLLECTIBLE, displayedItemId)
     if not morphOk then
         return false, "Morph failed: " .. tostring(morphError)
     end
@@ -470,7 +498,8 @@ local function _clearPendingMarker(job)
 end
 
 local function _removeUpgradeJob(index, job, cancelAnimation)
-    if cancelAnimation
+    job.status = cancelAnimation and "cancelled" or "complete"
+    if cancelAnimation and _jobMatchesPickup(job, job.pickup)
         and ConchBlessing.template
         and type(ConchBlessing.template.cancelForPickup) == "function" then
         ConchBlessing.template.cancelForPickup(job and job.pickup or nil)
@@ -508,13 +537,18 @@ local function _enqueueUpgradeJob(entityPickup, upgradeData, savedFields, cycleP
         cyclePlan = cyclePlan,
         templateState = {},
         token = {},
+        status = "queued",
     }
 
     local data = entityPickup:GetData()
+    _trackJobPickup(job, entityPickup)
     data[PENDING_UPGRADE_DATA_KEY] = job.token
     data[PICKUP_LOCK_DATA_KEY] = job.token
     table.insert(ConchBlessing._upgradeJobs, job)
-    return true
+    -- Relinquish the eligibility tint before either template snapshots color.
+    local highlight = ConchBlessing.UpgradeHighlight
+    if highlight and highlight.StopForPickup then highlight.StopForPickup(entityPickup) end
+    return job
 end
 
 local function _sourceStillMatches(job, pickup)
@@ -608,7 +642,7 @@ local function _commitCycleUpgrade(job, pickup)
         end
     end
 
-    local rebuilt, rebuildError = _rebuildCollectibleCycle(pickup, targetAtCommit)
+    local rebuilt, rebuildError = _rebuildCollectibleCycle(pickup, targetAtCommit, job)
     if rebuilt then
         local severedOath = ConchBlessing.severedoath
         if severedOath and type(severedOath.onCollectibleCycleRewritten) == "function" then
@@ -626,7 +660,7 @@ local function _commitCycleUpgrade(job, pickup)
         return true, titleItemData
     end
 
-    local rolledBack, rollbackError = _rebuildCollectibleCycle(pickup, sourceAtCommit)
+    local rolledBack, rollbackError = _rebuildCollectibleCycle(pickup, sourceAtCommit, job)
     _restorePickupFields(pickup, job.saved)
     if not rolledBack then
         return false, tostring(rebuildError) .. "; rollback failed: " .. tostring(rollbackError)
@@ -635,6 +669,7 @@ local function _commitCycleUpgrade(job, pickup)
 end
 
 local function _processUpgradeJobs()
+    if Game():IsPaused() then return end
     if #ConchBlessing._upgradeJobs == 0 then
         return
     end
@@ -642,7 +677,7 @@ local function _processUpgradeJobs()
     for i = #ConchBlessing._upgradeJobs, 1, -1 do
         local job = ConchBlessing._upgradeJobs[i]
         local pickup = job.pickup and job.pickup:ToPickup() or nil
-        if not pickup or not pickup:Exists() then
+        if not pickup or not _jobMatchesPickup(job, pickup) then
             _removeUpgradeJob(i, job, true)
             goto continue
         end
@@ -718,9 +753,7 @@ local function _processUpgradeJobs()
                         end
 
                         ConchBlessing.printDebug("[Upgrade] Morphing pickup to variant=" .. tostring(variantToUse) .. ", id=" .. tostring(morphId))
-                        local morphOk, morphError = pcall(function()
-                            pickup:Morph(EntityType.ENTITY_PICKUP, variantToUse, morphId, true, true, true)
-                        end)
+                        local morphOk, morphError = _morphUpgradePickup(job, pickup, variantToUse, morphId)
                         if not morphOk then
                             ConchBlessing.printError("[Upgrade] Morph failed for " .. tostring(job.itemKey or job.upgradeId) .. ": " .. tostring(morphError))
                             _removeUpgradeJob(i, job, true)
@@ -734,6 +767,7 @@ local function _processUpgradeJobs()
                     end
 
                     _restorePickupFields(pickup, job.saved)
+                    job.committed = true
                     _clearPendingMarker(job)
 
                     -- A pedestal morph is not an acquisition, so the engine
@@ -947,7 +981,7 @@ local function deletePickupWithEffect(entity)
 end
 
 -- Magic Conch result handling function
-local function handleMagicConchResult(result)
+local function queueResult(result, explicitPickups)
     if type(result) ~= "table" or not VALID_UPGRADE_FLAGS[result.type] then
         ConchBlessing.printError("[Upgrade] Ignoring invalid Magic Conch result")
         return
@@ -962,13 +996,14 @@ local function handleMagicConchResult(result)
     ConchBlessing.printDebug("Magic Conch result received: " .. tostring(result.text) .. " (type: " .. resultType .. ")")
 
     -- Check all entities in the current room (field items)
-    local entities = Isaac.GetRoomEntities()
+    local entities = explicitPickups or Isaac.GetRoomEntities()
+    local queuedJobs = {}
     local transformed = false
     local upgradeCount = 0
     local deleteCount = 0
     
     -- Check if Delete Mode is enabled
-    local deleteModeActive = isDeleteModeEnabled()
+    local deleteModeActive = not explicitPickups and isDeleteModeEnabled()
     ConchBlessing.printDebug("Delete Mode active: " .. tostring(deleteModeActive))
     
     ConchBlessing.printDebug("Number of entities in room: " .. tostring(#entities))
@@ -976,11 +1011,16 @@ local function handleMagicConchResult(result)
     -- Collect items for upgrade and delete
     local upgradeableItems = {}
     local deleteableItems = {}
+    local viewer = ConchBlessing.morphViewer
     
     for _, entity in ipairs(entities) do
         -- check if it's a pickup (collectible or trinket)
         if entity.Type == EntityType.ENTITY_PICKUP
             and (entity.Variant == PickupVariant.PICKUP_COLLECTIBLE or entity.Variant == PickupVariant.PICKUP_TRINKET)
+            -- The room-wide result owns gameplay pickups only. A preview may
+            -- enter this same pipeline only through its explicit target list,
+            -- including before queueing and after its pending lock is released.
+            and (explicitPickups or not (viewer and viewer.ownsPickup and viewer.ownsPickup(entity)))
             and not _isPickupPending(entity:ToPickup()) then
             local pickup = entity:ToPickup()
             local cycleHandled = false
@@ -1094,12 +1134,9 @@ local function handleMagicConchResult(result)
                 }, itemInfo.cyclePlan)
 
                 if queued then
+                    queuedJobs[#queuedJobs + 1] = queued
                     SFXManager():Play(SoundEffect.SOUND_POWERUP_SPEWER, 0.5)
                     ConchBlessing.printDebug("Item conversion in progress for item " .. tostring(entity.SubType))
-
-                    if ConchBlessing.UpgradeHighlight and ConchBlessing.UpgradeHighlight.StopForPickup then
-                        ConchBlessing.UpgradeHighlight.StopForPickup(pickup)
-                    end
 
                     upgradeCount = upgradeCount + 1
                     transformed = true
@@ -1127,6 +1164,54 @@ local function handleMagicConchResult(result)
     if not transformed and deleteCount == 0 then
         ConchBlessing.printDebug("No convertible field item found or conditions not met.")
     end
+    return queuedJobs
+end
+
+local function handleMagicConchResult(result)
+    queueResult(result)
+end
+
+-- Targeted entry into the same validated transaction used by Magic Conch.
+-- It never scans or deletes unrelated room pickups; callers own their fixture.
+ConchBlessing.upgrade = {}
+function ConchBlessing.upgrade.isAnimatingPickup(pickup)
+    if not pickup or not pickup:Exists() then return false end
+    if _isPickupPending(pickup) then return true end
+    -- Include the committed after-phase: its acquisition lock is already
+    -- released, and native Morph may have replaced GetData entirely.
+    for _, job in ipairs(ConchBlessing._upgradeJobs) do
+        if _jobMatchesPickup(job, pickup) then return true end
+    end
+    local template = ConchBlessing.template
+    return template and template.isAnimatingPickup(pickup) or false
+end
+
+function ConchBlessing.upgrade.queuePickup(pickup, itemKey, visualOwner)
+    local item = ConchBlessing.ItemData[itemKey]
+    if not item or not pickup or not pickup:Exists() then return nil, "missing item or pickup" end
+    if not ConchBlessing._itemMapsReady and not generateItemMaps() then return nil, "conversion map unavailable" end
+    local isTrinket = pickup.Variant == PickupVariant.PICKUP_TRINKET
+    local id = isTrinket and pickup.SubType % 32768 or pickup.SubType
+    local mappings = ConchBlessing.ItemMaps[(isTrinket and "T:" or "C:") .. tostring(id)]
+    local mapping = mappings and mappings[item.flag]
+    if not mapping or mapping.itemKey ~= itemKey then return nil, "source does not map to " .. tostring(itemKey) end
+    local jobs = queueResult({ type = item.flag }, { pickup })
+    local job = jobs and jobs[1]
+    if not job then return nil, "pickup is already pending or incompatible" end
+    job.templateState.visualOwner = visualOwner
+    return job
+end
+
+function ConchBlessing.upgrade.cancel(job)
+    if not job then return end
+    for i = #ConchBlessing._upgradeJobs, 1, -1 do
+        if ConchBlessing._upgradeJobs[i] == job then
+            _removeUpgradeJob(i, job, true)
+            return
+        end
+    end
+    -- The transaction may have completed one tick ahead of its final drawing.
+    ConchBlessing.template.cancelForPickup(job.pickup)
 end
 
 -- Register Magic Conch API
@@ -1284,5 +1369,5 @@ ConchBlessing:AddCallback(
 ConchBlessing:AddCallback(ModCallbacks.MC_POST_NEW_ROOM, clearUpgradeJobs)
 ConchBlessing:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, clearUpgradeJobs)
 
--- Presentation-only console viewer; shares the shipped animation renderer.
+-- Console viewer uses a real, viewer-owned pickup and the transaction above.
 require("scripts.dev.morph_viewer")

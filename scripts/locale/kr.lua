@@ -548,6 +548,21 @@ return {
             },
         },
 
+        REAL_EYES = {
+            name = "진실된 눈",
+            description = "Real eyes realize real lies",
+            eid = { "소라고둥의 답변을 미리 볼 수 있습니다." },
+        },
+
+        AR_GLASSES = {
+            name = "AR 안경", description = "안에 사람들이 있잖아!",
+            eid = { "C를 누를 때마다 긍정 → 부정 → 중립 순서로 선택합니다. 다음 소라고둥 사용 시 선택한 결과가 적용됩니다." },
+        },
+        HEMISPATIAL_NEGLECT = {
+            name = "편측 무시", description = "              게 보이는 거지?",
+            eid = { "{{Damage}} 공격력 ×2.", "#오른쪽 눈에서 눈물이 나오지 않습니다." },
+        },
+
         -- Familiars
         TIME_MONEY = {
             name = "시간 = 돈",
@@ -659,6 +674,13 @@ return {
         },
     },
     ui = {
+        real_eyes = {
+            prediction = "예측: %s",
+            numbered = "예측 #%s: %s",
+        },
+        ar_glasses = {
+            title = "다음: %s", open = "C: 다음 답변 변경", controls = "C: 다음 답변 변경", rejected = "답변 예약 불가",
+        },
         morph = {
             applied = "인게임 적용",
             pending = "보류 - 현재 기본 강화 연출",

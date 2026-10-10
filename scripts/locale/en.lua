@@ -563,6 +563,21 @@ return {
             },
         },
 
+        REAL_EYES = {
+            name = "Real Eyes",
+            description = "Real eyes realize real lies",
+            eid = { "See the Magic Conch's answer in advance." },
+        },
+
+        AR_GLASSES = {
+            name = "AR Glasses", description = "Expand your world.",
+            eid = { "Press C to cycle Positive → Negative → Neutral. The chosen outcome applies to your next normal Magic Conch use." },
+        },
+        HEMISPATIAL_NEGLECT = {
+            name = "Hemispatial Neglect", description = "              am I seeing?",
+            eid = { "{{Damage}} Damage ×2.", "#Tears cannot be fired from the right eye." },
+        },
+
         -- Familiars
         TIME_MONEY = {
             name = "Time = Money",
@@ -674,6 +689,13 @@ return {
         },
     },
     ui = {
+        real_eyes = {
+            prediction = "Prediction: %s",
+            numbered = "Prediction #%s: %s",
+        },
+        ar_glasses = {
+            title = "Next: %s", open = "C: change next answer", controls = "C: change next answer", rejected = "Could not reserve answer",
+        },
         morph = {
             applied = "APPLIED",
             pending = "PENDING - DEFAULT MORPH",

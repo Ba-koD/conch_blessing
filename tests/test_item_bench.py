@@ -22,7 +22,7 @@ class BenchTests(unittest.TestCase):
             ModCallbacks = { MC_POST_UPDATE=1, MC_POST_GAME_STARTED=2, MC_POST_NEW_ROOM=3,
                 MC_EXECUTE_CMD=4, MC_INPUT_ACTION=5, MC_POST_TRIGGER_WEAPON_FIRED=6, MC_USE_ITEM=7,
                 MC_POST_RENDER=8, MC_POST_NPC_DEATH=9, MC_PRE_SPAWN_CLEAN_AWARD=10,
-                MC_POST_PICKUP_INIT=11 }
+                MC_POST_PICKUP_INIT=11, MC_POST_FIRE_TEAR=61 }
             ConchBlessing = { ItemData = {} }
             function ConchBlessing:AddCallback(id, fn)
                 callbacks[id] = callbacks[id] or {}
@@ -396,7 +396,7 @@ class BenchTests(unittest.TestCase):
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','kronos detail')
             assert(started=='conch_test kronos detail')
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','all')
-            assert(label=='conch_test' and #selected==105,'update the documented suite count when it changes')
+            assert(label=='conch_test' and #selected==111,'update the documented suite count when it changes')
         """)
 
     def test_aliases_detailed_helpers_and_shared_probes_use_the_single_command(self):

@@ -2,6 +2,61 @@ local H = require("scripts.dev.item_test_support")
 local C = {}
 local used = {}
 
+C.AR_GLASSES = { stage = function(plan, _, n)
+    plan.require("next-use Conch reservation API available", function()
+        local api=MagicConch and MagicConch.API
+        return api and type(api.PreviewResult)=="function"
+            and type(api.ReserveNextResult)=="function" and type(api.GetNextResultReservation)=="function"
+            and type(api.ClearNextResultReservation)=="function" or nil,
+            "requires current Magic Conch API"
+    end)
+    plan.check("chooser ownership follows copies and final removal", function()
+        return ConchBlessing.arglasses.hasOwner()==(n>0), "copies="..n
+    end)
+    plan.check("cycling/cancelling a choice does not use Conch", function()
+        local before=MagicConch:GetCurrentRoomUsage()
+        local ar=ConchBlessing.arglasses
+        ar.reset()
+        local opened=ar.cycle()
+        local prediction=ar.getSelection()
+        ar.reset()
+        return opened==(n>0) and (prediction~=nil)==(n>0)
+            and before==MagicConch:GetCurrentRoomUsage(), "no use consumed"
+    end)
+end }
+
+C.HEMISPATIAL_NEGLECT = { stage = function(plan, id, n)
+    plan.check("damage doubles per copy and restores after removal", function(player, ctx)
+        return H.expect(player.Damage, ctx.base.Damage * 2^n)
+    end)
+    plan.check("StatsAPI owns one replacement multiplier", function(player)
+        local state=ConchBlessing.getUnifiedMultiplierState(player, ConchBlessing.stats.unifiedMultipliers)
+        local row=state and state.itemMultipliers and state.itemMultipliers[id]
+        local value=row and row.Damage and row.Damage.value
+        return n==0 and value==nil or value==2^n, "multiplier="..tostring(value)
+    end)
+end }
+
+C.REAL_EYES = { stage = function(plan, _, n)
+    plan.require("Magic Conch read-only preview API available", function()
+        return MagicConch and MagicConch.API and type(MagicConch.API.PreviewResult) == "function"
+            and MagicConch.Config.enabled or nil, "requires enabled Magic Conch with PreviewResult"
+    end)
+    plan.check("prediction follows ownership through stacking, removal and reacquisition", function()
+        local prediction, reason = ConchBlessing.realeyes.getPrediction()
+        if n == 0 then return prediction == nil and reason == "NO_OWNER", "expected no prediction; reason=" .. tostring(reason) end
+        local expected = MagicConch.API.PreviewResult(0)
+        return prediction ~= nil and expected ~= nil and prediction.id == expected.id
+            and prediction.text == expected.text and prediction.type == expected.type,
+            "expected=" .. tostring(expected and expected.text) .. " actual=" .. tostring(prediction and prediction.text)
+    end)
+    plan.check("repeated predictions consume no room uses", function()
+        local before = MagicConch:GetCurrentRoomUsage()
+        for _ = 1, 60 do ConchBlessing.realeyes.getPrediction() end
+        return H.expect(MagicConch:GetCurrentRoomUsage(), before)
+    end)
+end }
+
 ConchBlessing:AddCallback(ModCallbacks.MC_USE_ITEM, function(_, id)
     if not require("scripts.dev.test_bench").isRunning() then return end
     used[id] = (used[id] or 0) + 1

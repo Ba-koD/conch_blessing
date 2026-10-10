@@ -3,7 +3,7 @@
 local H = require("scripts.dev.item_test_support")
 local M = {}
 local eligible = { MONEY_TEAR=true, ORAL_STEROIDS=true, CEIL=true, ROUND=true, FLOOR=true,
-    F_MINUS=true, C_MINUS=true, B_MINUS=true, KRONOS=true, UTILITY_BELT=true }
+    F_MINUS=true, C_MINUS=true, B_MINUS=true, KRONOS=true, UTILITY_BELT=true, REAL_EYES=true, AR_GLASSES=true, HEMISPATIAL_NEGLECT=true }
 function M.supports(key) return eligible[key] == true end
 function M.group(key)
     if key=="KRONOS" then return "kronos_reversible" end

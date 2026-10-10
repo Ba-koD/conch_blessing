@@ -4,8 +4,19 @@
 
 local Template = {}
 local MorphVisuals -- Loaded lazily, after ItemData initialization.
+local PickupVisual = require("scripts.lib.upgrade_pickup_visual")
 Template._activeAnimations = Template._activeAnimations or {}
 Template._centralUpdaterRegistered = Template._centralUpdaterRegistered or false
+
+local function livePickup(anim)
+    local pickup = anim and anim.pickupPtr and anim.pickupPtr.Ref
+    if pickup and pickup:Exists() and GetPtrHash(pickup) == anim.pickupHash then return pickup end
+end
+
+local function matchesPickup(anim, pickup)
+    return livePickup(anim) ~= nil and pickup ~= nil and pickup:Exists()
+        and GetPtrHash(pickup) == anim.pickupHash
+end
 
 local function ensureCentralUpdater()
     if Template._centralUpdaterRegistered then
@@ -20,10 +31,12 @@ local function ensureCentralUpdater()
         ConchBlessing:AddCallback(ModCallbacks.MC_POST_RENDER, function()
             Template.renderAllAnimations()
         end)
-        if ModCallbacks.MC_POST_BACKDROP_PRE_RENDER_WALLS then
-            ConchBlessing:AddCallback(ModCallbacks.MC_POST_BACKDROP_PRE_RENDER_WALLS, function()
+        -- RenderWater is the per-frame floor pass. pre_render_walls instead
+        -- rebuilds backdrop textures and cannot host a running animation.
+        if ModCallbacks.MC_PRE_BACKDROP_RENDER_WATER then
+            ConchBlessing:AddCallback(ModCallbacks.MC_PRE_BACKDROP_RENDER_WATER, function()
                 for _, anim in ipairs(Template._activeAnimations) do
-                    if anim.morphScene and anim.pickup and anim.pickup:Exists() then
+                    if anim.morphScene and livePickup(anim) then
                         MorphVisuals.safe(MorphVisuals.renderFloor, anim.morphScene)
                     end
                 end
@@ -44,22 +57,30 @@ local function getPickupColor(pickup)
         return nil
     end
 
+    local highlight = ConchBlessing and ConchBlessing.UpgradeHighlight
+    if highlight and highlight.StopForPickup then highlight.StopForPickup(pickup) end
     local sprite = pickup:GetSprite()
-    return sprite and sprite.Color or nil
+    return sprite and PickupVisual.copyColor(sprite.Color) or nil
 end
 
 local function finishAnimation(anim, sprite)
+    -- A dead EntityPtr must never restore state onto a reused native address.
+    if anim and not livePickup(anim) then
+        anim.pickupVisual = nil
+        sprite = nil
+    end
     if anim then
+        PickupVisual.restore(anim.pickupVisual)
+        anim.pickupVisual = nil
         anim.lightSprite = nil
         anim.morphScene = nil
     end
     if sprite then
         sprite.Color = (anim and anim.originalColor) or Color(1, 1, 1, 1, 0, 0, 0)
     end
-    if anim and anim.soundId then
-        SFXManager():Stop(anim.soundId)
-        anim.soundId = nil
-    end
+    -- SFX Stop/AdjustVolume act on a shared sound ID, not this animation's
+    -- playback instance. One-shot cues finish naturally so cancelling one
+    -- pedestal never silences another preview, upgrade or gameplay sound.
     if anim and anim.ownerData and anim.ownerData.upgradeAnim == anim then
         anim.ownerData.upgradeAnim = nil
     end
@@ -71,6 +92,11 @@ local function registerAnimation(ownerData, anim)
         return
     end
     anim.ownerData = ownerData
+    -- ToPickup/callbacks can return distinct Lua wrappers of the same entity.
+    -- Match the live native identity, not wrapper equality or GetData.
+    anim.pickupPtr = EntityPtr(anim.pickup)
+    anim.pickupHash = GetPtrHash(anim.pickup)
+    assert(livePickup(anim), "upgrade animation pickup reference unavailable")
     anim.totalFrames = anim.frames or 60
     anim._centralManaged = true
     if ownerData then
@@ -79,7 +105,7 @@ local function registerAnimation(ownerData, anim)
     local active = Template._activeAnimations
     for i = #active, 1, -1 do
         local existing = active[i]
-        if existing and anim.pickup and existing.pickup == anim.pickup then
+        if existing and matchesPickup(existing, anim.pickup) then
             -- A second conversion may begin during the first one's hidden
             -- after-animation. Carry the real color, not its temporary alpha.
             anim.originalColor = existing.originalColor or anim.originalColor
@@ -99,12 +125,19 @@ Template.cancelForPickup = function(pickup)
     local active = Template._activeAnimations
     for i = #active, 1, -1 do
         local anim = active[i]
-        if anim and anim.pickup == pickup then
+        if anim and matchesPickup(anim, pickup) then
             local sprite = pickup:Exists() and pickup:GetSprite() or nil
             finishAnimation(anim, sprite)
             table.remove(active, i)
         end
     end
+end
+
+function Template.isAnimatingPickup(pickup)
+    for _, anim in ipairs(Template._activeAnimations) do
+        if matchesPickup(anim, pickup) then return true end
+    end
+    return false
 end
 
 -- Positive upgrade animation (bright white fade with Holy Light)
@@ -152,10 +185,9 @@ Template.positive.onBeforeChange = function(upgradePos, pickup, itemData, soundI
         originalColor = getPickupColor(pickup),
     }
     
-    -- start charging sound at low volume (no loop)
+    -- One-shot cue; never stop or adjust the shared sound channel.
     local sfx = SFXManager()
-    sfx:Stop(upgradeAnim.soundId)
-    sfx:Play(upgradeAnim.soundId, 0.05, 0, false, 1.0, 0)
+    sfx:Play(upgradeAnim.soundId, 0.25, 0, false, 1.0, 0)
     
     registerAnimation(itemData, upgradeAnim)
     
@@ -213,10 +245,9 @@ Template.neutral.onBeforeChange = function(upgradePos, pickup, itemData, soundId
         originalColor = getPickupColor(pickup),
     }
     
-    -- start subtle sound at low volume (no loop)
+    -- One-shot cue; never stop or adjust the shared sound channel.
     local sfx = SFXManager()
-    sfx:Stop(upgradeAnim.soundId)
-    sfx:Play(upgradeAnim.soundId, 0.03, 0, false, 1.0, 0)
+    sfx:Play(upgradeAnim.soundId, 0.2, 0, false, 1.0, 0)
     
     registerAnimation(itemData, upgradeAnim)
     
@@ -279,10 +310,9 @@ Template.negative.onBeforeChange = function(upgradePos, pickup, itemData, soundI
         originalColor = getPickupColor(pickup),
     }
     
-    -- start ominous sound at low volume (no loop)
+    -- One-shot cue; never stop or adjust the shared sound channel.
     local sfx = SFXManager()
-    sfx:Stop(upgradeAnim.soundId)
-    sfx:Play(upgradeAnim.soundId, 0.04, 0, false, 1.0, 0)
+    sfx:Play(upgradeAnim.soundId, 0.2, 0, false, 1.0, 0)
     
     registerAnimation(itemData, upgradeAnim)
     
@@ -385,17 +415,6 @@ Template._legacyItemLocalUpdate = function(itemData)
             end
         end
         
-        -- fade sound volume
-        if anim.soundId then
-            local vol = 0.0
-            if anim.phase == "before" then
-                vol = 0.03 + 0.47 * progress
-            else
-                vol = 0.5 * (1.0 - progress)
-            end
-            SFXManager():AdjustVolume(anim.soundId, vol)
-        end
-        
         -- 애니메이션이 끝났을 때 정리
         if anim.frames <= 0 then
             -- Debug: print animation completion
@@ -420,11 +439,6 @@ Template._legacyItemLocalUpdate = function(itemData)
                     sprite.Color = Color(1, 1, 1, 1, 0, 0, 0)
                 end
             end
-            -- stop sound at end
-            if anim.soundId then
-                SFXManager():Stop(anim.soundId)
-                anim.soundId = nil
-            end
             -- 애니메이션 데이터 완전 정리
             if itemData then
                 itemData.upgradeAnim = nil
@@ -435,9 +449,11 @@ Template._legacyItemLocalUpdate = function(itemData)
 end
 
 local function updateAnimation(anim)
+    if not livePickup(anim) then return finishAnimation(anim, nil) end
     if anim and anim.morphScene then
         local s = anim.pickup and anim.pickup:Exists() and anim.pickup:GetSprite() or nil
         if not s or anim.morphScene.failed then return finishAnimation(anim, s) end
+        if not PickupVisual.hasFrame(anim.pickupVisual) then return finishAnimation(anim, s) end
         if anim.phase == "after" and (anim.pickup.Variant ~= anim.expectedVariant
             or anim.pickup.SubType ~= anim.expectedSubType) then
             return finishAnimation(anim, s)
@@ -449,7 +465,7 @@ local function updateAnimation(anim)
         if anim.phase ~= "before" or scene.frame < scene.impact - 1 then
             if not MorphVisuals.safe(MorphVisuals.update, scene) then return finishAnimation(anim, s) end
         end
-        s.Color = Color(1, 1, 1, 0)
+        PickupVisual.hide(anim.pickupVisual)
         if anim.phase == "after" and anim.frames <= 0 then return finishAnimation(anim, s) end
         return false
     end
@@ -514,16 +530,6 @@ local function updateAnimation(anim)
         end
     end
 
-    if anim.soundId then
-        local vol = 0.0
-        if anim.phase == "before" then
-            vol = 0.03 + 0.47 * progress
-        else
-            vol = 0.5 * (1.0 - progress)
-        end
-        SFXManager():AdjustVolume(anim.soundId, vol)
-    end
-
     if anim.frames <= 0 then
         if ConchBlessing and ConchBlessing.printDebug then
             ConchBlessing.printDebug(string.format("Template: %s phase animation completed", anim.phase))
@@ -535,6 +541,7 @@ local function updateAnimation(anim)
 end
 
 Template.updateAllAnimations = function()
+    if Game and Game().IsPaused and Game():IsPaused() then return end
     local active = Template._activeAnimations
     if not active or #active == 0 then
         return
@@ -549,8 +556,12 @@ end
 
 Template.renderAllAnimations = function()
     for _, anim in ipairs(Template._activeAnimations) do
-        if anim.morphScene and anim.pickup and anim.pickup:Exists() then
-            if not MorphVisuals.safe(MorphVisuals.render, anim.morphScene) then
+        if not livePickup(anim) then
+            finishAnimation(anim, nil)
+            anim.frames = 0
+        elseif anim.morphScene then
+            if not PickupVisual.hasFrame(anim.pickupVisual)
+                or not MorphVisuals.safe(MorphVisuals.render, anim.morphScene) then
                 finishAnimation(anim, anim.pickup:GetSprite())
                 anim.frames = 0
             end
@@ -567,8 +578,18 @@ Template.forItem = function(key, flag)
     if not MorphVisuals.isApplied(key) then return Template[flag] end
     local function begin(phase, pos, pickup, state)
         local scene = state.morphScene
+        local bound, pickupVisual = pcall(PickupVisual.bind, pickup)
+        if not bound then
+            -- Older/foreign sprites without exact layer access keep the native
+            -- flag animation. Never conceal the whole pedestal as a fallback.
+            if not state.morphFallback then
+                ConchBlessing.printError("[ConchMorph] " .. key .. ": " .. tostring(pickupVisual))
+            end
+            state.morphFallback = true
+            return Template[flag][phase == "before" and "onBeforeChange" or "onAfterChange"](pos, pickup, state)
+        end
         if phase == "before" then
-            local ok, result = pcall(MorphVisuals.create, key, pos, pickup.Variant, pickup.SubType)
+            local ok, result = pcall(MorphVisuals.create, key, pos, pickup.Variant, pickup.SubType, nil, state.visualOwner)
             if not ok then
                 ConchBlessing.printError("[ConchMorph] " .. key .. ": " .. tostring(result))
                 state.morphFallback = true
@@ -587,9 +608,24 @@ Template.forItem = function(key, flag)
         local frames = phase == "before" and scene.impact or scene.duration - scene.impact
         local anim = { type = "custom", phase = phase, frames = frames,
             pos = pos, pickup = pickup, originalColor = getPickupColor(pickup), morphScene = scene,
+            pickupVisual = pickupVisual,
             expectedVariant = pickup.Variant, expectedSubType = pickup.SubType }
+        -- A chained presentation inherits the real visibility, not the old
+        -- animation's temporary hidden head. Each native Morph binds anew.
+        for _, existing in ipairs(Template._activeAnimations) do
+            if matchesPickup(existing, pickup) and existing.pickupVisual then
+                pickupVisual.visible = existing.pickupVisual.visible
+            end
+        end
         registerAnimation(state, anim)
-        pickup:GetSprite().Color = Color(1, 1, 1, 0)
+        scene.pickupVisual = pickupVisual
+        if phase == "after" and scene.profile.nativeResult then
+            -- The result has no item transform left to animate. Let the
+            -- engine display it from the commit, while surrounding art ends.
+            PickupVisual.release(pickupVisual)
+        else
+            PickupVisual.hide(pickupVisual)
+        end
         return frames
     end
     return {

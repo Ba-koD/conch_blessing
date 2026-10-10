@@ -1,0 +1,9 @@
+Mode: built-in image_gen edit for Real Eyes; approved existing image reused for AR Glasses.
+Final assets: resources/gfx/items/collectibles/real_eyes.png and ar_glasses.png
+Final native pixel grids: eye-item-pixels.json, rendered by eye-item-sprites.py.
+All enlarged final previews use nearest-neighbor enlargement of these exact runtime PNGs.
+
+AR Glasses: preserve the user-approved exec-40be38e1-92ec-41a9-ab25-ad1f64e52360.png silhouette, diagonal pose, cyan lens shapes and highlight placement. Reconstruct its logical pixel grid with a flat palette. Finish the far outside temple edge within 32 columns. Do not substitute a different drawn design.
+
+Real Eyes prompt:
+Use case: precise-object-edit. Edit this supplied small collectible icon, Real Eyes (Korean name: 진실된 눈). Preserve its identity: a centered turquoise star pupil inside a pale ivory almond eye, held by a muted gold triangular frame. Clean and refine the broken-looking pixel edges: make the gold triangle a continuous readable frame, ensure the eye contour is clean and balanced, keep a clear separation between eye and triangle and one crisp star-shaped pupil. Binding of Isaac collectible pixel art, thick near-black outline, flat 8-color palette, dirty gold/ivory/teal, sparse upper-left highlight. Author on a native 32x32 pixel grid; only 1024 logical square cells, no detail finer than one logical pixel. Center within 2-pixel transparent padding. No extra rays, text, UI, pedestal, particles or background. Transparent background. Do not turn it into a realistic eye, no gradients, antialiasing, speckle or decorative tiny triangles. If a larger canvas is required, show a nearest-neighbor integer enlargement of the 32x32 logical grid, without additional detail.

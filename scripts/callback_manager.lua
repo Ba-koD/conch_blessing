@@ -104,6 +104,18 @@ ConchBlessing.CallbackManager.callbackMapping = {
     tearInit = { callback = ModCallbacks.MC_POST_TEAR_INIT, needsId = false },
     tearUpdate = { callback = ModCallbacks.MC_POST_TEAR_UPDATE, needsId = false },
     fireTear = { callback = ModCallbacks.MC_POST_FIRE_TEAR, needsId = false },
+    evaluateTearHitParams = {
+        callback = getRepentogonCallback("MC_EVALUATE_TEAR_HIT_PARAMS"),
+        needsId = false, requires = "REPENTOGON", optional = true
+    },
+    preTearUpdate = {
+        callback = getRepentogonCallback("MC_PRE_TEAR_UPDATE"),
+        needsId = false, requires = "REPENTOGON", optional = true
+    },
+    postFireSplitTear = {
+        callback = getRepentogonCallback("MC_POST_FIRE_SPLIT_TEAR"),
+        needsId = false, requires = "REPENTOGON", optional = true
+    },
     weaponFired = {
         callback = getRepentogonCallback("MC_POST_TRIGGER_WEAPON_FIRED"),
         needsId = false,
@@ -155,6 +167,10 @@ ConchBlessing.CallbackManager.callbackMapping = {
     preNPCCollision = { callback = ModCallbacks.MC_PRE_NPC_COLLISION, needsId = false },
     postPlayerUpdate = { callback = ModCallbacks.MC_POST_PLAYER_UPDATE, needsId = false },
     postPlayerRender = { callback = ModCallbacks.MC_POST_PLAYER_RENDER, needsId = false },
+    prePlayerRender = {
+        callback = getRepentogonCallback("MC_PRE_PLAYER_RENDER"),
+        needsId = false, requires = "REPENTOGON", optional = true
+    },
     prePlayerCollision = { callback = ModCallbacks.MC_PRE_PLAYER_COLLISION, needsId = false },
     postPickupInit = { callback = ModCallbacks.MC_POST_PICKUP_INIT, needsId = false },
     postPickupUpdate = { callback = ModCallbacks.MC_POST_PICKUP_UPDATE, needsId = false },

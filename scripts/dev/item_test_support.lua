@@ -452,7 +452,7 @@ function H.stopShooting() inputPlayer, observing = nil, nil end
 -- Use real shooting input and the engine's collision path. In particular,
 -- SOFLAM's Technology replacement must be tested with its emitted laser, never
 -- a fabricated tear passed to TakeDamage.
-function H.fireWeaponAtTarget(plan, weapon)
+function H.fireWeaponAtTarget(plan, weapon, triggerLimit)
     plan.require("real weapon event observer available",function()
         return (ModCallbacks.MC_POST_TRIGGER_WEAPON_FIRED
             and ModCallbacks.MC_POST_ENTITY_TAKE_DMG
@@ -468,7 +468,7 @@ function H.fireWeaponAtTarget(plan, weapon)
         ctx.weaponTargetPosition=Vector(ctx.target.Position.X,ctx.target.Position.Y)
         ctx.weaponHpBefore=ctx.target.HitPoints
         ctx.weaponStartedAt=Game():GetFrameCount()
-        H.shoot(player,weapon=="laser" and "$lasers" or "$tears",ctx,1)
+        H.shoot(player,weapon=="laser" and "$lasers" or "$tears",ctx,triggerLimit or 1)
         ctx.shots.directOnly=true
         ctx.shots.targetHash=GetPtrHash(ctx.target)
         -- One physical beam designates the target. With multishot, SOFLAM

@@ -43,6 +43,7 @@ generated_paths="
 content/items.xml
 content/itempools.xml
 content/entities2.xml
+content/costumes2.xml
 content/gfx/death_items.anm2
 content/gfx/death_items.png
 "

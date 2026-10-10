@@ -5,7 +5,7 @@ local H = require("scripts.dev.item_test_support")
 local Dynamic = require("scripts.dev.item_test_dynamic")
 local Isolation = require("scripts.dev.test_isolation")
 local Scenarios = require("scripts.dev.item_scenarios")
-for _, module in ipairs({"synergies","conditions","damage","kronos_synergies","kronos_batches","kronos_sources","pools"}) do
+for _, module in ipairs({"synergies","conditions","damage","kronos_synergies","kronos_batches","kronos_sources","pools","real_eyes","eye_upgrades"}) do
     require("scripts.dev.item_test_" .. module)
 end
 local contracts = {}
@@ -216,7 +216,7 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
         if not started then out("FAIL latest setup: "..tostring(err)) end
         return
     end
-    local aliases = { appraisal="appraisal_certificate", liveeye="live_eye", belt="utility_belt" }
+    local aliases = { appraisal="appraisal_certificate", liveeye="live_eye", belt="utility_belt", realeyes="real_eyes", ar="ar_glasses", neglect="hemispatial_neglect" }
     action = aliases[action] or action
     if case == "detail" and #words > 2 then
         local def = deep[string.upper(action)] and TestBench.get(deep[string.upper(action)])

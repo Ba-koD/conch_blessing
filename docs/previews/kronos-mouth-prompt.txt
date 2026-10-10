@@ -1,0 +1,18 @@
+Mode: built-in image_gen, transparent_background=true
+Runtime asset: resources/gfx/effects/conch_upgrade_maw.png
+References: research only, no vanilla monster image supplied or copied.
+Research: https://www.theoi.com/Titan/TitanKronos.html (Hesiod, Theogony 453: swallowing offspring to preserve kingship)
+Research: https://www.museodelprado.es/en/the-collection/art-work/saturn/18110a75-b0e7-430c-bc73-2a4d55893bd6 (Goya's Saturn, darkness and dread)
+Art direction: an original hostile ancient humanlike mouth. Colors/outline adapted for Isaac-size readability; mythological identity retained. Emerges behind the item, seizes it in six 30Hz ticks, gone at ten; no top-down approach or lingering chewing.
+Export: lossless PNG re-encode with identical RGBA bytes. ANM2 source geometry selects rigid jaw parts; no destructive alpha edit or repaint.
+
+Final generation prompt:
+Use case: stylized-concept. Create a completely NEW original game sprite for the hostile Titan KRONOS (Cronus, Zeus's father), for an instantaneous supernatural devouring animation in The Binding of Isaac. NOT the old time god, no clock.
+
+Concept research: Hesiod's Kronos swallows his offspring to prevent any rival succeeding him. Goya's Saturn conveys a terrifying ancient human divinity emerging from absolute darkness, violently possessive and indifferent to the victim. Translate that dread and merciless swallowing into a mouth-only apparition. Do not reproduce the painting, a boss head, Monstro, Mega Maw, or any existing Isaac enemy.
+
+ONE enormous open HUMANLIKE ancient god's mouth, front-facing, centered, isolated, roughly 1.2:1 width-to-height. It will emerge BEHIND a tiny heart at the very center, snap shut in a few frames and vanish. It must look hostile and uncanny, never like a cute hungry creature, smiling denture, plump lips, or a small ordinary monster. A tall abyssal black throat occupies most of the silhouette. Severe, taut, angular desiccated charcoal-brown jaw edges; scant ashen ochre highlights suggest an ancient human face disappearing into blackness. Upper and lower banks of broad irregular ivory incisors form two forceful cutting edges, with a couple of narrow hooked canine shapes subtly echoing Kronos's sickle. The teeth are readable sharp-edged slabs, not comically spaced baby teeth, not a huge ornate forest of fangs. The two mouth corners taper into two or three jagged shadow tips; do not surround the mouth with a full head or mane. No eyes, nose, crown, hands, beard, tongue sticking out, text, rune, halo, blood or gore. No decorative symbols.
+
+Native small Isaac sprite language ONLY: handmade asymmetry, near-black outline 1-2 logical pixels, 6-8 flat dirty colors, chunky clean shapes, hard edges. Design the actual forms for about 96 by 80 game pixels; prioritize frightening negative space and silhouette, not texture. No photorealism, realistic lip wrinkles, shading gradients, shine, cinematic painting, fine veins, faceted stone armor, or intricate surface detail. Make it immediately recognizable as an impossible predatory HUMAN mouth in darkness at tiny size.
+
+Single completely OPEN mouth sprite with an unobstructed opaque near-black central cavity for the 32px heart to sit in front of. All outside space genuinely transparent, generous transparent padding around silhouette. Do not include the heart or any scene, only the one mouth.

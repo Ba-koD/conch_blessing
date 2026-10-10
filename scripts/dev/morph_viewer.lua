@@ -1,9 +1,33 @@
--- Visual review only. No inventory, pickup, room, seed or run mutations.
+-- Real pickup review: only the viewer-owned pedestal is spawned/converted.
+-- Presentation and morph timing come exclusively from the production queue.
 local Visuals = require("scripts.lib.upgrade_visuals")
 local Locale = require("scripts.locale.init")
+-- Isaac exposes its own require, but not Lua's package/loaded table.
+local TestBench = require("scripts.dev.test_bench")
 local Viewer = { index = 1 }
 ConchBlessing.morphViewer = Viewer
 local scene, previousIcon, nextIcon
+-- Keep ownership outside GetData: native morph/init callbacks may replace it.
+-- EntityPtr can expire on native Morph as well as removal. Only the exact
+-- transaction may rebind it synchronously after Morph; unrelated removals
+-- must never adopt another pickup with matching subtype/seed/position.
+local function ownedEntity(state)
+    local entity = state and state.pickupPtr and state.pickupPtr.Ref
+    if entity and entity:Exists() and GetPtrHash(entity) == state.pickupHash then return entity end
+end
+local function trackPickup(state, entity)
+    local ok, err = pcall(function()
+        state.pickupPtr = EntityPtr(entity)
+        state.pickupHash = GetPtrHash(entity)
+        assert(ownedEntity(state), "safe pickup reference unavailable")
+    end)
+    if not ok then
+        -- Still in the spawn/Morph call: remove this exact entity before raising.
+        -- Never retain a raw-reference fallback across frames.
+        if entity and entity:Exists() then entity:Remove() end
+        error(err, 0)
+    end
+end
 local hudFont, fontAttempted
 local function getFont()
     if not fontAttempted then
@@ -33,37 +57,75 @@ end
 local function indexAt(index) return (index - 1) % #Visuals.catalog + 1 end
 local function keyAt(index) return Visuals.catalog[indexAt(index)].key end
 local function stop()
+    local old = scene
     scene, previousIcon, nextIcon = nil, nil, nil
+    if not old then return end
+    local ok, err = pcall(function()
+        if old.job then ConchBlessing.upgrade.cancel(old.job) end
+        if old.pickup then ConchBlessing.template.cancelForPickup(old.pickup) end
+    end)
+    if not ok then ConchBlessing.printError("[ConchMorph] Cancel failed: " .. tostring(err)) end
+    -- Removing the exact spawned entity is independent of queue cancellation,
+    -- so a cosmetic failure cannot strand the real pickup in the room.
+    ok, err = pcall(function()
+        local entity = ownedEntity(old)
+        if entity then entity:Remove() end
+    end)
+    if not ok then ConchBlessing.printError("[ConchMorph] Pickup cleanup failed: " .. tostring(err)) end
 end
 function Viewer.isRunning() return scene ~= nil end
+function Viewer.ownsPickup(pickup)
+    return ownedEntity(scene) ~= nil and pickup ~= nil and GetPtrHash(pickup) == scene.pickupHash
+end
 Viewer.stop = stop
 
 local function start(index)
-    local testBench = package.loaded["scripts.dev.test_bench"]
-    if testBench and testBench.isRunning() then
+    if TestBench.isRunning() then
         log("Finish or stop conch_test before opening the visual viewer.")
         return false
     end
     if Game():GetNumPlayers() < 1 then log("Start a run first."); return false end
+    if not ModCallbacks.MC_PRE_CHANGE_ROOM then
+        log("Real pickup preview requires REPENTOGON's MC_PRE_CHANGE_ROOM cleanup hook.")
+        return false
+    end
     local nextIndex = indexAt(index)
     local key = keyAt(nextIndex)
-    local ok, result, before, after = pcall(function()
-        local nextScene = Visuals.create(key, Game():GetRoom():GetCenterPos())
+    -- Native removal may remain in the spatial index until the next update.
+    -- Re-searching immediately can push the next fixture off this pedestal's
+    -- position. Selection/replay reuse the live fixture's exact location.
+    local previous = ownedEntity(scene)
+    local position = previous and Vector(previous.Position.X, previous.Position.Y)
+    stop()
+    local ok, err = pcall(function()
+        assert(ConchBlessing.upgrade and ConchBlessing.upgrade.queuePickup, "upgrade transaction unavailable")
         local function iconAt(i)
             local item = ConchBlessing.ItemData[keyAt(i)]
             return Visuals.icon(item.type == "trinket" and PickupVariant.PICKUP_TRINKET
                 or PickupVariant.PICKUP_COLLECTIBLE, item.id)
         end
-        return nextScene, iconAt(nextIndex - 1), iconAt(nextIndex + 1)
+        previousIcon, nextIcon = iconAt(nextIndex - 1), iconAt(nextIndex + 1)
+        local variant, id = Visuals.origin(ConchBlessing.ItemData[key])
+        assert(type(id) == "number" and id > 0 and Visuals.config(variant, id), "missing source item")
+        local room = Game():GetRoom()
+        local pos = position or room:FindFreePickupSpawnPosition(room:GetCenterPos(), 0, true)
+        scene = { key = key, owner = Isaac.GetPlayer(0), sourceVariant = variant, sourceId = id, waiting = 0 }
+        local entity = Isaac.Spawn(EntityType.ENTITY_PICKUP, variant, id, pos, Vector(0, 0), nil)
+        trackPickup(scene, entity)
+        local pickup = entity:ToPickup()
+        assert(pickup and pickup.Variant == variant and pickup.SubType == id, "source spawn was replaced")
+        scene.pickup = pickup
+        -- Do not lend this demonstration to inventory, option groups or shops.
+        pickup.Price, pickup.ShopItemId, pickup.AutoUpdatePrice = 0, -1, false
+        pickup.OptionsPickupIndex = 0
     end)
     if not ok then
         stop()
-        ConchBlessing.printError("[ConchMorph] Cannot open " .. key .. ": " .. tostring(result))
+        ConchBlessing.printError("[ConchMorph] Cannot open " .. key .. ": " .. tostring(err))
         return false
     end
     Viewer.index = nextIndex
-    scene, previousIcon, nextIcon = result, before, after
-    log(string.format("%d/%d %s | %s | R replay, arrows select, Backspace / conch_morph stop exit",
+    log(string.format("%d/%d %s | REAL PICKUP | %s | R replay, arrows select, Backspace / conch_morph stop exit",
         nextIndex, #Visuals.catalog, string.lower(key),
         Visuals.isApplied(key) and "APPLIED" or "PENDING: current default animation"))
     return true
@@ -92,9 +154,65 @@ end)
 ConchBlessing:AddCallback(ModCallbacks.MC_POST_UPDATE, function()
     if not scene or Game():IsPaused() then return end
     -- Starting another console suite releases input capture immediately.
-    local testBench = package.loaded["scripts.dev.test_bench"]
-    if testBench and testBench.isRunning() then stop(); return end
-    if scene.frame < scene.duration and not Visuals.safe(Visuals.update, scene) then stop() end
+    if TestBench.isRunning() then stop(); return end
+    local ok, err = pcall(function()
+        local entity = ownedEntity(scene)
+        local pickup = entity and entity:ToPickup()
+        assert(pickup, "preview pickup removed or replaced")
+        if not scene.job then
+            -- Let native pickup initialization finish, including provider init
+            -- callbacks, before handing it to the ordinary upgrade transaction.
+            scene.waiting = scene.waiting + 1
+            assert(scene.waiting < 90, "source pickup initialization timed out")
+            if pickup.FrameCount < 1 then return end
+            assert(pickup.Variant == scene.sourceVariant and pickup.SubType == scene.sourceId, "source changed before upgrade")
+            local job, reason = ConchBlessing.upgrade.queuePickup(pickup, scene.key, scene.owner)
+            assert(job, reason)
+            scene.job = job
+            local owner = scene
+            job.onPickupReinitialized = function(morphed)
+                assert(scene == owner and owner.job == job, "stale preview transaction")
+                local previousHash = owner.pickupHash
+                local expired = not (owner.pickupPtr and owner.pickupPtr.Ref)
+                trackPickup(owner, morphed)
+                owner.pickup = morphed
+                log("REBIND " .. string.lower(owner.key) .. " oldRef=" .. (expired and "expired" or "live")
+                    .. " hash=" .. tostring(previousHash) .. "->" .. tostring(owner.pickupHash))
+            end
+            log("QUEUED " .. string.lower(scene.key) .. " source=" .. pickup.Variant .. ":" .. pickup.SubType)
+        end
+        local job = scene.job
+        assert(job.status ~= "cancelled", "upgrade transaction cancelled")
+        local visual = job.templateState.morphScene
+        assert(not visual or not visual.failed, "upgrade renderer failed")
+        if job.committed and not scene.reported then
+            scene.reported = true
+            local native = visual and visual.pickupVisual and visual.pickupVisual.released
+            log("MORPH " .. string.lower(scene.key) .. " target=" .. pickup.Variant .. ":" .. pickup.SubType
+                .. " itemRenderer=" .. (native and "native" or visual and "layer" or "native-default"))
+        end
+        if job.status == "complete" and not job.templateState.upgradeAnim and not scene.displayReported then
+            scene.displayReported = true
+            -- Property evidence after the shared template releases the pickup;
+            -- this is not a claim that the final pixels were inspected.
+            local observed, detail = pcall(function()
+                local s = pickup:GetSprite()
+                local name = pickup.Variant == PickupVariant.PICKUP_COLLECTIBLE and "head" or "body"
+                local layer = s.GetLayer and s:GetLayer(name)
+                local visible = layer and layer:IsVisible()
+                local frame = layer and s.GetLayerFrameData and s:GetLayerFrameData(layer:GetLayerID())
+                return string.format("alpha=%.3f scale=%.3f,%.3f entityVisible=%s layerVisible=%s frame=%s",
+                    s.Color.A, s.Scale.X, s.Scale.Y, tostring(pickup.Visible),
+                    layer and tostring(visible) or "unavailable", frame and "present" or "absent")
+            end)
+            log("DISPLAY " .. string.lower(scene.key) .. " "
+                .. (observed and detail or "unavailable: " .. tostring(detail)))
+        end
+    end)
+    if not ok then
+        stop()
+        ConchBlessing.printError("[ConchMorph] Viewer stopped: " .. tostring(err))
+    end
 end)
 
 local function caption(text, x, y, r, g, b)
@@ -124,7 +242,6 @@ local function renderViewer()
         elseif Input.IsButtonTriggered(Keyboard.KEY_RIGHT, 0) or Input.IsButtonTriggered(Keyboard.KEY_DOWN, 0) then start(Viewer.index + 1) end
     end
     if not scene then return end
-    if not Visuals.safe(Visuals.render, scene) then stop(); return end
     local room = Game():GetRoom()
     local center = Isaac.WorldToScreen(room:GetCenterPos())
     local bottom = Isaac.WorldToScreen(room:GetBottomRightPos())
@@ -161,9 +278,17 @@ ConchBlessing:AddCallback(ModCallbacks.MC_INPUT_ACTION, function(_, _, hook, act
         return false
     end
 end)
-if ModCallbacks.MC_POST_BACKDROP_PRE_RENDER_WALLS then
-    ConchBlessing:AddCallback(ModCallbacks.MC_POST_BACKDROP_PRE_RENDER_WALLS, function()
-        if scene and not Visuals.safe(Visuals.renderFloor, scene) then stop() end
+-- The real entity exists even after its morph. Keep just this fixture from
+-- being acquired; normal room pickups retain their usual collision behaviour.
+ConchBlessing:AddCallback(ModCallbacks.MC_PRE_PICKUP_COLLISION, function(_, pickup)
+    if Viewer.ownsPickup(pickup) then return true end
+end)
+if ModCallbacks.MC_PRE_CHANGE_ROOM then
+    ConchBlessing:AddCallback(ModCallbacks.MC_PRE_CHANGE_ROOM, stop)
+end
+if ModCallbacks.MC_PRE_MOD_UNLOAD then
+    ConchBlessing:AddCallback(ModCallbacks.MC_PRE_MOD_UNLOAD, function(_, mod)
+        if mod == ConchBlessing or (ConchBlessing.originalMod and mod == ConchBlessing.originalMod) then stop() end
     end)
 end
 ConchBlessing:AddCallback(ModCallbacks.MC_POST_NEW_ROOM, stop)

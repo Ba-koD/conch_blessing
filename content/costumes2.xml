@@ -1,0 +1,4 @@
+<?xml version="1.0" ?>
+<costumes anm2root="gfx/">
+    <costume id="24" type="passive" anm2path="characters/conch_neglect_toggle.anm2" priority="-1"/>
+</costumes>

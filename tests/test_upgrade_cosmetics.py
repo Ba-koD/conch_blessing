@@ -18,11 +18,24 @@ class UpgradeCosmeticsTests(unittest.TestCase):
                 MC_POST_GAME_STARTED=4,MC_PRE_GAME_EXIT=5}
             ConchBlessing={AddCallback=function(_,id,fn) callbacks[id]=fn end,
                 printError=function(s) errors[#errors+1]=s end}
+            function GetPtrHash(entity) return tostring(entity) end
+            EntityPtr=setmetatable({}, {__call=function(_,entity)
+                return setmetatable({}, {__index=function(_,key)
+                    if key=='Ref' and entity:Exists() then return entity end
+                end})
+            end})
             Isaac={Spawn=function() error('Cosmetic upgrade attempted entity spawn') end,
                 WorldToScreen=function(pos) return pos end}
-            function Color(...) return {...} end
+            Color=setmetatable({Lerp=function(a,b,t)
+                local result={}
+                for k,v in pairs(a) do result[k]=type(v)=='number' and v+(b[k]-v)*t or v end
+                return result
+            end}, {__call=function(_,...) return {...} end})
             SoundEffect={SOUND_HOLY=1,SOUND_POWERUP_SPEWER=2}
-            function SFXManager() return {Stop=function() end,Play=function() end,AdjustVolume=function() end} end
+            function SFXManager() return {
+                Stop=function() error('stops unrelated playback of this sound ID') end,
+                Play=function(_,id,volume,delay,loop) assert(not loop); sounds=sounds+1 end,
+                AdjustVolume=function() error('changes unrelated playback of this sound ID') end} end
             Sprite=setmetatable({}, {__call=function()
                 local s={frame=0,renders=0}
                 function s:Load(path) self.path=path; if loadFails then error('missing asset') end end
@@ -73,6 +86,23 @@ class UpgradeCosmeticsTests(unittest.TestCase):
             assert(data.upgradeAnim==nil and p.sprite.Color.original)
             assert(second.upgradeAnim and visuals[1].renders==0 and visuals[2].renders==1)
         ''')
+
+    def test_concurrent_default_cues_never_modify_shared_sound_channels(self):
+        for kind in ('positive', 'neutral', 'negative'):
+            with self.subTest(kind=kind):
+                self.lua.execute(f'''
+                    q=pickup(); first={{}}; second={{}}; local preset=T.{kind}
+                    local before=sounds
+                    preset.onBeforeChange(pos,p,first); preset.onBeforeChange(pos,q,second)
+                    for i=1,8 do T.updateAllAnimations() end
+                    local frames=second.upgradeAnim.frames
+                    T.cancelForPickup(p)
+                    assert(second.upgradeAnim.frames==frames and sounds==before+2)
+                    for i=1,60 do T.updateAllAnimations() end
+                    preset.onAfterChange(pos,q,second)
+                    for i=1,60 do T.updateAllAnimations() end
+                    assert(#T._activeAnimations==0 and q.sprite.Color.original)
+                ''')
 
     def test_room_and_game_boundaries_clear_art_and_restore_color(self):
         for event in (3, 4, 5):
