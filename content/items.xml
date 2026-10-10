@@ -22,9 +22,9 @@
     <passive id="19" name="Ceil" gfx="ceil.png" quality="4" tags="offensive stars" cache="speed firedelay damage range shotspeed luck" shopprice="20" devilprice="2"/>
     <passive id="20" name="Round" gfx="round.png" quality="3" tags="offensive stars" cache="speed firedelay damage range shotspeed luck" shopprice="15" devilprice="2"/>
     <passive id="21" name="Floor" gfx="floor.png" quality="2" tags="offensive stars" cache="speed firedelay damage range shotspeed luck" shopprice="15" devilprice="1"/>
-    <passive id="22" name="Real Eyes" gfx="real_eyes.png" quality="3" tags="guppy" shopprice="15" devilprice="1"/>
-    <passive id="23" name="AR Glasses" gfx="ar_glasses.png" quality="3" tags="guppy" shopprice="15" devilprice="1"/>
-    <passive id="24" name="Hemispatial Neglect" gfx="hemispatial_neglect.png" quality="2" tags="guppy" cache="damage" shopprice="15" devilprice="1"/>
+    <passive id="22" name="Real Eyes" gfx="real_eyes.png" quality="3" shopprice="15" devilprice="1"/>
+    <passive id="23" name="AR Glasses" gfx="ar_glasses.png" quality="3" shopprice="15" devilprice="1"/>
+    <passive id="24" name="Hemispatial Neglect" gfx="hemispatial_neglect.png" quality="2" cache="damage" shopprice="15" devilprice="1"/>
     <familiar id="25" name="Time = Money" gfx="time_money.png" quality="4" cache="familiars" shopprice="30" devilprice="2"/>
     <trinket id="26" name="Time = Power" gfx="time_power.png" tags="offensive" cache="damage" shopprice="15"/>
     <trinket id="27" name="Time = Tear" gfx="time_tear.png" tags="offensive" cache="fireDelay" shopprice="15"/>
