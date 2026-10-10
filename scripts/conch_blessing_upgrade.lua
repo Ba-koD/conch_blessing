@@ -83,13 +83,16 @@ local function _callConfiguredHook(path, label, ...)
     return _callUpgradeFunction(label, fn, ...)
 end
 
-local function _getUpgradeTemplate(flag)
+local function _getUpgradeTemplate(flag, itemKey)
     if not VALID_UPGRADE_FLAGS[flag] then
         return nil
     end
 
     local templateRoot = ConchBlessing.template
     local template = templateRoot and templateRoot[flag] or nil
+    if itemKey and templateRoot and type(templateRoot.forItem) == "function" then
+        template = templateRoot.forItem(itemKey, flag)
+    end
     if type(template) ~= "table"
         or type(template.onBeforeChange) ~= "function"
         or type(template.onAfterChange) ~= "function" then
@@ -656,7 +659,7 @@ local function _processUpgradeJobs()
             if job.phase == 0 then
                 _spawnEffects(job.itemData.upgradeEffectsBefore, job.pos)
 
-                job.template = _getUpgradeTemplate(job.itemData.flag)
+                job.template = _getUpgradeTemplate(job.itemData.flag, job.itemKey)
                 local templateDelay = 0
                 if job.template then
                     templateDelay = _callUpgradeFunction(
@@ -1280,3 +1283,6 @@ ConchBlessing:AddCallback(
 )
 ConchBlessing:AddCallback(ModCallbacks.MC_POST_NEW_ROOM, clearUpgradeJobs)
 ConchBlessing:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, clearUpgradeJobs)
+
+-- Presentation-only console viewer; shares the shipped animation renderer.
+require("scripts.dev.morph_viewer")

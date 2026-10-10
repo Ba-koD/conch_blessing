@@ -674,6 +674,11 @@ return {
         },
     },
     ui = {
+        morph = {
+            applied = "APPLIED",
+            pending = "PENDING - DEFAULT MORPH",
+            controls = "R replay | Arrows select | Backspace exit",
+        },
         percent = {
             standard = "%s%%",
             zero = "0%%",

@@ -659,6 +659,11 @@ return {
         },
     },
     ui = {
+        morph = {
+            applied = "인게임 적용",
+            pending = "보류 - 현재 기본 강화 연출",
+            controls = "R 다시 재생 | 방향키 선택 | Backspace 종료",
+        },
         percent = {
             standard = "%s%%",
             zero = "0%%",

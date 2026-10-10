@@ -659,6 +659,11 @@ return {
         },
     },
     ui = {
+        morph = {
+            applied = "게임에 적용",
+            pending = "보류 - 현재 기본 강화 연출",
+            controls = "R 다시 보기 | 방향키 고르기 | Backspace 닫기",
+        },
         percent = {
             standard = "%s%%",
             zero = "0할",

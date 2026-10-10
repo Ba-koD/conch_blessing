@@ -3,6 +3,7 @@
 -- Supports positive, neutral, and negative upgrade types
 
 local Template = {}
+local MorphVisuals -- Loaded lazily, after ItemData initialization.
 Template._activeAnimations = Template._activeAnimations or {}
 Template._centralUpdaterRegistered = Template._centralUpdaterRegistered or false
 
@@ -16,6 +17,24 @@ local function ensureCentralUpdater()
                 Template.updateAllAnimations()
             end
         end)
+        ConchBlessing:AddCallback(ModCallbacks.MC_POST_RENDER, function()
+            Template.renderAllAnimations()
+        end)
+        if ModCallbacks.MC_POST_BACKDROP_PRE_RENDER_WALLS then
+            ConchBlessing:AddCallback(ModCallbacks.MC_POST_BACKDROP_PRE_RENDER_WALLS, function()
+                for _, anim in ipairs(Template._activeAnimations) do
+                    if anim.morphScene and anim.pickup and anim.pickup:Exists() then
+                        MorphVisuals.safe(MorphVisuals.renderFloor, anim.morphScene)
+                    end
+                end
+            end)
+        end
+        local function clearVisuals()
+            Template.clearAnimations()
+        end
+        ConchBlessing:AddCallback(ModCallbacks.MC_POST_NEW_ROOM, clearVisuals)
+        ConchBlessing:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, clearVisuals)
+        ConchBlessing:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, clearVisuals)
         Template._centralUpdaterRegistered = true
     end
 end
@@ -30,6 +49,10 @@ local function getPickupColor(pickup)
 end
 
 local function finishAnimation(anim, sprite)
+    if anim then
+        anim.lightSprite = nil
+        anim.morphScene = nil
+    end
     if sprite then
         sprite.Color = (anim and anim.originalColor) or Color(1, 1, 1, 1, 0, 0, 0)
     end
@@ -57,6 +80,9 @@ local function registerAnimation(ownerData, anim)
     for i = #active, 1, -1 do
         local existing = active[i]
         if existing and anim.pickup and existing.pickup == anim.pickup then
+            -- A second conversion may begin during the first one's hidden
+            -- after-animation. Carry the real color, not its temporary alpha.
+            anim.originalColor = existing.originalColor or anim.originalColor
             finishAnimation(existing, nil)
             table.remove(active, i)
         end
@@ -83,6 +109,30 @@ end
 
 -- Positive upgrade animation (bright white fade with Holy Light)
 Template.positive = {}
+
+local function createCosmeticLight()
+    -- CRACK_THE_SKY has native attack logic even when CollisionDamage is zero.
+    -- Play only its vanilla art: no entity, collision, Hit event, or proc source.
+    local ok, sprite = pcall(function()
+        local visual = Sprite()
+        for _, method in ipairs({ "Load", "Play", "Update", "Render", "IsFinished" }) do
+            assert(type(visual[method]) == "function", "Sprite:" .. method .. " unavailable")
+        end
+        visual:Load("gfx/1000.019_crack the sky.anm2", true)
+        if type(visual.IsLoaded) == "function" then
+            assert(visual:IsLoaded(), "Holy Light animation could not load")
+        end
+        visual:Play("Spotlight", true)
+        return visual
+    end)
+    if ok then
+        return sprite
+    end
+    if ConchBlessing and ConchBlessing.printError then
+        ConchBlessing.printError("[Upgrade] Cosmetic Holy Light unavailable: " .. tostring(sprite))
+    end
+    return nil
+end
 
 Template.positive.onBeforeChange = function(upgradePos, pickup, itemData, soundId)
     -- Debug: print function call
@@ -118,17 +168,6 @@ Template.positive.onAfterChange = function(upgradePos, pickup, itemData, soundId
         ConchBlessing.printDebug("Template.positive.onAfterChange called")
     end
     
-    -- single Holy Light strike at the pedestal to finalize (안전한 enum 처리)
-    local crackTheSkyVariant = EffectVariant.CRACK_THE_SKY or 0
-    -- Keep the strike cosmetic and unowned so it cannot enter player attack chains.
-    local eff = Isaac.Spawn(EntityType.ENTITY_EFFECT, crackTheSkyVariant, 0, upgradePos, Vector.Zero, nil)
-    local efx = eff and eff:ToEffect() or nil
-    if efx then
-        pcall(function()
-            efx.CollisionDamage = 0
-        end)
-    end
-    
     -- fade back from white to normal over 2 seconds (60 ticks)
     local upgradeAnim = {
         pickup = pickup,
@@ -139,6 +178,7 @@ Template.positive.onAfterChange = function(upgradePos, pickup, itemData, soundId
         soundId = soundId or SoundEffect.SOUND_HOLY,
         type = "positive",
         originalColor = getPickupColor(pickup),
+        lightSprite = createCosmeticLight(),
     }
     
     registerAnimation(itemData, upgradeAnim)
@@ -395,11 +435,35 @@ Template._legacyItemLocalUpdate = function(itemData)
 end
 
 local function updateAnimation(anim)
+    if anim and anim.morphScene then
+        local s = anim.pickup and anim.pickup:Exists() and anim.pickup:GetSprite() or nil
+        if not s or anim.morphScene.failed then return finishAnimation(anim, s) end
+        if anim.phase == "after" and (anim.pickup.Variant ~= anim.expectedVariant
+            or anim.pickup.SubType ~= anim.expectedSubType) then
+            return finishAnimation(anim, s)
+        end
+        anim.frames = anim.frames - 1
+        local scene = anim.morphScene
+        scene.pos = Vector(anim.pickup.Position.X, anim.pickup.Position.Y)
+        -- The pre-morph picture holds until the transaction actually commits.
+        if anim.phase ~= "before" or scene.frame < scene.impact - 1 then
+            if not MorphVisuals.safe(MorphVisuals.update, scene) then return finishAnimation(anim, s) end
+        end
+        s.Color = Color(1, 1, 1, 0)
+        if anim.phase == "after" and anim.frames <= 0 then return finishAnimation(anim, s) end
+        return false
+    end
     if not (anim and anim.frames and anim.frames > 0 and anim.pickup and anim.pickup:Exists()) then
         return finishAnimation(anim, nil)
     end
 
     anim.frames = anim.frames - 1
+    if anim.lightSprite then
+        anim.lightSprite:Update()
+        if anim.lightSprite:IsFinished("Spotlight") then
+            anim.lightSprite = nil
+        end
+    end
     local base = tonumber(anim.totalFrames) or 60.0
     if base <= 0 then
         base = 60.0
@@ -480,6 +544,67 @@ Template.updateAllAnimations = function()
         if updateAnimation(active[i]) then
             table.remove(active, i)
         end
+    end
+end
+
+Template.renderAllAnimations = function()
+    for _, anim in ipairs(Template._activeAnimations) do
+        if anim.morphScene and anim.pickup and anim.pickup:Exists() then
+            if not MorphVisuals.safe(MorphVisuals.render, anim.morphScene) then
+                finishAnimation(anim, anim.pickup:GetSprite())
+                anim.frames = 0
+            end
+        elseif anim.lightSprite and anim.pickup and anim.pickup:Exists() then
+            anim.lightSprite:Render(Isaac.WorldToScreen(anim.pos))
+        end
+    end
+end
+
+-- Only explicitly approved profiles replace the flag template. Per-pedestal
+-- state belongs to the upgrade transaction, never the shared ItemData row.
+Template.forItem = function(key, flag)
+    MorphVisuals = MorphVisuals or require("scripts.lib.upgrade_visuals")
+    if not MorphVisuals.isApplied(key) then return Template[flag] end
+    local function begin(phase, pos, pickup, state)
+        local scene = state.morphScene
+        if phase == "before" then
+            local ok, result = pcall(MorphVisuals.create, key, pos, pickup.Variant, pickup.SubType)
+            if not ok then
+                ConchBlessing.printError("[ConchMorph] " .. key .. ": " .. tostring(result))
+                state.morphFallback = true
+                return Template[flag].onBeforeChange(pos, pickup, state)
+            end
+            scene = result
+            state.morphScene = scene
+        elseif state.morphFallback or not scene or scene.failed then
+            return Template[flag].onAfterChange(pos, pickup, state)
+        else
+            scene.frame = scene.impact
+            -- A rotating pedestal may commit a different visible cycle head.
+            local ok, icon = pcall(MorphVisuals.icon, pickup.Variant, pickup.SubType)
+            if ok then scene.after = icon; scene.targetVariant = pickup.Variant end
+        end
+        local frames = phase == "before" and scene.impact or scene.duration - scene.impact
+        local anim = { type = "custom", phase = phase, frames = frames,
+            pos = pos, pickup = pickup, originalColor = getPickupColor(pickup), morphScene = scene,
+            expectedVariant = pickup.Variant, expectedSubType = pickup.SubType }
+        registerAnimation(state, anim)
+        pickup:GetSprite().Color = Color(1, 1, 1, 0)
+        return frames
+    end
+    return {
+        onBeforeChange = function(pos, pickup, state) return begin("before", pos, pickup, state) end,
+        onAfterChange = function(pos, pickup, state) return begin("after", pos, pickup, state) end,
+    }
+end
+
+Template.clearAnimations = function()
+    local active = Template._activeAnimations
+    for i = #active, 1, -1 do
+        local anim = active[i]
+        local sprite = anim.pickup and anim.pickup:Exists() and anim.pickup:GetSprite() or nil
+        finishAnimation(anim, sprite)
+        active[i] = nil
     end
 end
 
