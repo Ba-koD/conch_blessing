@@ -19,7 +19,7 @@ async function run(reduced=false){
  class AudioContext{constructor(){audio.push('context');this.destination={};}resume(){return Promise.resolve();}decodeAudioData(b){return Promise.resolve({byteLength:b.byteLength});}createGain(){return {gain:{},connect(){}};}createBufferSource(){const s={connect(){},start(){audio.push('start');},stop(){audio.push('stop');}};return s;}}
  const window={AudioContext,innerWidth:1280,innerHeight:900,events:{},addEventListener(k,f){this.events[k]=f;},matchMedia:()=>({matches:reduced})};
  const document={body:{},events:{},getElementById:el,createElement:t=>t==='canvas'?createCanvas(32,32):make(),addEventListener(k,f){this.events[k]=f;}};
- const inject='Object.assign(probe,{drawItem,rainWetness,voidMotes,itemPose,phaseTime,floodLevel,screenShake,soundCues,scenery,animations,duration,selectKronosPets,kronosTiming,ringState,ringPoint,ringWhite,kronosPhase,petCatalog,run:()=>kronosRun,setKronosStyle:(v)=>{kronosStyle=v;choose("KRONOS");},select:(key)=>choose(key),render:(key,t)=>{choose(key);time=t;draw();},setTime:(t)=>{time=t;draw();}});})();';
+ const inject='Object.assign(probe,{drawItem,rainWetness,voidMotes,itemPose,phaseTime,floodLevel,screenShake,soundCues,scenery,animations,duration,selectKronosPets,kronosTiming,ringState,ringPoint,ringBlack,kronosPhase,petCatalog,run:()=>kronosRun,setKronosStyle:(v)=>{kronosStyle=v;choose("KRONOS");},select:(key)=>choose(key),render:(key,t)=>{choose(key);time=t;draw();},setTime:(t)=>{time=t;draw();}});})();';
  vm.runInNewContext(source.replace('})();',inject),{probe,document,window,Image,atob:v=>Buffer.from(v,'base64').toString('binary'),performance:{now:()=>now},
    localStorage:{getItem(){throw Error('unavailable');},setItem(){throw Error('unavailable');}},
    getComputedStyle:e=>e===root?{rowGap:'12'}:{paddingTop:'16',paddingBottom:'16',paddingLeft:'20',paddingRight:'20'},
@@ -104,10 +104,10 @@ async function run(reduced=false){
  assert.deepEqual([probe.itemPose(k.reveal).w,probe.itemPose(k.reveal).h],[40,25.6],'Kronos lands with a squash');
  assert.equal(probe.itemPose(k.reveal+3/30).w,32);
  for(let f=0;f<kronosRow.impact;f++){const pose=probe.itemPose(f/30);assert.equal(pose.w,32);assert.equal(pose.alpha,1);}
- // White rises before the conversion and fades out slowly afterwards.
- assert.equal(probe.ringWhite(1),0);assert(probe.ringWhite(k.reveal-10/30)<probe.ringWhite(k.reveal-2/30));
- assert.equal(probe.ringWhite(k.reveal),1);assert(probe.ringWhite(k.reveal+.75)>0&&probe.ringWhite(k.reveal+.75)<1);
- assert.equal(probe.ringWhite(k.reveal+45/30),0,'Original colours fully return');
+ // Black deepens before the conversion and fades out slowly afterwards.
+ assert.equal(probe.ringBlack(1),0);assert(probe.ringBlack(k.reveal-10/30)<probe.ringBlack(k.reveal-2/30));
+ assert.equal(probe.ringBlack(k.reveal),1);assert(probe.ringBlack(k.reveal+.75)>0&&probe.ringBlack(k.reveal+.75)<1);
+ assert.equal(probe.ringBlack(k.reveal+45/30),0,'Original colours fully return');
  // Orbit speeds up and closes in on the item.
  const early=probe.ringState(50/30),tight=probe.ringState((kronosRow.impact-14)/30);
  assert(tight.rx<early.rx*.5,'The ring closes in on the item');
@@ -273,5 +273,5 @@ async function run(reduced=false){
 
 
 
- console.log('PASS: 34 before/after identities and playback controls; turned Saturn ring with slow whitening and colour return; owned-only selection including modded snapshots, one-pet timing, empty-only random without replacement, stable pause/scrub snapshot; specific void/impact/chomp/flood contracts; fixed flame tip with downward growth and concealed conversion; red native reticle with the SOFLAM lock-on warning and launch/blast cues, small articulated clock, native halo/glints; Cancer trinket; original vanilla crop/padding bounds; audio gesture, pause, silent scrub, laser alternate; applied/pending filter and combined Korean search; IME/search; reduced motion; offline assets. Direct Canvas frame sheets saved, browser layout not verified.');
+ console.log('PASS: 34 before/after identities and playback controls; turned Saturn ring with slow darkening and colour return; owned-only selection including modded snapshots, one-pet timing, empty-only random without replacement, stable pause/scrub snapshot; specific void/impact/chomp/flood contracts; fixed flame tip with downward growth and concealed conversion; red native reticle with the SOFLAM lock-on warning and launch/blast cues, small articulated clock, native halo/glints; Cancer trinket; original vanilla crop/padding bounds; audio gesture, pause, silent scrub, laser alternate; applied/pending filter and combined Korean search; IME/search; reduced motion; offline assets. Direct Canvas frame sheets saved, browser layout not verified.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

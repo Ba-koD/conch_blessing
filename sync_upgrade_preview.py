@@ -28,6 +28,13 @@ def synchronize(check=False):
             row['effectAnchor'] = [float(value[1]) for value in anchor]
         else:
             row.pop('effectAnchor', None)
+        # Item icons are the shipped runtime PNGs, so a redrawn icon never
+        # leaves a stale copy in the preview.
+        name = row['key'].lower() + '.png'
+        icon = next((p for p in (ROOT / 'resources/gfx/items/collectibles' / name,
+                                 ROOT / 'resources/gfx/items/trinkets' / name) if p.exists()), None)
+        assert icon, 'missing runtime icon for ' + row['key']
+        row['icon'] = 'data:image/png;base64,' + base64.b64encode(icon.read_bytes()).decode('ascii')
         # Both renderers read the impact and scene length from the catalog.
         for field in ('impact', 'duration'):
             value = re.search(field + r'\s*=\s*(\d+)', entries[row['key']])
