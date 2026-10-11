@@ -17,7 +17,7 @@ local DEFAULT_SOUND = { positive = "SOUND_HOLY", neutral = "SOUND_POWERUP_SPEWER
 
 local LOOK = {
     lightning = "the room darkens around the item, stays dark, then one close bolt strikes as it changes and the darkness clears",
-    saturn = "three pets fade in already riding the tilted ring, speed up and close in while the item turns white, fuse into a golden ring, collapse, and the new item slowly regains its colours",
+    saturn = "three pets fade in already riding the tilted ring, speed up and close in while the item turns black, fuse into a golden ring, collapse, and the new item slowly regains its colours",
     rain = "rain falls across a flooding floor, five drops soak the item blue, it changes and dries",
     clock = "the clock runs six hours from 6 to 12 with a continuous tick-tock, a heavy grandfather-clock strike at 12 as the item changes; nothing else beside it",
     fire = "a red flame ignites above the item, grows down over it, bursts and the new item appears",
@@ -241,24 +241,24 @@ local function effectChecks(plan, key, profile)
             local s = ctx.scene
             return #s.pets == 3 and s.petSource == "random", string.format("pets=%d source=%s", #s.pets, tostring(s.petSource))
         end)
-        plan.check(key .. ": the item whitens only from frame 70 up to the change", function(_, ctx)
+        plan.check(key .. ": the item darkens to black only from frame 70 up to the change", function(_, ctx)
             local s = ctx.scene
-            local ok, detail = sampled(s, "white", 1, 70, function(v) return v == 0, "should not be white yet" end)
+            local ok, detail = sampled(s, "black", 1, 70, function(v) return v == 0, "should not be dark yet" end)
             if not ok then return ok, detail end
-            return sampled(s, "white", 71, impact - 1, function(v, f)
-                return v > 0 and v >= s.samples.white[f - 1] and (f < impact - 1 or v >= 0.95), "should rise to near white"
+            return sampled(s, "black", 71, impact - 1, function(v, f)
+                return v > 0 and v >= s.samples.black[f - 1] and (f < impact - 1 or v >= 0.95), "should deepen to near black"
             end)
         end)
         plan.check(key .. ": the colour returns gradually over 45 frames, not at once", function(_, ctx)
             local s, maxStep = ctx.scene, 0
-            local ok, detail = sampled(s, "white", impact, impact + 45, function(v, f)
-                if f == impact then return v >= 0.99, "should start fully white" end
-                local step = s.samples.white[f - 1] - v
+            local ok, detail = sampled(s, "black", impact, impact + 45, function(v, f)
+                if f == impact then return v >= 0.99, "should start fully black" end
+                local step = s.samples.black[f - 1] - v
                 maxStep = math.max(maxStep, step)
                 return step >= -1e-9 and step <= 0.05, "should fall by at most 0.05 per frame"
             end)
             if not ok then return ok, detail end
-            return s.samples.white[impact + 45] <= 0.01, string.format("%s; max step %.3f; final %.3f", detail, maxStep, s.samples.white[impact + 45])
+            return s.samples.black[impact + 45] <= 0.01, string.format("%s; max step %.3f; final %.3f", detail, maxStep, s.samples.black[impact + 45])
         end)
     elseif effect == "rain" then
         plan.check(key .. ": the item soaks blue up to the change, then dries gradually over 45 frames", function(_, ctx)

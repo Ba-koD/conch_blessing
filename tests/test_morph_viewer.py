@@ -313,7 +313,7 @@ class MorphVisualTests(unittest.TestCase):
             end
         ''')
 
-    def test_kronos_real_morph_whitens_into_the_ring_and_returns_native_colors(self):
+    def test_kronos_real_morph_darkens_into_the_ring_and_returns_native_colors(self):
         self.viewer()
         self.lua.execute('''
             for _,ownedPets in ipairs({0,1,3}) do
@@ -330,21 +330,22 @@ class MorphVisualTests(unittest.TestCase):
                 sprite.Color=Color(1,1,1,1)
                 event(1)
                 local job=ConchBlessing._upgradeJobs[1]
-                local visual,revealFrames,settledFrames,whitest,firstAfter,lastAfter=nil,0,0,0
+                local visual,revealFrames,settledFrames,darkest,firstAfter,lastAfter=nil,0,0,1
                 -- Borrowed colours are restored right after each draw; read the
-                -- white offset while the item layer is actually rendering.
+                -- colour scale while the item layer is actually rendering.
                 local render=sprite.RenderLayer
                 function sprite:RenderLayer(id,pos)
                     if id==1 then
-                        if job.committed then firstAfter=firstAfter or self.Color.RO; lastAfter=self.Color.RO
-                        else whitest=math.max(whitest,self.Color.RO) end
+                        assert(self.Color.RO==0, 'darkening scales the colour, it adds nothing')
+                        if job.committed then firstAfter=firstAfter or self.Color.R; lastAfter=self.Color.R
+                        else darkest=math.min(darkest,self.Color.R) end
                     end
                     return render(self,id,pos)
                 end
                 for tick=1,240 do
                     event(1); drawings={}; event(2)
                     visual=job.templateState.morphScene or visual
-                    assert(sprite.Color.A==1 and sprite.Color.RO==0, 'temporary white leaked into the native item')
+                    assert(sprite.Color.A==1 and sprite.Color.RO==0 and sprite.Color.R==1, 'temporary darkness leaked into the native item')
                     assert(sprite.Scale.X==1 and sprite.Scale.Y==1, 'the landing squash must not stay on the pickup')
                     assert(sprite:GetLayer(0):IsVisible(), 'native pedestal stays visible')
                     for _,d in ipairs(drawings) do
@@ -360,8 +361,8 @@ class MorphVisualTests(unittest.TestCase):
                 end
                 assert(visual.impact==120 and visual.duration==170)
                 assert(revealFrames>=45 and settledFrames>30)
-                assert(whitest>.9, 'the heart turns white before the conversion')
-                assert(firstAfter>.9 and lastAfter<.05, 'Kronos slowly regains its colours')
+                assert(darkest<.1, 'the heart turns black before the conversion')
+                assert(firstAfter<.1 and lastAfter>.95, 'Kronos slowly regains its colours')
                 assert(#visual.pets==(ownedPets==0 and 3 or ownedPets))
                 assert(W.isRunning() and p:Exists() and #T._activeAnimations==0 and #errors==0)
                 event(6,'conch_morph','stop')
@@ -882,8 +883,8 @@ class MorphVisualTests(unittest.TestCase):
             local early,late=D.ring(s,50,320,158,ease),D.ring(s,s.impact-14,320,158,ease)
             assert(late.rx<early.rx*.5, 'the orbit closes in on the item')
             assert(D.ring(s,51,320,158,ease).turn-early.turn<late.turn-D.ring(s,s.impact-15,320,158,ease).turn, 'and accelerates')
-            assert(D.white(s,60,ease)==0 and D.white(s,s.impact-1,ease)>.9 and D.white(s,s.impact,ease)==1)
-            assert(D.white(s,s.impact+20,ease)>0 and D.white(s,s.impact+45,ease)==0, 'colours return over 1.5 s')
+            assert(D.black(s,60,ease)==0 and D.black(s,s.impact-1,ease)>.9 and D.black(s,s.impact,ease)==1)
+            assert(D.black(s,s.impact+20,ease)>0 and D.black(s,s.impact+45,ease)==0, 'colours return over 1.5 s')
             p=pickup(); state={}; local custom=T.forItem('KRONOS','positive')
             local before=custom.onBeforeChange(p.Position,p,state)
             assert(before==s.impact)

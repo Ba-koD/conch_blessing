@@ -257,7 +257,7 @@ class UpgradePresentationTests(unittest.TestCase):
                 want = ';'.join(c for c in expected_cues(effect, impact) if int(c.split('|')[1]) >= impact)
                 self.assertEqual(self.lua.eval('late'), want)
 
-    def test_kronos_whitens_late_and_regains_colour_gradually(self):
+    def test_kronos_darkens_to_black_late_and_regains_colour_gradually(self):
         self.lua.execute('''
             tints={}
             scene,p=runFull('KRONOS',false,function(s,p)
@@ -266,23 +266,23 @@ class UpgradePresentationTests(unittest.TestCase):
                 end
                 drawings={}
             end)''')
-        white = self.lua.eval('scene.samples.white')
+        black = self.lua.eval('scene.samples.black')
         for f in range(1, 71):
-            self.assertEqual(white[f], 0, 'white too early at %d' % f)
+            self.assertEqual(black[f], 0, 'dark too early at %d' % f)
         for f in range(71, 120):
-            self.assertGreater(white[f], white[f - 1] - 1e-12)
-        self.assertGreaterEqual(white[119], .95)
-        self.assertEqual(white[120], 1)
-        steps = [white[f - 1] - white[f] for f in range(121, 166)]
+            self.assertGreater(black[f], black[f - 1] - 1e-12)
+        self.assertGreaterEqual(black[119], .95)
+        self.assertEqual(black[120], 1)
+        steps = [black[f - 1] - black[f] for f in range(121, 166)]
         self.assertTrue(all(-1e-12 <= s <= .05 for s in steps), max(steps))
         self.assertLess(max(steps), .04, 'colour return should be spread over 45 frames')
         for f in range(165, 171):
-            self.assertLess(white[f], 1e-9)
-        # The item is actually drawn with that tint (lerp to white, not additive).
+            self.assertLess(black[f], 1e-9)
+        # The item is actually drawn with that tint: scaled toward black, nothing added.
         for f in (100, 119, 120, 130, 142, 160):
             color = self.lua.eval('tints[%d]' % f)
-            self.assertAlmostEqual(color['RO'], white[f], places=6)
-            self.assertAlmostEqual(color['R'], 1 - white[f], places=6)
+            self.assertAlmostEqual(color['RO'], 0, places=6)
+            self.assertAlmostEqual(color['R'], 1 - black[f], places=6)
             self.assertAlmostEqual(color['A'], .8, places=6)
 
     def test_kronos_pets_appear_already_riding_the_orbit(self):
@@ -451,7 +451,7 @@ class UpgradePresentationTests(unittest.TestCase):
     def test_kronos_debug_marks_record_the_colour_return(self):
         self.run_key('KRONOS', debug=True)
         lines = list(self.lua.eval('logs').values())
-        marks = {m[1]: m[2] for line in lines for m in [re.search(r'MARK KRONOS frame=\d+/170 (\S+) at=\d+ white=([\d.]+)', line)] if m}
+        marks = {m[1]: m[2] for line in lines for m in [re.search(r'MARK KRONOS frame=\d+/170 (\S+) at=\d+ black=([\d.]+)', line)] if m}
         self.assertEqual(marks['commit'], '1.00')
         self.assertTrue(.5 < float(marks['colour+15']) < 1)
         self.assertTrue(0 < float(marks['colour+30']) < .5)
@@ -666,7 +666,7 @@ class MorphBenchOracleTests(unittest.TestCase):
 
     def test_checks_catch_each_defect(self):
         cases = {
-            'instant colour return': ("KRONOS", "function(_,s) s.samples.white[121]=0 end", 'colour returns gradually'),
+            'instant colour return': ("KRONOS", "function(_,s) s.samples.black[121]=0 end", 'colour returns gradually'),
             'missing cue': ("KRONOS", "function(_,s) table.remove(s.cues,1) end", 'every cue played once'),
             'cue on the wrong frame': ("SOFLAM", "function(_,s) s.cues[1].frame=4 end", 'every cue played once'),
             'quiet cue': ("SOFLAM", "function(_,s) s.cues[2].volume=.2 end", 'every cue played once'),

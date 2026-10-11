@@ -86,7 +86,7 @@ local function trace(scene, event, detail)
         scene.frame, scene.duration, detail and detail ~= "" and " " .. detail or ""))
 end
 Visuals.trace = trace
--- One value per scene frame, e.g. Kronos's white strength or the storm's darkness.
+-- One value per scene frame, e.g. Kronos's black strength or the storm's darkness.
 local function sample(scene, name, value)
     local values = scene.samples[name]
     if not values then values = {}; scene.samples[name] = values end
@@ -291,12 +291,12 @@ function Visuals.milestones(scene)
     local i, e, list = scene.impact, scene.profile.effect, {}
     local function add(name, frame, value) list[#list + 1] = { name = name, frame = frame, value = value } end
     local function dark(f) return string.format("darkness=%.2f", stormAlpha(scene, f)) end
-    local function white(f) return string.format("white=%.2f", Devour.white(scene, f, ease)) end
+    local function black(f) return string.format("black=%.2f", Devour.black(scene, f, ease)) end
     if e == "lightning" then
         add("blackout", 2, dark); add("darkness-full", 18, dark); add("darkness-held", i - 1, dark)
     elseif e == "saturn" then
         for k = 1, #(scene.pets or {}) do add("pet" .. k .. "-appears", 4 + (k - 1) * 8) end
-        add("spin", 40); add("whiten", 70, white); add("fuse", i - 12, white); add("collapse", i - 6, white)
+        add("spin", 40); add("blacken", 70, black); add("fuse", i - 12, black); add("collapse", i - 6, black)
     elseif e == "rain" then
         local function wet() return string.format("wet=%.2f flood=%.2f", rainWetness(scene), floodLevel(scene)) end
         for k = 1, 5 do add("drop" .. k .. "-lands", strikeLanding(scene, k), wet) end
@@ -328,10 +328,10 @@ function Visuals.milestones(scene)
             end
         end
     end
-    add("commit", i, e == "lightning" and dark or e == "saturn" and white or nil)
+    add("commit", i, e == "lightning" and dark or e == "saturn" and black or nil)
     if e == "lightning" then add("flash-gone", i + 7); add("ring-gone", i + 16) end
     if e == "saturn" then
-        for _, step in ipairs({ 15, 23, 30, 45 }) do add("colour+" .. step, i + step, white) end
+        for _, step in ipairs({ 15, 23, 30, 45 }) do add("colour+" .. step, i + step, black) end
     end
     if e == "void" then
         add("vanished", i + 3, function(f) return string.format("vanish=%.2f", voidVanish(scene, f)) end)

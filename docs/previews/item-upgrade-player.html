@@ -359,16 +359,19 @@ footer { text-align:center; font-size:11px; color:#79736a; }
   }
   function bolt(points,c,width=2){for(let i=1;i<points.length;i++)line(...points[i-1],...points[i],c,width);}
   const whiteSprites=new WeakMap();
-  function whiteItem(img,x,y,strength,w=32,h=32){
+  function tintItem(img,x,y,strength,w=32,h=32,fill='#ffffff'){
     if(strength<=0||!img.complete||!img.naturalWidth)return;
     // Tint only the original sprite's opaque pixels on a tiny private canvas.
-    let surface=whiteSprites.get(img);
+    const key=fill+'|'+img.src;
+    let surface=whiteSprites.get(key);
     if(!surface){surface=document.createElement('canvas');surface.width=surface.height=32;
       const ctx=surface.getContext('2d');ctx.imageSmoothingEnabled=false;ctx.drawImage(img,0,0,32,32);
-      ctx.globalCompositeOperation='source-in';ctx.fillStyle='#ffffff';ctx.fillRect(0,0,32,32);whiteSprites.set(img,surface);
+      ctx.globalCompositeOperation='source-in';ctx.fillStyle=fill;ctx.fillRect(0,0,32,32);whiteSprites.set(key,surface);
     }
     g.save();g.globalAlpha=clamp(strength);g.drawImage(surface,x-w/2,y-h/2,w,h);g.restore();
   }
+  function whiteItem(img,x,y,strength,w=32,h=32){tintItem(img,x,y,strength,w,h,'#ffffff');}
+  function blackItem(img,x,y,strength,w=32,h=32){tintItem(img,x,y,strength,w,h,'#000000');}
   function floodedFloor(t){
     const level=floodLevel(t);if(level<=0)return;
     g.save();g.beginPath();g.rect(138,80,364,204);g.clip();
@@ -621,14 +624,14 @@ footer { text-align:center; font-size:11px; color:#79736a; }
   }
 
   // Saturn (applied; scripts/lib/upgrade_devour.lua draws the same numbers).
-  // A slow, absorbing build like MattPack's ~3 s whitening transformations:
+  // A slow, absorbing build like MattPack's ~3 s transformations, in black:
   // pets fade in one by one already riding the planet's orbit, circle faster and closer to the
-  // item while it turns white, fuse into one golden ring, hold for a beat,
+  // item while it turns black, fuse into one golden ring, hold for a beat,
   // collapse into the item, and the result slowly regains its colours.
   // The icon is the Saturn sign turned 232 degrees clockwise, so the ring and
   // its near half turn with it.
   const RING_TILT=(-16+232)*Math.PI/180,RING_APPEAR=[4,8,24],RING_SPIN=40,RING_COLLAPSE=[14,10,6,2];
-  const RING_WHITE=70,RING_RETURN=45;
+  const RING_BLACK=70,RING_RETURN=45;
   function ringFrames(){const impact=fr(kronosRun.timing.reveal);return {impact,fuse:impact-12,collapse:impact-6};}
   function ringState(t){
     const f=fr(t),{fuse}=ringFrames(),spin=smooth(RING_SPIN,fuse,f),rx=48-34*spin;
@@ -641,10 +644,10 @@ footer { text-align:center; font-size:11px; color:#79736a; }
     const x=Math.cos(phase)*r.rx,y=Math.sin(phase)*r.ry;
     return {x:r.cx+x*Math.cos(r.tilt)-y*Math.sin(r.tilt),y:r.cy+x*Math.sin(r.tilt)+y*Math.cos(r.tilt),front:Math.sin(phase)>0};
   }
-  // Lerp-to-white strength of the item: rises before impact, then fades out.
-  function ringWhite(t){
+  // Lerp-to-black strength of the item: rises before impact, then fades out.
+  function ringBlack(t){
     const f=fr(t),{impact}=ringFrames();
-    return f<impact?clamp((f-RING_WHITE)/(impact-RING_WHITE))**2:1-smooth(impact,impact+RING_RETURN,f);
+    return f<impact?clamp((f-RING_BLACK)/(impact-RING_BLACK))**2:1-smooth(impact,impact+RING_RETURN,f);
   }
   function ringPass(t,front){
     const r=ringState(t),{impact,fuse,collapse}=ringFrames(),n=Math.max(1,kronosRun.pets.length);
@@ -939,7 +942,7 @@ footer { text-align:center; font-size:11px; color:#79736a; }
     }
     if(m==='crown')whiteItem(t<phaseTime()?pair.origin:pair.icon,X,Y,smooth(10/30,38/30,t)*(1-smooth(phaseTime()+8/30,94/30,t)));
     if(m==='cointear')rainOnItem(t);
-    if(m==='devour'&&kronosRun.timing.style==='ring')whiteItem(t<phaseTime()?pair.origin:pair.icon,s.x,s.y,ringWhite(t),s.w,s.h);
+    if(m==='devour'&&kronosRun.timing.style==='ring')blackItem(t<phaseTime()?pair.origin:pair.icon,s.x,s.y,ringBlack(t),s.w,s.h);
   }
   function screenShake(t){
     if(!reduceMotion.matches&&mode()==='devour'){

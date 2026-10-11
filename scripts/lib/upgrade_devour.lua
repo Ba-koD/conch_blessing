@@ -73,16 +73,16 @@ function Devour.prepare(scene, owner)
 end
 
 -- The turned Saturn ring, with the same numbers as the HTML preview's
--- ringPass. A slow build like MattPack's ~3 s whitening transformations:
+-- ringPass. A slow build like MattPack's ~3 s transformations, in black:
 -- pets fade in one by one already riding the orbit, circle faster and closer to the item
--- while it turns white, fuse into one golden ring, hold, collapse into the
+-- while it turns black, fuse into one golden ring, hold, collapse into the
 -- item on the catalog's impact frame, and the result regains its colours.
 -- The icon is the Saturn sign turned 232 degrees clockwise, so the ring and
 -- the half that passes in front of the item turn with it.
 local TILT = math.rad(-16 + 232)
 local APPEAR_AT, APPEAR_STEP, APPEAR_LEN = 4, 8, 24
 local SPIN_START = 40
-local WHITE_START, COLOR_RETURN = 70, 45
+local BLACK_START, COLOR_RETURN = 70, 45
 local COLLAPSE = { 14, 10, 6, 2 }
 local LAND = { { 1.25, .8 }, { .9, 1.12 }, { 1.04, .97 } }
 local GOLD, PALE, SPARK = { .859, .698, .427 }, { 1, .945, .757 }, { .137, .098, .114 }
@@ -107,10 +107,10 @@ function Devour.point(ring, phase, rx, ry)
         ring.cy + px * math.sin(TILT) + py * math.cos(TILT), math.sin(phase) > 0
 end
 
--- Lerp-to-white strength of the item: rises before impact, then fades out.
-function Devour.white(scene, f, ease)
+-- Lerp-to-black strength of the item: rises before impact, then fades out.
+function Devour.black(scene, f, ease)
     if f < scene.impact then
-        local p = math.max(0, math.min(1, (f - WHITE_START) / (scene.impact - WHITE_START)))
+        local p = math.max(0, math.min(1, (f - BLACK_START) / (scene.impact - BLACK_START)))
         return p * p
     end
     return 1 - ease(scene.impact, scene.impact + COLOR_RETURN, f)
@@ -169,10 +169,10 @@ end
 
 function Devour.render(scene, x, y, h)
     local f = scene.frame
-    local white = Devour.white(scene, f, h.ease)
-    if h.sample then h.sample(scene, "white", white) end
-    -- Interpolate toward white (as the crown does) rather than adding light.
-    local tint = h.color(1 - white, 1 - white, 1 - white, 1, white)
+    local black = Devour.black(scene, f, h.ease)
+    if h.sample then h.sample(scene, "black", black) end
+    -- Interpolate toward black: scale the colour down, nothing added.
+    local tint = h.color(1 - black, 1 - black, 1 - black, 1, 0)
     pass(scene, h, x, y, false)
     if f < scene.impact then
         h.drawItem(scene, false, x, y, 1, 1, tint)
