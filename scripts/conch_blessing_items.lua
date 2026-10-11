@@ -305,18 +305,20 @@ ConchBlessing.ItemData = {
         id = Isaac.GetItemIdByName("Rabbit"),
     },
     DRAGON = {
-        type = "passive",
+        -- A familiar item kept at its original registry position (not the
+        -- familiar group) so every generated collectible ID stays unchanged.
+        type = "familiar",
         id = Isaac.GetItemIdByName("Dragon"),
+        anm2 = "dragon.anm2",
+        entity = { variant = 778, collisiondamage = 0, collisionmass = 3, collisionradius = 8, friction = 1, numgridcollisionpoints = 1, shadowsize = 0 },
+        gibs = { amount = 0, blood = 0, bone = 0, eye = 0, gut = 0, large = 0 },
         pool = {
             RoomType.ROOM_TREASURE,
             RoomType.ROOM_PLANETARIUM
         },
-        synergies = {
-            [{type = "collectible", name = "Dragon" }] = "dragon",
-        },
         quality = 4,
-        tags = "offensive",
-        cache = "flying tearflag",
+        tags = "offensive summonable",
+        cache = "familiars",
         hidden = false,
         shopprice = 20,
         devilprice = 2,
@@ -325,10 +327,11 @@ ConchBlessing.ItemData = {
         script = "scripts/items/collectibles/dragon",
         callbacks = {
             evaluateCache = "dragon.onEvaluateCache",
-            weaponFired = "dragon.onWeaponFired",
-            postLaserUpdate = "dragon.onPostLaserUpdate",
-            postEffectUpdate = "dragon.onPostEffectUpdate",
-            postPlayerUpdate = "dragon.onPlayerUpdate",
+            familiarInit = "dragon.onFamiliarInit",
+            familiarUpdate = "dragon.onFamiliarUpdate",
+            postFamiliarRender = "dragon.onFamiliarRender",
+            update = "dragon.onUpdate",
+            postRender = "dragon.onRender",
             postNewRoom = "dragon.onNewRoom",
             gameStarted = "dragon.onGameStarted"
         },

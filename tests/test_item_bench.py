@@ -345,7 +345,7 @@ class BenchTests(unittest.TestCase):
                     total=total+1
                 end
             end
-            assert(total==144,'update the documented synergy inventory when it changes')
+            assert(total==143,'update the documented synergy inventory when it changes')
             for _,name in ipairs({'conch_test kronos detail','conch_test live_eye detail','conch_test appraisal detail'}) do
                 bench.register({command=name,build=function() end})
             end
@@ -396,7 +396,7 @@ class BenchTests(unittest.TestCase):
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','kronos detail')
             assert(started=='conch_test kronos detail')
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','all')
-            assert(label=='conch_test' and #selected==111,'update the documented suite count when it changes')
+            assert(label=='conch_test' and #selected==110,'update the documented suite count when it changes')
         """)
 
     def test_aliases_detailed_helpers_and_shared_probes_use_the_single_command(self):
@@ -769,26 +769,66 @@ class BenchTests(unittest.TestCase):
             assert(curse==0 and checked and ctx.flameDamage==0 and ctx.flameTears==0)
         """)
 
-    def test_dragon_oracle_distinguishes_lightning_and_typhoon(self):
+    def test_dragon_oracle_checks_familiars_lightning_and_contact(self):
         self.run_lua("""
             C=require('scripts.dev.item_test_combat')
-            for _, n in ipairs({0,1,2,3}) do
-                local check
-                local plan=setmetatable({check=function(label,fn)
-                    if label:find('one copy fires lightning',1,true) then check=fn end
-                end}, {__index=function() return function() end end})
+            ConchBlessing.ItemData.DRAGON={entity={variant=778}}
+            ConchBlessing.dragon={data={strikeCooldown=150,parts={}}}
+            CollectibleType=CollectibleType or {}; CollectibleType.COLLECTIBLE_BFFS=247
+            function player:HasCollectible() return false end
+            for _, n in ipairs({0,1,2}) do
+                local checks={}
+                local plan=setmetatable({check=function(label,fn) checks[label]=fn end},
+                    {__index=function() return function() end end})
                 C.DRAGON.stage(plan,7,n)
-                assert(check, 'missing projectile-kind assertion')
-                local function result(lightning,typhoons)
-                    return check(player,{shots={countsByKey={
-                        __ConchDragonTechX=lightning,__ConchDragonVortex=typhoons}}})
-                end
+                assert(checks['one dragon per copy'], 'missing familiar count check')
+                assert(checks['Dragon grants no flight or spectral tears'], 'missing flag check')
                 if n==0 then
-                    assert(result(0,0)); assert(not result(5,0)); assert(not result(0,5))
-                elseif n==1 then
-                    assert(result(5,0)); assert(not result(0,5)); assert(not result(5,5))
+                    assert(checks['every enemy the snout runs into is struck for 5x current damage']==nil)
                 else
-                    assert(result(0,5)); assert(not result(5,0)); assert(not result(5,5))
+                    local strike=checks['every enemy the snout runs into is struck for 5x current damage']
+                    local rhythm=checks['a dragon strikes the same enemy at most once every five seconds']
+                    local contact=checks['contact deals 5% of current damage every tick']
+                    assert(strike and rhythm and contact)
+                    player.Damage=10
+                    local H=require('scripts.dev.item_test_support')
+                    -- hits[i] lists the recorded dragon hits on target i as {amount, frame}.
+                    local function targets(losses, hits)
+                        local t,hp,log={},{},{}
+                        for i,loss in ipairs(losses) do
+                            hp[i]=1000; t[i]={HitPoints=1000-loss}
+                            log[t[i]]=(hits and hits[i]) or (loss>0 and {{loss,i*100}} or {})
+                        end
+                        H.dragonHits=function(target,atLeast)
+                            local out={}
+                            for _,h in ipairs(log[target] or {}) do if not atLeast or h[1]>=atLeast then out[#out+1]={amount=h[1],frame=h[2],dragon=h[3]} end end
+                            return out
+                        end
+                        H.dragonDamage=function(target) local sum=0 for _,h in ipairs(log[target] or {}) do sum=sum+h[1] end return sum end
+                        return {targets=t,hp=hp}
+                    end
+                    assert(strike(player,targets({50,50,50,0,0,0})))
+                    assert(strike(player,targets({100.5,50,50,0,0,0},{{{50,10},{50,60},{0.5,61}}})), 'body contact and repeat bolts are accounted for')
+                    assert(not strike(player,targets({50,50,0,0,0,0})), 'too few strikes caught')
+                    assert(not strike(player,targets({50,50,25,0,0,0})), 'weak bolt caught')
+                    assert(not strike(player,targets({60,50,50,0,0,0},{{{50,10}}})), 'unexplained HP loss caught')
+                    assert(rhythm(player,targets({100,0,0,0,0,0},{{{50,10},{50,160}}})))
+                    assert(not rhythm(player,targets({100,0,0,0,0,0},{{{50,10},{50,40}}})), 'double strike caught')
+                    assert(rhythm(player,targets({100,0,0,0,0,0},{{{50,10,'a'},{50,40,'b'}}})), 'two dragons keep their own rhythm')
+                    assert(not rhythm(player,targets({100,0,0,0,0,0},{{{50,10,'a'},{50,40,'b'},{50,60,'a'}}})), 'one dragon striking twice caught')
+                    local biter={HitPoints=1000-20}
+                    local ctx={contactHp=1000,contactExpected=0.5,biter=biter}
+                    local function contactHits(n,extra)
+                        local list={}
+                        for i=1,n do list[#list+1]={0.5,i} end
+                        if extra then list[#list+1]={extra,99} end
+                        H.dragonHits=function() local out={} for _,h in ipairs(list) do out[#out+1]={amount=h[1],frame=h[2]} end return out end
+                        H.dragonDamage=function() local sum=0 for _,h in ipairs(list) do sum=sum+h[1] end return sum end
+                    end
+                    contactHits(40); assert(contact(player,ctx))
+                    contactHits(40,50); biter.HitPoints=1000-70; assert(contact(player,ctx), 'a bolt on top is fine')
+                    contactHits(4); biter.HitPoints=1000-2; assert(not contact(player,ctx), 'missing contact caught')
+                    contactHits(200); biter.HitPoints=1000-100; assert(not contact(player,ctx), 'contact counted per part caught')
                 end
             end
         """)

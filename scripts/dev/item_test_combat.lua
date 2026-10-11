@@ -93,10 +93,163 @@ C.TIME_MONEY = { stage = function(plan, _, n)
     end)
 end }
 
+-- Dragon: one long familiar per copy, no flight or spectral tears. Contact 5%
+-- of damage per tick; lightning for 5x damage on every enemy its snout runs
+-- into, once every five seconds each per dragon. The
+-- boss multiplier is covered offline (tests/test_dragon_familiar_contracts.py):
+-- spawning a real boss would attack the test player. Its recorded hits
+-- separate 5x bolts from 5% body contact, and HP loss must agree with every
+-- recorded hit.
+local function dragonsOf(player)
+    local variant = assert(ConchBlessing.ItemData.DRAGON.entity.variant, "missing Dragon familiar variant")
+    local list = {}
+    for _, entity in ipairs(Isaac.FindByType(EntityType.ENTITY_FAMILIAR, variant, -1)) do
+        local familiar = entity:ToFamiliar()
+        if familiar and familiar.Player and GetPtrHash(familiar.Player) == GetPtrHash(player) then list[#list + 1] = familiar end
+    end
+    return list
+end
+
+-- Offsets from the room centre, well outside the dragon's orbit around the player.
+local DRAGON_SPOTS = { { 170, -100 }, { 190, 95 }, { -200, -70 }, { -215, 85 }, { 235, 0 }, { -240, 5 } }
+local function pinTargets(ctx)
+    for i, target in ipairs(ctx.targets) do
+        local spot = DRAGON_SPOTS[i]
+        if target:Exists() then target.Position = ctx.center + Vector(spot[1], spot[2]); target.Velocity = Vector.Zero end
+    end
+end
+
+C.DRAGON = { stage = function(plan, _, n)
+    plan.check("Dragon grants no flight or spectral tears", function(player, ctx)
+        return player.CanFly == ctx.baseFly
+            and (player.TearFlags & TearFlags.TEAR_SPECTRAL ~= 0) == ctx.baseSpectral,
+            "flight=" .. tostring(player.CanFly)
+    end)
+    plan.check("one dragon per copy", function(player)
+        local list, segmented = dragonsOf(player), true
+        for _, familiar in ipairs(list) do
+            local state = familiar:GetData().__ConchDragon
+            segmented = segmented and state ~= nil and #state.segments == #ConchBlessing.dragon.data.parts
+        end
+        local expected = n
+        return #list == expected and segmented, string.format("dragons=%d expected=%d copies=%d segments=%s",
+            #list, expected, n, tostring(segmented))
+    end)
+    if n == 0 then return end
+    plan.act(function(player, ctx)
+        H.isolateAttack()
+        ctx.center = Game():GetRoom():GetCenterPos()
+        player.Position = ctx.center
+        ctx.dragon = dragonsOf(player)[1]
+        ctx.targets = {}
+        for i = 1, #DRAGON_SPOTS do ctx.targets[i] = H.target(player, true) end
+        pinTargets(ctx)
+        ctx.hp = {}
+        H.recordDragonHits(true)
+    end)
+    plan.waitUntil(function(_, ctx)
+        pinTargets(ctx)
+        for _, target in ipairs(ctx.targets) do
+            local ready, why = H.targetReady(target)
+            if not ready then return false, why end
+        end
+        for i, target in ipairs(ctx.targets) do ctx.hp[i] = target.HitPoints end
+        return true
+    end, 60, "six far targets initialized and vulnerable")
+    plan.act(function()
+        -- Readiness waits are over; count only hits from here on.
+        H.recordDragonHits(true)
+    end)
+    -- The dragon hunts the targets in turn; lightning strikes each one its snout runs into.
+    plan.waitUntil(function(player, ctx)
+        pinTargets(ctx)
+        player.Position = ctx.center
+        local struck = 0
+        for _, target in ipairs(ctx.targets) do
+            if #H.dragonHits(target, player.Damage * 2) > 0 then struck = struck + 1 end
+        end
+        return struck >= 3, "targets struck=" .. struck
+    end, 450, "the dragon runs into and strikes several targets")
+    plan.waitUntil(function(player, ctx)
+        pinTargets(ctx); player.Position = ctx.center
+        ctx.settle = (ctx.settle or 0) + 1
+        return ctx.settle >= 6
+    end, 8, "HP settles")
+    plan.check("every enemy the snout runs into is struck for 5x current damage", function(player, ctx)
+        local expected = player.Damage * 5 * (player:HasCollectible(CollectibleType.COLLECTIBLE_BFFS) and 2 or 1)
+        local struck, wrong = 0, {}
+        for i, target in ipairs(ctx.targets) do
+            local bolts = H.dragonHits(target, player.Damage * 2)
+            if #bolts > 0 then struck = struck + 1 end
+            for _, bolt in ipairs(bolts) do
+                if not H.near(bolt.amount, expected) then wrong[#wrong + 1] = i .. ":bolt " .. bolt.amount end
+            end
+            -- Every HP point lost is a recorded dragon hit (lightning plus body contact).
+            local loss = ctx.hp[i] - target.HitPoints
+            if math.abs(loss - H.dragonDamage(target)) > math.max(0.02, expected * 0.002) then
+                wrong[#wrong + 1] = i .. ":HP loss " .. loss .. " vs hits " .. H.dragonDamage(target)
+            end
+        end
+        return struck >= 3 and #wrong == 0, string.format("struck=%d damage=%s wrong=%s", struck, expected, table.concat(wrong, ","))
+    end)
+    plan.check("a dragon strikes the same enemy at most once every five seconds", function(player, ctx)
+        local gaps = {}
+        for i, target in ipairs(ctx.targets) do
+            -- Each dragon keeps its own rhythm; several dragons may strike one enemy.
+            local last = {}
+            for _, bolt in ipairs(H.dragonHits(target, player.Damage * 2)) do
+                local who = bolt.dragon or 0
+                local gap = last[who] and bolt.frame - last[who]
+                if gap and gap < ConchBlessing.dragon.data.strikeCooldown then gaps[#gaps + 1] = i .. ":" .. gap end
+                last[who] = bolt.frame
+            end
+        end
+        return #gaps == 0, "too-close bolts=" .. (#gaps > 0 and table.concat(gaps, ",") or "none")
+    end)
+    -- Contact: the body held against one enemy hurts it every tick.
+    plan.act(function(player, ctx)
+        for i = 2, #ctx.targets do ctx.targets[i]:Remove() end
+        ctx.biter = ctx.targets[1]
+        ctx.contactTicks, ctx.contactHp = 0, nil
+        ctx.contactExpected = player.Damage * 0.05 * (player:HasCollectible(CollectibleType.COLLECTIBLE_BFFS) and 2 or 1)
+        H.recordDragonHits(true)
+    end)
+    plan.waitUntil(function(player, ctx)
+        player.Position = ctx.center
+        local state = ctx.dragon:GetData().__ConchDragon
+        ctx.biter.Position = state.segments[6]
+        ctx.biter.Velocity = Vector.Zero
+        if not ctx.contactHp then ctx.contactHp = ctx.biter.HitPoints end
+        ctx.contactTicks = ctx.contactTicks + 1
+        return ctx.contactTicks > 40
+    end, 45, "an enemy held against the dragon's body")
+    plan.check("contact deals 5% of current damage every tick", function(_, ctx)
+        -- 40 updates of contact; a bolt may land too if the head swings round.
+        local touches, odd = 0, 0
+        local mine = ctx.dragon and GetPtrHash(ctx.dragon)
+        for _, hit in ipairs(H.dragonHits(ctx.biter)) do
+            -- Count the measured dragon's touches; other dragons may brush past too.
+            if hit.amount < ctx.contactExpected * 10 and not (mine and hit.dragon and hit.dragon ~= mine) then
+                touches = touches + 1
+                if not H.near(hit.amount, ctx.contactExpected) then odd = odd + 1 end
+            end
+        end
+        local loss = ctx.contactHp - ctx.biter.HitPoints
+        local recorded = H.dragonDamage(ctx.biter)
+        return touches >= 39 and touches <= 41 and odd == 0 and math.abs(loss - recorded) <= math.max(0.02, recorded * 0.002),
+            string.format("contact hits=%d (39-41 expected, %.3f each) odd=%d HP loss=%.3f recorded=%.3f",
+                touches, ctx.contactExpected, odd, loss, recorded)
+    end)
+    plan.act(function(_, ctx)
+        H.recordDragonHits(false)
+        if ctx.biter and ctx.biter:Exists() then ctx.biter:Remove() end
+        ctx.targets, ctx.biter, ctx.dragon = nil, nil, nil
+    end)
+end }
+
 for key, spec in pairs({ FIRE_BREATH = { dataKey = "__ConchFireBreath", coef = 0.3 },
-    ICE_BREATH = { dataKey = "__ConchIceBreath", coef = 0.2 },
-    DRAGON = { dataKey = { "__ConchDragonTechX", "__ConchDragonVortex" }, coef = 0.25 } }) do
-    C[key] = { prepare = key ~= "DRAGON" and function(plan)
+    ICE_BREATH = { dataKey = "__ConchIceBreath", coef = 0.2 } }) do
+    C[key] = { prepare = function(plan)
         -- Copy/removal checks need one real burst, not a repeated low-luck wait.
         -- The owned-stat matrix separately exercises 15/10/2/1-shot boundaries.
         plan.act(function(player)
@@ -106,21 +259,14 @@ for key, spec in pairs({ FIRE_BREATH = { dataKey = "__ConchFireBreath", coef = 0
             H.flameDecayControl(plan)
             H.blueFlameDamageControl(plan)
         end
-    end or nil, stage = function(plan, _, n)
-        if key == "DRAGON" then
-            plan.check("flight/spectral flags follow presence", function(player, ctx)
-                return player.CanFly == (n > 0 or ctx.baseFly)
-                    and (player.TearFlags & TearFlags.TEAR_SPECTRAL ~= 0) == (n > 0 or ctx.baseSpectral),
-                    "flight=" .. tostring(player.CanFly)
-            end)
-        end
+    end, stage = function(plan, _, n)
         if not ModCallbacks.MC_POST_TRIGGER_WEAPON_FIRED then
             plan.check("real weapon-trigger path", function() return nil, "MC_POST_TRIGGER_WEAPON_FIRED unavailable" end)
             return
         end
         plan.act(function(player, ctx)
-            local interval = key == "DRAGON" and 5 or math.max(1, math.floor(15 - player.Luck))
-            local state = player:GetData()[key == "DRAGON" and "__ConchDragon" or spec.dataKey]
+            local interval = math.max(1, math.floor(15 - player.Luck))
+            local state = player:GetData()[spec.dataKey]
             local previous = state and state.attackCount or 0
             ctx.requiredTriggers = n > 0 and math.max(1, interval - previous) or interval
             H.shoot(player, spec.dataKey, ctx, ctx.requiredTriggers)
@@ -135,22 +281,12 @@ for key, spec in pairs({ FIRE_BREATH = { dataKey = "__ConchFireBreath", coef = 0
             return (n > 0 and s.count > 0) or (n == 0 and s.count == 0),
                 "weapon triggers=" .. s.triggers .. " new projectiles=" .. s.count
         end)
-        if key == "DRAGON" then
-            plan.check("one copy fires lightning; stacked copies replace it with typhoons", function(_, ctx)
-                local lightning = ctx.shots.countsByKey.__ConchDragonTechX or 0
-                local typhoons = ctx.shots.countsByKey.__ConchDragonVortex or 0
-                local correct = n == 0 and lightning == 0 and typhoons == 0
-                    or n == 1 and lightning > 0 and typhoons == 0
-                    or n >= 2 and lightning == 0 and typhoons > 0
-                return correct, "lightning=" .. lightning .. " typhoons=" .. typhoons
-            end)
-        end
         if n > 0 then
             plan.check("burst occurs at the required real attack count", function(_, ctx)
                 return H.expect(ctx.shots.triggers, ctx.requiredTriggers)
             end)
             plan.check("burst projectile count follows current tears", function(player, ctx)
-                local expected = key == "DRAGON" and 5 or math.max(1, math.floor(30 / (math.max(0, player.MaxFireDelay) + 1)))
+                local expected = math.max(1, math.floor(30 / (math.max(0, player.MaxFireDelay) + 1)))
                 return H.expect(ctx.shots.count, expected)
             end)
             plan.check("projectile damage scales with remaining copies", function(player, ctx)
@@ -161,21 +297,18 @@ for key, spec in pairs({ FIRE_BREATH = { dataKey = "__ConchFireBreath", coef = 0
                 end
                 return true, "all samples match " .. expected
             end)
-            if key ~= "DRAGON" then
-                plan.check("emitted flame status chance follows live luck", function(player, ctx)
-                    local chance = math.max(0, math.min(1, player.Luck * (key == "FIRE_BREATH" and 0.05 or 0.01)))
-                    for _, sample in ipairs(ctx.shots.samples) do
-                        if not H.near(sample.chance, chance) then return false, "status chance: " .. tostring(sample.chance) .. " expected " .. chance end
-                    end
-                    return #ctx.shots.samples > 0, "spawned chance=" .. chance .. "; actual status checked in status_conditions"
-                end)
-            end
+            plan.check("emitted flame status chance follows live luck", function(player, ctx)
+                local chance = math.max(0, math.min(1, player.Luck * (key == "FIRE_BREATH" and 0.05 or 0.01)))
+                for _, sample in ipairs(ctx.shots.samples) do
+                    if not H.near(sample.chance, chance) then return false, "status chance: " .. tostring(sample.chance) .. " expected " .. chance end
+                end
+                return #ctx.shots.samples > 0, "spawned chance=" .. chance .. "; actual status checked in status_conditions"
+            end)
             H.sampleAttackDamage(plan, function(player) return player.Damage * spec.coef * n end,
                 function(_, ctx) return ctx.shots.entities[1] end, {blueFlame=key=="ICE_BREATH"})
         else
             plan.check("attack counter cleared after loss", function(player)
-                local keyName = key == "DRAGON" and "__ConchDragon" or spec.dataKey
-                local state = player:GetData()[keyName]
+                local state = player:GetData()[spec.dataKey]
                 return not state or state.attackCount == 0, "no stored attacks while absent"
             end)
         end

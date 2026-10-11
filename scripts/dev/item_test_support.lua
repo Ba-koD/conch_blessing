@@ -176,8 +176,7 @@ function H.isolateAttack(keep)
         if (not keep or GetPtrHash(entity) ~= GetPtrHash(keep)) and
             (entity.Type == EntityType.ENTITY_TEAR or entity.Type == EntityType.ENTITY_LASER
                 or entity.Type == EntityType.ENTITY_BOMB
-                or entity.Type == EntityType.ENTITY_EFFECT and (data.__ConchFireBreath or data.__ConchIceBreath
-                    or data.__ConchDragonVortex or data.__ConchDragonWhirlpool)) then entity:Remove() end
+                or entity.Type == EntityType.ENTITY_EFFECT and (data.__ConchFireBreath or data.__ConchIceBreath)) then entity:Remove() end
     end
 end
 
@@ -618,5 +617,36 @@ function H.cleanup(ctx)
     end
     if failure then error(failure) end
 end
+
+-- Every damage hit the dragon familiar deals (applied hits where the runtime
+-- reports them), so lightning and body contact can be told
+-- apart while the dragon hunts the very targets a check measures.
+local dragonHits = { on = false, list = {} }
+function H.recordDragonHits(on)
+    dragonHits.on, dragonHits.list = on, {}
+end
+function H.dragonHits(target, atLeast)
+    local out = {}
+    for _, hit in ipairs(dragonHits.list) do
+        if (not target or hit.hash == GetPtrHash(target)) and (not atLeast or hit.amount >= atLeast) then out[#out + 1] = hit end
+    end
+    return out
+end
+function H.dragonDamage(target)
+    local total = 0
+    for _, hit in ipairs(H.dragonHits(target)) do total = total + hit.amount end
+    return total
+end
+local dragonHitCallback = ModCallbacks and (ModCallbacks.MC_POST_ENTITY_TAKE_DMG or ModCallbacks.MC_ENTITY_TAKE_DMG)
+if dragonHitCallback then ConchBlessing:AddCallback(dragonHitCallback, function(_, entity, amount, _, source)
+    if not dragonHits.on or amount <= 0 then return end
+    local from = source and source.Entity
+    local item = ConchBlessing.ItemData.DRAGON
+    local variant = item and item.entity and item.entity.variant
+    if from and variant and from.Type == EntityType.ENTITY_FAMILIAR and from.Variant == variant then
+        dragonHits.list[#dragonHits.list + 1] = { hash = GetPtrHash(entity), amount = amount, frame = Game():GetFrameCount(),
+            dragon = GetPtrHash(from) }
+    end
+end) end
 
 return H

@@ -108,17 +108,10 @@ return {
             name = "Dragon",
             description = "God of Weather",
             eid = {
-                "Gain flight and Spectral tears.",
-                "#Every 5th attack, fires 5 lightning shots in random directions.",
-                "#{{Warning}} Requires REPENTOGON!",
-            },
-            synergies = {
-                dragon = {
-                    "Lightning shots are replaced with a tornado",
-                    "#When the tornado ends, it creates a vortex that pulls in enemies for 2 seconds",
-                    "#When the vortex disappears, it explodes for 25x your damage",
-                    "#Each additional Dragon increases damage by 25%",
-                },
+                "A long dragon weaves around you and lunges at nearby enemies",
+                "#Enemies touching its body take 5% of your damage every tick",
+                "#Lightning strikes every enemy the dragon's head runs into for 5x your damage (once every 5 seconds each)",
+                "#Bosses take 5x more lightning damage (25x your damage)",
             },
         },
         SNAKE = {

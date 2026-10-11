@@ -705,13 +705,12 @@ def create_items_xml(items, output_path):
                 item_elem.set("tags", " ".join(tag_tokens))
         
         # set additional attributes
-        # cache: ensure familiars include "familiar" in cache flags
+        # cache: ensure familiars include the "familiars" cache flag exactly once
         cache_value = item_info.get('cache')
         if item_type == 'familiar':
             if cache_value:
-                # append 'familiar' if not already present as a token
                 tokens = set(str(cache_value).split())
-                if 'familiar' not in tokens:
+                if 'familiars' not in tokens and 'familiar' not in tokens:
                     cache_value = str(cache_value) + ' familiars'
             else:
                 cache_value = 'familiars'

@@ -1,1082 +1,777 @@
+-- 진 (Dragon): a long azure dragon familiar per copy.
+--
+-- The dragon weaves around its player like a living creature and rushes at
+-- any enemy in the room, swimming at it in a gently weaving line (wave
+-- pursuit). It hurts every enemy its body touches each tick, and lightning
+-- strikes every enemy its snout runs into, at most once every five seconds each
+-- (bosses take five times more). Several dragons spread out, each going for
+-- an enemy no other dragon is already after when there is one. Small sparks of current crackle along its
+-- body now and then; they are drawn only and hurt nothing.
+-- docs/guidance_methods.md names every steering method used here.
+--
+-- Every part follows one orientation rule: drawn facing right with its back
+-- up, a part heading left is mirrored top-to-bottom so its back stays up.
+-- Each part decides from its own direction, with a small band around vertical
+-- so it never flickers, so a turn travels naturally from head to tail; nothing
+-- is squashed. Like a rig, the head leads and the
+-- body follows: the head always swims forward and its turning speed itself
+-- eases in and out, so its direction never jumps; every other part sits on
+-- the exact trail the head left behind, so the body never bunches or kinks.
+-- The dragon keeps its own head position and sets the entity to it each
+-- update rather than relying on the engine to integrate a velocity.
+-- Motion and drawing are cosmetic; damage always goes through
+-- Entity:TakeDamage with the familiar as its source.
 ConchBlessing.dragon = {}
 
-local WeaponAttackTracker = require("scripts.lib.weapon_attack_tracker")
 local DRAGON_ID = Isaac.GetItemIdByName("Dragon")
-local VORTEX_VARIANT = (EffectVariant and EffectVariant.BRIMSTONE_BALL) or 113
-local WHIRLPOOL_VARIANT = (EffectVariant and EffectVariant.WHIRLPOOL) or 142
-local WHIRLPOOL_PARTICLE_SUBTYPE = 1
-local BIG_WATER_SPLASH_VARIANT = (EffectVariant and EffectVariant.BIG_SPLASH) or 132
-local WHIRLPOOL_SCALE_MULT = 1.2
-local WHIRLPOOL_PARTICLE_SCALE_MULT = 1.5
-local BIG_WATER_SPLASH_SCALE_MULT = 2.0
+local THUNDER_SOUND = "Conch Upgrade Thunder Strike"
 
 ConchBlessing.dragon.data = {
-    attacksPerTrigger = 5,
-    spawnCount = 5, -- fixed count (no stack scaling)
-    projectileSpeed = 6.3, -- 70% speed baseline
-    decelerationFrames = 60, -- fully stops in 60 ticks
-    baseDamagePercent = 0.25, -- 25% of player damage
-    synergyDamageBonus = 0.25, -- +25% per extra stack for vortex touch damage
-    vortexExplosionDamageMultiplier = 25, -- whirlpool expiry explosion damage
-    techXRadius = 40,
-    vortexPullRadius = 220, -- whirlpool pull radius
-    vortexPullStrength = 3.2, -- whirlpool pull strength
-    vortexExplosionRadius = 180, -- fixed explosion radius reference
-    vortexExplosionVisualDamage = 0, -- visual-only explode damage
-    vortexTouchRadius = 72, -- base radius at SpriteScale 1.0
-    vortexTouchTick = 1,
-    vortexScale = 0.6,
-    whirlpoolDurationFrames = 60, -- 2 sec at 30 FPS
-    gridInteractionRadius = 60, -- fireplace/TNT interaction radius around vortex/whirlpool
-    gridInteractionTick = 4, -- frames between touching the same grid index
-    gridCollisionProbeOffset = 16, -- front probe distance for moving vortex
-    vortexWallMode = "pierce", -- "pierce" | "stick"
+    -- Head, a long body and the tail; legs hang under the front and hind parts.
+    parts = { "Head", "Body", "Body", "Body", "Body", "Body", "Body", "Body",
+              "Body", "Body", "Body", "Body", "Body", "Tail" },
+    legParts = { [3] = true, [9] = true },
+    flipThreshold = 0.08,                -- heading cosine (about 5 degrees past vertical) at which a part turns round
+    spacing = { 10, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 10 },  -- trail distance between part pivots
+    taper = 0.35,                        -- the tail end is drawn this much smaller than the head
+    flyHeight = 7,                       -- the body floats above its shadow...
+    liftWave = 3, liftRate = 0.12, liftStep = 0.55,  -- ...rising and dipping along its length
+    orbitRadius = 74,
+    radiusSwing = 22, radiusSwing2 = 9,  -- the orbit breathes in and out
+    orbitSquash = 0.78,                  -- Isaac's floor is seen at an angle
+    angularSpeed = 0.045,                -- radians per update before the speed swings
+    speedSwing = 0.45, speedSwing2 = 0.25,
+    -- The head always swims forward. Its turn velocity eases toward what the
+    -- goal asks for (turnGain), never faster than turnAccel per update and
+    -- never beyond the turn-rate cap, so its path is one smooth curve.
+    turnGain = 0.15, turnAccel = 0.02,
+    idleTurnRate = 0.08, hurryTurnRate = 0.2,
+    turnSlowdown = 0.7,                  -- share of speed kept while the goal is behind
+    minTurnRadius = 30,                  -- the head never curls tighter than this, so the body bends smoothly
+    minSpeed = 1.2, maxSpeed = 15,
+    hurryDistance = 120,                 -- this far outside the orbit, the turn rate rises to hurryTurnRate
+    radialGain = 0.04,                   -- tilt toward the orbit per unit of distance off it
+    weave = 0.2, weaveRate = 0.06,       -- gentle side-to-side swimming
+    catchUp = 0.15,                      -- extra speed per unit of distance outside the orbit
+    speedEase = 0.1,
+    -- Any enemy in the room draws the dragon off its orbit: wave pursuit,
+    -- heading for the enemy with a slow sine weave on top of the bearing.
+    -- Once the head runs into its prey it flies straight on through (a fly-by)
+    -- and then goes for the enemy it has passed least recently, so its hits
+    -- spread over every enemy instead of coiling round one.
+    -- The hunt is fast and decisive: a quick dash, and a sharp (but still
+    -- eased) turn the moment a new target is chosen, so the switch is plain to see.
+    chaseSpeed = 8, chaseSpeedEase = 0.25,
+    chaseTurnRate = 0.2, chaseTurnAccel = 0.045,
+    chaseWeave = 0.15, chaseWeaveRate = 0.07,
+    passReach = 6,                       -- head within headReach + this + the enemy's size runs into it
+    passTicks = 12,                      -- updates it keeps straight on after running through
+    trailStep = 0.5,                     -- smallest head move recorded on the trail
+    teleportStep = 96,                   -- the player moving this far in one update has teleported
+    snapDistance = 1600,                 -- failsafe: never this far from the player, even while hunting
+    legFrameTicks = 5, tailFrameTicks = 8,
+    headReach = 14,                      -- the snout reaches this far ahead of the neck
+    contactDamagePercent = 0.05,         -- of the player's damage, per tick, per enemy
+    contactRadius = 8,                   -- per part, plus the enemy's own size
+    lightningDamageMultiplier = 5,
+    lightningBossMultiplier = 5,
+    strikeCooldown = 150,                -- one lightning bolt per enemy every five seconds, per dragon
+    bffsDamageMultiplier = 2,
+    bffsScale = 1.25,
+    strikeFrames = { 2, 2, 2, 2, 3 },    -- ticks each lightning frame stays on screen
+    -- Sparks of current crackling along the body (drawn only).
+    sparkGap = { 6, 14 },                -- updates between sparks, rolled from the dragon's own seed
+    sparkFrames = 3,                     -- the Spark animation's frames...
+    sparkFrameTicks = 2,                 -- ...each this many updates on screen
+    sparkSpread = 5,                     -- off the spine to either side, before scaling
 }
 
-ConchBlessing.dragon._sfxCooldown = {}
-ConchBlessing.dragon._effectBySeed = {}
+local PART_ANIMATIONS = ConchBlessing.dragon.data.parts
+ConchBlessing.dragon._strikes = {}
+local enemyCache = { frame = -1, list = {} }
+-- Every dragon's state and the frame it last updated, so several dragons can
+-- spread over different enemies. Weak keys: a removed dragon drops out.
+local liveStates = setmetatable({}, { __mode = "k" })
+local reportedRenderFailure = false
+local thunderSound
 
--- Tech X ring texture is red-heavy, so use additive offsets to force a yellow tint.
-local TECHX_COLOR = Color(1.0, 1.0, 1.0, 1.0, 0.55, 1.75, -0.05)
-local VORTEX_COLOR = Color(1.0, 1.0, 1.0, 1.0, -0.75, 0.45, 1.25)
-
-local function clamp(value, minValue, maxValue)
-    if value < minValue then return minValue end
-    if value > maxValue then return maxValue end
-    return value
+local function debugLog(format, ...)
+    if not (ConchBlessing.Config and ConchBlessing.Config.debugMode) then return end
+    ConchBlessing.printDebug("[Dragon] " .. string.format(format, ...))
 end
 
-local function resolveSoundId(defaultId, ...)
-    if SoundEffect then
-        for _, rawName in ipairs({ ... }) do
-            local name = tostring(rawName)
-            local id = SoundEffect["SOUND_" .. name] or SoundEffect[name]
-            if type(id) == "number" then
-                return id
-            end
+local function getVariant()
+    local item = ConchBlessing.ItemData.DRAGON
+    return item and item.entity and item.entity.variant
+end
+
+local function ownedCount(player)
+    return player and player:GetCollectibleNum(DRAGON_ID) or 0
+end
+
+-- One dragon per copy: owned copies plus temporary effects (Box of Friends,
+-- Monster Manual), like any other familiar item.
+local function familiarCount(player)
+    local effects = player:GetEffects()
+    local temporary = effects and effects:GetCollectibleEffectNum(DRAGON_ID) or 0
+    return ownedCount(player) + temporary
+end
+
+local function hasBffs(player)
+    return player and player:HasCollectible(CollectibleType.COLLECTIBLE_BFFS) or false
+end
+
+-- ------------------------------------------------------------------ pure rules
+-- Kept free of engine state so tests can exercise them directly.
+local function contactDamage(playerDamage, bffs)
+    local d = ConchBlessing.dragon.data
+    return playerDamage * d.contactDamagePercent * (bffs and d.bffsDamageMultiplier or 1)
+end
+
+local function lightningDamage(playerDamage, isBoss, bffs)
+    local d = ConchBlessing.dragon.data
+    return playerDamage * d.lightningDamageMultiplier * (isBoss and d.lightningBossMultiplier or 1)
+        * (bffs and d.bffsDamageMultiplier or 1)
+end
+
+-- Angular speed and orbit radius at time t: two slow sine swings with
+-- per-dragon phases, so the path never settles into a mechanical circle.
+local function orbitShape(state, t)
+    local d = ConchBlessing.dragon.data
+    local speed = d.angularSpeed * (1 + d.speedSwing * math.sin(t * 0.031 + state.p1)
+        + d.speedSwing2 * math.sin(t * 0.077 + state.p2))
+    local radius = d.orbitRadius + d.radiusSwing * math.sin(t * 0.023 + state.p3)
+        + d.radiusSwing2 * math.sin(t * 0.061 + state.p4)
+    return speed, radius
+end
+
+local function wrapAngle(a)
+    return (a + math.pi) % (2 * math.pi) - math.pi
+end
+
+local function trailLength()
+    local total = 0
+    for _, gap in ipairs(ConchBlessing.dragon.data.spacing) do total = total + gap end
+    return total
+end
+
+-- The head's trail, newest point first. A move shorter than trailStep slides
+-- the newest point instead of adding one; points past the body's length drop off.
+local function pushTrail(trail, head)
+    local d = ConchBlessing.dragon.data
+    local first = trail[1]
+    if first and first:Distance(head) < d.trailStep and trail[2] then
+        trail[1] = head
+    else
+        table.insert(trail, 1, head)
+    end
+    local need, travelled = trailLength() + 4, 0
+    for i = 2, #trail do
+        travelled = travelled + trail[i]:Distance(trail[i - 1])
+        if travelled > need then
+            for j = #trail, i + 1, -1 do trail[j] = nil end
+            break
         end
     end
-    return defaultId
 end
 
-local SFX_WHIRL_SPAWN = resolveSoundId(474, "BOSS_2_DIVE", "WATER_FLOW_LARGE")
-local SFX_WHIRL_SPAWN_ALT = resolveSoundId(426, "MAW_OF_VOID", "BOSS_2_WATER_THRASHING")
-local SFX_WHIRLPOOL_SPAWN = resolveSoundId(488, "BOSS_2_WATER_THRASHING", "WATER_FLOW_LOOP", "WET_FEET")
-local SFX_WHIRLPOOL_LOOP = resolveSoundId(473, "WATER_FLOW_LOOP", "WET_FEET")
-local SFX_WATER_EXPLODE = resolveSoundId(486, "BOSS_2_INTRO_WATER_EXPLOSION", "BOSS_2_WATER_THRASHING")
-local SFX_WATER_EXPLODE_ALT = resolveSoundId(488, "BOSS_2_WATER_THRASHING", "WAR_LAVA_SPLASH", "BEAST_LAVA_BALL_SPLASH")
-
-local function playSfx(soundId, volume, pitch, minIntervalFrames)
-    local id = tonumber(soundId)
-    if not id then
-        return
-    end
-
-    local interval = tonumber(minIntervalFrames) or 0
-    if interval > 0 then
-        local frame = Game():GetFrameCount()
-        local gate = ConchBlessing.dragon._sfxCooldown or {}
-        local lastFrame = gate[id]
-        if lastFrame and (frame - lastFrame) < interval then
-            return
+-- The point `distance` along the trail behind the head. Past the recorded end
+-- the trail continues straight back.
+local function sampleTrail(trail, distance, heading)
+    local travelled = 0
+    for i = 2, #trail do
+        local a, b = trail[i - 1], trail[i]
+        local length = b:Distance(a)
+        if length > 0 and travelled + length >= distance then
+            return a + (b - a) * ((distance - travelled) / length)
         end
-        gate[id] = frame
-        ConchBlessing.dragon._sfxCooldown = gate
+        travelled = travelled + length
     end
+    local last, before = trail[#trail], trail[#trail - 1]
+    local back = before and last - before
+    if not back or back:Length() < 0.001 then back = Vector(-math.cos(heading), -math.sin(heading)) end
+    return last + back:Resized(distance - travelled)
+end
 
-    local sfx = SFXManager()
-    if not sfx then
-        return
+-- Every part's position and angle, laid on the trail; the head points along its heading.
+local function layOut(trail, heading)
+    local d = ConchBlessing.dragon.data
+    local positions, angles = {}, {}
+    local offset = 0
+    for i = 1, #d.parts do
+        if i > 1 then offset = offset + (d.spacing[i - 1] or d.spacing[#d.spacing]) end
+        positions[i] = sampleTrail(trail, offset, heading)
+        if i == 1 then
+            angles[i] = heading
+        else
+            local toward = sampleTrail(trail, math.max(0, offset - 5), heading) - sampleTrail(trail, offset + 5, heading)
+            angles[i] = toward:Length() > 0.001 and math.atan(toward.Y, toward.X) or angles[i - 1]
+        end
     end
+    return positions, angles
+end
 
-    local ok = pcall(function()
-        sfx:Play(id, volume or 1.0, 0, false, pitch or 1.0, 0)
-    end)
-    if not ok then
-        ok = pcall(function()
-            sfx:Play(id, volume or 1.0, 0, false, pitch or 1.0)
-        end)
-    end
-    if not ok then
-        pcall(function()
-            sfx:Play(id, volume or 1.0)
-        end)
+-- How large a part is drawn: full size at the head, thinning toward the tail.
+local function partTaper(index)
+    local d = ConchBlessing.dragon.data
+    return 1 - d.taper * ((index - 1) / (#d.parts - 1)) ^ 1.4
+end
+
+-- ------------------------------------------------------------------ state
+local function copyVector(v) return Vector(v.X, v.Y) end
+
+local function straightTrail(position, heading)
+    local back = Vector(-math.cos(heading), -math.sin(heading))
+    return { copyVector(position), position + back * (trailLength() + 4) }
+end
+
+-- Whether a part faces left: past vertical by the flipThreshold band, else
+-- whatever it faced before, so swimming straight up or down never flickers.
+local function facesLeft(angle, current)
+    local c = math.cos(angle)
+    local threshold = ConchBlessing.dragon.data.flipThreshold
+    if c < -threshold then return true end
+    if c > threshold then return false end
+    if current == nil then return c < 0 end
+    return current
+end
+
+-- The single orientation rule for drawing any part. The engine applies the
+-- mirror after the rotation (on screen), so a mirrored part takes the negated
+-- angle to point the same way.
+local function orient(sprite, angle, mirrored)
+    local degrees = math.deg(angle)
+    sprite.FlipY = mirrored
+    sprite.Rotation = mirrored and -degrees or degrees
+end
+
+-- Lay the parts on the current trail, keeping the last pose for render interpolation.
+local function settle(state, keepPrevious)
+    local positions, angles = layOut(state.trail, state.dir)
+    for i = 1, #positions do
+        if keepPrevious then
+            state.previous[i], state.prevAngles[i] = state.segments[i], state.angles[i]
+        else
+            state.previous[i], state.prevAngles[i] = positions[i], angles[i]
+            state.flips[i] = nil
+        end
+        state.segments[i], state.angles[i] = positions[i], angles[i]
+        state.flips[i] = facesLeft(angles[i], state.flips[i])
     end
 end
 
-local function playSfxSet(ids, volume, pitch, minIntervalFrames)
-    if not ids then
-        return
-    end
-    for _, id in ipairs(ids) do
-        playSfx(id, volume, pitch, minIntervalFrames)
-    end
+local function newState(familiar)
+    -- Cosmetic phases from the familiar's own seed; no gameplay RNG is consumed.
+    local seed = familiar.InitSeed or 1
+    local function phase(k) return ((seed // k) % 997) / 997 * 2 * math.pi end
+    local player = familiar.Player
+    local origin = player and player.Position or familiar.Position
+    local offset = familiar.Position - origin
+    local theta = offset:Length() > 1 and math.atan(offset.Y, offset.X) or phase(3)
+    local dir = theta + math.pi / 2               -- start swimming along the orbit
+    local state = {
+        t = 0, p1 = phase(1), p2 = phase(7), p3 = phase(13), p4 = phase(29),
+        theta = theta, dir = dir, turnVel = 0, speed = ConchBlessing.dragon.data.minSpeed,
+        head = copyVector(familiar.Position),
+        velocity = Vector(0, 0), trail = straightTrail(familiar.Position, dir),
+        segments = {}, previous = {}, angles = {}, prevAngles = {}, flips = {}, passed = {},
+        struck = {}, renders = 0,
+        sparks = {}, sparkWait = ConchBlessing.dragon.data.sparkGap[1], sparkSeed = seed % 2147483647 + 1,
+    }
+    settle(state, false)
+    return state
 end
 
-local function safePlayAnimation(sprite, animation, force)
-    if not (sprite and sprite.Play and animation) then
-        return
-    end
-    pcall(function()
-        sprite:Play(animation, force == true)
-    end)
-end
-
-local function hasDragon(player)
-    return player
-        and DRAGON_ID
-        and DRAGON_ID > 0
-        and player.HasCollectible
-        and player:HasCollectible(DRAGON_ID)
-end
-
-local function getDragonCount(player)
-    if not player then
-        return 0
-    end
-
-    local ok, count = pcall(function()
-        return player:GetCollectibleNum(DRAGON_ID, true)
-    end)
-    if not ok then
-        ok, count = pcall(function()
-            return player:GetCollectibleNum(DRAGON_ID)
-        end)
-    end
-
-    if ok and type(count) == "number" then
-        return math.max(0, math.floor(count))
-    end
-    return 0
-end
-
-local function getPlayerData(player)
-    local data = player:GetData()
-    if not data.__ConchDragon then
-        data.__ConchDragon = {
-            attackCount = 0,
-        }
-    end
+local function getState(familiar)
+    local data = familiar:GetData()
+    if not data.__ConchDragon then data.__ConchDragon = newState(familiar) end
     return data.__ConchDragon
 end
 
-local function findPlayerByInitSeed(initSeed)
-    if not initSeed then
-        return nil
-    end
-
-    local n = Game():GetNumPlayers()
-    for i = 0, n - 1 do
-        local player = Isaac.GetPlayer(i)
-        if player and player.InitSeed == initSeed then
-            return player
-        end
-    end
-    return nil
+local function snapTo(state, position)
+    state.head = copyVector(position)
+    state.playerAt = copyVector(position)
+    state.trail = straightTrail(position, state.dir)
+    state.velocity = Vector(0, 0)
+    state.turnVel, state.prey, state.passing, state.passed = 0, nil, nil, {}
+    settle(state, false)
 end
 
-local function rememberEffect(effect)
-    if effect and effect.InitSeed then
-        ConchBlessing.dragon._effectBySeed = ConchBlessing.dragon._effectBySeed or {}
-        ConchBlessing.dragon._effectBySeed[effect.InitSeed] = effect
-    end
+-- ------------------------------------------------------------------ enemies
+local function isTarget(entity)
+    return entity and entity:Exists() and entity:IsVulnerableEnemy() and entity:IsActiveEnemy(false)
+        and not entity:IsDead() and not entity:HasEntityFlags(EntityFlag.FLAG_FRIENDLY)
 end
 
-local function findEffectByInitSeed(initSeed, variant)
-    if not initSeed then
-        return nil
-    end
-
-    local cache = ConchBlessing.dragon._effectBySeed
-    local cached = cache and cache[initSeed] or nil
-    if cached and cached:Exists() then
-        if (not variant) or cached.Variant == variant then
-            return cached
+-- One room scan per update, shared by every dragon.
+local function roomEnemies()
+    local frame = Game():GetFrameCount()
+    if enemyCache.frame ~= frame then
+        enemyCache.frame, enemyCache.list = frame, {}
+        for _, entity in ipairs(Isaac.GetRoomEntities()) do
+            local npc = entity:ToNPC()
+            if npc and isTarget(npc) then enemyCache.list[#enemyCache.list + 1] = npc end
         end
-    elseif cache then
-        cache[initSeed] = nil
     end
+    return enemyCache.list
+end
 
-    for _, entity in ipairs(Isaac.GetRoomEntities()) do
-        local effect = entity:ToEffect()
-        if effect and effect.InitSeed == initSeed then
-            if (not variant) or effect.Variant == variant then
-                rememberEffect(effect)
-                return effect
+local function scaleFor(player)
+    return hasBffs(player) and ConchBlessing.dragon.data.bffsScale or 1
+end
+
+-- Body contact: every enemy touched by any part takes contact damage once
+-- this tick. Returns the enemies the snout ran into.
+local function applyContact(familiar, state, player)
+    local d = ConchBlessing.dragon.data
+    local damage = contactDamage(player.Damage, hasBffs(player))
+    local scale = scaleFor(player)
+    local reach = d.contactRadius * scale
+    -- The snout, which reaches ahead of the neck, then the parts' pivots.
+    local points = { state.segments[1] + Vector(math.cos(state.dir), math.sin(state.dir)) * (d.headReach * scale) }
+    for i, segment in ipairs(state.segments) do points[i + 1] = segment end
+    local snouted = {}
+    for _, enemy in ipairs(roomEnemies()) do
+        local limit = reach + (enemy.Size or 0)
+        for k, point in ipairs(points) do
+            if point:DistanceSquared(enemy.Position) <= limit * limit then
+                -- Once per enemy per tick, however many parts touch it.
+                enemy:TakeDamage(damage, 0, EntityRef(familiar), 0)
+                if k == 1 then snouted[#snouted + 1] = enemy end
+                break
             end
         end
     end
-    return nil
+    return snouted
 end
 
-local function spawnWhirlpoolParticle(position, spawner, scale, timeoutFrames)
-    local particle = Isaac.Spawn(
-        EntityType.ENTITY_EFFECT,
-        WHIRLPOOL_VARIANT,
-        WHIRLPOOL_PARTICLE_SUBTYPE,
-        position,
-        Vector.Zero,
-        spawner
-    ):ToEffect()
-    if not particle then
-        return nil
+-- ------------------------------------------------------------------ lightning
+local function getThunderSound()
+    if thunderSound == nil then
+        local id = Isaac.GetSoundIdByName and Isaac.GetSoundIdByName(THUNDER_SOUND)
+        thunderSound = type(id) == "number" and id > 0 and id or false
+        if not thunderSound then ConchBlessing.printError("[Dragon] missing sound: " .. THUNDER_SOUND) end
     end
-
-    local particleScale = 0.3 * WHIRLPOOL_PARTICLE_SCALE_MULT
-    particle.SpriteScale = Vector(particleScale, particleScale)
-    particle.SpriteOffset = Vector(0, -5)
-    particle.DepthOffset = 24
-    safePlayAnimation(particle:GetSprite(), "Idle1", true)
-    if timeoutFrames and particle.SetTimeout then
-        particle:SetTimeout(timeoutFrames)
-    end
-    rememberEffect(particle)
-    return particle
+    return thunderSound or nil
 end
 
-local function getRandomDirection(player)
-    local rng = nil
-    if player and player.GetCollectibleRNG then
-        local ok, collectibleRng = pcall(function()
-            return player:GetCollectibleRNG(DRAGON_ID)
-        end)
-        if ok then
-            rng = collectibleRng
+local function strikeEnemy(familiar, player, enemy)
+    local isBoss = enemy:IsBoss()
+    local damage = lightningDamage(player.Damage, isBoss, hasBffs(player))
+    enemy:TakeDamage(damage, 0, EntityRef(familiar), 0)
+    local strikes = ConchBlessing.dragon._strikes
+    strikes[#strikes + 1] = { position = copyVector(enemy.Position), age = 0 }
+    local sound = getThunderSound()
+    if sound then SFXManager():Play(sound, 0.5, 0, false, 1) end
+    Game():ShakeScreen(3)
+    debugLog("strike %s.%s boss=%s damage=%.2f", tostring(enemy.Type), tostring(enemy.Variant), tostring(isBoss), damage)
+end
+
+-- Lightning on every enemy the snout runs into, once per strikeCooldown each
+-- (per dragon: every dragon keeps its own record).
+local function updateLightning(familiar, state, player, snouted)
+    local d = ConchBlessing.dragon.data
+    for _, enemy in ipairs(snouted) do
+        local hash = GetPtrHash(enemy)
+        local last = state.struck[hash]
+        if not last or state.t - last >= d.strikeCooldown then
+            state.struck[hash] = state.t
+            strikeEnemy(familiar, player, enemy)
         end
     end
+end
 
-    local angle = nil
-    if rng and rng.RandomFloat then
-        angle = rng:RandomFloat() * 360
+-- ------------------------------------------------------------------ sparks
+-- Cosmetic dice from the dragon's own seed (a small LCG), never gameplay RNG.
+local function cosmeticRoll(seed)
+    seed = (seed * 1103515245 + 12345) % 2147483648
+    return seed, seed / 2147483648
+end
+
+-- Age the sparks and drop spent ones; every few updates light a new one on a
+-- random part, turned any way and a little off the spine.
+local function updateSparks(state)
+    local d = ConchBlessing.dragon.data
+    state.sparks = state.sparks or {}
+    state.sparkWait = state.sparkWait or d.sparkGap[1]
+    state.sparkSeed = state.sparkSeed or 1
+    local life = d.sparkFrames * d.sparkFrameTicks
+    for i = #state.sparks, 1, -1 do
+        local spark = state.sparks[i]
+        spark.age = spark.age + 1
+        if spark.age >= life then table.remove(state.sparks, i) end
+    end
+    state.sparkWait = state.sparkWait - 1
+    if state.sparkWait > 0 then return end
+    local rolls = {}
+    for k = 1, 4 do state.sparkSeed, rolls[k] = cosmeticRoll(state.sparkSeed) end
+    local parts = #d.parts
+    state.sparks[#state.sparks + 1] = {
+        part = math.min(parts, 1 + math.floor(rolls[1] * parts)),
+        angle = rolls[2] * 360,
+        side = (rolls[3] * 2 - 1) * d.sparkSpread,
+        age = 0,
+    }
+    state.sparkWait = d.sparkGap[1] + math.floor(rolls[4] * (d.sparkGap[2] - d.sparkGap[1] + 1))
+end
+
+-- ------------------------------------------------------------------ motion
+-- Ease the head's turn velocity toward what the wanted heading asks for, so
+-- its direction changes smoothly however suddenly the goal moves.
+local function steerHead(state, want, maxTurn, accel)
+    local d = ConchBlessing.dragon.data
+    accel = accel or d.turnAccel
+    -- Turn rate is capped by speed so the path never curls tighter than minTurnRadius.
+    maxTurn = math.min(maxTurn, math.max(state.speed, d.minSpeed) / d.minTurnRadius)
+    local err = wrapAngle(want - state.dir)
+    local asked = math.max(-maxTurn, math.min(maxTurn, err * d.turnGain * 6))
+    state.turnVel = state.turnVel + math.max(-accel, math.min(accel, asked - state.turnVel))
+    state.dir = wrapAngle(state.dir + state.turnVel)
+    -- How much of its speed the head keeps: less while its goal is off to the side or behind.
+    return d.turnSlowdown + (1 - d.turnSlowdown) * math.max(0, math.cos(err))
+end
+
+-- The enemy to hunt: the current prey until the head has run through it;
+-- then the enemy passed least recently (never-passed ones first), nearest
+-- among equals, so every enemy gets its turn.
+-- The enemies other live dragons are going for this update.
+local function preyOfOthers(state)
+    local frame = Game():GetFrameCount()
+    local taken = {}
+    for other, seen in pairs(liveStates) do
+        if other ~= state and other.prey and frame - seen <= 1 then taken[other.prey] = true end
+    end
+    return taken
+end
+
+-- Keep the current prey; otherwise prefer an enemy no other dragon is after,
+-- then the one this dragon passed least recently, then the nearest.
+local function choosePrey(state, head)
+    local taken = preyOfOthers(state)
+    local best, bestTaken, bestPass, bestDistance = nil, math.huge, math.huge, math.huge
+    for _, enemy in ipairs(roomEnemies()) do
+        local hash = GetPtrHash(enemy)
+        if hash == state.prey then return enemy end
+        local claimed = taken[hash] and 1 or 0
+        local pass = state.passed[hash] or -math.huge
+        local distance = enemy.Position:Distance(head)
+        if claimed < bestTaken or (claimed == bestTaken and (pass < bestPass
+            or (pass == bestPass and distance < bestDistance))) then
+            best, bestTaken, bestPass, bestDistance = enemy, claimed, pass, distance
+        end
+    end
+    return best
+end
+
+local function updateMotion(familiar, state, player)
+    local d = ConchBlessing.dragon.data
+    -- Reattach only after a real teleport of the player (or a runaway failsafe);
+    -- hunting across a big room must not pull the dragon back.
+    local jumped = state.playerAt and player.Position:Distance(state.playerAt) > d.teleportStep
+    state.playerAt = copyVector(player.Position)
+    if jumped or state.head:Distance(player.Position) > d.snapDistance then
+        snapTo(state, player.Position)
+    end
+    state.t = state.t + 1
+    local head = state.head
+    local prey = not state.passing and choosePrey(state, head)
+    local wanted
+    if state.passing then
+        -- Fly-by: straight on through for a moment before turning for the next.
+        steerHead(state, state.dir, d.chaseTurnRate, d.chaseTurnAccel)
+        wanted = d.chaseSpeed
+        state.passing = state.passing - 1
+        if state.passing <= 0 then state.passing = nil end
+    elseif prey then
+        -- Wave pursuit: the bearing to the enemy plus a slow sine weave.
+        local toward = prey.Position - head
+        local want = math.atan(toward.Y, toward.X) + math.sin(state.t * d.chaseWeaveRate + state.p2) * d.chaseWeave
+        wanted = d.chaseSpeed * steerHead(state, want, d.chaseTurnRate, d.chaseTurnAccel)
+        local hash = GetPtrHash(prey)
+        if state.prey ~= hash then
+            state.prey = hash
+            debugLog("dragon hunts %s.%s", tostring(prey.Type), tostring(prey.Variant))
+        end
+        local reach = d.headReach * scaleFor(player) + d.passReach + (prey.Size or 0)
+        if toward:Length() <= reach then
+            state.passed[hash], state.prey, state.passing = state.t, nil, d.passTicks
+            debugLog("dragon runs through %s.%s", tostring(prey.Type), tostring(prey.Variant))
+        end
     else
-        angle = math.random() * 360
+        state.prey = nil
+        local angular, radius = orbitShape(state, state.t)
+        -- Orbit as a steering field: head along the circle's tangent, tilted
+        -- inward when outside the breathing radius and outward when inside,
+        -- plus a slow side-to-side weave. Worked in unsquashed floor space.
+        local rel = head - player.Position
+        local rx, ry = rel.X, rel.Y / d.orbitSquash
+        local r = math.sqrt(rx * rx + ry * ry)
+        local phi = r > 0.001 and math.atan(ry, rx) or state.theta
+        state.theta = phi
+        local miss = r - radius
+        local want = phi + (math.pi / 2 + math.atan(miss * d.radialGain))
+            + math.sin(state.t * d.weaveRate + state.p2) * d.weave
+        want = math.atan(math.sin(want) * d.orbitSquash, math.cos(want))
+        -- Left behind, the dragon may turn more sharply and swims faster.
+        local hurry = math.min(1, math.max(0, miss) / d.hurryDistance)
+        local keep = steerHead(state, want, d.idleTurnRate + (d.hurryTurnRate - d.idleTurnRate) * hurry,
+            d.turnAccel * (1 + 1.5 * hurry))
+        wanted = (angular * radius + math.max(0, miss) * d.catchUp) * keep
     end
+    wanted = math.max(d.minSpeed, math.min(d.maxSpeed, wanted))
+    local hunting = state.passing or state.prey
+    state.speed = state.speed + (wanted - state.speed) * (hunting and d.chaseSpeedEase or d.speedEase)
+    local velocity = Vector(math.cos(state.dir), math.sin(state.dir)) * state.speed
+    state.velocity = velocity
+    state.head = head + velocity
+    -- The dragon owns its position; the invisible entity just follows the head.
+    familiar.Position = state.head
+    familiar.Velocity = Vector(0, 0)
 
-    local direction = Vector.FromAngle(angle)
-    if direction:Length() < 0.001 then
-        direction = Vector(1, 0)
-    end
-    return direction:Resized(1)
+    pushTrail(state.trail, state.head)
+    settle(state, true)
+    state.renders = 0
 end
 
-local function getTechXDamage(player)
-    return (player.Damage or 3.5) * (ConchBlessing.dragon.data.baseDamagePercent or 0.25)
+-- ------------------------------------------------------------------ callbacks
+ConchBlessing.dragon.onEvaluateCache = function(_, player, cacheFlag)
+    if cacheFlag == CacheFlag.CACHE_FAMILIARS then
+        local variant = getVariant()
+        if not variant then return end
+        -- A zero count removes the last dragon once every copy is gone.
+        player:CheckFamiliar(variant, familiarCount(player), player:GetCollectibleRNG(DRAGON_ID),
+            Isaac.GetItemConfig():GetCollectible(DRAGON_ID))
+    end
 end
 
-local function getVortexTouchDamage(player, dragonCount)
-    local playerDamage = player.Damage or 3.5
-    local basePercent = ConchBlessing.dragon.data.baseDamagePercent or 0.25
-    local perExtra = ConchBlessing.dragon.data.synergyDamageBonus or 0.25
-    local extraStacks = math.max(0, dragonCount - 1)
-    local totalPercent = basePercent + (perExtra * extraStacks)
-    return playerDamage * totalPercent
+ConchBlessing.dragon.onFamiliarInit = function(_, familiar)
+    if familiar.Variant ~= getVariant() then return end
+    familiar.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
+    familiar.GridCollisionClass = EntityGridCollisionClass.GRIDCOLL_NONE
+    -- The entity's own sprite stays empty; the parts are drawn on render.
+    familiar:GetSprite():Play("Hidden", true)
+    getState(familiar)
 end
 
-local function getVortexExplosionDamage(player)
-    local mult = ConchBlessing.dragon.data.vortexExplosionDamageMultiplier or 25
-    local out = (player.Damage or 3.5) * mult
-    if out < 1 then
-        out = 1
-    end
-    return out
+ConchBlessing.dragon.onFamiliarUpdate = function(_, familiar)
+    if familiar.Variant ~= getVariant() then return end
+    local player = familiar.Player
+    if not player then return end
+    local state = getState(familiar)
+    liveStates[state] = Game():GetFrameCount()
+    updateMotion(familiar, state, player)
+    updateLightning(familiar, state, player, applyContact(familiar, state, player))
+    updateSparks(state)
 end
 
-local function doSoflamStyleExplosion(player, sourceEntity, position, damage)
-    local spawner = player or sourceEntity
-    Isaac.Explode(position, spawner, damage)
-    Game():ShakeScreen(4)
-end
-
-local function applyDragonLaserFlags(laser, player)
-    local flags = laser.TearFlags or 0
-    if player and player.TearFlags then
-        flags = flags | player.TearFlags
-    end
-    if TearFlags and TearFlags.TEAR_SPECTRAL then
-        flags = flags | TearFlags.TEAR_SPECTRAL
-    end
-    if TearFlags and TearFlags.TEAR_JACOBS then
-        flags = flags | TearFlags.TEAR_JACOBS
-    end
-    if TearFlags and TearFlags.TEAR_ATTRACTOR then
-        flags = flags | TearFlags.TEAR_ATTRACTOR
-    end
-    laser.TearFlags = flags
-end
-
-local function spawnTechX(player, velocity, damage)
-    local playerDamage = player.Damage or 3.5
-    if playerDamage <= 0 then
-        playerDamage = 3.5
-    end
-    local damageMultiplier = damage / playerDamage
-    local radius = ConchBlessing.dragon.data.techXRadius or 12
-
-    local laser = player:FireTechXLaser(player.Position, velocity, radius, player, damageMultiplier)
-    if not laser then
-        return
-    end
-
-    laser.CollisionDamage = damage
-    laser.Color = TECHX_COLOR
-    laser:SetColor(TECHX_COLOR, -1, 1, false, false)
-    local spawnSprite = laser:GetSprite()
-    if spawnSprite then
-        spawnSprite.Color = TECHX_COLOR
-    end
-    applyDragonLaserFlags(laser, player)
-
-    local lData = laser:GetData()
-    lData.__ConchDragonTechX = {
-        ownerInitSeed = player.InitSeed,
-        direction = velocity:Normalized(),
-        initialSpeed = velocity:Length(),
-        age = 0,
-        life = ConchBlessing.dragon.data.decelerationFrames or 60,
-    }
-end
-
-local function spawnVortex(player, velocity, touchDamage, explosionDamage)
-    local effect = Isaac.Spawn(
-        EntityType.ENTITY_EFFECT,
-        VORTEX_VARIANT,
-        0,
-        player.Position,
-        velocity,
-        player
-    ):ToEffect()
-    if not effect then
-        return
-    end
-
-    local scale = ConchBlessing.dragon.data.vortexScale or 0.6
-    effect.SpriteScale = Vector(scale, scale)
-    effect:SetColor(VORTEX_COLOR, -1, 1, false, false)
-    effect.DepthOffset = 25
-
-    local totalLife = (ConchBlessing.dragon.data.decelerationFrames or 60) + (ConchBlessing.dragon.data.whirlpoolDurationFrames or 60) + 8
-    local particle = spawnWhirlpoolParticle(player.Position, player, scale, totalLife)
-    playSfxSet({ SFX_WHIRL_SPAWN, SFX_WHIRL_SPAWN_ALT }, 1.05, 1.04, 2)
-
-    local eData = effect:GetData()
-    eData.__ConchDragonVortex = {
-        ownerInitSeed = player.InitSeed,
-        direction = velocity:Normalized(),
-        initialSpeed = velocity:Length(),
-        age = 0,
-        life = ConchBlessing.dragon.data.decelerationFrames or 60,
-        touchDamage = touchDamage,
-        explosionDamage = explosionDamage,
-        pullRadius = ConchBlessing.dragon.data.vortexPullRadius or 220,
-        pullStrength = ConchBlessing.dragon.data.vortexPullStrength or 0.9,
-        explodeRadius = ConchBlessing.dragon.data.vortexExplosionRadius or 180,
-        touchRadius = ConchBlessing.dragon.data.vortexTouchRadius or 72,
-        touchTick = ConchBlessing.dragon.data.vortexTouchTick or 1,
-        particleInitSeed = particle and particle.InitSeed or nil,
-        touchedAt = {},
-        exploded = false,
-    }
-end
-
-local function spawnWhirlpool(position, vortexData)
-    local owner = findPlayerByInitSeed(vortexData.ownerInitSeed)
-    local spawner = owner or Isaac.GetPlayer(0)
-    local effect = Isaac.Spawn(
-        EntityType.ENTITY_EFFECT,
-        WHIRLPOOL_VARIANT,
-        0,
-        position,
-        Vector.Zero,
-        spawner
-    ):ToEffect()
-    if not effect then
+local function getSprites(state)
+    if state.sprites ~= nil then return state.sprites or nil end
+    local ok, sprites = pcall(function()
+        local result = {}
+        for _, name in ipairs({ "Head", "Body", "Legs", "Tail", "Shadow", "Spark" }) do
+            local sprite = Sprite()
+            sprite:Load("gfx/dragon.anm2", true)
+            if sprite.IsLoaded and not sprite:IsLoaded() then error("gfx/dragon.anm2 did not load") end
+            sprite:SetFrame(name, 0)
+            result[name] = sprite
+        end
+        return result
+    end)
+    if not ok then
+        state.sprites = false
+        if not reportedRenderFailure then
+            reportedRenderFailure = true
+            ConchBlessing.printError("[Dragon] familiar art unavailable: " .. tostring(sprites))
+        end
         return nil
     end
-
-    local scale = (ConchBlessing.dragon.data.vortexScale or 0.6) * WHIRLPOOL_SCALE_MULT
-    effect.SpriteScale = Vector(scale, scale)
-    effect.Velocity = Vector.Zero
-    effect.DepthOffset = 25
-
-    local oldParticle = findEffectByInitSeed(vortexData.particleInitSeed)
-    if oldParticle then
-        oldParticle:Remove()
-    end
-
-    -- Spawn a fresh particle exactly when vortex transitions into whirlpool.
-    local particle = spawnWhirlpoolParticle(
-        position,
-        spawner,
-        scale,
-        (ConchBlessing.dragon.data.whirlpoolDurationFrames or 60) + 8
-    )
-
-    playSfxSet({ SFX_WHIRLPOOL_SPAWN }, 1.0, 0.95, 2)
-
-    local eData = effect:GetData()
-    eData.__ConchDragonWhirlpool = {
-        ownerInitSeed = vortexData.ownerInitSeed,
-        age = 0,
-        life = ConchBlessing.dragon.data.whirlpoolDurationFrames or 60,
-        touchDamage = vortexData.touchDamage,
-        explosionDamage = vortexData.explosionDamage,
-        pullRadius = vortexData.pullRadius or (ConchBlessing.dragon.data.vortexPullRadius or 220),
-        pullStrength = vortexData.pullStrength or (ConchBlessing.dragon.data.vortexPullStrength or 0.9),
-        explodeRadius = vortexData.explodeRadius or (ConchBlessing.dragon.data.vortexExplosionRadius or 180),
-        touchRadius = vortexData.touchRadius or (ConchBlessing.dragon.data.vortexTouchRadius or 72),
-        touchTick = vortexData.touchTick or (ConchBlessing.dragon.data.vortexTouchTick or 1),
-        particleInitSeed = particle and particle.InitSeed or nil,
-        particleSpawnInterval = 15, -- 0.5 sec
-        nextParticleSpawnAge = 15,
-        isWhirlpool = true,
-        touchedAt = {},
-        exploded = false,
-    }
-    return effect
+    state.sprites = sprites
+    return sprites
 end
 
-local function spawnDragonProjectiles(player)
-    if not hasDragon(player) then
-        return
-    end
-
-    local dragonCount = getDragonCount(player)
-    if dragonCount <= 0 then
-        return
-    end
-
-    local speed = ConchBlessing.dragon.data.projectileSpeed or 6.3
-    local spawnCount = ConchBlessing.dragon.data.spawnCount or 5
-
-    for _ = 1, spawnCount do
-        local direction = getRandomDirection(player)
-        local velocity = direction:Resized(speed)
-        if dragonCount >= 2 then
-            spawnVortex(
-                player,
-                velocity,
-                getVortexTouchDamage(player, dragonCount),
-                getVortexExplosionDamage(player)
-            )
-        else
-            spawnTechX(player, velocity, getTechXDamage(player))
-        end
-    end
-
-end
-
-local function isDamageableEnemy(npc)
-    if not npc then
-        return false
-    end
-    if npc:IsDead() then
-        return false
-    end
-    if not npc:IsVulnerableEnemy() then
-        return false
-    end
-    if npc:HasEntityFlags(EntityFlag.FLAG_FRIENDLY) then
-        return false
-    end
-    return true
-end
-
-local GRID_TILE_SIZE = 40
-
-local function resolveGridType(...)
-    local t = GridEntityType or {}
-    for _, rawName in ipairs({ ... }) do
-        local name = tostring(rawName)
-        local id = t["GRID_" .. name] or t[name]
-        if type(id) == "number" then
-            return id
-        end
-    end
-    return nil
-end
-
-local GRID_TYPE_TNT = resolveGridType("TNT") or 12
-local GRID_TYPE_FIREPLACE = resolveGridType("FIREPLACE") or 13
-
-local function resolveEntityType(...)
-    local t = EntityType or {}
-    for _, rawName in ipairs({ ... }) do
-        local name = tostring(rawName)
-        local id = t["ENTITY_" .. name] or t[name]
-        if type(id) == "number" then
-            return id
-        end
-    end
-    return nil
-end
-
-local ENTITY_TYPE_FIREPLACE = resolveEntityType("FIREPLACE") or 33
-local ENTITY_TYPE_MOVABLE_TNT = resolveEntityType("MOVABLE_TNT") or 292
-
-local function buildBreakableGridTypeSet()
-    -- Dragon vortex/grid interaction is intentionally limited:
-    -- only fireplace + TNT should react (no generic rock/block breaking).
-    local out = {}
-    out[GRID_TYPE_TNT] = true
-    out[GRID_TYPE_FIREPLACE] = true
-    return out
-end
-
-local BREAKABLE_GRID_TYPE_SET = buildBreakableGridTypeSet()
-
-local function isBreakableGrid(gridEntity)
-    if not gridEntity or not gridEntity.GetType then
-        return false
-    end
-    return BREAKABLE_GRID_TYPE_SET[gridEntity:GetType()] == true
-end
-
-local function triggerTntExplosion(room, gridIndex, sourceEntity)
-    if not room then
-        return false
-    end
-
-    local explosionPos = room:GetGridPosition(gridIndex)
-    if not explosionPos then
-        return false
-    end
-
-    local owner = sourceEntity or Isaac.GetPlayer(0)
-    local didExplode = pcall(function()
-        Isaac.Explode(explosionPos, owner, 40)
-    end)
-
-    pcall(function()
-        room:RemoveGridEntity(gridIndex, 0, false)
-    end)
-
-    return didExplode
-end
-
-local function removeGridAtIndex(room, gridIndex, sourceEntity)
-    if not (room and gridIndex and gridIndex >= 0) then
-        return false
-    end
-
-    local gridEntity = room:GetGridEntity(gridIndex)
-    if not gridEntity then
-        return false
-    end
-
-    local gridType = (gridEntity.GetType and gridEntity:GetType()) or -1
-    if gridType == GRID_TYPE_TNT then
-        local ok = false
-        if room.DestroyGrid then
-            ok = pcall(function()
-                room:DestroyGrid(gridIndex, true)
-            end)
-        end
-        local stillTnt = false
-        local after = room:GetGridEntity(gridIndex)
-        if after and after.GetType then
-            stillTnt = (after:GetType() == GRID_TYPE_TNT)
-        end
-        if stillTnt then
-            triggerTntExplosion(room, gridIndex, sourceEntity)
-        end
-        return ok or not stillTnt
-    end
-    if gridType ~= GRID_TYPE_FIREPLACE then
-        return false
-    end
-
-    if room.DestroyGrid then
-        local ok = pcall(function()
-            room:DestroyGrid(gridIndex, false)
-        end)
-        if ok then
-            pcall(function()
-                room:SetGridPath(gridIndex, 0)
-            end)
-            return true
-        end
-    end
-    if room.RemoveGridEntity then
-        local ok = pcall(function()
-            room:RemoveGridEntity(gridIndex, 0, false)
-        end)
-        if ok then
-            pcall(function()
-                room:SetGridPath(gridIndex, 0)
-            end)
-            return true
-        end
-    end
-    return false
-end
-
-local function interactWithNearbySpecialEntities(position, radius, sourceEntity)
-    local scanRadius = math.max(8, radius or (ConchBlessing.dragon.data.gridInteractionRadius or 36))
-    local sourceRef = EntityRef(sourceEntity or Isaac.GetPlayer(0))
-    local fireFlags = ((DamageFlag and DamageFlag.DAMAGE_FIRE) or 0)
-        | ((DamageFlag and DamageFlag.DAMAGE_IGNORE_ARMOR) or 0)
-
-    for _, entity in ipairs(Isaac.GetRoomEntities()) do
-        if entity and entity.Position:Distance(position) <= scanRadius then
-            if entity.Type == ENTITY_TYPE_MOVABLE_TNT then
-                local eData = entity:GetData()
-                if eData and eData.__ConchDragonTntTriggered then
-                    goto __continue_entity_scan
-                end
-                if eData then
-                    eData.__ConchDragonTntTriggered = true
-                end
-
-                if entity.ToBomb then
-                    local bomb = entity:ToBomb()
-                    if bomb and bomb.SetExplosionCountdown then
-                        pcall(function()
-                            bomb:SetExplosionCountdown(0)
-                        end)
-                    end
-                end
-                pcall(function()
-                    Isaac.Explode(entity.Position, sourceEntity or Isaac.GetPlayer(0), 40)
-                end)
-                if entity:Exists() then
-                    pcall(function()
-                        entity:Remove()
-                    end)
-                end
-            elseif entity.Type == ENTITY_TYPE_FIREPLACE then
-                local eData = entity:GetData()
-                if eData and eData.__ConchDragonFireExtinguished then
-                    goto __continue_entity_scan
-                end
-                if eData then
-                    eData.__ConchDragonFireExtinguished = true
-                end
-
-                if entity.ToNPC then
-                    local fireNpc = entity:ToNPC()
-                    if fireNpc then
-                        pcall(function()
-                            fireNpc:TakeDamage(30, fireFlags, sourceRef, 0)
-                        end)
-                    end
-                end
-                if entity:Exists() then
-                    pcall(function()
-                        entity:Kill()
-                    end)
-                end
-                if entity:Exists() then
-                    pcall(function()
-                        entity:Remove()
-                    end)
-                end
-            end
-        end
-        ::__continue_entity_scan::
-    end
-end
-
-local function interactWithNearbyBreakableGrids(position, radius, runtimeData)
+local function isReflectionPass()
     local room = Game():GetRoom()
-    if not room then
-        return false
+    return RenderMode and type(room.GetRenderMode) == "function"
+        and room:GetRenderMode() == RenderMode.RENDER_WATER_REFLECT
+end
+
+-- Animation frame for a part: legs stroke through four poses (the front and
+-- hind pairs out of step), the tail tuft flutters between two.
+local function partFrame(index, t)
+    local d = ConchBlessing.dragon.data
+    if d.legParts[index] then return (t // d.legFrameTicks + index) % 4 end
+    if PART_ANIMATIONS[index] == "Tail" then return (t // d.tailFrameTicks) % 2 end
+    return 0
+end
+
+-- Height of a part above its shadow: the body rises and dips like a swimmer.
+local function partLift(index, time)
+    local d = ConchBlessing.dragon.data
+    return d.flyHeight + d.liftWave * math.sin(time * d.liftRate - index * d.liftStep)
+end
+
+ConchBlessing.dragon.onFamiliarRender = function(_, familiar, offset)
+    if familiar.Variant ~= getVariant() or isReflectionPass() then return end
+    local state = familiar:GetData().__ConchDragon
+    local sprites = state and getSprites(state)
+    if not sprites then return end
+    local scale = scaleFor(familiar.Player)
+    offset = offset or Vector(0, 0)
+    -- The callback's offset already carries the camera scroll and screen
+    -- shake, so add it to the render position; WorldToScreen would count the
+    -- scroll twice and draw the dragon away from itself in scrolling rooms.
+    local toRender = Isaac.WorldToRenderPosition
+        and function(at) return Isaac.WorldToRenderPosition(at) + offset end
+        or function(at) return Isaac.WorldToScreen(at) end
+    -- Render runs twice per update; interpolate the pose so the body glides.
+    local alpha = math.min(1, state.renders * 0.5)
+    state.renders = state.renders + 1
+    local time = state.t - 1 + alpha
+    local n = #state.segments
+    local screen = {}
+    for i = 1, n do
+        local prev, cur = state.previous[i], state.segments[i]
+        screen[i] = toRender(prev + (cur - prev) * alpha)
     end
-
-    local centerIndex = room:GetGridIndex(position)
-    if not centerIndex or centerIndex < 0 then
-        return false
-    end
-
-    local gridWidth = room:GetGridWidth() or 0
-    local gridSize = room:GetGridSize() or 0
-    if gridWidth <= 0 or gridSize <= 0 then
-        return false
-    end
-
-    local scanRadius = math.max(8, radius or (ConchBlessing.dragon.data.gridInteractionRadius or 36))
-    local gridRadius = math.max(1, math.ceil(scanRadius / GRID_TILE_SIZE))
-    local now = Game():GetFrameCount()
-    local tick = runtimeData.gridInteractionTick or (ConchBlessing.dragon.data.gridInteractionTick or 4)
-    runtimeData.gridTouchedAt = runtimeData.gridTouchedAt or {}
-    local owner = findPlayerByInitSeed(runtimeData.ownerInitSeed)
-    local sourceEntity = owner or Isaac.GetPlayer(0)
-    interactWithNearbySpecialEntities(position, scanRadius, sourceEntity)
-
-    local touchedAny = false
-    for dy = -gridRadius, gridRadius do
-        for dx = -gridRadius, gridRadius do
-            local gridIndex = centerIndex + dx + (dy * gridWidth)
-            if gridIndex >= 0 and gridIndex < gridSize then
-                local gridEntity = room:GetGridEntity(gridIndex)
-                if gridEntity and isBreakableGrid(gridEntity) then
-                    local gridPos = room:GetGridPosition(gridIndex)
-                    if gridPos and gridPos:Distance(position) <= (scanRadius + GRID_TILE_SIZE * 0.55) then
-                        local lastTouchFrame = runtimeData.gridTouchedAt[gridIndex]
-                        if (not lastTouchFrame) or (now - lastTouchFrame >= tick) then
-                            if removeGridAtIndex(room, gridIndex, sourceEntity) then
-                                runtimeData.gridTouchedAt[gridIndex] = now
-                                touchedAny = true
-                            end
-                        end
-                    end
-                end
-            end
+    -- Shadows on the floor first (every other part, so they do not pile up).
+    local shadow = sprites.Shadow
+    shadow:SetFrame("Shadow", 0)
+    shadow.Rotation = 0
+    for i = n, 1, -1 do
+        if i % 2 == 1 or i == n then
+            local size = scale * partTaper(i)
+            shadow.Scale = Vector(size, size)
+            shadow:Render(screen[i])
         end
     end
-
-    return touchedAny
-end
-
-local function isBlockingGridAt(room, position)
-    if not (room and position and room.GetGridEntityFromPos) then
-        return false
-    end
-
-    local gridEntity = room:GetGridEntityFromPos(position)
-    if not gridEntity then
-        return false
-    end
-    if isBreakableGrid(gridEntity) then
-        return false
-    end
-
-    local c = gridEntity.CollisionClass or 0
-    local objectClass = (GridCollisionClass and (GridCollisionClass.COLLISION_OBJECT or GridCollisionClass.OBJECT)) or 2
-    local solidClass = (GridCollisionClass and (GridCollisionClass.COLLISION_SOLID or GridCollisionClass.SOLID)) or 3
-    local wallClass = (GridCollisionClass and (GridCollisionClass.COLLISION_WALL or GridCollisionClass.WALL)) or 4
-    return c == objectClass or c == solidClass or c == wallClass
-end
-
-local function handleVortexGridInteraction(effect, vortexData)
-    local room = Game():GetRoom()
-    if not room then
-        return false
-    end
-
-    local probeOffset = ConchBlessing.dragon.data.gridCollisionProbeOffset or 16
-    local velocity = effect.Velocity or Vector.Zero
-    local gridRadius = ConchBlessing.dragon.data.gridInteractionRadius or 36
-    interactWithNearbyBreakableGrids(effect.Position, gridRadius, vortexData)
-    local probePos = effect.Position
-    if velocity:Length() > 0.1 then
-        probePos = effect.Position + velocity:Resized(probeOffset)
-        interactWithNearbyBreakableGrids(probePos, gridRadius, vortexData)
-    end
-    local owner = findPlayerByInitSeed(vortexData.ownerInitSeed)
-    interactWithNearbySpecialEntities(probePos, gridRadius, owner or Isaac.GetPlayer(0))
-    return isBlockingGridAt(room, probePos)
-end
-
-local function applyVortexPull(position, radius, strength)
-    local entities = Isaac.GetRoomEntities()
-    for _, entity in ipairs(entities) do
-        local npc = entity:ToNPC()
-        if isDamageableEnemy(npc) then
-            local offset = position - npc.Position
-            local distance = offset:Length()
-            if distance > 0.1 and distance <= radius then
-                local pullScale = 1 - (distance / radius)
-                if pullScale < 0 then
-                    pullScale = 0
-                end
-                local pullVelocity = offset:Resized((0.6 + 3.4 * pullScale) * strength)
-                npc.Velocity = npc.Velocity * 0.45 + pullVelocity
-                if EntityFlag and EntityFlag.FLAG_ATTRACTED then
-                    npc:AddEntityFlags(EntityFlag.FLAG_ATTRACTED)
-                end
-            end
+    -- Then the body, tail first, so the parts nearer the head lie on top
+    -- wherever the body crosses itself. Legs go under their body part and
+    -- share its pose.
+    local d = ConchBlessing.dragon.data
+    for i = n, 1, -1 do
+        local angle = state.prevAngles[i] + wrapAngle(state.angles[i] - state.prevAngles[i]) * alpha
+        local size = Vector(scale * partTaper(i), scale * partTaper(i))
+        local at = screen[i] - Vector(0, partLift(i, time))
+        if d.legParts[i] then
+            local legs = sprites.Legs
+            legs:SetFrame("Legs", partFrame(i, state.t))
+            legs.Scale = size
+            orient(legs, angle, state.flips[i])
+            legs:Render(at)
         end
+        local name = PART_ANIMATIONS[i]
+        local sprite = sprites[name]
+        sprite:SetFrame(name, name == "Tail" and partFrame(i, state.t) or 0)
+        sprite.Scale = size
+        orient(sprite, angle, state.flips[i])
+        sprite:Render(at)
+    end
+    -- Sparks of current crackle on top of the body.
+    local spark = sprites.Spark
+    for _, item in ipairs(state.sparks or {}) do
+        local i = item.part
+        local heading = state.angles[i] or 0
+        local size = scale * partTaper(i)
+        local aside = Vector(-math.sin(heading), math.cos(heading)) * (item.side * size)
+        spark:SetFrame("Spark", item.age // d.sparkFrameTicks)
+        spark.Rotation = item.angle
+        spark.Scale = Vector(size, size)
+        spark:Render(screen[i] - Vector(0, partLift(i, time)) + aside)
     end
 end
 
-local function applyVortexTouchDamage(effect, vortexData)
-    local owner = findPlayerByInitSeed(vortexData.ownerInitSeed)
-    local sourceEntity = owner or Isaac.GetPlayer(0) or effect
-    local sourceRef = EntityRef(sourceEntity)
-    local now = Game():GetFrameCount()
-    local scaleX = 1
-    if effect.SpriteScale and effect.SpriteScale.X then
-        scaleX = effect.SpriteScale.X
-    end
-    local touchRadius = (vortexData.touchRadius or 72) * math.max(0.45, scaleX)
-    local touchTick = vortexData.touchTick or 1
-    local damage = vortexData.touchDamage or 1
-    local touchFlags = (DamageFlag and DamageFlag.DAMAGE_IGNORE_ARMOR) or 0
+local function loadSprite(path, label)
+    local ok, sprite = pcall(function()
+        local s = Sprite()
+        s:Load(path, true)
+        if s.IsLoaded and not s:IsLoaded() then error(path .. " did not load") end
+        return s
+    end)
+    if not ok then ConchBlessing.printError("[Dragon] " .. label .. " art unavailable: " .. tostring(sprite)) end
+    return ok and sprite or false
+end
 
-    for _, entity in ipairs(Isaac.GetRoomEntities()) do
-        local npc = entity:ToNPC()
-        if isDamageableEnemy(npc) then
-            if npc.Position:Distance(effect.Position) <= touchRadius then
-                local key = npc.InitSeed or npc.Index
-                local last = vortexData.touchedAt[key]
-                if (not last) or (now - last >= touchTick) then
-                    npc:TakeDamage(damage, touchFlags, sourceRef, 0)
-                    vortexData.touchedAt[key] = now
-                end
-            end
-        end
+local function strikeLength()
+    local total = 0
+    for _, ticks in ipairs(ConchBlessing.dragon.data.strikeFrames) do total = total + ticks end
+    return total
+end
+
+local function strikeFrame(age)
+    local elapsed = 0
+    for frame, ticks in ipairs(ConchBlessing.dragon.data.strikeFrames) do
+        elapsed = elapsed + ticks
+        if age < elapsed then return frame - 1 end
     end
 end
 
-local function applyFixedExplosionDamage(position, radius, damage, sourceEntity)
-    if damage <= 0 then
-        return
+ConchBlessing.dragon.onUpdate = function()
+    local strikes = ConchBlessing.dragon._strikes
+    local length = strikeLength()
+    for i = #strikes, 1, -1 do
+        strikes[i].age = strikes[i].age + 1
+        if strikes[i].age >= length then table.remove(strikes, i) end
     end
+end
 
-    local sourceRef = EntityRef(sourceEntity or Isaac.GetPlayer(0))
-    local damageFlags = ((DamageFlag and DamageFlag.DAMAGE_EXPLOSION) or 0)
-        | ((DamageFlag and DamageFlag.DAMAGE_IGNORE_ARMOR) or 0)
-
-    for _, entity in ipairs(Isaac.GetRoomEntities()) do
-        local npc = entity:ToNPC()
-        if isDamageableEnemy(npc) and npc.Position:Distance(position) <= radius then
-            npc:TakeDamage(damage, damageFlags, sourceRef, 0)
+local lightningSprite
+ConchBlessing.dragon.onRender = function()
+    local strikes = ConchBlessing.dragon._strikes
+    if #strikes == 0 then return end
+    if lightningSprite == nil then lightningSprite = loadSprite("gfx/effects/conch_dragon_lightning.anm2", "lightning") end
+    if not lightningSprite then return end
+    for _, item in ipairs(strikes) do
+        local frame = strikeFrame(item.age)
+        if frame then
+            lightningSprite:SetFrame("Strike", frame)
+            lightningSprite:Render(Isaac.WorldToScreen(item.position))
         end
     end
 end
 
-local function explodeVortex(effect, vortexData)
-    if vortexData.exploded then
-        return
-    end
-    vortexData.exploded = true
-
-    local owner = findPlayerByInitSeed(vortexData.ownerInitSeed)
-    local sourceEntity = owner or Isaac.GetPlayer(0) or effect
-    local damage = getVortexExplosionDamage(owner or { Damage = 3.5 })
-    if (not owner) and vortexData.explosionDamage then
-        damage = vortexData.explosionDamage
-    end
-    local fixedRadius = vortexData.explodeRadius or (ConchBlessing.dragon.data.vortexExplosionRadius or 180)
-    local visualDamage = ConchBlessing.dragon.data.vortexExplosionVisualDamage or 0
-    local position = effect.Position
-
-    if vortexData.isWhirlpool then
-        local particle = findEffectByInitSeed(vortexData.particleInitSeed)
-        if particle then
-            particle:Remove()
-        end
-
-        local splash = Isaac.Spawn(
-            EntityType.ENTITY_EFFECT,
-            BIG_WATER_SPLASH_VARIANT,
-            0,
-            position + Vector(0, 10),
-            Vector.Zero,
-            sourceEntity
-        ):ToEffect()
-        if splash then
-            local splashScale = 0.5 * BIG_WATER_SPLASH_SCALE_MULT
-            splash.SpriteScale = Vector(splashScale, splashScale)
-            splash.DepthOffset = 28
-            safePlayAnimation(splash:GetSprite(), "Poof", true)
-        end
-
-        playSfxSet({ SFX_WATER_EXPLODE, SFX_WATER_EXPLODE_ALT }, 1.25, 0.98, 2)
-    end
-
-    -- Follow-up explosion should also react to fireplace/TNT around the blast.
-    interactWithNearbyBreakableGrids(position, fixedRadius, {
-        ownerInitSeed = vortexData.ownerInitSeed,
-        gridTouchedAt = {},
-        gridInteractionTick = 1,
-    })
-    interactWithNearbySpecialEntities(position, fixedRadius, sourceEntity)
-
-    applyFixedExplosionDamage(position, fixedRadius, damage, sourceEntity)
-    doSoflamStyleExplosion(nil, sourceEntity, position, visualDamage)
-
-    playSfx(SFX_WHIRL_SPAWN_ALT, 0.7, 0.9, 2)
-end
-
-ConchBlessing.dragon.onEvaluateCache = function(_, player, cacheFlag)
-    if not hasDragon(player) then
-        return
-    end
-
-    if cacheFlag == CacheFlag.CACHE_FLYING then
-        player.CanFly = true
-    end
-
-    if cacheFlag == CacheFlag.CACHE_TEARFLAG then
-        player.TearFlags = player.TearFlags | TearFlags.TEAR_SPECTRAL
-    end
-end
-
-ConchBlessing.dragon.onWeaponFired = function(_, _fireDirection, _fireAmount, owner, _weapon)
-    local player = WeaponAttackTracker.getDirectPlayerOwner(owner)
-    if not player or not hasDragon(player) then
-        return
-    end
-
-    local pData = getPlayerData(player)
-    local trigger = ConchBlessing.dragon.data.attacksPerTrigger or 5
-    local triggered = WeaponAttackTracker.advance(pData, trigger)
-    if triggered then
-        spawnDragonProjectiles(player)
-    end
-end
-
-ConchBlessing.dragon.onPostLaserUpdate = function(_, laser)
-    if not laser then
-        return
-    end
-
-    local lData = laser:GetData()
-    local techXData = lData and lData.__ConchDragonTechX
-    if not techXData then
-        return
-    end
-
-    techXData.age = (techXData.age or 0) + 1
-    local life = techXData.life or 60
-    local progress = clamp(techXData.age / life, 0, 1)
-    local speedScale = 1 - progress
-
-    if speedScale <= 0 then
-        laser:Remove()
-        return
-    end
-
-    local direction = techXData.direction or Vector(1, 0)
-    local initialSpeed = techXData.initialSpeed or 0
-    laser.Velocity = direction * (initialSpeed * speedScale)
-    laser.Color = TECHX_COLOR
-    laser:SetColor(TECHX_COLOR, -1, 1, false, false)
-    local updateSprite = laser:GetSprite()
-    if updateSprite then
-        updateSprite.Color = TECHX_COLOR
-    end
-
-    if laser.Velocity:Length() <= 0.05 then
-        laser:Remove()
-    end
-end
-
-ConchBlessing.dragon.onPostEffectUpdate = function(_, effect)
-    if not effect then
-        return
-    end
-
-    local eData = effect:GetData()
-    local vortexData = eData and eData.__ConchDragonVortex
-    if vortexData then
-        vortexData.age = (vortexData.age or 0) + 1
-        local life = vortexData.life or 60
-        local progress = clamp(vortexData.age / life, 0, 1)
-        local speedScale = 1 - progress
-
-        local direction = vortexData.direction or Vector(1, 0)
-        local initialSpeed = vortexData.initialSpeed or 0
-        effect.Velocity = direction * (initialSpeed * speedScale)
-        effect:SetColor(VORTEX_COLOR, 1, 1, false, false)
-
-        local particle = findEffectByInitSeed(vortexData.particleInitSeed)
-        if particle then
-            particle.Position = effect.Position
-            particle.Velocity = Vector.Zero
-        end
-
-        applyVortexTouchDamage(effect, vortexData)
-        local wallMode = ConchBlessing.dragon.data.vortexWallMode or "pierce"
-        local blockedByGrid = handleVortexGridInteraction(effect, vortexData)
-        if wallMode == "stick" and blockedByGrid then
-            if not vortexData.stickPosition then
-                vortexData.stickPosition = Vector(effect.Position.X, effect.Position.Y)
-            end
-            vortexData.stuckOnWall = true
-            vortexData.initialSpeed = 0
-            vortexData.direction = Vector.Zero
-            effect.Position = vortexData.stickPosition
-            effect.Velocity = Vector.Zero
-        end
-
-        local shouldStopBySpeed = effect.Velocity:Length() <= 0.05 and not vortexData.stuckOnWall
-        if progress >= 1 or shouldStopBySpeed then
-            local spawned = spawnWhirlpool(effect.Position, vortexData)
-            if not spawned then
-                explodeVortex(effect, vortexData)
-            end
-            effect:Remove()
-        end
-        return
-    end
-
-    local whirlpoolData = eData and eData.__ConchDragonWhirlpool
-    if not whirlpoolData then
-        return
-    end
-
-    whirlpoolData.age = (whirlpoolData.age or 0) + 1
-    effect.Velocity = Vector.Zero
-
-    local particle = findEffectByInitSeed(whirlpoolData.particleInitSeed)
-    if particle then
-        particle.Position = effect.Position
-        particle.Velocity = Vector.Zero
-    end
-
-    local interval = whirlpoolData.particleSpawnInterval or 15
-    local nextAge = whirlpoolData.nextParticleSpawnAge or interval
-    local owner = findPlayerByInitSeed(whirlpoolData.ownerInitSeed)
-    local spawner = owner or Isaac.GetPlayer(0)
-    local particleScaleRef = (effect.SpriteScale and effect.SpriteScale.X) or ((ConchBlessing.dragon.data.vortexScale or 0.6) * WHIRLPOOL_SCALE_MULT)
-    while whirlpoolData.age >= nextAge do
-        spawnWhirlpoolParticle(effect.Position, spawner, particleScaleRef, interval + 2)
-        playSfx(SFX_WHIRLPOOL_LOOP, 0.62, 0.92, 10)
-        nextAge = nextAge + interval
-    end
-    whirlpoolData.nextParticleSpawnAge = nextAge
-
-    local pullRadius = whirlpoolData.pullRadius or 220
-    local pullStrength = whirlpoolData.pullStrength or 0.9
-    local gridRadius = (whirlpoolData.touchRadius or (ConchBlessing.dragon.data.vortexTouchRadius or 72))
-        * math.max(0.45, (effect.SpriteScale and effect.SpriteScale.X) or 1)
-        * 0.6
-    interactWithNearbyBreakableGrids(effect.Position, gridRadius, whirlpoolData)
-    applyVortexPull(effect.Position, pullRadius, pullStrength)
-    applyVortexTouchDamage(effect, whirlpoolData)
-
-    if whirlpoolData.age >= (whirlpoolData.life or 60) and not whirlpoolData.exploded then
-        explodeVortex(effect, whirlpoolData)
-        effect:Remove()
-    end
-end
-
-ConchBlessing.dragon.onPlayerUpdate = function(_, player)
-    if not player then
-        return
-    end
-
-    local pData = getPlayerData(player)
-    if not hasDragon(player) then
-        WeaponAttackTracker.reset(pData)
-    end
+local function clearEffects()
+    ConchBlessing.dragon._strikes = {}
+    enemyCache.frame = -1
 end
 
 ConchBlessing.dragon.onNewRoom = function()
-    ConchBlessing.dragon._effectBySeed = {}
-    local numPlayers = Game():GetNumPlayers()
-    for i = 0, numPlayers - 1 do
-        local player = Isaac.GetPlayer(i)
-        if player then
-            local pData = getPlayerData(player)
-            WeaponAttackTracker.reset(pData)
+    clearEffects()
+    local variant = getVariant()
+    if not variant then return end
+    for _, entity in ipairs(Isaac.FindByType(EntityType.ENTITY_FAMILIAR, variant, -1, false, false)) do
+        local familiar = entity:ToFamiliar()
+        local state = familiar and familiar:GetData().__ConchDragon
+        if state then
+            -- A new room starts with the dragon on its player.
+            local at = familiar.Player and familiar.Player.Position or familiar.Position
+            familiar.Position = at
+            snapTo(state, at)
+            state.struck, state.sparks = {}, {}
         end
     end
 end
 
 ConchBlessing.dragon.onGameStarted = function()
-    ConchBlessing.dragon._sfxCooldown = {}
-    ConchBlessing.dragon._effectBySeed = {}
-    local numPlayers = Game():GetNumPlayers()
-    for i = 0, numPlayers - 1 do
-        local player = Isaac.GetPlayer(i)
-        if player then
-            local pData = getPlayerData(player)
-            WeaponAttackTracker.reset(pData)
-        end
-    end
+    clearEffects()
 end
+
+ConchBlessing.dragon._test = {
+    contactDamage = contactDamage,
+    lightningDamage = lightningDamage,
+    cosmeticRoll = cosmeticRoll,
+    updateSparks = updateSparks,
+    orbitShape = orbitShape,
+    pushTrail = pushTrail,
+    sampleTrail = sampleTrail,
+    layOut = layOut,
+    partFrame = partFrame,
+    facesLeft = facesLeft,
+    orient = orient,
+    steerHead = steerHead,
+    partTaper = partTaper,
+    partLift = partLift,
+    strikeFrame = strikeFrame,
+    strikeLength = strikeLength,
+}
 
 return ConchBlessing.dragon
