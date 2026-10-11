@@ -27,4 +27,43 @@ for key, data in pairs(ConchBlessing.PocketData) do
     end
 end
 
+-- The engine shows a card's pocketitems.xml name and description, which are
+-- English, when it is picked up or used. REPENTOGON's MC_PRE_ITEM_TEXT_DISPLAY
+-- lets that banner be cancelled (return false) and shown again in the current
+-- language; without the callback the English banner stays.
+local showingPocketText = false
+
+local function localizedText(data)
+    local lang = require("scripts.conch_blessing_config").GetCurrentLanguage()
+    local function pick(value)
+        if type(value) == "table" then return value[lang] or value.en end
+        return value
+    end
+    return pick(data.name), pick(data.description)
+end
+
+function ConchBlessing.onPocketItemText(_, title, subtitle, isSticky, isCurseDisplay)
+    if showingPocketText or isSticky or isCurseDisplay or type(title) ~= "string" then return end
+    for _, data in pairs(ConchBlessing.PocketData) do
+        if type(data.name) == "table" and data.name.en == title then
+            local name, description = localizedText(data)
+            if type(name) ~= "string" or (name == title and description == subtitle) then return end
+            local hud = Game():GetHUD()
+            if not (hud and type(hud.ShowItemText) == "function") then return end
+            showingPocketText = true
+            local ok, err = pcall(hud.ShowItemText, hud, name, description or "")
+            showingPocketText = false
+            if not ok then
+                ConchBlessing.printError("[Pockets] localized card banner failed: " .. tostring(err))
+                return
+            end
+            return false
+        end
+    end
+end
+
+if type(ModCallbacks.MC_PRE_ITEM_TEXT_DISPLAY) == "number" then
+    ConchBlessing:AddCallback(ModCallbacks.MC_PRE_ITEM_TEXT_DISPLAY, ConchBlessing.onPocketItemText)
+end
+
 return ConchBlessing.PocketData
