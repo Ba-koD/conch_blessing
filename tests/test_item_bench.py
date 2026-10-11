@@ -437,6 +437,78 @@ class BenchTests(unittest.TestCase):
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','kronos detail caption 9'); assert(helper=='caption 8')
         ''')
 
+    def test_thurisaz_cases_helpers_and_parameters_route_through_conch_test(self):
+        self.load_item_probe()
+        self.run_lua("""
+            local enum=function() return setmetatable({}, {__index=function(_, k) return #k end}) end
+            CollectibleType, FamiliarVariant, EntityType, PickupVariant = enum(), enum(), enum(), enum()
+            UseFlag={USE_NOANIM=1,USE_NOANNOUNCER=2}
+            local Rune=require('scripts.dev.thurisaz_probe')
+            local names={'basic','more','flies','temporary','kronos','stand_ins','exclusions','conversion',
+                'gb_bug','clear_rune','card','drop','pool'}
+            assert(#Rune.commands()==#names)
+            for i,name in ipairs(names) do
+                local command='conch_test thurisaz '..name
+                assert(Rune.commands()[i]==command and Rune.commandFor(name)==command)
+                local def=bench.get(command); assert(def and def.restartCommand=='restart 0', command)
+                local ops=0
+                local plan=setmetatable({}, {__index=function() return function() ops=ops+1 end end})
+                def.build(plan); assert(ops>5, command..' built no steps')
+            end
+            local started,suiteName,suiteList,helped
+            bench.start=function(name) started=name end
+            bench.startSuite=function(name,list) suiteName=name; suiteList=list end
+            Rune.helper=function(name,words) helped=name..':'..table.concat(words,' ') end
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','thurisaz')
+            assert(suiteName=='conch_test thurisaz' and #suiteList==#names)
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','thurisaz kronos'); assert(started=='conch_test thurisaz kronos')
+            started=nil
+            for _,params in ipairs({'thurisaz typo','thurisaz kronos extra','thurisaz list extra','thurisaz give 2 3','thurisaz ledger x'}) do
+                dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test',params)
+            end
+            assert(started==nil and helped==nil,'invalid parameters started something')
+            assert(output():find('Unknown case: typo',1,true))
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','thurisaz give 2'); assert(helped=='give:thurisaz give 2')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','thurisaz ledger'); assert(helped=='ledger:thurisaz ledger')
+            assert(started==nil,'a helper never starts a bench')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','thurisaz list')
+            assert(output():find('conch_test thurisaz drop',1,true) and output():find('give [N]',1,true))
+        """)
+
+    def test_conch_ticket_cases_helpers_and_alias_route_through_conch_test(self):
+        self.load_item_probe()
+        self.run_lua("""
+            local enum=function() return setmetatable({}, {__index=function(_, k) return #k end}) end
+            CollectibleType, FamiliarVariant, EntityType, PickupVariant, ButtonAction = enum(), enum(), enum(), enum(), enum()
+            local Ticket=require('scripts.dev.conch_ticket_probe')
+            local names={'pick','rooms','use','card','pool'}
+            assert(#Ticket.commands()==#names)
+            for i,name in ipairs(names) do
+                local command='conch_test conch_ticket '..name
+                assert(Ticket.commands()[i]==command and Ticket.commandFor(name)==command)
+                local def=bench.get(command); assert(def and def.restartCommand=='restart 0', command)
+                local ops=0
+                local plan=setmetatable({}, {__index=function() return function() ops=ops+1 end end})
+                def.build(plan); assert(ops>5, command..' built no steps')
+            end
+            local started,suiteName,suiteList,helped
+            bench.start=function(name) started=name end
+            bench.startSuite=function(name,list) suiteName=name; suiteList=list end
+            Ticket.helper=function(name,words) helped=name..':'..table.concat(words,' ') end
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','ticket')
+            assert(suiteName=='conch_test conch_ticket' and #suiteList==#names, 'the short name runs the suite')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','conch_ticket use'); assert(started=='conch_test conch_ticket use')
+            started=nil
+            for _,params in ipairs({'ticket typo','ticket use extra','ticket queue extra','ticket give 1 2'}) do
+                dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test',params)
+            end
+            assert(started==nil and helped==nil,'invalid parameters started something')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','ticket queue'); assert(helped=='queue:ticket queue')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','conch_ticket give 3'); assert(helped=='give:conch_ticket give 3')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','ticket list')
+            assert(output():find('conch_test conch_ticket card',1,true) and output():find('queue | clear',1,true))
+        """)
+
     def test_sequential_bundle_uses_one_run_and_aborts_on_failed_boundary(self):
         self.run_lua('''
             local S=require('scripts.dev.item_scenarios'); local H=require('scripts.dev.item_test_support')

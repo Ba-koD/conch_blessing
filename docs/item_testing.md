@@ -61,7 +61,11 @@ SOFLAM 지연·상태 이상 지속 시간과 기존 상세 벤치의 캡션 렌
 | `conch_test kronos auras` | 오라·추가 발사 펫 7종을 같은 런에서 순차 검사 |
 | `conch_test kronos abilities` | 스탯·피격 능력 펫 10종을 같은 런에서 순차 검사 |
 | `conch_test locale` | 언어·설명·EID 검증 |
-| `conch_test thurisaz` | 투리사즈 룬을 실제로 사용: 펫 3마리 영구 흡수, 공격력·능력·변환 아이템, 펫 없음, 파란 파리, 크로노스 상실 후에도 유지 |
+| `conch_test thurisaz` | 투리사즈 룬 사례 전체(각각 새 런): basic, more, flies, temporary, kronos, stand_ins, exclusions, conversion, gb_bug, clear_rune, card, drop, pool(게임의 무작위 룬·카드 뽑기에 나오는지) |
+| `conch_test thurisaz CASE` / `list` | 사례 하나만 실행 / 사례 목록 |
+| `conch_test conch_ticket` / `ticket` | 소라 예약권 사례 전체(각각 새 런): pick(머리 위 선택창·화살표·Q 확정·예약), rooms(방·층을 옮겨도 예약 유지), use(실제 소라고둥이 예약한 순서대로 대답·소진), card(카드 등록·떨굴 때 모션), pool(게임의 무작위 카드 뽑기에 나오는지) |
+| `conch_test conch_ticket give [N]` / `spawn` / `queue` / `clear` | 수동 확인용: 주머니에 예약권 넣기, 바닥에 놓기, 대기열·소라고둥 예약 출력(이어하기 확인용), 대기열 비우기 |
+| `conch_test thurisaz give [N]` / `spawn` / `familiars` / `ledger` | 수동 확인용: 주머니에 룬 넣기, 바닥에 룬 놓기, 펫 세트 주기, 룬 장부 출력(이어하기 확인용) |
 | `conch_test morph [아이템 \| default \| list]` | 강화 연출 자동 검사: 적용 연출 13종과 기본 긍정·중립·부정 애니메이션을 실제 강화 처리로 재생하고 효과음·프레임·색 복원을 확인 |
 | `conch_test rng [샘플 수] [luck 행운]` | 확률 함수·분포 검증 |
 | `conch_test rounding [sweep] [숫자]` | 반올림/올림/내림의 배율 계산 및 복원 검증 |

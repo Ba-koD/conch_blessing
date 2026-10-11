@@ -1959,11 +1959,11 @@ do
     end
 end
 
--- Dev tooling: registers the conch_test thurisaz rune bench. Safe to remove.
-do
-    local ok, err = pcall(require, "scripts.dev.thurisaz_probe")
+-- Dev tooling: registers the conch_test thurisaz and conch_ticket benches. Safe to remove.
+for _, probe in ipairs({ "thurisaz_probe", "conch_ticket_probe" }) do
+    local ok, err = pcall(require, "scripts.dev." .. probe)
     if not ok then
-        ConchBlessing.printError("[ThurisazProbe] load failed: " .. tostring(err))
+        ConchBlessing.printError("[" .. probe .. "] load failed: " .. tostring(err))
     end
 end
 

@@ -687,10 +687,19 @@ return {
             name = "투리사즈",
             description = "포식",
             eid = {
-                "사용 시 내가 가진 펫 중 무작위 3마리를 {own:KRONOS} 크로노스처럼 흡수합니다",
+                "랜덤 펫 3마리를 흡수합니다.",
                 "#흡수한 펫마다 {{Damage}} 공격력 +2와 그 펫의 고유 능력을 영구히 얻습니다 (크로노스가 없어도 유지)",
-                "#3마리보다 적으면 있는 만큼 흡수합니다",
                 "#{{Warning}} REPENTOGON 권장",
+            },
+        },
+        CONCH_TICKET = {
+            name = "소라 예약권",
+            description = "예약됨",
+            eid = {
+                "사용 시 다음 소라고둥의 대답을 긍정·중립·부정 중에서 고릅니다",
+                "#공격 키로 고르고 카드 사용 키(Q)를 다시 눌러 확정합니다",
+                "#방을 옮기거나 게임을 껐다 켜도 다음 소라고둥 사용 때까지 예약이 유지됩니다",
+                "#여러 장을 쓰면 고른 순서대로 예약됩니다",
             },
         },
     },
@@ -698,6 +707,9 @@ return {
         real_eyes = {
             prediction = "예측: %s",
             numbered = "예측 #%s: %s",
+        },
+        conch_ticket = {
+            hint = "< > 고르기   Q 확정", waiting = "x%s", reserved = "예약: %s", separator = ", ",
         },
         ar_glasses = {
             title = "다음: %s", open = "C: 다음 답변 변경", controls = "C: 다음 답변 변경", rejected = "답변 예약 불가",

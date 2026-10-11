@@ -702,10 +702,19 @@ return {
             name = "Thurisaz",
             description = "Devour",
             eid = {
-                "Absorbs 3 random familiars you have, like {own:KRONOS} Kronos",
+                "Absorbs 3 random familiars.",
                 "#Each absorbed familiar permanently grants {{Damage}} +2 damage and its unique ability, even without Kronos",
-                "#With fewer than 3, absorbs those you have",
                 "#{{Warning}} REPENTOGON recommended",
+            },
+        },
+        CONCH_TICKET = {
+            name = "Conch Ticket",
+            description = "Reserved",
+            eid = {
+                "Use to choose the Magic Conch's next answer: positive, neutral or negative",
+                "#Pick with the shooting keys and press the card key (Q) again to confirm",
+                "#The answer stays reserved until the next Magic Conch use, even after changing rooms or quitting and continuing",
+                "#Several tickets reserve their answers in the order chosen",
             },
         },
     },
@@ -713,6 +722,9 @@ return {
         real_eyes = {
             prediction = "Prediction: %s",
             numbered = "Prediction #%s: %s",
+        },
+        conch_ticket = {
+            hint = "< > choose   Q confirm", waiting = "x%s", reserved = "Reserved: %s", separator = ", ",
         },
         ar_glasses = {
             title = "Next: %s", open = "C: change next answer", controls = "C: change next answer", rejected = "Could not reserve answer",

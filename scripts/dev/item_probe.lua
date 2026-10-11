@@ -203,10 +203,32 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
         if case then out("Usage: conch_test locale"); return end
         TestBench.start("conch_test locale",true); return
     end
-    if action == "thurisaz" then
-        if case then out("Usage: conch_test thurisaz"); return end
+    -- Cards and runes: their own case suites and manual helpers.
+    local pocketBenches = { thurisaz = "scripts.dev.thurisaz_probe", conch_ticket = "scripts.dev.conch_ticket_probe" }
+    if action == "ticket" then action = "conch_ticket" end
+    if pocketBenches[action] then
+        local loaded, Pocket = pcall(require, pocketBenches[action])
+        if not loaded then out("FAIL " .. action .. " bench unavailable: " .. tostring(Pocket)); return end
+        local usage = "conch_test " .. action
+        if case == "list" or case == "help" then
+            if #words > 2 then out("Usage: " .. usage .. " list"); return end
+            for _, line in ipairs(Pocket.list()) do out(line) end
+            return
+        end
+        if case and Pocket.isHelper(case) then
+            if TestBench.isRunning() then out("A test is already running; use conch_test stop first."); return end
+            if #words > (case == "give" and 3 or 2) then out("Usage: " .. usage .. " list"); return end
+            Pocket.helper(case, words, Isaac.GetPlayer(0)); return
+        end
+        if #words > 2 then out("Usage: " .. usage .. " [CASE]; use " .. usage .. " list."); return end
+        local command = case and Pocket.commandFor(case)
+        if case and not command then out("Unknown case: " .. case .. "; use " .. usage .. " list."); return end
         if Game():GetNumPlayers() ~= 1 then out("Start a single-player test run first."); return end
-        TestBench.start("conch_test thurisaz",true); return
+        local ok, err
+        if command then ok, err = pcall(TestBench.start, command, true)
+        else ok, err = pcall(TestBench.startSuite, usage, Pocket.commands()) end
+        if not ok then out("FAIL " .. action .. " setup: " .. tostring(err)) end
+        return
     end
     if action == "morph" then
         local loaded, Morph = pcall(require, "scripts.dev.morph_probe")
@@ -267,7 +289,8 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
         end
         out("For individual cases: conch_test ITEM list (example: conch_test kronos list).")
         out("Short names: conch_test appraisal, conch_test belt. Shared checks: conch_test locale, conch_test morph [ITEM | default | list], conch_test rng [samples] [luck N].")
-        out("Pocket items: conch_test thurisaz (the Kronos rune).")
+        out("Pocket items: conch_test thurisaz [CASE | list | give [N] | spawn | familiars | ledger] (the Kronos rune),")
+        out("  conch_test conch_ticket [CASE | list | give [N] | spawn | queue | clear] (the Conch Ticket; short name: ticket).")
         out("Stat math: conch_test rounding [multiplier | sweep [stacks]] [pN].")
         return
     end

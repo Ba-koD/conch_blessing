@@ -55,6 +55,16 @@ local function draw(s, x, y, scale, rgb)
         else Isaac.RenderText(s, x+offset, y+offset,c[1],c[2],c[3],1) end
     end
 end
+-- Free placement for overlays that follow a player instead of the HUD anchor.
+function V.width(s, scale)
+    getFont()
+    return width(s) * (font and scale or 1)
+end
+function V.drawAt(s, x, y, scale, rgb)
+    getFont()
+    draw(s, x, y, font and scale or 1, rgb)
+end
+
 local function icon(path)
     if icons[path] == nil then
         local ok, value = pcall(function()

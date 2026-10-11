@@ -53,7 +53,14 @@ local function validOwner()
     return ConchBlessing.arglasses == M and M.hasOwner()
 end
 
+local function ticketWaiting()
+    local ticket = ConchBlessing.conchTicket
+    return ticket ~= nil and ticket.hasQueue()
+end
+
 local function reserve(index)
+    -- A Conch Ticket's answer holds the same provider slot and wins over a choice.
+    if ticketWaiting() then return false, "TICKET_RESERVED" end
     local a, reason = api()
     if not a then return false, reason end
     if boundAPI and boundAPI ~= a then M.cancel() end
@@ -105,7 +112,7 @@ end
 
 function M.onRender()
     M.onUpdate()
-    if not M.hasOwner() then return end
+    if not M.hasOwner() or ticketWaiting() then return end
     local ok, err = pcall(function()
         local prediction = M.getSelection()
         if not prediction then

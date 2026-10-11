@@ -14,7 +14,7 @@ import xml.etree.ElementTree as ET
 
 from PIL import Image
 
-import generate_rune_assets
+import generate_pocket_assets
 import generate_xml
 import lua_data
 import test_kronos_room_effects as kronos_tests
@@ -206,13 +206,19 @@ class ThurisazTests(unittest.TestCase):
 class ThurisazContentTests(unittest.TestCase):
     def test_registry_text_and_art_agree(self):
         pockets = generate_xml.load_pockets()
-        self.assertEqual(list(pockets), ['THURISAZ'])
+        self.assertEqual(list(pockets), ['THURISAZ', 'CONCH_TICKET'])
         rune = pockets['THURISAZ']
         self.assertEqual((rune['name'], rune['type'], rune['hud']), ('Thurisaz', 'rune', 'Thurisaz'))
         for lang in ('en', 'kr', 'urimal'):
             entry = lua_data.load(f'scripts/locale/{lang}.lua')['pockets']['THURISAZ']
-            self.assertEqual(len(entry['eid']), 4, lang)
-            self.assertIn('{own:KRONOS}', entry['eid'][0], lang)
+            # User-designated copy: three random familiars, then the reward, then the note.
+            self.assertEqual(len(entry['eid']), 3, lang)
+            self.assertFalse(entry['eid'][0].startswith('#'), lang)
+            self.assertIn('3', entry['eid'][0], lang)
+            self.assertNotIn('{own:KRONOS}', ''.join(entry['eid']), lang)
+        kr = lua_data.load('scripts/locale/kr.lua')['pockets']['THURISAZ']['eid']
+        self.assertEqual(kr[0], '랜덤 펫 3마리를 흡수합니다.')
+        self.assertNotIn('적으면', ''.join(kr))
         sheet = Image.open(ROOT / 'resources/gfx' / rune['gfx']).convert('RGBA')
         self.assertEqual(sheet.size, (96, 32))
         body = sheet.crop((0, 0, 32, 32))
@@ -260,15 +266,43 @@ class ThurisazContentTests(unittest.TestCase):
             finally:
                 lua_data.load = original
 
+    def test_a_dropped_rune_is_tossed_from_the_floor_and_settles_into_idle(self):
+        def tracks(name):
+            anim = next(a for a in ET.parse(ROOT / 'resources/gfx/005.300_thurisaz.anm2').getroot().iter('Animation')
+                        if a.get('Name') == name)
+            return {la.get('LayerId'): list(la) for la in anim.find('LayerAnimations')}
+        def at(frames, t):
+            start = 0
+            for frame in frames:
+                if t < start + int(frame.get('Delay')):
+                    return frame
+                start += int(frame.get('Delay'))
+        appear, idle = tracks('Appear'), tracks('Idle')
+        body = appear['0']
+        shown = [f for f in body if f.get('Visible') == 'true']
+        self.assertEqual(float(shown[0].get('YPosition')), 0, 'it springs out of the floor, never materializes mid-air')
+        self.assertLessEqual(min(float(f.get('YPosition')) for f in shown), -15, 'a real arc')
+        landing = at(body, generate_pocket_assets.THURISAZ_LAND)
+        self.assertGreater(float(landing.get('XScale')), float(landing.get('YScale')), 'squashed as it lands')
+        self.assertLessEqual(abs(float(landing.get('YPosition'))), 1)
+        for layer in ('0', '1'):
+            last, first = appear[layer][-1], idle[layer][0]
+            for attr in ('YPosition', 'XScale', 'YScale', 'RedTint', 'AlphaTint', 'Rotation'):
+                self.assertEqual(last.get(attr), first.get(attr), f"layer {layer} {attr}: Appear ends on Idle's first pose")
+            loop_end = idle[layer][-1]
+            for attr in ('YPosition', 'XScale', 'YScale', 'RedTint', 'AlphaTint'):
+                self.assertEqual(loop_end.get(attr), first.get(attr), f'layer {layer} {attr}: Idle loops without a seam')
+
     def test_pickup_animation_has_every_animation_the_engine_plays(self):
         root = ET.parse(ROOT / 'resources/gfx/005.300_thurisaz.anm2').getroot()
         names = [a.get('Name') for a in root.iter('Animation')]
         self.assertEqual(names, ['Idle', 'Appear', 'Collect', 'Sparkle', 'HUD', 'HUDSmall'])
         appear = root.find(".//Animation[@Name='Appear']")
-        self.assertEqual(appear.find('Triggers/Trigger').get('AtFrame'), '15')
+        self.assertEqual(appear.find('Triggers/Trigger').get('AtFrame'), str(generate_pocket_assets.THURISAZ_LAND))
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'again.anm2'
-            generate_rune_assets.write_anm2(path)
+            generate_pocket_assets.write_anm2(path, generate_pocket_assets.THURISAZ_SHEET,
+                                              generate_pocket_assets.THURISAZ_ANIMATIONS)
             self.assertEqual(path.read_bytes(), (ROOT / 'resources/gfx/005.300_thurisaz.anm2').read_bytes())
 
 

@@ -54,6 +54,9 @@ function M.getPrediction()
 end
 
 local function render()
+    -- A waiting Conch Ticket shows the answer the next use will give in this spot.
+    local ticket = ConchBlessing.conchTicket
+    if ticket and ticket.hasQueue() then return end
     local ar = ConchBlessing.arglasses
     if ar and ar.isOpen() then return end
     local prediction = M.getPrediction()

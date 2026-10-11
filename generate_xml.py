@@ -277,6 +277,8 @@ POCKET_RESOURCES = "resources/gfx"
 POCKET_FRAME = 32
 POCKET_HUD_X = 64   # pocket-slot art sits third on each card's spritesheet
 POCKET_FIELDS = {"type", "pickup", "hud", "anm2", "gfx", "mimiccharge", "script"}
+# pocketitems.xml types: runes are <rune> elements, every other type a <card>.
+POCKET_TYPES = ("rune", "tarot", "tarot_reverse", "suit", "special", "object")
 
 
 def load_pockets(definitions_path=POCKET_DEFINITIONS_PATH, locale_path=LOCALE_EN_PATH):
@@ -293,8 +295,8 @@ def load_pockets(definitions_path=POCKET_DEFINITIONS_PATH, locale_path=LOCALE_EN
         description = entry.get("description") if isinstance(entry, dict) else None
         if not isinstance(name, str) or not name or not isinstance(description, str):
             raise ValueError(f"pocket {key}: needs a name and description under pockets in {locale_path}")
-        if definition["type"] not in ("rune", "card"):
-            raise ValueError(f"pocket {key}: type must be rune or card")
+        if definition["type"] not in POCKET_TYPES:
+            raise ValueError(f"pocket {key}: type must be one of {', '.join(POCKET_TYPES)}")
         pickup, charge = definition["pickup"], definition["mimiccharge"]
         if type(pickup) is not int or pickup < 1000 or pickup in pickups:
             raise ValueError(f"pocket {key}: pickup must be a unique subtype of 1000 or more")
@@ -305,7 +307,7 @@ def load_pockets(definitions_path=POCKET_DEFINITIONS_PATH, locale_path=LOCALE_EN
             if not isinstance(path, str) or not path.endswith(suffix) or ".." in path or ":" in path:
                 raise ValueError(f"pocket {key}: invalid {field}")
             if not os.path.isfile(os.path.join(POCKET_RESOURCES, path)):
-                raise ValueError(f"pocket {key}: {POCKET_RESOURCES}/{path} is missing (run generate_rune_assets.py)")
+                raise ValueError(f"pocket {key}: {POCKET_RESOURCES}/{path} is missing (run generate_pocket_assets.py)")
         if not isinstance(definition["hud"], str) or not definition["hud"] or definition["hud"] in huds:
             raise ValueError(f"pocket {key}: hud must be a unique animation name")
         pickups.add(pickup)
