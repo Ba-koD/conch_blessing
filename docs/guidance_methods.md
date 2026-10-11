@@ -1,16 +1,16 @@
 # 추적·유도 방식 정식 명칭
 
-진(`DRAGON`) 작업에서 비교한 추적 방식의 정식 명칭과 계산식이다. 식의 `dir`은 진행 방향(라디안),
+청룡(`AZURE_DRAGON`, 예전 진 패밀리어) 작업에서 비교한 추적 방식의 정식 명칭과 계산식이다. 식의 `dir`은 진행 방향(라디안),
 `bearing`은 표적 쪽 방향, `wrap()`은 각도를 −π..π로 접는 함수다.
 
 ## 현재 사용처
 
 | 대상 | 방식 | 코드 |
 | --- | --- | --- |
-| 진 본체, 적이 있을 때 | 물결 추적 (Sinusoidal weaving pursuit) | `scripts/items/collectibles/dragon.lua` `updateMotion` |
-| 진 본체, 적이 없을 때 | 벡터장 궤도 유도 (Vector field orbit guidance) | 같은 함수 |
-| 진 본체의 방향 전환 | 회전 속도 자체를 가감속하는 조향 (rate- and acceleration-limited steering) | `steerHead` |
-| 진의 몸통 | 경로 추종 체인 (follow-the-leader / trail following) | `pushTrail`, `layOut` |
+| 청룡 본체, 적이 있을 때 | 물결 추적 (Sinusoidal weaving pursuit) | `scripts/items/collectibles/azure_dragon.lua` `updateMotion` |
+| 청룡 본체, 적이 없을 때 | 벡터장 궤도 유도 (Vector field orbit guidance) | 같은 함수 |
+| 청룡 본체의 방향 전환 | 회전 속도 자체를 가감속하는 조향 (rate- and acceleration-limited steering) | `steerHead` |
+| 청룡의 몸통 | 경로 추종 체인 (follow-the-leader / trail following) | `pushTrail`, `layOut` |
 
 ## 방식별 정리
 
@@ -26,7 +26,7 @@
 | 8. 관통 후 재돌진 | Fly-by (strafing) attack | slashing pass; 표준 유도 법칙이 아니라 회전 제한 추적이 표적을 지나치는 성질을 이용한 전술 | 빠른 속도와 작은 회전 한계로 표적을 관통한 뒤 크게 돌아 다시 진입 |
 | 9. 관통 → 다음 적 | Chain targeting (target hopping) | 연쇄 표적, 튕기는 공격(ricochet)과 같은 표적 선택 | 유도 법칙이 아니라 표적 선택 규칙. 닿은 표적을 빠져나오면 그 표적을 제외한 가장 가까운 적으로 바꾼다 |
 
-## 진에서 쓰는 보조 기법
+## 청룡에서 쓰는 보조 기법
 
 - **회전 속도 가감속 조향**: 진행 방향을 바로 바꾸지 않고 회전 속도(`turnVel`)를 목표치로 서서히 바꾼다
   (`turnVel += clamp(asked - turnVel, -turnAccel, turnAccel)`). 경로의 곡률이 연속이 되어 머리 방향이 급변하지 않는다.

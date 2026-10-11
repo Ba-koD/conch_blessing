@@ -93,7 +93,7 @@ C.TIME_MONEY = { stage = function(plan, _, n)
     end)
 end }
 
--- Dragon: one long familiar per copy, no flight or spectral tears. Contact 5%
+-- Azure Dragon (console only): one long familiar per copy, no flight or spectral tears. Contact 5%
 -- of damage per tick; lightning for 5x damage on every enemy its snout runs
 -- into, once every five seconds each per dragon. The
 -- boss multiplier is covered offline (tests/test_dragon_familiar_contracts.py):
@@ -101,7 +101,7 @@ end }
 -- separate 5x bolts from 5% body contact, and HP loss must agree with every
 -- recorded hit.
 local function dragonsOf(player)
-    local variant = assert(ConchBlessing.ItemData.DRAGON.entity.variant, "missing Dragon familiar variant")
+    local variant = assert(ConchBlessing.ItemData.AZURE_DRAGON.entity.variant, "missing Azure Dragon familiar variant")
     local list = {}
     for _, entity in ipairs(Isaac.FindByType(EntityType.ENTITY_FAMILIAR, variant, -1)) do
         local familiar = entity:ToFamiliar()
@@ -119,8 +119,8 @@ local function pinTargets(ctx)
     end
 end
 
-C.DRAGON = { stage = function(plan, _, n)
-    plan.check("Dragon grants no flight or spectral tears", function(player, ctx)
+C.AZURE_DRAGON = { stage = function(plan, _, n)
+    plan.check("Azure Dragon grants no flight or spectral tears", function(player, ctx)
         return player.CanFly == ctx.baseFly
             and (player.TearFlags & TearFlags.TEAR_SPECTRAL ~= 0) == ctx.baseSpectral,
             "flight=" .. tostring(player.CanFly)
@@ -129,7 +129,7 @@ C.DRAGON = { stage = function(plan, _, n)
         local list, segmented = dragonsOf(player), true
         for _, familiar in ipairs(list) do
             local state = familiar:GetData().__ConchDragon
-            segmented = segmented and state ~= nil and #state.segments == #ConchBlessing.dragon.data.parts
+            segmented = segmented and state ~= nil and #state.segments == #ConchBlessing.azureDragon.data.parts
         end
         local expected = n
         return #list == expected and segmented, string.format("dragons=%d expected=%d copies=%d segments=%s",
@@ -200,7 +200,7 @@ C.DRAGON = { stage = function(plan, _, n)
             for _, bolt in ipairs(H.dragonHits(target, player.Damage * 2)) do
                 local who = bolt.dragon or 0
                 local gap = last[who] and bolt.frame - last[who]
-                if gap and gap < ConchBlessing.dragon.data.strikeCooldown then gaps[#gaps + 1] = i .. ":" .. gap end
+                if gap and gap < ConchBlessing.azureDragon.data.strikeCooldown then gaps[#gaps + 1] = i .. ":" .. gap end
                 last[who] = bolt.frame
             end
         end
@@ -244,6 +244,163 @@ C.DRAGON = { stage = function(plan, _, n)
         H.recordDragonHits(false)
         if ctx.biter and ctx.biter:Exists() then ctx.biter:Remove() end
         ctx.targets, ctx.biter, ctx.dragon = nil, nil, nil
+    end)
+end }
+
+-- 진 (Dragon) weather: while enemies are present, tears stat / 5 bolts a second
+-- per copy, on their own. Every bolt lands close to an enemy and catches it, so
+-- with targets far apart each bolt hits exactly one. The holder never shoots
+-- here, so every hit whose source is the player itself is the weather's: bolts
+-- for 1x damage, twister touches for 5%. Rain and the dim room are visual only.
+local WEATHER_SPOTS = { { -220, -100 }, { 0, 110 }, { 220, -100 } }
+local function pinWeatherTargets(ctx)
+    for i, target in ipairs(ctx.targets or {}) do
+        local spot = WEATHER_SPOTS[i]
+        if target:Exists() then target.Position = ctx.center + Vector(spot[1], spot[2]); target.Velocity = Vector.Zero end
+    end
+end
+
+local function weatherStrikesExpected(player, n, updates)
+    local d = ConchBlessing.dragon.data
+    return n * (30 / (player.MaxFireDelay + 1)) / d.tearsDivisor * updates / 30
+end
+
+local function watchTwisters(ctx)
+    for _, twister in ipairs(ConchBlessing.dragon._twisters) do
+        if not ctx.seenTwisters[twister] then ctx.seenTwisters[twister] = true; ctx.risen = ctx.risen + 1 end
+    end
+end
+
+C.DRAGON = { stage = function(plan, _, n)
+    plan.section(string.format("DRAGON / weather with %d cop%s", n, n == 1 and "y" or "ies"),
+        n > 0 and "rain falls and the room is dimmed as if under dark clouds" or "no rain and the room's own light")
+    plan.act(function(player, ctx)
+        H.isolateAttack()
+        ctx.center = Game():GetRoom():GetCenterPos()
+        player.Position = ctx.center
+        ctx.targets = {}
+        for i = 1, #WEATHER_SPOTS do ctx.targets[i] = H.target(player, true) end
+        pinWeatherTargets(ctx)
+        H.recordPlayerHits(true)
+    end)
+    plan.waitUntil(function(player, ctx)
+        pinWeatherTargets(ctx); player.Position = ctx.center
+        for _, target in ipairs(ctx.targets) do
+            local ready, why = H.targetReady(target)
+            if not ready then return false, why end
+        end
+        return true
+    end, 60, "three far-apart targets initialized and vulnerable")
+    plan.act(function(_, ctx)
+        H.recordPlayerHits(true)
+        ctx.hp = {}
+        for i, target in ipairs(ctx.targets) do ctx.hp[i] = target.HitPoints end
+        ctx.ticks, ctx.risen, ctx.seenTwisters = 0, 0, {}
+        for _, twister in ipairs(ConchBlessing.dragon._twisters) do ctx.seenTwisters[twister] = true end
+    end)
+    plan.waitUntil(function(player, ctx)
+        pinWeatherTargets(ctx); player.Position = ctx.center
+        watchTwisters(ctx)
+        ctx.ticks = ctx.ticks + 1
+        return ctx.ticks >= 150
+    end, 160, "five seconds of weather")
+    plan.waitUntil(function(player, ctx)
+        pinWeatherTargets(ctx); player.Position = ctx.center
+        ctx.settle = (ctx.settle or 0) + 1
+        return ctx.settle >= 6
+    end, 8, "HP settles")
+    plan.check("bolts follow the tears stat and copies (tears / 5 a second per copy)", function(player, ctx)
+        local bolts = #H.playerHits(nil, player.Damage * 0.5)
+        local expected = weatherStrikesExpected(player, n, ctx.ticks)
+        local strikes = bolts + ctx.risen
+        return math.abs(strikes - expected) <= 1.01, string.format("bolts=%d twisters=%d expected=%.2f copies=%d MaxFireDelay=%.2f",
+            bolts, ctx.risen, expected, n, player.MaxFireDelay)
+    end)
+    if n > 0 then
+        plan.check("every bolt hits for 1x current damage and HP loss matches", function(player, ctx)
+            local wrong = {}
+            for _, hit in ipairs(H.playerHits(nil, player.Damage * 0.5)) do
+                if not H.near(hit.amount, player.Damage) then wrong[#wrong + 1] = "bolt " .. hit.amount end
+            end
+            for i, target in ipairs(ctx.targets) do
+                local loss = ctx.hp[i] - target.HitPoints
+                if math.abs(loss - H.playerDamage(target)) > math.max(0.02, player.Damage * 0.002) then
+                    wrong[#wrong + 1] = i .. ":HP loss " .. loss .. " vs hits " .. H.playerDamage(target)
+                end
+            end
+            return #wrong == 0, "wrong=" .. (#wrong > 0 and table.concat(wrong, ",") or "none")
+        end)
+    end
+    local weather = ConchBlessing.dragon and ConchBlessing.dragon.data
+    if n >= (weather and weather.twisterMinCopies or 2) then
+        -- Twister mechanics with the chance forced to 1 for this check only; the
+        -- 5% roll itself is measured by conch_test rng and rng_report.py.
+        plan.act(function(player, ctx)
+            ctx.chance = ConchBlessing.dragon.data.twisterChance
+            ConchBlessing.dragon.data.twisterChance = 1
+            ctx.twister, ctx.most = nil, 0
+            H.recordPlayerHits(true)
+        end)
+        plan.waitUntil(function(player, ctx)
+            pinWeatherTargets(ctx); player.Position = ctx.center
+            ctx.twister = ctx.twister or ConchBlessing.dragon._twisters[#ConchBlessing.dragon._twisters]
+            return ctx.twister ~= nil, "no twister yet"
+        end, 60, "a bolt rises as a twister")
+        plan.act(function(_, ctx)
+            ConchBlessing.dragon.data.twisterChance = ctx.chance
+            ctx.rose = Vector(ctx.twister.position.X, ctx.twister.position.Y)
+            ctx.puller = ctx.targets[2]
+            ctx.pullStart = nil
+        end)
+        plan.waitUntil(function(player, ctx)
+            player.Position = ctx.center
+            ctx.most = math.max(ctx.most, #ConchBlessing.dragon._twisters)
+            -- Hold the others away; let one target go 100px from the twister and watch it come in.
+            for i, target in ipairs(ctx.targets) do
+                if target ~= ctx.puller and target:Exists() then
+                    local spot = WEATHER_SPOTS[i]; target.Position = ctx.center + Vector(spot[1], spot[2]) * 2; target.Velocity = Vector.Zero
+                end
+            end
+            if not ctx.pullStart then
+                ctx.puller.Position = ctx.rose + Vector(100, 0); ctx.puller.Velocity = Vector.Zero
+                ctx.pullStart = 100
+            end
+            ctx.pullEnd = ctx.puller.Position:Distance(ctx.rose)
+            ctx.waited = (ctx.waited or 0) + 1
+            return ctx.waited >= 20
+        end, 25, "a target drifts near the twister")
+        plan.check("the twister stays where it rose and pulls enemies in", function(_, ctx)
+            local still = ctx.twister.position:Distance(ctx.rose) < 0.01
+            return still and ctx.pullEnd < ctx.pullStart - 10, string.format("moved=%s distance %d -> %.1f",
+                tostring(not still), ctx.pullStart, ctx.pullEnd)
+        end)
+        plan.check("a twister hurts what it touches for 5% of damage a tick", function(player, ctx)
+            local expected = player.Damage * ConchBlessing.dragon.data.twisterDamagePercent
+            local touches, odd = 0, 0
+            for _, hit in ipairs(H.playerHits(ctx.puller)) do
+                if hit.amount < player.Damage * 0.5 then
+                    touches = touches + 1
+                    if not H.near(hit.amount, expected) then odd = odd + 1 end
+                end
+            end
+            return touches > 0 and odd == 0, string.format("touches=%d odd=%d each=%.3f", touches, odd, expected)
+        end)
+        plan.check("never more than five twisters at once", function(_, ctx)
+            return ctx.most <= ConchBlessing.dragon.data.twisterLimit, "most=" .. ctx.most
+        end)
+        plan.waitUntil(function(player)
+            player.Position = Game():GetRoom():GetCenterPos()
+            for _, twister in ipairs(ConchBlessing.dragon._twisters) do
+                if twister.age < ConchBlessing.dragon.data.twisterTicks + ConchBlessing.dragon.data.twisterEndTicks - 1 then return false, "twisters still standing" end
+            end
+            return true
+        end, 200, "the twisters run their five seconds")
+    end
+    plan.act(function(_, ctx)
+        if ctx.chance then ConchBlessing.dragon.data.twisterChance = ctx.chance end
+        H.recordPlayerHits(false)
+        for _, target in ipairs(ctx.targets or {}) do if target:Exists() then target:Remove() end end
+        ctx.targets, ctx.twister, ctx.puller, ctx.chance = nil, nil, nil, nil
     end)
 end }
 

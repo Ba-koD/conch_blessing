@@ -108,10 +108,15 @@ return {
             name = "Dragon",
             description = "God of Weather",
             eid = {
-                "A long dragon weaves around you and lunges at nearby enemies",
-                "#Enemies touching its body take 5% of your damage every tick",
-                "#Lightning strikes every enemy the dragon's head runs into for 5x your damage (once every 5 seconds each)",
-                "#Bosses take 5x more lightning damage (25x your damage)",
+                "It always rains, and the room darkens as if under dark clouds.",
+                "#{{Tears}} Lightning strikes enemies every tears / 5 seconds.",
+                "#Lightning deals your damage.",
+            },
+            synergies = {
+                dragon = {
+                    "Each bolt has a 5% chance to rise as a dragon twister instead (up to 5 at once)",
+                    "#A twister stays where it rose for 5 seconds, pulling enemies in and hitting them for 5% of your damage every tick",
+                },
             },
         },
         SNAKE = {
@@ -584,6 +589,16 @@ return {
             },
             synergies = {
                 bffs = "Drop rate increases to 10%.",
+            },
+        },
+        AZURE_DRAGON = {
+            name = "Azure Dragon",
+            description = "Guardian of the East",
+            eid = {
+                "A long dragon weaves around you and lunges at nearby enemies",
+                "#Enemies touching its body take 5% of your damage every tick",
+                "#Lightning strikes every enemy the dragon's head runs into for 5x your damage (once every 5 seconds each)",
+                "#Bosses take 5x more lightning damage (25x your damage)",
             },
         },
 

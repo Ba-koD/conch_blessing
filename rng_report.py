@@ -42,6 +42,7 @@ SRC = {
     "crown": "scripts/items/trinkets/angels_crown.lua",
     "kronos": "scripts/items/collectibles/kronos.lua",
     "liveeye": "scripts/items/collectibles/live_eye.lua",
+    "dragon": "scripts/items/collectibles/dragon.lua",
 }
 
 _cache: dict[str, list[str]] = {}
@@ -588,6 +589,33 @@ def build(samples: int, seed: int) -> str:
         hits = sum(1 for _ in range(samples) if rng.random() < p)
         rows.append([str(luck), f"**{p:.0%}**", f"{hits / samples:.3%}"])
     w("\n".join(table(["Luck", "Exact P (no loss)", "Measured"], rows)))
+    w("")
+
+    # 12 -------------------------------------------------------------------------
+    chance, chance_cite = const("dragon", "twisterChance")
+    limit, limit_cite = const("dragon", "twisterLimit")
+    min_copies, min_cite = const("dragon", "twisterMinCopies")
+    divisor, divisor_cite = const("dragon", "tearsDivisor")
+    w("## 12. Dragon bolts and twisters")
+    w("")
+    w(f"Bolts are not random in number: while enemies are present they strike tears / {int(divisor)} x copies held")
+    w(f"times a second ({divisor_cite}), from the tears stat `30 / (MaxFireDelay + 1)`, without counting shots.")
+    w(f"With {int(min_copies)} or more copies ({min_cite}) each strike rolls `RandomFloat() < {chance}`")
+    w(f"({chance_cite}) on the holder's Dragon collectible RNG and rises as a twister instead, unless")
+    w(f"{int(limit)} twisters already stand ({limit_cite}). The roll is a single draw, so the odds equal the constant.")
+    w("")
+    rows = []
+    for copies, standing in ((1, 0), (2, 0), (3, 0), (2, int(limit) - 1), (2, int(limit))):
+        p = chance if copies >= min_copies and standing < limit else 0.0
+        hits = sum(1 for _ in range(samples) if copies >= min_copies and standing < limit and rng.random() < chance)
+        rows.append([str(copies), str(standing), f"**{p:.0%}**", f"{hits / samples:.3%}"])
+    w("\n".join(table(["Copies", "Twisters standing", "Exact P (twister)", "Measured"], rows)))
+    w("")
+    rows = []
+    for delay in (10, 7, 5, 2):
+        sps = 30 / (delay + 1)
+        rows.append([str(delay), f"{sps:.2f}", f"{sps / divisor:.2f}", f"{2 * sps / divisor:.2f}"])
+    w("\n".join(table(["MaxFireDelay", "Tears stat", "Strikes/s, 1 copy", "Strikes/s, 2 copies"], rows)))
     w("")
 
     return "\n".join(md) + "\n"

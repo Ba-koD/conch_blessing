@@ -1,300 +1,156 @@
--- 진 (Dragon): a long azure dragon familiar per copy.
+-- 진 (Dragon), God of Weather.
 --
--- The dragon weaves around its player like a living creature and rushes at
--- any enemy in the room, swimming at it in a gently weaving line (wave
--- pursuit). It hurts every enemy its body touches each tick, and lightning
--- strikes every enemy its snout runs into, at most once every five seconds each
--- (bosses take five times more). Several dragons spread out, each going for
--- an enemy no other dragon is already after when there is one. Small sparks of current crackle along its
--- body now and then; they are drawn only and hurt nothing.
--- docs/guidance_methods.md names every steering method used here.
---
--- Every part follows one orientation rule: drawn facing right with its back
--- up, a part heading left is mirrored top-to-bottom so its back stays up.
--- Each part decides from its own direction, with a small band around vertical
--- so it never flickers, so a turn travels naturally from head to tail; nothing
--- is squashed. Like a rig, the head leads and the
--- body follows: the head always swims forward and its turning speed itself
--- eases in and out, so its direction never jumps; every other part sits on
--- the exact trail the head left behind, so the body never bunches or kinks.
--- The dragon keeps its own head position and sets the entity to it each
--- update rather than relying on the engine to integrate a velocity.
--- Motion and drawing are cosmetic; damage always goes through
--- Entity:TakeDamage with the familiar as its source.
+-- While any player holds it, it always rains and the room is dimmed as if under
+-- dark clouds (well short of Curse of Darkness). Lightning strikes on its own,
+-- whether or not anyone shoots: each holder's tears stat divided by 5 is bolts
+-- a second (tears 5 strikes once a second), times the copies held, so copies
+-- add up linearly as independent storms.
+-- A bolt lands close to a random enemy (never far off, so it always catches
+-- that enemy) and hurts every enemy around it for the holder's damage. Bolts
+-- crackle lightly; a full thunderclap, which lights the room for a moment,
+-- comes only every few seconds, and a quiet distant rumble rolls now and then
+-- for as long as it is held. With two or more copies a bolt may rise as a
+-- dragon twister instead (Hush's tear pillar, drawn as a plain sprite): it
+-- stays where it rose, pulls enemies in and hurts what it touches every tick.
+-- The long dragon familiar this item once summoned is the console-only Azure
+-- Dragon (azure_dragon.lua).
+local DamageProvenance = require("scripts.lib.damage_provenance")
+
 ConchBlessing.dragon = {}
 
 local DRAGON_ID = Isaac.GetItemIdByName("Dragon")
 local THUNDER_SOUND = "Conch Upgrade Thunder Strike"
+local CRACKLE_SOUND = "Conch Dragon Crackle"
+local TWISTER_SOUND = "Conch Dragon Twister"
+local BOLT_PROC_KEY = "dragon_bolt"
+local TWISTER_PROC_KEY = "dragon_twister"
 
 ConchBlessing.dragon.data = {
-    -- Head, a long body and the tail; legs hang under the front and hind parts.
-    parts = { "Head", "Body", "Body", "Body", "Body", "Body", "Body", "Body",
-              "Body", "Body", "Body", "Body", "Body", "Tail" },
-    legParts = { [3] = true, [9] = true },
-    flipThreshold = 0.08,                -- heading cosine (about 5 degrees past vertical) at which a part turns round
-    spacing = { 10, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 10 },  -- trail distance between part pivots
-    taper = 0.35,                        -- the tail end is drawn this much smaller than the head
-    flyHeight = 7,                       -- the body floats above its shadow...
-    liftWave = 3, liftRate = 0.12, liftStep = 0.55,  -- ...rising and dipping along its length
-    orbitRadius = 74,
-    radiusSwing = 22, radiusSwing2 = 9,  -- the orbit breathes in and out
-    orbitSquash = 0.78,                  -- Isaac's floor is seen at an angle
-    angularSpeed = 0.045,                -- radians per update before the speed swings
-    speedSwing = 0.45, speedSwing2 = 0.25,
-    -- The head always swims forward. Its turn velocity eases toward what the
-    -- goal asks for (turnGain), never faster than turnAccel per update and
-    -- never beyond the turn-rate cap, so its path is one smooth curve.
-    turnGain = 0.15, turnAccel = 0.02,
-    idleTurnRate = 0.08, hurryTurnRate = 0.2,
-    turnSlowdown = 0.7,                  -- share of speed kept while the goal is behind
-    minTurnRadius = 30,                  -- the head never curls tighter than this, so the body bends smoothly
-    minSpeed = 1.2, maxSpeed = 15,
-    hurryDistance = 120,                 -- this far outside the orbit, the turn rate rises to hurryTurnRate
-    radialGain = 0.04,                   -- tilt toward the orbit per unit of distance off it
-    weave = 0.2, weaveRate = 0.06,       -- gentle side-to-side swimming
-    catchUp = 0.15,                      -- extra speed per unit of distance outside the orbit
-    speedEase = 0.1,
-    -- Any enemy in the room draws the dragon off its orbit: wave pursuit,
-    -- heading for the enemy with a slow sine weave on top of the bearing.
-    -- Once the head runs into its prey it flies straight on through (a fly-by)
-    -- and then goes for the enemy it has passed least recently, so its hits
-    -- spread over every enemy instead of coiling round one.
-    -- The hunt is fast and decisive: a quick dash, and a sharp (but still
-    -- eased) turn the moment a new target is chosen, so the switch is plain to see.
-    chaseSpeed = 8, chaseSpeedEase = 0.25,
-    chaseTurnRate = 0.2, chaseTurnAccel = 0.045,
-    chaseWeave = 0.15, chaseWeaveRate = 0.07,
-    passReach = 6,                       -- head within headReach + this + the enemy's size runs into it
-    passTicks = 12,                      -- updates it keeps straight on after running through
-    trailStep = 0.5,                     -- smallest head move recorded on the trail
-    teleportStep = 96,                   -- the player moving this far in one update has teleported
-    snapDistance = 1600,                 -- failsafe: never this far from the player, even while hunting
-    legFrameTicks = 5, tailFrameTicks = 8,
-    headReach = 14,                      -- the snout reaches this far ahead of the neck
-    contactDamagePercent = 0.05,         -- of the player's damage, per tick, per enemy
-    contactRadius = 8,                   -- per part, plus the enemy's own size
-    lightningDamageMultiplier = 5,
-    lightningBossMultiplier = 5,
-    strikeCooldown = 150,                -- one lightning bolt per enemy every five seconds, per dragon
-    bffsDamageMultiplier = 2,
-    bffsScale = 1.25,
-    strikeFrames = { 2, 2, 2, 2, 3 },    -- ticks each lightning frame stays on screen
-    -- Sparks of current crackling along the body (drawn only).
-    sparkGap = { 6, 14 },                -- updates between sparks, rolled from the dragon's own seed
-    sparkFrames = 3,                     -- the Spark animation's frames...
-    sparkFrameTicks = 2,                 -- ...each this many updates on screen
-    sparkSpread = 5,                     -- off the spine to either side, before scaling
+    tearsDivisor = 5,                    -- bolts a second = tears stat / 5 x copies held (tears 5, one copy: once a second)
+    boltRadius = 60,                     -- about one and a half tiles, plus the enemy's size
+    boltScatter = 40,                    -- lands this close to its enemy at most, so the enemy is always caught
+    boltDamageMultiplier = 1,            -- of the holder's damage
+    twisterChance = 0.05,                -- with twisterMinCopies or more, a bolt rises as a twister instead
+    twisterMinCopies = 2,
+    twisterLimit = 5,                    -- most twisters in the room at once
+    twisterTicks = 150,                  -- five seconds where it rose
+    twisterDamagePercent = 0.05,         -- of the holder's damage, per tick, to every enemy it touches
+    twisterReach = 28,                   -- touch reach, plus the enemy's size
+    twisterPullRadius = 180,             -- enemies this close are sucked in...
+    twisterPull = 4.5,                   -- ...this much faster per tick (half at the edge, 1.5x near the middle)
+    twisterBossPull = 0.3,               -- share of the pull a boss feels
+    twisterStartTicks = 8, twisterEndTicks = 8,  -- Hush pillar Start/End animations
+    -- Leader, strike, flash, second stroke, flicker, thin, fade.
+    strikeFrames = { 1, 2, 2, 2, 2, 2, 3 },
+    boltShapes = 4,                      -- Strike, Strike2..4: forked, split, spray, swinging
+    boltScale = { 0.85, 1.1 },           -- each bolt drawn a little smaller or larger
+    scorchTicks = 60,                    -- the burnt patch fades over two seconds
+    -- Cue volume x the sample's loudest 50 ms must reach -18 dB or it is lost
+    -- under gameplay (tests/test_dragon_weather_contracts.py measures it).
+    crackleVolume = 0.65,                -- the light crackle peaks at -13.6 dB: -17.3 dB, every bolt
+    thunderVolume = 0.45,                -- the full strike peaks at -10.3 dB: -17.2 dB, at most every thunderGap
+    thunderGap = 150,                    -- five seconds between full thunderclaps
+    twisterVolume = 0.6,                 -- the twister's wind peaks at -12.8 dB: -17.3 dB, for its whole life
+    flashTicks = 6,                      -- a thunderclap lifts the dark this long
+    rumbleVolume = 0.3,                  -- vanilla thunder peaks at -5.5 to -7.4 dB: -16 to -18 dB, quiet but heard
+    rumblePitch = 0.85,                  -- a little lower, so it sounds far away
+    rumbleGap = { 360, 600 },            -- 12-20 s between rumbles (the vanilla samples run 8-13 s)
+    rumbleFirst = { 90, 240 },           -- the first one 3-8 s after entering a room
+    overcast = 0.32,                     -- veil opacity while held (Curse of Darkness goes much darker)
+    rainDrops = 56,
+    rainFall = 110,                      -- pixels a drop falls before it lands
+    rainAlpha = 0.5,
 }
 
-local PART_ANIMATIONS = ConchBlessing.dragon.data.parts
-ConchBlessing.dragon._strikes = {}
+ConchBlessing.dragon._bolts = {}
+ConchBlessing.dragon._scorches = {}
+ConchBlessing.dragon._twisters = {}
+ConchBlessing.dragon._charge = {}         -- per player: bolts owed, by pointer hash
+ConchBlessing.dragon._rumble = { count = 0 }  -- the distant thunder's countdown
+ConchBlessing.dragon._sky = { sinceThunder = math.huge, flash = 0, cracks = 0, bolts = 0 }
 local enemyCache = { frame = -1, list = {} }
--- Every dragon's state and the frame it last updated, so several dragons can
--- spread over different enemies. Weak keys: a removed dragon drops out.
-local liveStates = setmetatable({}, { __mode = "k" })
-local reportedRenderFailure = false
-local thunderSound
+local reported = {}
+local sounds = {}
 
 local function debugLog(format, ...)
     if not (ConchBlessing.Config and ConchBlessing.Config.debugMode) then return end
     ConchBlessing.printDebug("[Dragon] " .. string.format(format, ...))
 end
 
-local function getVariant()
-    local item = ConchBlessing.ItemData.DRAGON
-    return item and item.entity and item.entity.variant
+local function reportOnce(key, message)
+    if reported[key] then return end
+    reported[key] = true
+    ConchBlessing.printError("[Dragon] " .. message)
 end
 
-local function ownedCount(player)
+local function copies(player)
     return player and player:GetCollectibleNum(DRAGON_ID) or 0
 end
 
--- One dragon per copy: owned copies plus temporary effects (Box of Friends,
--- Monster Manual), like any other familiar item.
-local function familiarCount(player)
-    local effects = player:GetEffects()
-    local temporary = effects and effects:GetCollectibleEffectNum(DRAGON_ID) or 0
-    return ownedCount(player) + temporary
-end
-
-local function hasBffs(player)
-    return player and player:HasCollectible(CollectibleType.COLLECTIBLE_BFFS) or false
+-- Cosmetic hash for rain, pitch and the rumble's timing, never gameplay RNG:
+-- the same index always gives the same value.
+local function hash(i)
+    local x = math.sin(i * 12.9898 + 78.233) * 43758.5453
+    return x - math.floor(x)
 end
 
 -- ------------------------------------------------------------------ pure rules
--- Kept free of engine state so tests can exercise them directly.
-local function contactDamage(playerDamage, bffs)
+-- Kept free of engine state so tests and the RNG probe can call them directly.
+local function shotsPerSecond(maxFireDelay)
+    return 30 / (math.max(0, maxFireDelay or 0) + 1)
+end
+
+-- Bolts owed per update: tears stat / tearsDivisor a second for each copy,
+-- every copy its own storm, so they add up linearly.
+local function boltsPerUpdate(maxFireDelay, count)
     local d = ConchBlessing.dragon.data
-    return playerDamage * d.contactDamagePercent * (bffs and d.bffsDamageMultiplier or 1)
+    return math.max(0, count or 0) * shotsPerSecond(maxFireDelay) / d.tearsDivisor / 30
 end
 
-local function lightningDamage(playerDamage, isBoss, bffs)
+local function boltDamage(playerDamage)
+    return playerDamage * ConchBlessing.dragon.data.boltDamageMultiplier
+end
+
+local function twisterTickDamage(playerDamage)
+    return playerDamage * ConchBlessing.dragon.data.twisterDamagePercent
+end
+
+-- What a bolt becomes for a roll in [0, 1): a twister only with enough copies
+-- and while the room has room for one more.
+local function rollStrikeKind(roll, count, twisters)
     local d = ConchBlessing.dragon.data
-    return playerDamage * d.lightningDamageMultiplier * (isBoss and d.lightningBossMultiplier or 1)
-        * (bffs and d.bffsDamageMultiplier or 1)
-end
-
--- Angular speed and orbit radius at time t: two slow sine swings with
--- per-dragon phases, so the path never settles into a mechanical circle.
-local function orbitShape(state, t)
-    local d = ConchBlessing.dragon.data
-    local speed = d.angularSpeed * (1 + d.speedSwing * math.sin(t * 0.031 + state.p1)
-        + d.speedSwing2 * math.sin(t * 0.077 + state.p2))
-    local radius = d.orbitRadius + d.radiusSwing * math.sin(t * 0.023 + state.p3)
-        + d.radiusSwing2 * math.sin(t * 0.061 + state.p4)
-    return speed, radius
-end
-
-local function wrapAngle(a)
-    return (a + math.pi) % (2 * math.pi) - math.pi
-end
-
-local function trailLength()
-    local total = 0
-    for _, gap in ipairs(ConchBlessing.dragon.data.spacing) do total = total + gap end
-    return total
-end
-
--- The head's trail, newest point first. A move shorter than trailStep slides
--- the newest point instead of adding one; points past the body's length drop off.
-local function pushTrail(trail, head)
-    local d = ConchBlessing.dragon.data
-    local first = trail[1]
-    if first and first:Distance(head) < d.trailStep and trail[2] then
-        trail[1] = head
-    else
-        table.insert(trail, 1, head)
+    if count >= d.twisterMinCopies and twisters < d.twisterLimit and roll < d.twisterChance then
+        return "twister"
     end
-    local need, travelled = trailLength() + 4, 0
-    for i = 2, #trail do
-        travelled = travelled + trail[i]:Distance(trail[i - 1])
-        if travelled > need then
-            for j = #trail, i + 1, -1 do trail[j] = nil end
-            break
-        end
-    end
+    return "bolt"
 end
 
--- The point `distance` along the trail behind the head. Past the recorded end
--- the trail continues straight back.
-local function sampleTrail(trail, distance, heading)
-    local travelled = 0
-    for i = 2, #trail do
-        local a, b = trail[i - 1], trail[i]
-        local length = b:Distance(a)
-        if length > 0 and travelled + length >= distance then
-            return a + (b - a) * ((distance - travelled) / length)
-        end
-        travelled = travelled + length
-    end
-    local last, before = trail[#trail], trail[#trail - 1]
-    local back = before and last - before
-    if not back or back:Length() < 0.001 then back = Vector(-math.cos(heading), -math.sin(heading)) end
-    return last + back:Resized(distance - travelled)
+-- Where a bolt lands for two rolls in [0, 1): up to boltScatter from its enemy,
+-- in any direction.
+local function scatter(center, angleRoll, distanceRoll)
+    local angle = angleRoll * 2 * math.pi
+    local distance = distanceRoll * ConchBlessing.dragon.data.boltScatter
+    return Vector(center.X + math.cos(angle) * distance, center.Y + math.sin(angle) * distance)
 end
 
--- Every part's position and angle, laid on the trail; the head points along its heading.
-local function layOut(trail, heading)
+-- Pull velocity toward a twister: strongest near the middle, nothing past the radius.
+local function pullToward(center, position, isBoss)
     local d = ConchBlessing.dragon.data
-    local positions, angles = {}, {}
-    local offset = 0
-    for i = 1, #d.parts do
-        if i > 1 then offset = offset + (d.spacing[i - 1] or d.spacing[#d.spacing]) end
-        positions[i] = sampleTrail(trail, offset, heading)
-        if i == 1 then
-            angles[i] = heading
-        else
-            local toward = sampleTrail(trail, math.max(0, offset - 5), heading) - sampleTrail(trail, offset + 5, heading)
-            angles[i] = toward:Length() > 0.001 and math.atan(toward.Y, toward.X) or angles[i - 1]
-        end
-    end
-    return positions, angles
+    local toward = center - position
+    local distance = toward:Length()
+    if distance <= 1 or distance > d.twisterPullRadius then return Vector(0, 0) end
+    local strength = d.twisterPull * (1.5 - distance / d.twisterPullRadius) * (isBoss and d.twisterBossPull or 1)
+    return toward:Resized(strength)
 end
 
--- How large a part is drawn: full size at the head, thinning toward the tail.
-local function partTaper(index)
+-- The look of one bolt from its running number: which shape, mirrored or not,
+-- and how large. Cosmetic only, so it comes from the hash, not the item RNG.
+local function boltLook(index)
     local d = ConchBlessing.dragon.data
-    return 1 - d.taper * ((index - 1) / (#d.parts - 1)) ^ 1.4
-end
-
--- ------------------------------------------------------------------ state
-local function copyVector(v) return Vector(v.X, v.Y) end
-
-local function straightTrail(position, heading)
-    local back = Vector(-math.cos(heading), -math.sin(heading))
-    return { copyVector(position), position + back * (trailLength() + 4) }
-end
-
--- Whether a part faces left: past vertical by the flipThreshold band, else
--- whatever it faced before, so swimming straight up or down never flickers.
-local function facesLeft(angle, current)
-    local c = math.cos(angle)
-    local threshold = ConchBlessing.dragon.data.flipThreshold
-    if c < -threshold then return true end
-    if c > threshold then return false end
-    if current == nil then return c < 0 end
-    return current
-end
-
--- The single orientation rule for drawing any part. The engine applies the
--- mirror after the rotation (on screen), so a mirrored part takes the negated
--- angle to point the same way.
-local function orient(sprite, angle, mirrored)
-    local degrees = math.deg(angle)
-    sprite.FlipY = mirrored
-    sprite.Rotation = mirrored and -degrees or degrees
-end
-
--- Lay the parts on the current trail, keeping the last pose for render interpolation.
-local function settle(state, keepPrevious)
-    local positions, angles = layOut(state.trail, state.dir)
-    for i = 1, #positions do
-        if keepPrevious then
-            state.previous[i], state.prevAngles[i] = state.segments[i], state.angles[i]
-        else
-            state.previous[i], state.prevAngles[i] = positions[i], angles[i]
-            state.flips[i] = nil
-        end
-        state.segments[i], state.angles[i] = positions[i], angles[i]
-        state.flips[i] = facesLeft(angles[i], state.flips[i])
-    end
-end
-
-local function newState(familiar)
-    -- Cosmetic phases from the familiar's own seed; no gameplay RNG is consumed.
-    local seed = familiar.InitSeed or 1
-    local function phase(k) return ((seed // k) % 997) / 997 * 2 * math.pi end
-    local player = familiar.Player
-    local origin = player and player.Position or familiar.Position
-    local offset = familiar.Position - origin
-    local theta = offset:Length() > 1 and math.atan(offset.Y, offset.X) or phase(3)
-    local dir = theta + math.pi / 2               -- start swimming along the orbit
-    local state = {
-        t = 0, p1 = phase(1), p2 = phase(7), p3 = phase(13), p4 = phase(29),
-        theta = theta, dir = dir, turnVel = 0, speed = ConchBlessing.dragon.data.minSpeed,
-        head = copyVector(familiar.Position),
-        velocity = Vector(0, 0), trail = straightTrail(familiar.Position, dir),
-        segments = {}, previous = {}, angles = {}, prevAngles = {}, flips = {}, passed = {},
-        struck = {}, renders = 0,
-        sparks = {}, sparkWait = ConchBlessing.dragon.data.sparkGap[1], sparkSeed = seed % 2147483647 + 1,
-    }
-    settle(state, false)
-    return state
-end
-
-local function getState(familiar)
-    local data = familiar:GetData()
-    if not data.__ConchDragon then data.__ConchDragon = newState(familiar) end
-    return data.__ConchDragon
-end
-
-local function snapTo(state, position)
-    state.head = copyVector(position)
-    state.playerAt = copyVector(position)
-    state.trail = straightTrail(position, state.dir)
-    state.velocity = Vector(0, 0)
-    state.turnVel, state.prey, state.passing, state.passed = 0, nil, nil, {}
-    settle(state, false)
+    local shape = 1 + math.floor(hash(index * 3 + 1) * d.boltShapes) % d.boltShapes
+    local flip = hash(index * 3 + 2) < 0.5
+    local scale = d.boltScale[1] + hash(index * 3 + 3) * (d.boltScale[2] - d.boltScale[1])
+    return shape, flip, scale
 end
 
 -- ------------------------------------------------------------------ enemies
@@ -303,7 +159,7 @@ local function isTarget(entity)
         and not entity:IsDead() and not entity:HasEntityFlags(EntityFlag.FLAG_FRIENDLY)
 end
 
--- One room scan per update, shared by every dragon.
+-- One room scan per update, shared by every holder and twister.
 local function roomEnemies()
     local frame = Game():GetFrameCount()
     if enemyCache.frame ~= frame then
@@ -316,381 +172,133 @@ local function roomEnemies()
     return enemyCache.list
 end
 
-local function scaleFor(player)
-    return hasBffs(player) and ConchBlessing.dragon.data.bffsScale or 1
+local function soundId(name)
+    if sounds[name] == nil then
+        local id = Isaac.GetSoundIdByName and Isaac.GetSoundIdByName(name)
+        sounds[name] = type(id) == "number" and id > 0 and id or false
+        if not sounds[name] then reportOnce(name, "missing sound: " .. name) end
+    end
+    return sounds[name] or nil
 end
 
--- Body contact: every enemy touched by any part takes contact damage once
--- this tick. Returns the enemies the snout ran into.
-local function applyContact(familiar, state, player)
+-- ------------------------------------------------------------------ strikes
+local function strikePosition(rng, enemies)
+    local enemy = enemies[rng:RandomInt(#enemies) + 1]
+    local spot = scatter(enemy.Position, rng:RandomFloat(), rng:RandomFloat())
+    local room = Game():GetRoom()
+    if room and room.IsPositionInRoom and not room:IsPositionInRoom(spot, 0) then return enemy.Position end
+    return spot
+end
+
+-- Every bolt crackles; a full thunderclap, with a flash, at most every thunderGap.
+local function sound(bolts)
     local d = ConchBlessing.dragon.data
-    local damage = contactDamage(player.Damage, hasBffs(player))
-    local scale = scaleFor(player)
-    local reach = d.contactRadius * scale
-    -- The snout, which reaches ahead of the neck, then the parts' pivots.
-    local points = { state.segments[1] + Vector(math.cos(state.dir), math.sin(state.dir)) * (d.headReach * scale) }
-    for i, segment in ipairs(state.segments) do points[i + 1] = segment end
-    local snouted = {}
-    for _, enemy in ipairs(roomEnemies()) do
-        local limit = reach + (enemy.Size or 0)
-        for k, point in ipairs(points) do
-            if point:DistanceSquared(enemy.Position) <= limit * limit then
-                -- Once per enemy per tick, however many parts touch it.
-                enemy:TakeDamage(damage, 0, EntityRef(familiar), 0)
-                if k == 1 then snouted[#snouted + 1] = enemy end
-                break
+    local sky = ConchBlessing.dragon._sky
+    sky.cracks = sky.cracks + 1
+    if sky.sinceThunder >= d.thunderGap then
+        sky.sinceThunder, sky.flash = 0, d.flashTicks
+        local id = soundId(THUNDER_SOUND)
+        if id then SFXManager():Play(id, d.thunderVolume, 0, false, 1) end
+        return "thunder"
+    end
+    local id = soundId(CRACKLE_SOUND)
+    if id then SFXManager():Play(id, d.crackleVolume, 0, false, 0.85 + hash(sky.cracks) * 0.3) end
+    return "crackle"
+end
+
+local function bolt(player, position, enemies)
+    local d = ConchBlessing.dragon.data
+    local damage = boltDamage(player.Damage)
+    local hit = 0
+    DamageProvenance.withTriggeredSource(player, BOLT_PROC_KEY, nil, BOLT_PROC_KEY, function()
+        for _, enemy in ipairs(enemies) do
+            local limit = d.boltRadius + (enemy.Size or 0)
+            if enemy:Exists() and position:DistanceSquared(enemy.Position) <= limit * limit then
+                enemy:TakeDamage(damage, 0, EntityRef(player), 0)
+                hit = hit + 1
             end
         end
-    end
-    return snouted
+    end)
+    local at = Vector(position.X, position.Y)
+    local bolts = ConchBlessing.dragon._bolts
+    local sky = ConchBlessing.dragon._sky
+    sky.bolts = sky.bolts + 1
+    local shape, flip, scale = boltLook(sky.bolts)
+    bolts[#bolts + 1] = { position = at, age = 0, shape = shape, flip = flip, scale = scale }
+    local scorches = ConchBlessing.dragon._scorches
+    scorches[#scorches + 1] = { position = at, age = 0 }
+    local cue = sound(bolts)
+    debugLog("bolt at %.0f,%.0f damage=%.2f hit=%d sound=%s", position.X, position.Y, damage, hit, cue)
 end
 
--- ------------------------------------------------------------------ lightning
-local function getThunderSound()
-    if thunderSound == nil then
-        local id = Isaac.GetSoundIdByName and Isaac.GetSoundIdByName(THUNDER_SOUND)
-        thunderSound = type(id) == "number" and id > 0 and id or false
-        if not thunderSound then ConchBlessing.printError("[Dragon] missing sound: " .. THUNDER_SOUND) end
-    end
-    return thunderSound or nil
+local function raiseTwister(player, position)
+    local twisters = ConchBlessing.dragon._twisters
+    twisters[#twisters + 1] = { position = Vector(position.X, position.Y), age = 0, player = EntityPtr(player) }
+    local id = soundId(TWISTER_SOUND)
+    if id then SFXManager():Play(id, ConchBlessing.dragon.data.twisterVolume, 0, false, 1) end
+    debugLog("twister rises at %.0f,%.0f (%d in the room)", position.X, position.Y, #twisters)
 end
 
-local function strikeEnemy(familiar, player, enemy)
-    local isBoss = enemy:IsBoss()
-    local damage = lightningDamage(player.Damage, isBoss, hasBffs(player))
-    enemy:TakeDamage(damage, 0, EntityRef(familiar), 0)
-    local strikes = ConchBlessing.dragon._strikes
-    strikes[#strikes + 1] = { position = copyVector(enemy.Position), age = 0 }
-    local sound = getThunderSound()
-    if sound then SFXManager():Play(sound, 0.5, 0, false, 1) end
-    Game():ShakeScreen(3)
-    debugLog("strike %s.%s boss=%s damage=%.2f", tostring(enemy.Type), tostring(enemy.Variant), tostring(isBoss), damage)
-end
-
--- Lightning on every enemy the snout runs into, once per strikeCooldown each
--- (per dragon: every dragon keeps its own record).
-local function updateLightning(familiar, state, player, snouted)
-    local d = ConchBlessing.dragon.data
-    for _, enemy in ipairs(snouted) do
-        local hash = GetPtrHash(enemy)
-        local last = state.struck[hash]
-        if not last or state.t - last >= d.strikeCooldown then
-            state.struck[hash] = state.t
-            strikeEnemy(familiar, player, enemy)
-        end
-    end
-end
-
--- ------------------------------------------------------------------ sparks
--- Cosmetic dice from the dragon's own seed (a small LCG), never gameplay RNG.
-local function cosmeticRoll(seed)
-    seed = (seed * 1103515245 + 12345) % 2147483648
-    return seed, seed / 2147483648
-end
-
--- Age the sparks and drop spent ones; every few updates light a new one on a
--- random part, turned any way and a little off the spine.
-local function updateSparks(state)
-    local d = ConchBlessing.dragon.data
-    state.sparks = state.sparks or {}
-    state.sparkWait = state.sparkWait or d.sparkGap[1]
-    state.sparkSeed = state.sparkSeed or 1
-    local life = d.sparkFrames * d.sparkFrameTicks
-    for i = #state.sparks, 1, -1 do
-        local spark = state.sparks[i]
-        spark.age = spark.age + 1
-        if spark.age >= life then table.remove(state.sparks, i) end
-    end
-    state.sparkWait = state.sparkWait - 1
-    if state.sparkWait > 0 then return end
-    local rolls = {}
-    for k = 1, 4 do state.sparkSeed, rolls[k] = cosmeticRoll(state.sparkSeed) end
-    local parts = #d.parts
-    state.sparks[#state.sparks + 1] = {
-        part = math.min(parts, 1 + math.floor(rolls[1] * parts)),
-        angle = rolls[2] * 360,
-        side = (rolls[3] * 2 - 1) * d.sparkSpread,
-        age = 0,
-    }
-    state.sparkWait = d.sparkGap[1] + math.floor(rolls[4] * (d.sparkGap[2] - d.sparkGap[1] + 1))
-end
-
--- ------------------------------------------------------------------ motion
--- Ease the head's turn velocity toward what the wanted heading asks for, so
--- its direction changes smoothly however suddenly the goal moves.
-local function steerHead(state, want, maxTurn, accel)
-    local d = ConchBlessing.dragon.data
-    accel = accel or d.turnAccel
-    -- Turn rate is capped by speed so the path never curls tighter than minTurnRadius.
-    maxTurn = math.min(maxTurn, math.max(state.speed, d.minSpeed) / d.minTurnRadius)
-    local err = wrapAngle(want - state.dir)
-    local asked = math.max(-maxTurn, math.min(maxTurn, err * d.turnGain * 6))
-    state.turnVel = state.turnVel + math.max(-accel, math.min(accel, asked - state.turnVel))
-    state.dir = wrapAngle(state.dir + state.turnVel)
-    -- How much of its speed the head keeps: less while its goal is off to the side or behind.
-    return d.turnSlowdown + (1 - d.turnSlowdown) * math.max(0, math.cos(err))
-end
-
--- The enemy to hunt: the current prey until the head has run through it;
--- then the enemy passed least recently (never-passed ones first), nearest
--- among equals, so every enemy gets its turn.
--- The enemies other live dragons are going for this update.
-local function preyOfOthers(state)
-    local frame = Game():GetFrameCount()
-    local taken = {}
-    for other, seen in pairs(liveStates) do
-        if other ~= state and other.prey and frame - seen <= 1 then taken[other.prey] = true end
-    end
-    return taken
-end
-
--- Keep the current prey; otherwise prefer an enemy no other dragon is after,
--- then the one this dragon passed least recently, then the nearest.
-local function choosePrey(state, head)
-    local taken = preyOfOthers(state)
-    local best, bestTaken, bestPass, bestDistance = nil, math.huge, math.huge, math.huge
-    for _, enemy in ipairs(roomEnemies()) do
-        local hash = GetPtrHash(enemy)
-        if hash == state.prey then return enemy end
-        local claimed = taken[hash] and 1 or 0
-        local pass = state.passed[hash] or -math.huge
-        local distance = enemy.Position:Distance(head)
-        if claimed < bestTaken or (claimed == bestTaken and (pass < bestPass
-            or (pass == bestPass and distance < bestDistance))) then
-            best, bestTaken, bestPass, bestDistance = enemy, claimed, pass, distance
-        end
-    end
-    return best
-end
-
-local function updateMotion(familiar, state, player)
-    local d = ConchBlessing.dragon.data
-    -- Reattach only after a real teleport of the player (or a runaway failsafe);
-    -- hunting across a big room must not pull the dragon back.
-    local jumped = state.playerAt and player.Position:Distance(state.playerAt) > d.teleportStep
-    state.playerAt = copyVector(player.Position)
-    if jumped or state.head:Distance(player.Position) > d.snapDistance then
-        snapTo(state, player.Position)
-    end
-    state.t = state.t + 1
-    local head = state.head
-    local prey = not state.passing and choosePrey(state, head)
-    local wanted
-    if state.passing then
-        -- Fly-by: straight on through for a moment before turning for the next.
-        steerHead(state, state.dir, d.chaseTurnRate, d.chaseTurnAccel)
-        wanted = d.chaseSpeed
-        state.passing = state.passing - 1
-        if state.passing <= 0 then state.passing = nil end
-    elseif prey then
-        -- Wave pursuit: the bearing to the enemy plus a slow sine weave.
-        local toward = prey.Position - head
-        local want = math.atan(toward.Y, toward.X) + math.sin(state.t * d.chaseWeaveRate + state.p2) * d.chaseWeave
-        wanted = d.chaseSpeed * steerHead(state, want, d.chaseTurnRate, d.chaseTurnAccel)
-        local hash = GetPtrHash(prey)
-        if state.prey ~= hash then
-            state.prey = hash
-            debugLog("dragon hunts %s.%s", tostring(prey.Type), tostring(prey.Variant))
-        end
-        local reach = d.headReach * scaleFor(player) + d.passReach + (prey.Size or 0)
-        if toward:Length() <= reach then
-            state.passed[hash], state.prey, state.passing = state.t, nil, d.passTicks
-            debugLog("dragon runs through %s.%s", tostring(prey.Type), tostring(prey.Variant))
-        end
+local function strike(player, count, enemies)
+    local rng = player:GetCollectibleRNG(DRAGON_ID)
+    local position = strikePosition(rng, enemies)
+    if rollStrikeKind(rng:RandomFloat(), count, #ConchBlessing.dragon._twisters) == "twister" then
+        raiseTwister(player, position)
     else
-        state.prey = nil
-        local angular, radius = orbitShape(state, state.t)
-        -- Orbit as a steering field: head along the circle's tangent, tilted
-        -- inward when outside the breathing radius and outward when inside,
-        -- plus a slow side-to-side weave. Worked in unsquashed floor space.
-        local rel = head - player.Position
-        local rx, ry = rel.X, rel.Y / d.orbitSquash
-        local r = math.sqrt(rx * rx + ry * ry)
-        local phi = r > 0.001 and math.atan(ry, rx) or state.theta
-        state.theta = phi
-        local miss = r - radius
-        local want = phi + (math.pi / 2 + math.atan(miss * d.radialGain))
-            + math.sin(state.t * d.weaveRate + state.p2) * d.weave
-        want = math.atan(math.sin(want) * d.orbitSquash, math.cos(want))
-        -- Left behind, the dragon may turn more sharply and swims faster.
-        local hurry = math.min(1, math.max(0, miss) / d.hurryDistance)
-        local keep = steerHead(state, want, d.idleTurnRate + (d.hurryTurnRate - d.idleTurnRate) * hurry,
-            d.turnAccel * (1 + 1.5 * hurry))
-        wanted = (angular * radius + math.max(0, miss) * d.catchUp) * keep
-    end
-    wanted = math.max(d.minSpeed, math.min(d.maxSpeed, wanted))
-    local hunting = state.passing or state.prey
-    state.speed = state.speed + (wanted - state.speed) * (hunting and d.chaseSpeedEase or d.speedEase)
-    local velocity = Vector(math.cos(state.dir), math.sin(state.dir)) * state.speed
-    state.velocity = velocity
-    state.head = head + velocity
-    -- The dragon owns its position; the invisible entity just follows the head.
-    familiar.Position = state.head
-    familiar.Velocity = Vector(0, 0)
-
-    pushTrail(state.trail, state.head)
-    settle(state, true)
-    state.renders = 0
-end
-
--- ------------------------------------------------------------------ callbacks
-ConchBlessing.dragon.onEvaluateCache = function(_, player, cacheFlag)
-    if cacheFlag == CacheFlag.CACHE_FAMILIARS then
-        local variant = getVariant()
-        if not variant then return end
-        -- A zero count removes the last dragon once every copy is gone.
-        player:CheckFamiliar(variant, familiarCount(player), player:GetCollectibleRNG(DRAGON_ID),
-            Isaac.GetItemConfig():GetCollectible(DRAGON_ID))
+        bolt(player, position, enemies)
     end
 end
 
-ConchBlessing.dragon.onFamiliarInit = function(_, familiar)
-    if familiar.Variant ~= getVariant() then return end
-    familiar.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
-    familiar.GridCollisionClass = EntityGridCollisionClass.GRIDCOLL_NONE
-    -- The entity's own sprite stays empty; the parts are drawn on render.
-    familiar:GetSprite():Play("Hidden", true)
-    getState(familiar)
-end
-
-ConchBlessing.dragon.onFamiliarUpdate = function(_, familiar)
-    if familiar.Variant ~= getVariant() then return end
-    local player = familiar.Player
-    if not player then return end
-    local state = getState(familiar)
-    liveStates[state] = Game():GetFrameCount()
-    updateMotion(familiar, state, player)
-    updateLightning(familiar, state, player, applyContact(familiar, state, player))
-    updateSparks(state)
-end
-
-local function getSprites(state)
-    if state.sprites ~= nil then return state.sprites or nil end
-    local ok, sprites = pcall(function()
-        local result = {}
-        for _, name in ipairs({ "Head", "Body", "Legs", "Tail", "Shadow", "Spark" }) do
-            local sprite = Sprite()
-            sprite:Load("gfx/dragon.anm2", true)
-            if sprite.IsLoaded and not sprite:IsLoaded() then error("gfx/dragon.anm2 did not load") end
-            sprite:SetFrame(name, 0)
-            result[name] = sprite
+-- ------------------------------------------------------------------ twisters
+local function updateTwister(twister)
+    local d = ConchBlessing.dragon.data
+    twister.age = twister.age + 1
+    local life = d.twisterTicks + d.twisterEndTicks
+    if twister.age >= life then return false end
+    if twister.age >= d.twisterTicks then return true end   -- fading out, harmless
+    local player = twister.player and twister.player.Ref
+    player = player and player:ToPlayer()
+    if not player then
+        twister.age = d.twisterTicks
+        return true
+    end
+    local damage = twisterTickDamage(player.Damage)
+    DamageProvenance.withTriggeredSource(player, TWISTER_PROC_KEY, nil, TWISTER_PROC_KEY, function()
+        for _, enemy in ipairs(roomEnemies()) do
+            if enemy:Exists() then
+                enemy.Velocity = enemy.Velocity + pullToward(twister.position, enemy.Position, enemy:IsBoss())
+                local limit = d.twisterReach + (enemy.Size or 0)
+                if twister.position:DistanceSquared(enemy.Position) <= limit * limit then
+                    enemy:TakeDamage(damage, 0, EntityRef(player), 0)
+                end
+            end
         end
-        return result
     end)
-    if not ok then
-        state.sprites = false
-        if not reportedRenderFailure then
-            reportedRenderFailure = true
-            ConchBlessing.printError("[Dragon] familiar art unavailable: " .. tostring(sprites))
-        end
-        return nil
-    end
-    state.sprites = sprites
-    return sprites
+    return true
 end
 
-local function isReflectionPass()
-    local room = Game():GetRoom()
-    return RenderMode and type(room.GetRenderMode) == "function"
-        and room:GetRenderMode() == RenderMode.RENDER_WATER_REFLECT
+-- ------------------------------------------------------------------ rumble
+-- Updates until the next distant rumble, spread over [lo, hi] by the hash.
+local function rumbleWait(range, index)
+    return range[1] + math.floor(hash(index) * (range[2] - range[1] + 1))
 end
 
--- Animation frame for a part: legs stroke through four poses (the front and
--- hind pairs out of step), the tail tuft flutters between two.
-local function partFrame(index, t)
+-- A quiet thunder roll every 12-20 seconds while anyone holds it.
+local function updateRumble(held)
     local d = ConchBlessing.dragon.data
-    if d.legParts[index] then return (t // d.legFrameTicks + index) % 4 end
-    if PART_ANIMATIONS[index] == "Tail" then return (t // d.tailFrameTicks) % 2 end
-    return 0
+    local rumble = ConchBlessing.dragon._rumble
+    if not held then rumble.wait = nil; return end
+    rumble.wait = rumble.wait or rumbleWait(d.rumbleFirst, rumble.count + 0.5)
+    rumble.wait = rumble.wait - 1
+    if rumble.wait > 0 then return end
+    rumble.count = rumble.count + 1
+    rumble.wait = rumbleWait(d.rumbleGap, rumble.count)
+    local id = SoundEffect and SoundEffect.SOUND_THUNDER
+    if id then SFXManager():Play(id, d.rumbleVolume, 0, false, d.rumblePitch) end
+    debugLog("distant thunder (next in %d updates)", rumble.wait)
 end
 
--- Height of a part above its shadow: the body rises and dips like a swimmer.
-local function partLift(index, time)
-    local d = ConchBlessing.dragon.data
-    return d.flyHeight + d.liftWave * math.sin(time * d.liftRate - index * d.liftStep)
-end
-
-ConchBlessing.dragon.onFamiliarRender = function(_, familiar, offset)
-    if familiar.Variant ~= getVariant() or isReflectionPass() then return end
-    local state = familiar:GetData().__ConchDragon
-    local sprites = state and getSprites(state)
-    if not sprites then return end
-    local scale = scaleFor(familiar.Player)
-    offset = offset or Vector(0, 0)
-    -- The callback's offset already carries the camera scroll and screen
-    -- shake, so add it to the render position; WorldToScreen would count the
-    -- scroll twice and draw the dragon away from itself in scrolling rooms.
-    local toRender = Isaac.WorldToRenderPosition
-        and function(at) return Isaac.WorldToRenderPosition(at) + offset end
-        or function(at) return Isaac.WorldToScreen(at) end
-    -- Render runs twice per update; interpolate the pose so the body glides.
-    local alpha = math.min(1, state.renders * 0.5)
-    state.renders = state.renders + 1
-    local time = state.t - 1 + alpha
-    local n = #state.segments
-    local screen = {}
-    for i = 1, n do
-        local prev, cur = state.previous[i], state.segments[i]
-        screen[i] = toRender(prev + (cur - prev) * alpha)
-    end
-    -- Shadows on the floor first (every other part, so they do not pile up).
-    local shadow = sprites.Shadow
-    shadow:SetFrame("Shadow", 0)
-    shadow.Rotation = 0
-    for i = n, 1, -1 do
-        if i % 2 == 1 or i == n then
-            local size = scale * partTaper(i)
-            shadow.Scale = Vector(size, size)
-            shadow:Render(screen[i])
-        end
-    end
-    -- Then the body, tail first, so the parts nearer the head lie on top
-    -- wherever the body crosses itself. Legs go under their body part and
-    -- share its pose.
-    local d = ConchBlessing.dragon.data
-    for i = n, 1, -1 do
-        local angle = state.prevAngles[i] + wrapAngle(state.angles[i] - state.prevAngles[i]) * alpha
-        local size = Vector(scale * partTaper(i), scale * partTaper(i))
-        local at = screen[i] - Vector(0, partLift(i, time))
-        if d.legParts[i] then
-            local legs = sprites.Legs
-            legs:SetFrame("Legs", partFrame(i, state.t))
-            legs.Scale = size
-            orient(legs, angle, state.flips[i])
-            legs:Render(at)
-        end
-        local name = PART_ANIMATIONS[i]
-        local sprite = sprites[name]
-        sprite:SetFrame(name, name == "Tail" and partFrame(i, state.t) or 0)
-        sprite.Scale = size
-        orient(sprite, angle, state.flips[i])
-        sprite:Render(at)
-    end
-    -- Sparks of current crackle on top of the body.
-    local spark = sprites.Spark
-    for _, item in ipairs(state.sparks or {}) do
-        local i = item.part
-        local heading = state.angles[i] or 0
-        local size = scale * partTaper(i)
-        local aside = Vector(-math.sin(heading), math.cos(heading)) * (item.side * size)
-        spark:SetFrame("Spark", item.age // d.sparkFrameTicks)
-        spark.Rotation = item.angle
-        spark.Scale = Vector(size, size)
-        spark:Render(screen[i] - Vector(0, partLift(i, time)) + aside)
-    end
-end
-
-local function loadSprite(path, label)
-    local ok, sprite = pcall(function()
-        local s = Sprite()
-        s:Load(path, true)
-        if s.IsLoaded and not s:IsLoaded() then error(path .. " did not load") end
-        return s
-    end)
-    if not ok then ConchBlessing.printError("[Dragon] " .. label .. " art unavailable: " .. tostring(sprite)) end
-    return ok and sprite or false
-end
-
+-- ------------------------------------------------------------------ update
 local function strikeLength()
     local total = 0
     for _, ticks in ipairs(ConchBlessing.dragon.data.strikeFrames) do total = total + ticks end
@@ -705,50 +313,211 @@ local function strikeFrame(age)
     end
 end
 
-ConchBlessing.dragon.onUpdate = function()
-    local strikes = ConchBlessing.dragon._strikes
-    local length = strikeLength()
-    for i = #strikes, 1, -1 do
-        strikes[i].age = strikes[i].age + 1
-        if strikes[i].age >= length then table.remove(strikes, i) end
+local function anyHolder()
+    local game = Game()
+    for i = 0, game:GetNumPlayers() - 1 do
+        if copies(Isaac.GetPlayer(i)) > 0 then return true end
+    end
+    return false
+end
+
+local function age(list, length)
+    for i = #list, 1, -1 do
+        list[i].age = list[i].age + 1
+        if list[i].age >= length then table.remove(list, i) end
     end
 end
 
-local lightningSprite
-ConchBlessing.dragon.onRender = function()
-    local strikes = ConchBlessing.dragon._strikes
-    if #strikes == 0 then return end
-    if lightningSprite == nil then lightningSprite = loadSprite("gfx/effects/conch_dragon_lightning.anm2", "lightning") end
-    if not lightningSprite then return end
-    for _, item in ipairs(strikes) do
-        local frame = strikeFrame(item.age)
-        if frame then
-            lightningSprite:SetFrame("Strike", frame)
-            lightningSprite:Render(Isaac.WorldToScreen(item.position))
+ConchBlessing.dragon.onUpdate = function()
+    local d = ConchBlessing.dragon.data
+    local game = Game()
+    local sky = ConchBlessing.dragon._sky
+    sky.sinceThunder = sky.sinceThunder + 1
+    if sky.flash > 0 then sky.flash = sky.flash - 1 end
+    local held = false
+    local enemies = roomEnemies()
+    local charge = ConchBlessing.dragon._charge
+    for i = 0, game:GetNumPlayers() - 1 do
+        local player = Isaac.GetPlayer(i)
+        local count = copies(player)
+        local key = GetPtrHash(player)
+        if count > 0 then
+            held = true
+            if #enemies == 0 then
+                charge[key] = 0                 -- no bolts are banked between fights
+            else
+                charge[key] = (charge[key] or 0) + boltsPerUpdate(player.MaxFireDelay, count)
+                -- A hair under 1 still counts, so float drift never swallows a bolt.
+                while charge[key] >= 1 - 1e-9 do
+                    charge[key] = charge[key] - 1
+                    strike(player, count, enemies)
+                end
+            end
+        else
+            charge[key] = nil
+        end
+    end
+    -- Without REPENTOGON's room render hook there is no veil under the HUD, so
+    -- fall back to the engine's own darkening, refreshed every update.
+    if held and not ModCallbacks.MC_POST_ROOM_RENDER_ENTITIES and type(game.Darken) == "function" then
+        game:Darken(d.overcast, 2)
+    end
+    updateRumble(held)
+    local twisters = ConchBlessing.dragon._twisters
+    for i = #twisters, 1, -1 do
+        if not updateTwister(twisters[i]) then table.remove(twisters, i) end
+    end
+    age(ConchBlessing.dragon._bolts, strikeLength())
+    age(ConchBlessing.dragon._scorches, d.scorchTicks)
+end
+
+-- ------------------------------------------------------------------ drawing
+local function loadSprite(path, label, animation)
+    local ok, sprite = pcall(function()
+        local s = Sprite()
+        s:Load(path, true)
+        if s.IsLoaded and not s:IsLoaded() then error(path .. " did not load") end
+        if animation then s:SetFrame(animation, 0) end
+        return s
+    end)
+    if not ok then reportOnce(label, label .. " art unavailable: " .. tostring(sprite)) end
+    return ok and sprite or false
+end
+
+local art = {}
+local function getArt(key, path, animation)
+    if art[key] == nil then art[key] = loadSprite(path, key, animation) end
+    return art[key] or nil
+end
+
+-- The Hush pillar animation and frame for a twister at its age.
+local function twisterFrame(twister)
+    local d = ConchBlessing.dragon.data
+    if twister.age >= d.twisterTicks then return "End", math.min(twister.age - d.twisterTicks, d.twisterEndTicks - 1) end
+    if twister.age < d.twisterStartTicks then return "Start", twister.age end
+    return "Loop", twister.age % 8
+end
+
+-- Opacity of the dark veil: a thunderclap lifts most of it for a moment.
+local function veilAlpha(flash)
+    local d = ConchBlessing.dragon.data
+    return d.overcast * (1 - 0.75 * math.max(0, math.min(1, flash / d.flashTicks)))
+end
+
+local function screenSize()
+    local width = Isaac.GetScreenWidth and Isaac.GetScreenWidth() or 480
+    local height = Isaac.GetScreenHeight and Isaac.GetScreenHeight() or 270
+    return width, height
+end
+
+local function drawVeil()
+    local pixel = getArt("veil", "gfx/effects/conch_upgrade_pixel.anm2", "Idle")
+    if not pixel then return end
+    local width, height = screenSize()
+    pixel.Scale = Vector(width, height)
+    pixel.Rotation = 0
+    pixel.Color = Color(0.04, 0.05, 0.1, veilAlpha(ConchBlessing.dragon._sky.flash))
+    pixel:Render(Vector(0, 0))
+end
+
+local RAIN = { 0.69, 0.83, 0.88 }
+local function drawRain()
+    local d = ConchBlessing.dragon.data
+    local pixel = getArt("rain", "gfx/effects/conch_upgrade_pixel.anm2", "Idle")
+    if not pixel then return end
+    local ripple = getArt("ripple", "gfx/1000.133_water ripple.anm2", "Poof")
+    local room = Game():GetRoom()
+    local topLeft, bottomRight = room:GetTopLeftPos(), room:GetBottomRightPos()
+    local time = Isaac.GetFrameCount() / 60          -- render frames, 60 a second
+    for i = 1, d.rainDrops do
+        local spot = Vector(topLeft.X + hash(i) * (bottomRight.X - topLeft.X),
+            topLeft.Y + hash(i + 100) * (bottomRight.Y - topLeft.Y))
+        local period = 0.8 + hash(i + 200) * 0.6
+        local p = ((time + hash(i + 300) * period) % period) / period
+        local at = Isaac.WorldToScreen(spot)
+        if p < 0.7 then
+            local y = at.Y - d.rainFall * (1 - p / 0.7)
+            pixel.Scale = Vector(1, 8)
+            pixel.Rotation = 20
+            pixel.Color = Color(RAIN[1], RAIN[2], RAIN[3], d.rainAlpha)
+            pixel:Render(Vector(at.X, y - 8))
+        elseif ripple then
+            ripple:SetFrame("Poof", math.min(13, math.floor((p - 0.7) * period * 30)))
+            ripple.Scale = Vector(0.22, 0.22)
+            ripple.Color = Color(1, 1, 1, d.rainAlpha * 0.8)
+            ripple:Render(at)
         end
     end
 end
 
+local function drawStrikes()
+    local d = ConchBlessing.dragon.data
+    local scorches, bolts = ConchBlessing.dragon._scorches, ConchBlessing.dragon._bolts
+    local lightning = (#scorches > 0 or #bolts > 0) and getArt("lightning", "gfx/effects/conch_dragon_lightning.anm2")
+    if lightning then
+        -- Burnt patches first, their embers dying, then fading out.
+        for _, item in ipairs(scorches) do
+            lightning:SetFrame("Scorch", math.min(2, item.age // 10))
+            lightning.Color = Color(1, 1, 1, math.min(1, 2 * (1 - item.age / d.scorchTicks)))
+            lightning:Render(Isaac.WorldToScreen(item.position))
+        end
+        lightning.Color = Color(1, 1, 1, 1)
+    end
+    local twisters = ConchBlessing.dragon._twisters
+    if #twisters > 0 then
+        local pillar = getArt("pillar", "gfx/1000.096_hushlaser.anm2")
+        if pillar then
+            for _, twister in ipairs(twisters) do
+                pillar:SetFrame(twisterFrame(twister))
+                pillar:Render(Isaac.WorldToScreen(twister.position))
+            end
+        end
+    end
+    if lightning then
+        for _, item in ipairs(bolts) do
+            local frame = strikeFrame(item.age)
+            if frame then
+                local shape = item.shape or 1
+                lightning:SetFrame(shape == 1 and "Strike" or "Strike" .. shape, frame)
+                lightning.FlipX = item.flip == true
+                lightning.Scale = Vector(item.scale or 1, item.scale or 1)
+                lightning:Render(Isaac.WorldToScreen(item.position))
+            end
+        end
+        lightning.FlipX = false
+        lightning.Scale = Vector(1, 1)
+    end
+end
+
+-- REPENTOGON draws the weather after the room's entities and before the HUD:
+-- the dark veil, then strikes and rain, which stay bright through it.
+ConchBlessing.dragon.onRoomRender = function()
+    local held = anyHolder()
+    if held then drawVeil() end
+    drawStrikes()
+    if held then drawRain() end
+end
+
+-- Without that hook the weather is drawn in the ordinary render pass instead,
+-- without the veil (which would cover the HUD there).
+ConchBlessing.dragon.onRender = function()
+    if ModCallbacks.MC_POST_ROOM_RENDER_ENTITIES then return end
+    drawStrikes()
+    if anyHolder() then drawRain() end
+end
+
 local function clearEffects()
-    ConchBlessing.dragon._strikes = {}
+    ConchBlessing.dragon._bolts = {}
+    ConchBlessing.dragon._scorches = {}
+    ConchBlessing.dragon._twisters = {}
+    ConchBlessing.dragon._charge = {}
+    ConchBlessing.dragon._rumble.wait = nil      -- a new room waits a few seconds for its first rumble
+    ConchBlessing.dragon._sky.flash = 0
     enemyCache.frame = -1
 end
 
 ConchBlessing.dragon.onNewRoom = function()
     clearEffects()
-    local variant = getVariant()
-    if not variant then return end
-    for _, entity in ipairs(Isaac.FindByType(EntityType.ENTITY_FAMILIAR, variant, -1, false, false)) do
-        local familiar = entity:ToFamiliar()
-        local state = familiar and familiar:GetData().__ConchDragon
-        if state then
-            -- A new room starts with the dragon on its player.
-            local at = familiar.Player and familiar.Player.Position or familiar.Position
-            familiar.Position = at
-            snapTo(state, at)
-            state.struck, state.sparks = {}, {}
-        end
-    end
 end
 
 ConchBlessing.dragon.onGameStarted = function()
@@ -756,22 +525,19 @@ ConchBlessing.dragon.onGameStarted = function()
 end
 
 ConchBlessing.dragon._test = {
-    contactDamage = contactDamage,
-    lightningDamage = lightningDamage,
-    cosmeticRoll = cosmeticRoll,
-    updateSparks = updateSparks,
-    orbitShape = orbitShape,
-    pushTrail = pushTrail,
-    sampleTrail = sampleTrail,
-    layOut = layOut,
-    partFrame = partFrame,
-    facesLeft = facesLeft,
-    orient = orient,
-    steerHead = steerHead,
-    partTaper = partTaper,
-    partLift = partLift,
+    shotsPerSecond = shotsPerSecond,
+    boltsPerUpdate = boltsPerUpdate,
+    boltDamage = boltDamage,
+    twisterTickDamage = twisterTickDamage,
+    rollStrikeKind = rollStrikeKind,
+    scatter = scatter,
+    pullToward = pullToward,
+    twisterFrame = twisterFrame,
     strikeFrame = strikeFrame,
     strikeLength = strikeLength,
+    rumbleWait = rumbleWait,
+    veilAlpha = veilAlpha,
+    boltLook = boltLook,
 }
 
 return ConchBlessing.dragon

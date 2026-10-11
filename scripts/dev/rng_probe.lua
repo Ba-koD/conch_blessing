@@ -364,6 +364,31 @@ function probe.liveEye(samples, luck)
     end
 end
 
+-- --------------------------------------------------------------- dragon twister
+function probe.dragonTwister(samples)
+    header("Dragon twister (a strike rises as a twister instead of a bolt)")
+    local module = ConchBlessing.dragon
+    local t, d = module and module._test, module and module.data
+    if not t or not t.rollStrikeKind then out("SKIPPED (module not loaded)") return end
+    local rng = RNG()
+    local seed = Random()
+    if seed == 0 then seed = 1 end
+    rng:SetSeed(seed, 35)
+    for _, case in ipairs({ { 1, 0 }, { 2, 0 }, { 3, 0 }, { 2, d.twisterLimit - 1 }, { 2, d.twisterLimit } }) do
+        local copies, standing = case[1], case[2]
+        local rose = quietly(function()
+            local n = 0
+            for _ = 1, samples do
+                if t.rollStrikeKind(rng:RandomFloat(), copies, standing) == "twister" then n = n + 1 end
+            end
+            return n
+        end)
+        local configured = (copies >= d.twisterMinCopies and standing < d.twisterLimit) and d.twisterChance or 0
+        out(string.format("  copies=%d standing=%d configured=%6.2f%%  measured=%7.3f%%",
+            copies, standing, configured * 100, rose / samples * 100))
+    end
+end
+
 -- --------------------------------------------------------------- death spiral
 function probe.injectableDeath()
     header("Injectable Steroids instant death (cumulative over one floor)")
@@ -447,6 +472,7 @@ function probe.run(params)
     probe.angelsCrown(samples)
     probe.kronos(samples)
     probe.liveEye(samples, luck)
+    probe.dragonTwister(samples)
     probe.injectableDeath()
     out("")
     out("conch_test rng: done")

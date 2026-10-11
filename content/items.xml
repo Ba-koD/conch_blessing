@@ -6,7 +6,7 @@
     <active id="3" name="Power Training" gfx="power_training.png" quality="4" tags="offensive" cache="damage firedelay range luck" shopprice="20" devilprice="2" maxcharges="12" chargetype="normal" initcharge="6"/>
     <passive id="4" name="Oral Steroids" gfx="oral_steroids.png" quality="2" tags="offensive" cache="damage firedelay range luck" shopprice="20" devilprice="1"/>
     <active id="5" name="Injectable Steroids" gfx="injectable_steroids.png" quality="3" tags="offensive" cache="damage firedelay range luck" shopprice="15" devilprice="2" maxcharges="12" chargetype="normal" initcharge="6"/>
-    <familiar id="6" name="Dragon" gfx="dragon.png" quality="4" tags="offensive summonable" cache="familiars" shopprice="20" devilprice="2"/>
+    <passive id="6" name="Dragon" gfx="dragon.png" quality="4" tags="offensive" shopprice="20" devilprice="2"/>
     <passive id="7" name="Kronos" gfx="kronos.png" quality="4" tags="offensive" cache="damage firedelay"/>
     <active id="8" name="Appraisal Certificate" gfx="appraisal_certificate.png" quality="3" tags="offensive" shopprice="20" devilprice="2" maxcharges="0"/>
     <passive id="9" name="Money = Tear" gfx="money_tear.png" quality="4" tags="offensive" cache="tears" shopprice="20"/>
@@ -26,13 +26,14 @@
     <passive id="23" name="AR Glasses" gfx="ar_glasses.png" quality="3" shopprice="15" devilprice="1"/>
     <passive id="24" name="Hemispatial Neglect" gfx="hemispatial_neglect.png" quality="2" cache="damage" shopprice="15" devilprice="1"/>
     <familiar id="25" name="Time = Money" gfx="time_money.png" quality="4" cache="familiars" shopprice="30" devilprice="2"/>
-    <trinket id="26" name="Time = Power" gfx="time_power.png" tags="offensive" cache="damage" shopprice="15"/>
-    <trinket id="27" name="Time = Tear" gfx="time_tear.png" tags="offensive" cache="fireDelay" shopprice="15"/>
-    <trinket id="28" name="Time = Luck" gfx="time_luck.png" tags="utility" cache="luck" shopprice="15"/>
-    <trinket id="29" name="F -" gfx="f_minus.png" tags="offensive" cache="luck" shopprice="15"/>
-    <trinket id="30" name="C -" gfx="c_minus.png" tags="offensive" cache="tears" hidden="true" shopprice="15"/>
-    <trinket id="31" name="B -" gfx="b_minus.png" tags="offensive" cache="luck damage" hidden="true" shopprice="15"/>
-    <trinket id="32" name="A -" gfx="a_minus.png" tags="offensive" cache="luck damage tears" hidden="true" shopprice="15"/>
-    <trinket id="33" name="Atropos" gfx="atropos.png" tags="utility" shopprice="15"/>
-    <trinket id="34" name="Angel's Crown" gfx="angels_crown.png" tags="utility" shopprice="15"/>
+    <familiar id="26" name="Azure Dragon" gfx="azure_dragon.png" quality="0" tags="offensive summonable" cache="familiars" hidden="true" shopprice="999"/>
+    <trinket id="27" name="Time = Power" gfx="time_power.png" tags="offensive" cache="damage" shopprice="15"/>
+    <trinket id="28" name="Time = Tear" gfx="time_tear.png" tags="offensive" cache="fireDelay" shopprice="15"/>
+    <trinket id="29" name="Time = Luck" gfx="time_luck.png" tags="utility" cache="luck" shopprice="15"/>
+    <trinket id="30" name="F -" gfx="f_minus.png" tags="offensive" cache="luck" shopprice="15"/>
+    <trinket id="31" name="C -" gfx="c_minus.png" tags="offensive" cache="tears" hidden="true" shopprice="15"/>
+    <trinket id="32" name="B -" gfx="b_minus.png" tags="offensive" cache="luck damage" hidden="true" shopprice="15"/>
+    <trinket id="33" name="A -" gfx="a_minus.png" tags="offensive" cache="luck damage tears" hidden="true" shopprice="15"/>
+    <trinket id="34" name="Atropos" gfx="atropos.png" tags="utility" shopprice="15"/>
+    <trinket id="35" name="Angel's Crown" gfx="angels_crown.png" tags="utility" shopprice="15"/>
 </items>

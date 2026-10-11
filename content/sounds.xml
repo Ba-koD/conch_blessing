@@ -15,4 +15,11 @@
 	<sound name="Conch Upgrade Clock Bell">
 		<sample weight="1" path="conch_upgrade_clock_bell.wav" />
 	</sound>
+	<!-- 진's frequent weather bolts; generate_dragon_assets.py writes the sample. -->
+	<sound name="Conch Dragon Crackle">
+		<sample weight="1" path="conch_dragon_crackle.wav" />
+	</sound>
+	<sound name="Conch Dragon Twister">
+		<sample weight="1" path="conch_dragon_twister.wav" />
+	</sound>
 </sounds>

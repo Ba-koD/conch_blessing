@@ -1,4 +1,4 @@
-"""Dragon familiar's shipped Lua with engine doubles; real HP and art remain in-game.
+"""Azure Dragon (console-only familiar) shipped Lua with engine doubles; real HP and art remain in-game.
 
 Expected values come from the item's design: contact 5% of damage per tick per
 enemy, lightning on every enemy the snout runs into for 5x damage (once
@@ -15,7 +15,7 @@ from lupa.lua53 import LuaRuntime
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class DragonFamiliarContracts(unittest.TestCase):
+class AzureDragonContracts(unittest.TestCase):
     def setUp(self):
         self.lua = LuaRuntime(unpack_returned_tuples=True)
         self.lua.globals().repo = ROOT.as_posix()
@@ -65,7 +65,7 @@ class DragonFamiliarContracts(unittest.TestCase):
                 WorldToScreen=function(p) return Vector(p.X,p.Y) end,
                 GetItemConfig=function() return {GetCollectible=function(_,id) return {ID=id} end} end,
                 GetSoundIdByName=function(name) return name=='Conch Upgrade Thunder Strike' and 901 or -1 end}
-            ConchBlessing={ItemData={DRAGON={entity={variant=778}}},Config={debugMode=false},
+            ConchBlessing={ItemData={AZURE_DRAGON={entity={variant=778}}},Config={debugMode=false},
                 printDebug=function(t) logs[#logs+1]=t end,printError=function(t) errors[#errors+1]=t end}
             function makePlayer()
                 local p={Position=Vector(300,200),Damage=10,InitSeed=1,items=0,temp=0,bffs=false,TearFlags=0,CanFly=false,alive=true}
@@ -109,7 +109,7 @@ class DragonFamiliarContracts(unittest.TestCase):
                 D.onFamiliarUpdate(nil,f)
                 D.onUpdate()
             end
-            require('scripts.items.collectibles.dragon'); D=ConchBlessing.dragon; T=D._test
+            require('scripts.items.collectibles.azure_dragon'); D=ConchBlessing.azureDragon; T=D._test
             function near(a,b,eps) assert(math.abs(a-b)<=(eps or 1e-9), tostring(a)..' ~= '..tostring(b)) end
         ''')
 
@@ -240,7 +240,7 @@ class DragonFamiliarContracts(unittest.TestCase):
             ConchBlessing.Config.debugMode=true; s.struck={}
             e.Position=snout(); tick(f)
             local text=table.concat(logs,'\\n')
-            assert(text:find('[Dragon] strike 10.0 boss=false damage=50.00',1,true), text)
+            assert(text:find('[Azure Dragon] strike 10.0 boss=false damage=50.00',1,true), text)
         ''')
 
     def test_several_dragons_go_for_different_enemies(self):
@@ -656,10 +656,11 @@ class DragonFamiliarContracts(unittest.TestCase):
 
     def test_strike_visuals_age_out_and_rooms_reset(self):
         self.run_lua('''
-            assert(T.strikeLength()==11)
-            assert(T.strikeFrame(0)==0 and T.strikeFrame(1)==0 and T.strikeFrame(2)==1 and T.strikeFrame(10)==4 and T.strikeFrame(11)==nil)
+            -- Leader, strike, flash, second stroke, flicker, thin, fade.
+            assert(T.strikeLength()==14)
+            assert(T.strikeFrame(0)==0 and T.strikeFrame(1)==1 and T.strikeFrame(2)==1 and T.strikeFrame(13)==6 and T.strikeFrame(14)==nil)
             D._strikes={{position=Vector(0,0),age=0}}
-            for i=1,10 do D.onUpdate() end
+            for i=1,13 do D.onUpdate() end
             assert(#D._strikes==1); D.onUpdate(); assert(#D._strikes==0)
             local p=makePlayer(); p.items=1; local f=makeFamiliar(p); D.onFamiliarInit(nil,f)
             entities[#entities+1]=f
@@ -714,20 +715,22 @@ class DragonFamiliarContracts(unittest.TestCase):
             spriteLog={}; D.onFamiliarRender(nil,f,Vector(0,0)); assert(#spriteLog==0, 'skips the water reflection pass')
         ''')
 
-    def test_registry_entry_is_a_familiar_without_a_self_synergy(self):
+    def test_registry_entry_is_a_hidden_console_only_familiar(self):
         source = (ROOT / 'scripts/conch_blessing_items.lua').read_text(encoding='utf-8')
-        block = source[source.index('    DRAGON = {'):]
+        block = source[source.index('    AZURE_DRAGON = {'):]
         block = block[:block.index('\n    },\n')]
         self.assertIn('type = "familiar"', block)
         self.assertIn('variant = 778', block)
         self.assertIn('cache = "familiars"', block)
+        self.assertIn('hidden = true', block)
+        self.assertNotIn('pool = {', block)
+        self.assertNotIn('origin', block)
         self.assertNotIn('synergies', block)
-        self.assertNotIn('weaponFired', block)
         xml = (ROOT / 'content/items.xml').read_text(encoding='utf-8')
-        self.assertIn('<familiar id="6" name="Dragon"', xml)
-        self.assertIn('cache="familiars"', xml)
+        self.assertIn('name="Azure Dragon" gfx="azure_dragon.png" quality="0"', xml)
+        self.assertIn('hidden="true"', xml[xml.index('name="Azure Dragon"'):].split('\n')[0])
         entities = (ROOT / 'content/entities2.xml').read_text(encoding='utf-8')
-        self.assertIn('name="Dragon" id="3" variant="778" anm2path="dragon.anm2"', entities)
+        self.assertIn('name="Azure Dragon" id="3" variant="778" anm2path="dragon.anm2"', entities)
 
 
 if __name__ == '__main__':

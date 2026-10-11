@@ -49,6 +49,7 @@
         <Item Name="Ceil" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Round" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Floor" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Azure Dragon" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
     <Pool Name="shop">
         <Item Name="Power Training" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>

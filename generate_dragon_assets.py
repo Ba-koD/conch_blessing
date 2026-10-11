@@ -12,6 +12,8 @@ Outputs (all generator-owned; edit this file, not the outputs):
     resources/gfx/dragon.anm2
     resources/gfx/effects/conch_dragon_lightning.png
     resources/gfx/effects/conch_dragon_lightning.anm2
+    resources/sfx/conch_dragon_crackle.wav   (registered in content/sounds.xml)
+    resources/sfx/conch_dragon_twister.wav   (registered in content/sounds.xml)
 """
 import math
 import random
@@ -19,6 +21,8 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from PIL import Image
+
+from generate_upgrade_visual_assets import SAMPLE_RATE, biquad, normalized, write_wav
 
 ROOT = Path(__file__).resolve().parent
 GFX = ROOT / 'resources/gfx'
@@ -336,7 +340,20 @@ BOLT_W, BOLT_H = 96, 320
 BOLT_PIVOT = (48, 296)
 HALO, BDEEP, BMID, BPALE, BCORE = ((40, 70, 200, 90), (40, 80, 210, 200), (90, 160, 255, 255),
                                    (196, 236, 255, 255), (255, 255, 255, 255))
-BOLT_FRAMES = ('strike', 'flash', 'flicker', 'thin', 'fade')
+# A stepped leader feels its way down, the return stroke lights every branch,
+# the channel flashes, strikes again once, then flickers out.
+BOLT_FRAMES = ('leader', 'strike', 'flash', 'restrike', 'flicker', 'thin', 'fade')
+# Bolt shapes, one row of frames each: the classic forked bolt, a channel that
+# splits in two halfway down, a wide spray of short branches, and a slender bolt
+# that swings far out to one side. Runtime picks one per strike.
+BOLT_VARIANTS = (
+    dict(seed=11, forks=5, length=80, jitter=14, start=14),
+    dict(seed=47, forks=3, length=70, jitter=12, start=10, split=True),
+    dict(seed=83, forks=9, length=46, jitter=10, start=8),
+    dict(seed=131, forks=2, length=60, jitter=22, start=26, swing=True),
+)
+SCORCH_W, SCORCH_H = 40, 18
+SCORCH_FRAMES = 3
 
 
 def bolt_path(rng, x0, y0, x1, y1, step=(14, 30), jitter=14):
@@ -376,17 +393,37 @@ def stroke(img, pts, layers):
 
 
 def forks(rng, main, count, length):
+    """Branches off the main channel, each with its own twigs (two levels deep)."""
     out = []
     for _ in range(count):
-        x, y = main[rng.randint(2, len(main) - 3)]
+        x, y = main[rng.randint(1, len(main) - 3)]
         side = rng.choice((-1, 1))
         end = (max(6, min(BOLT_W - 6, x + side * rng.randint(length // 3, length // 2))), y + rng.randint(length // 2, length))
         branch = bolt_path(rng, x, y, end[0], end[1], step=(8, 14), jitter=6)
         out.append(branch)
-        if rng.random() < 0.6:
+        for _ in range(rng.randint(1, 2)):
             tx, ty = branch[rng.randint(1, len(branch) - 1)]
-            out.append(bolt_path(rng, tx, ty, tx + side * rng.randint(6, 12), ty + rng.randint(8, 16), step=(6, 10), jitter=3))
+            twig = bolt_path(rng, tx, ty, max(3, min(BOLT_W - 3, tx + side * rng.randint(6, 14))),
+                             ty + rng.randint(8, 18), step=(6, 10), jitter=3)
+            out.append(twig)
     return out
+
+
+def leader_path(main, reach):
+    """The stepped leader: the main channel's upper part, as far down as `reach`."""
+    return [pt for pt in main if pt[1] <= BOLT_PIVOT[1] * reach]
+
+
+def sparks(img, rng, count, size):
+    """Bright chips flung up and out of the strike point."""
+    cx, cy = BOLT_PIVOT
+    for _ in range(count):
+        a = rng.uniform(math.pi * 1.05, math.pi * 1.95)
+        d = rng.uniform(size * 0.9, size * 2.0)
+        px, py = round(cx + math.cos(a) * d), round(cy + math.sin(a) * d * 0.8)
+        if 0 <= px < BOLT_W - 1 and 0 <= py < BOLT_H - 1:
+            img.putpixel((px, py), BCORE)
+            img.putpixel((px + 1, py), BPALE)
 
 
 def impact(img, rng, size, bright=True):
@@ -412,17 +449,53 @@ def impact(img, rng, size, bright=True):
             img.putpixel((px, py), BCORE if bright else BPALE)
 
 
-def bolt_frame(kind, seed=11):
+def swing_path(rng, x0, y0, x1, y1, jitter):
+    """A channel that bows far out to one side before coming down on the pivot."""
+    side = rng.choice((-1, 1))
+    pts = bolt_path(rng, x0, y0, x1, y1, jitter=jitter)
+    n = len(pts) - 1
+    return [(max(4, min(BOLT_W - 4, round(x + side * 26 * math.sin(math.pi * i / n)))), y) for i, (x, y) in enumerate(pts)]
+
+
+def bolt_frame(kind, variant=0):
+    v = BOLT_VARIANTS[variant]
+    seed = v['seed']
     rng = random.Random(seed)
     img = Image.new('RGBA', (BOLT_W, BOLT_H), (0, 0, 0, 0))
-    main = bolt_path(rng, BOLT_PIVOT[0] + rng.randint(-14, 14), -10, BOLT_PIVOT[0], BOLT_PIVOT[1])
-    branches = forks(random.Random(seed * 31 + 1), main, 3, 70)
-    if kind == 'strike':
+    start = BOLT_PIVOT[0] + rng.randint(-v['start'], v['start'])
+    if v.get('swing'):
+        main = swing_path(rng, start, -10, BOLT_PIVOT[0], BOLT_PIVOT[1], v['jitter'])
+    else:
+        main = bolt_path(rng, start, -10, BOLT_PIVOT[0], BOLT_PIVOT[1], jitter=v['jitter'])
+    branches = forks(random.Random(seed * 31 + 1), main, v['forks'], v['length'])
+    if v.get('split'):
+        # A second channel peels off halfway and lands beside the first.
+        x, y = main[len(main) // 2]
+        twin = bolt_path(random.Random(seed * 7 + 3), x, y, BOLT_PIVOT[0] + rng.choice((-14, 14)), BOLT_PIVOT[1] - 2,
+                         step=(10, 20), jitter=8)
+        branches = [twin] + branches
+    if kind == 'leader':
+        # Faint, thin and not yet grounded, with stubby feelers off it.
+        stroke(img, leader_path(main, 0.7), [(1, BDEEP), (0, BMID)])
+        for f in branches[:3]:
+            stub = [pt for pt in f[:3] if pt[1] <= BOLT_PIVOT[1] * 0.7]
+            if len(stub) > 1:
+                stroke(img, stub, [(0, BDEEP)])
+    elif kind == 'strike':
         stroke(img, main, [(7, HALO)])
         for f in branches:
             stroke(img, f, [(3, HALO), (2, BDEEP), (1, BMID), (0, BCORE)])
         stroke(img, main, [(5, BDEEP), (4, BMID), (2, BPALE), (1, BCORE)])
         impact(img, rng, 15)
+        sparks(img, rng, 14, 15)
+    elif kind == 'restrike':
+        # The same channel lights again, a little thinner, with fewer branches.
+        stroke(img, main, [(5, HALO)])
+        for f in branches[:4]:
+            stroke(img, f, [(1, BDEEP), (0, BPALE)])
+        stroke(img, main, [(3, BDEEP), (2, BMID), (1, BPALE), (0, BCORE)])
+        impact(img, rng, 11)
+        sparks(img, rng, 8, 12)
     elif kind == 'flash':
         stroke(img, main, [(6, HALO)])
         for f in branches:
@@ -439,6 +512,24 @@ def bolt_frame(kind, seed=11):
         impact(img, rng, 6, bright=False)
     else:
         stroke(img, main, [(0, BDEEP)])
+    return img
+
+
+def scorch(frame, seed=23):
+    """A burnt patch left on the floor, its embers dying over three frames."""
+    rng = random.Random(seed)
+    img = Image.new('RGBA', (SCORCH_W, SCORCH_H), (0, 0, 0, 0))
+    cx, cy = SCORCH_W / 2, SCORCH_H / 2
+    for y in range(SCORCH_H):
+        for x in range(SCORCH_W):
+            d = ((x + 0.5 - cx) / (SCORCH_W / 2)) ** 2 + ((y + 0.5 - cy) / (SCORCH_H / 2)) ** 2
+            if d <= 1:
+                alpha = round(150 * (1 - d) ** 0.6)
+                img.putpixel((x, y), (24, 20, 30, alpha))
+    embers = [(round(cx + rng.uniform(-14, 14)), round(cy + rng.uniform(-5, 5))) for _ in range(9)]
+    for i, (x, y) in enumerate(embers):
+        if i < 9 - frame * 3:
+            img.putpixel((x, y), (255, 190, 90, 255) if frame == 0 else (220, 120, 60, 220))
     return img
 
 
@@ -484,6 +575,77 @@ def spark(frame):
     for x, y in core:
         img.putpixel((x, y), BCORE if frame == 0 else BPALE)
     return img
+
+
+# ---------------------------------------------------------------- crackle
+def crackle(seconds=0.8, seed=0x51A7):
+    """A light strike for 진's frequent weather bolts.
+
+    The upgrade's thunder strike is a heavy crack and boom; heard twice a
+    second it wears on the ear. This keeps a short tearing snap, a soft body
+    and a quick low tail, with no boom and nothing above ~4 kHz.
+    """
+    rng = random.Random(seed)
+    n = int(SAMPLE_RATE * seconds)
+
+    def noise():
+        return rng.random() * 2 - 1
+
+    snap, t = [0.0] * n, 0.0
+    while t < 0.12:
+        begin, tau = int(t * SAMPLE_RATE), 0.0002 + 0.0006 * rng.random()
+        amp = (0.4 + 0.6 * rng.random()) * (1 - t / 0.12) ** 1.5
+        for i in range(int(tau * 7 * SAMPLE_RATE)):
+            if begin + i < n:
+                ramp = min(1, i / (0.0003 * SAMPLE_RATE))
+                snap[begin + i] += amp * noise() * ramp * math.exp(-i / (tau * SAMPLE_RATE))
+        t += (0.001 + 0.007 * (t / 0.12) ** 2) * (0.5 + rng.random())
+    snap = normalized(biquad(biquad(snap, 'high', 400), 'low', 4200))
+    body = [noise() * min(1, i / (0.003 * SAMPLE_RATE)) * math.exp(-i / (0.05 * SAMPLE_RATE)) for i in range(n)]
+    body = normalized(biquad(biquad(body, 'low', 900), 'high', 90))
+    last, tail = 0.0, []
+    for _ in range(n):
+        last = 0.97 * last + 0.25 * noise()
+        tail.append(last)
+    tail = biquad(biquad(tail, 'low', 300), 'high', 40)
+    for i in range(n):
+        x = i / SAMPLE_RATE
+        fade = 1.0 if x < seconds - 0.25 else 0.5 + 0.5 * math.cos(math.pi * (x - seconds + 0.25) / 0.25)
+        tail[i] *= min(1, x / 0.03) * math.exp(-x / 0.22) * fade
+    tail = normalized(tail)
+    mix = [snap[i] * 0.55 + body[i] * 0.5 + tail[i] * 0.55 for i in range(n)]
+    return [v * 0.8 for v in normalized(biquad(mix, 'high', 45))]
+
+
+def twister_wind(seconds=5.3, seed=0x7417):
+    """The roar of a dragon twister for its whole life: wind swirling round.
+
+    Band-limited noise whose loudness and brightness sweep round about three
+    times a second, over a low roar, with a soft whistle that rises as it
+    winds up. It fades in as the pillar rises and out as it falls.
+    """
+    rng = random.Random(seed)
+    n = int(SAMPLE_RATE * seconds)
+
+    def noise():
+        return rng.random() * 2 - 1
+
+    hiss = normalized(biquad(biquad([noise() for _ in range(n)], 'high', 350), 'low', 1800))
+    last, roar = 0.0, []
+    for _ in range(n):
+        last = 0.985 * last + 0.15 * noise()
+        roar.append(last)
+    roar = normalized(biquad(biquad(roar, 'low', 260), 'high', 40))
+    mix = []
+    phase = 0.0
+    for i in range(n):
+        x = i / SAMPLE_RATE
+        swirl = 0.55 + 0.45 * math.sin(2 * math.pi * 2.8 * x + 0.6 * math.sin(2 * math.pi * 0.4 * x))
+        phase += 2 * math.pi * (520 + 160 * min(1, x / 1.5) + 40 * math.sin(2 * math.pi * 2.8 * x)) / SAMPLE_RATE
+        whistle = math.sin(phase) * 0.06 * swirl
+        envelope = min(1, x / 0.35) * (1 if x < seconds - 0.6 else 0.5 + 0.5 * math.cos(math.pi * (x - seconds + 0.6) / 0.6))
+        mix.append((hiss[i] * 0.55 * swirl + roar[i] * 0.6 + whistle) * envelope)
+    return [v * 0.8 for v in normalized(biquad(mix, 'high', 45))]
 
 
 # ---------------------------------------------------------------- ANM2
@@ -543,13 +705,26 @@ def main():
     sheet.save(GFX / 'familiar/familiar_dragon.png')
     write_anm2(GFX / 'dragon.anm2', 'familiar/familiar_dragon.png', 'Hidden', animations)
 
-    bolts = Image.new('RGBA', (BOLT_W * len(BOLT_FRAMES), BOLT_H), (0, 0, 0, 0))
-    frames = []
-    for i, kind in enumerate(BOLT_FRAMES):
-        bolts.alpha_composite(bolt_frame(kind), (i * BOLT_W, 0))
-        frames.append((i * BOLT_W, 0, BOLT_W, BOLT_H, BOLT_PIVOT[0], BOLT_PIVOT[1]))
+    # One row per bolt shape; the burnt patch frames sit after the first row.
+    bolts = Image.new('RGBA', (BOLT_W * len(BOLT_FRAMES) + SCORCH_W * SCORCH_FRAMES, BOLT_H * len(BOLT_VARIANTS)),
+                      (0, 0, 0, 0))
+    animations = []
+    for v in range(len(BOLT_VARIANTS)):
+        frames = []
+        for i, kind in enumerate(BOLT_FRAMES):
+            bolts.alpha_composite(bolt_frame(kind, v), (i * BOLT_W, v * BOLT_H))
+            frames.append((i * BOLT_W, v * BOLT_H, BOLT_W, BOLT_H, BOLT_PIVOT[0], BOLT_PIVOT[1]))
+        animations.append(('Strike' if v == 0 else 'Strike%d' % (v + 1), frames))
+    burns, left = [], BOLT_W * len(BOLT_FRAMES)
+    for f in range(SCORCH_FRAMES):
+        bolts.alpha_composite(scorch(f), (left + f * SCORCH_W, 0))
+        burns.append((left + f * SCORCH_W, 0, SCORCH_W, SCORCH_H, SCORCH_W // 2, SCORCH_H // 2))
+    animations.append(('Scorch', burns))
     bolts.save(GFX / 'effects/conch_dragon_lightning.png')
-    write_anm2(GFX / 'effects/conch_dragon_lightning.anm2', 'conch_dragon_lightning.png', 'Strike', [('Strike', frames)])
+    write_anm2(GFX / 'effects/conch_dragon_lightning.anm2', 'conch_dragon_lightning.png', 'Strike', animations)
+    (ROOT / 'resources/sfx').mkdir(parents=True, exist_ok=True)
+    write_wav(ROOT / 'resources/sfx/conch_dragon_crackle.wav', crackle())
+    write_wav(ROOT / 'resources/sfx/conch_dragon_twister.wav', twister_wind())
     print('dragon assets written')
 
 

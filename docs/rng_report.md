@@ -386,3 +386,26 @@ the Live Eye collectible RNG of the tear's owner, so the effective odds equal th
 | 10 | **100%** | 100.000% |
 | 15 | **100%** | 100.000% |
 
+## 12. Dragon bolts and twisters
+
+Bolts are not random in number: while enemies are present they strike tears / 5 x copies held
+times a second (`scripts/items/collectibles/dragon.lua:28`), from the tears stat `30 / (MaxFireDelay + 1)`, without counting shots.
+With 2 or more copies (`scripts/items/collectibles/dragon.lua:33`) each strike rolls `RandomFloat() < 0.05`
+(`scripts/items/collectibles/dragon.lua:32`) on the holder's Dragon collectible RNG and rises as a twister instead, unless
+5 twisters already stand (`scripts/items/collectibles/dragon.lua:34`). The roll is a single draw, so the odds equal the constant.
+
+| Copies | Twisters standing | Exact P (twister) | Measured |
+|---|---|---|---|
+| 1 | 0 | **0%** | 0.000% |
+| 2 | 0 | **5%** | 4.970% |
+| 3 | 0 | **5%** | 4.995% |
+| 2 | 4 | **5%** | 4.963% |
+| 2 | 5 | **0%** | 0.000% |
+
+| MaxFireDelay | Tears stat | Strikes/s, 1 copy | Strikes/s, 2 copies |
+|---|---|---|---|
+| 10 | 2.73 | 0.55 | 1.09 |
+| 7 | 3.75 | 0.75 | 1.50 |
+| 5 | 5.00 | 1.00 | 2.00 |
+| 2 | 10.00 | 2.00 | 4.00 |
+

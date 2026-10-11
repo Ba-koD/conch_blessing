@@ -345,7 +345,7 @@ class BenchTests(unittest.TestCase):
                     total=total+1
                 end
             end
-            assert(total==143,'update the documented synergy inventory when it changes')
+            assert(total==144,'update the documented synergy inventory when it changes')
             for _,name in ipairs({'conch_test kronos detail','conch_test live_eye detail','conch_test appraisal detail'}) do
                 bench.register({command=name,build=function() end})
             end
@@ -396,7 +396,7 @@ class BenchTests(unittest.TestCase):
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','kronos detail')
             assert(started=='conch_test kronos detail')
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','all')
-            assert(label=='conch_test' and #selected==110,'update the documented suite count when it changes')
+            assert(label=='conch_test' and #selected==111,'update the documented suite count when it changes')
         """)
 
     def test_aliases_detailed_helpers_and_shared_probes_use_the_single_command(self):
@@ -772,17 +772,17 @@ class BenchTests(unittest.TestCase):
     def test_dragon_oracle_checks_familiars_lightning_and_contact(self):
         self.run_lua("""
             C=require('scripts.dev.item_test_combat')
-            ConchBlessing.ItemData.DRAGON={entity={variant=778}}
-            ConchBlessing.dragon={data={strikeCooldown=150,parts={}}}
+            ConchBlessing.ItemData.AZURE_DRAGON={entity={variant=778}}
+            ConchBlessing.azureDragon={data={strikeCooldown=150,parts={}}}
             CollectibleType=CollectibleType or {}; CollectibleType.COLLECTIBLE_BFFS=247
             function player:HasCollectible() return false end
             for _, n in ipairs({0,1,2}) do
                 local checks={}
                 local plan=setmetatable({check=function(label,fn) checks[label]=fn end},
                     {__index=function() return function() end end})
-                C.DRAGON.stage(plan,7,n)
+                C.AZURE_DRAGON.stage(plan,7,n)
                 assert(checks['one dragon per copy'], 'missing familiar count check')
-                assert(checks['Dragon grants no flight or spectral tears'], 'missing flag check')
+                assert(checks['Azure Dragon grants no flight or spectral tears'], 'missing flag check')
                 if n==0 then
                     assert(checks['every enemy the snout runs into is struck for 5x current damage']==nil)
                 else

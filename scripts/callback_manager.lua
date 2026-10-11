@@ -176,6 +176,11 @@ ConchBlessing.CallbackManager.callbackMapping = {
         callback = getRepentogonCallback("MC_PRE_PLAYER_RENDER"),
         needsId = false, requires = "REPENTOGON", optional = true
     },
+    -- After the room's entities are drawn and before the HUD.
+    postRoomRenderEntities = {
+        callback = getRepentogonCallback("MC_POST_ROOM_RENDER_ENTITIES"),
+        needsId = false, requires = "REPENTOGON", optional = true
+    },
     prePlayerCollision = { callback = ModCallbacks.MC_PRE_PLAYER_COLLISION, needsId = false },
     postPickupInit = { callback = ModCallbacks.MC_POST_PICKUP_INIT, needsId = false },
     postPickupUpdate = { callback = ModCallbacks.MC_POST_PICKUP_UPDATE, needsId = false },

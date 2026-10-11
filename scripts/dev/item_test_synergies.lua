@@ -206,6 +206,10 @@ S.add("SOFLAM", "mr_mega_and_multishot", { synergies = true, damage = true, cond
     end)
 end, { "mr_mega" })
 
+-- Two or more Dragons: a bolt may rise as a twister. The lifecycle bench
+-- exercises it at two copies (rise, stays put, pull, 5% ticks, at most five).
+S.link("DRAGON","conch_test dragon lifecycle",{synergies=true,damage=true},{"dragon"})
+
 S.link("APPRAISAL_CERTIFICATE","conch_test appraisal detail",{synergies=true,conditions=true},{"atropos"})
 
 local function dcCollectibleStock()

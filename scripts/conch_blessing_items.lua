@@ -305,33 +305,30 @@ ConchBlessing.ItemData = {
         id = Isaac.GetItemIdByName("Rabbit"),
     },
     DRAGON = {
-        -- A familiar item kept at its original registry position (not the
-        -- familiar group) so every generated collectible ID stays unchanged.
-        type = "familiar",
+        -- God of Weather. A passive again, kept at its original registry
+        -- position so every generated collectible ID stays unchanged.
+        type = "passive",
         id = Isaac.GetItemIdByName("Dragon"),
-        anm2 = "dragon.anm2",
-        entity = { variant = 778, collisiondamage = 0, collisionmass = 3, collisionradius = 8, friction = 1, numgridcollisionpoints = 1, shadowsize = 0 },
-        gibs = { amount = 0, blood = 0, bone = 0, eye = 0, gut = 0, large = 0 },
         pool = {
             RoomType.ROOM_TREASURE,
             RoomType.ROOM_PLANETARIUM
         },
         quality = 4,
-        tags = "offensive summonable",
-        cache = "familiars",
+        tags = "offensive",
         hidden = false,
         shopprice = 20,
         devilprice = 2,
         origin = { id = CollectibleType.COLLECTIBLE_TAURUS, type = "collectible" },
         flag = "positive",
+        synergies = {
+            -- Two or more Dragons: a bolt may rise as a dragon twister instead.
+            [{type = "collectible", name = "Dragon" }] = "dragon",
+        },
         script = "scripts/items/collectibles/dragon",
         callbacks = {
-            evaluateCache = "dragon.onEvaluateCache",
-            familiarInit = "dragon.onFamiliarInit",
-            familiarUpdate = "dragon.onFamiliarUpdate",
-            postFamiliarRender = "dragon.onFamiliarRender",
             update = "dragon.onUpdate",
             postRender = "dragon.onRender",
+            postRoomRenderEntities = "dragon.onRoomRender",
             postNewRoom = "dragon.onNewRoom",
             gameStarted = "dragon.onGameStarted"
         },
@@ -957,6 +954,32 @@ ConchBlessing.ItemData = {
             postPlayerUpdate = "timemoney.onPlayerUpdate",
             entityTakeDmg = "timemoney.onEntityTakeDamage"
         }
+    },
+    AZURE_DRAGON = {
+        -- The long dragon familiar that 진 used to summon. Console only, like
+        -- Inf D6: hidden and in no pool.
+        type = "familiar",
+        id = Isaac.GetItemIdByName("Azure Dragon"),
+        gfx = "azure_dragon.png",
+        anm2 = "dragon.anm2",
+        entity = { variant = 778, collisiondamage = 0, collisionmass = 3, collisionradius = 8, friction = 1, numgridcollisionpoints = 1, shadowsize = 0 },
+        gibs = { amount = 0, blood = 0, bone = 0, eye = 0, gut = 0, large = 0 },
+        quality = 0,
+        tags = "offensive summonable",
+        cache = "familiars",
+        hidden = true,
+        shopprice = 999,
+        script = "scripts/items/collectibles/azure_dragon",
+        callbacks = {
+            evaluateCache = "azureDragon.onEvaluateCache",
+            familiarInit = "azureDragon.onFamiliarInit",
+            familiarUpdate = "azureDragon.onFamiliarUpdate",
+            postFamiliarRender = "azureDragon.onFamiliarRender",
+            update = "azureDragon.onUpdate",
+            postRender = "azureDragon.onRender",
+            postNewRoom = "azureDragon.onNewRoom",
+            gameStarted = "azureDragon.onGameStarted"
+        },
     },
 
     -- Trinkets

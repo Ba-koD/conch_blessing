@@ -271,7 +271,7 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
     if action=="synergies" or action=="conditions" or action=="damage" then
         local list,seen={},{}
         local function append(command) if not seen[command] then list[#list+1]=command; seen[command]=true end end
-        local damageKeys={"FIRE_BREATH","ICE_BREATH","DRAGON","VOID_DAGGER","SOFLAM","KRONOS"}
+        local damageKeys={"FIRE_BREATH","ICE_BREATH","DRAGON","AZURE_DRAGON","VOID_DAGGER","SOFLAM","KRONOS"}
         local conditionKeys={"MONEY_TEAR","ETERNAL_FLAME","SEALED_DEMON_SWORD","TYRFING","LIVE_EYE"}
         if action~="synergies" then
             for _,key in ipairs(action=="damage" and damageKeys or conditionKeys) do append(commands[key]) end
