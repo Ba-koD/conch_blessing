@@ -728,7 +728,8 @@ local function _processUpgradeJobs()
                     end
 
                     if ConchBlessing.template and type(ConchBlessing.template.cancelForPickup) == "function" then
-                        ConchBlessing.template.cancelForPickup(pickup)
+                        -- Retire the before phase only; this commit continues the same scene.
+                        ConchBlessing.template.cancelForPickup(pickup, true)
                     end
 
                     local titleItemData = job.itemData

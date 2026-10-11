@@ -1,5 +1,6 @@
 Mode: built-in image_gen, transparent_background=true
-Runtime asset: resources/gfx/effects/conch_upgrade_maw.png
+Retired: the user replaced the swallowing mouth with the turned Saturn ring (2026-10-11).
+Former runtime asset: resources/gfx/effects/conch_upgrade_maw.png (removed; recover it from git history if needed).
 References: research only, no vanilla monster image supplied or copied.
 Research: https://www.theoi.com/Titan/TitanKronos.html (Hesiod, Theogony 453: swallowing offspring to preserve kingship)
 Research: https://www.museodelprado.es/en/the-collection/art-work/saturn/18110a75-b0e7-430c-bc73-2a4d55893bd6 (Goya's Saturn, darkness and dread)

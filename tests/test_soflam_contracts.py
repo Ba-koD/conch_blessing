@@ -22,7 +22,7 @@ class SoflamContracts(unittest.TestCase):
             Vector=setmetatable({},{__call=function(_,x,y) return {X=x,Y=y} end}); Vector.Zero=Vector(0,0)
             serial=0; entities={}; bombs={}; explosions={}; callbacks={}; errors={}; room=5
             ConchBlessing={AddCallback=function(_,id,fn) callbacks[id]=fn end,
-                printError=function(e) errors[#errors+1]=e end}
+                printError=function(e) errors[#errors+1]=e end, printDebug=function() end}
             function entity(kind,owner)
                 serial=serial+1
                 local e={kind=kind,Type=kind,InitSeed=serial,Index=serial,Position=Vector(100,100),
@@ -213,6 +213,70 @@ class SoflamContracts(unittest.TestCase):
             for _,mode in ipairs({'dead','removed'}) do
                 player[mode]=true; hit(laser()); assert(#S._pendingStrikes==0); player[mode]=false
             end
+        """)
+
+    def test_lock_warning_sounds_on_reticle_and_engine_replay_is_cancelled_while_rocket_falls(self):
+        self.run_lua("""
+            SoundEffect.SOUND_DR_REMOTE_WARNING=855; played={}
+            -- The engine's MC_PRE_SFX_PLAY sees every Play, including SOFLAM's own.
+            SFXManager=function() return {Play=function(_,id)
+                if S.onPreSfxPlay(nil,id)~=false then played[#played+1]=id end
+            end} end
+            hit(laser())
+            assert(played[#played]==855, 'the warning sounds the moment the reticle appears')
+            assert(S.onPreSfxPlay(nil,855)==false, 'engine replays are cancelled during the lock-on')
+            for _=1,300 do
+                local strike=S._pendingStrikes[1]
+                if strike and strike.phase=='rocket' then break end
+                S.onUpdate()
+            end
+            assert(S.onPreSfxPlay(nil,855)==false, 'and while the rocket falls')
+            assert(S.onPreSfxPlay(nil,1)==nil, 'other sounds are untouched')
+            local logs={}; ConchBlessing.printDebug=function(t) logs[#logs+1]=t end
+            ConchBlessing.Config={debugMode=true}
+            assert(S.onPreSfxPlay(nil,1)==nil and logs[1]=='[SOFLAM] sound 1 played during strike',
+                'debug mode names every sound played during a strike')
+            assert(S.onPreSfxPlay(nil,855)==false and logs[2]=='[SOFLAM] cancelled engine lock-on warning during strike')
+            ConchBlessing.Config=nil
+            finish()
+            -- The bomb explodes on its own update, after the strike settled.
+            assert(#S._pendingStrikes==0 and bombs[1]:Exists())
+            assert(S.onPreSfxPlay(nil,855)==false, 'the landing replay is cancelled')
+            bombs[1]:Remove()
+            assert(S.onPreSfxPlay(nil,855)==nil, 'warnings play normally after the explosion')
+            hit(laser()); S.onNewRoom()
+            assert(S.onPreSfxPlay(nil,855)==nil, 'a room change drops every live reference')
+        """)
+
+    def test_debug_mode_logs_the_strike_lifecycle_and_stays_silent_otherwise(self):
+        self.run_lua("""
+            SoundEffect.SOUND_DR_REMOTE_WARNING=855
+            SFXManager=function() return {Play=function(_,id) S.onPreSfxPlay(nil,id) end} end
+            local logs={}; ConchBlessing.printDebug=function(t) logs[#logs+1]=t end
+            hit(laser()); finish(); S.onPreSfxPlay(nil,855)
+            for _,line in ipairs(logs) do assert(not line:find('[SOFLAM]',1,true), 'debug off logs nothing: '..line) end
+            ConchBlessing.Config={debugMode=true}; logs={}
+            hit(laser())
+            local strike=S._pendingStrikes[1]
+            for _=1,300 do
+                if not S._pendingStrikes[1] then break end
+                S.onUpdate()
+            end
+            assert(S.onPreSfxPlay(nil,855)==false)
+            for _,bomb in ipairs(bombs) do bomb:Remove() end; assert(S.onPreSfxPlay(nil,855)==nil)
+            local text=table.concat(logs,'\\n')
+            local order={'lock-on warning played at the reticle','strike queued target=','rockets=1 lockOn=45 crosshair=spawned',
+                'rocket falls remaining=1','detonation bomb variant=9','explodes next update',
+                'cancelled engine lock-on warning during bomb','detonation bomb exploded; 0 still live'}
+            local at=0
+            for _,part in ipairs(order) do
+                local found=text:find(part,at+1,true)
+                assert(found, 'missing or out of order: '..part..'\\n'..text)
+                at=found
+            end
+            hit(laser()); S.onNewRoom()
+            assert(logs[#logs]:find('cleared 1 pending strikes and 0 live bombs',1,true), logs[#logs])
+            ConchBlessing.Config=nil
         """)
 
     def test_dead_or_reused_target_keeps_last_live_position_and_removed_rocket_detonates_once(self):

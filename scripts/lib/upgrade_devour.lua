@@ -1,4 +1,5 @@
--- Kronos's presentation snapshot. Never retain or animate a live familiar.
+-- Kronos's presentation: snapshots of the upgrading player's own familiars
+-- ride the turned Saturn ring. Never retain or animate a live familiar.
 local Devour = {}
 local fallback = {
     { "gfx/003.001_brother bobby.anm2", "FloatDown" },
@@ -67,100 +68,119 @@ function Devour.snapshot(owner)
     return pets, "random"
 end
 
-function Devour.prepare(scene, owner, asset)
+function Devour.prepare(scene, owner)
     scene.pets, scene.petSource = Devour.snapshot(owner)
-    local feedEnd = 18 + math.max(0, #scene.pets - 1) * 14 + 20
-    local open = feedEnd + 8
-    scene.devour = { first = 18, spacing = 14, feedEnd = feedEnd,
-        open = open, swallow = open + 2, swallowed = open + 5,
-        close = open + 2, closed = open + 6, gone = open + 10 }
-    scene.impact = scene.devour.gone
-    scene.duration = scene.impact + 24
-    for _, part in ipairs({ "all", "upper", "lower", "sides" }) do asset(scene, "maw_" .. part) end
 end
 
-local function clamp(value) return math.max(0, math.min(1, value)) end
-local function ease(a, b, f)
-    local p = clamp((f - a) / (b - a))
-    return p * p * (3 - 2 * p)
+-- The turned Saturn ring, with the same numbers as the HTML preview's
+-- ringPass. A slow build like MattPack's ~3 s whitening transformations:
+-- pets fade in one by one already riding the orbit, circle faster and closer to the item
+-- while it turns white, fuse into one golden ring, hold, collapse into the
+-- item on the catalog's impact frame, and the result regains its colours.
+-- The icon is the Saturn sign turned 232 degrees clockwise, so the ring and
+-- the half that passes in front of the item turn with it.
+local TILT = math.rad(-16 + 232)
+local APPEAR_AT, APPEAR_STEP, APPEAR_LEN = 4, 8, 24
+local SPIN_START = 40
+local WHITE_START, COLOR_RETURN = 70, 45
+local COLLAPSE = { 14, 10, 6, 2 }
+local LAND = { { 1.25, .8 }, { .9, 1.12 }, { 1.04, .97 } }
+local GOLD, PALE, SPARK = { .859, .698, .427 }, { 1, .945, .757 }, { .137, .098, .114 }
+
+function Devour.frames(scene)
+    return { impact = scene.impact, fuse = scene.impact - 12, collapse = scene.impact - 6 }
 end
 
-function Devour.petPose(scene, index, f, x, y)
-    local start = scene.devour.first + (index - 1) * scene.devour.spacing
-    local pull = clamp((f - start) / 20) ^ 2.6
-    local angle = -math.pi * .96 + (index - 1) * 1.11
-    -- A short outward drag precedes accelerating suction. No orbit, spin,
-    -- bouncing, hands or feeding mouth are added to the BFF heart.
-    local tension = ease(start - 5, start, f) * (1 - pull) * 3
-    local radius = 60 + tension
-    local px, py = x + math.cos(angle) * radius * (1 - pull), y + 3 + math.sin(angle) * radius * .75 * (1 - pull)
-    local scale = (1 - .94 * ease(.2, 1, pull))
-    return { x = px, y = py, pull = pull, scale = scale,
-        alpha = ease(2, 9, f) * (1 - ease(.8, 1, pull)),
-        angle = math.deg(angle), visible = f < start + 20 }
+function Devour.ring(scene, f, x, y, ease)
+    local fuse = scene.impact - 12
+    local spin = ease(SPIN_START, fuse, f)
+    local rx = 48 - 34 * spin
+    local turn = 0
+    -- The orbit turns from the first tick, slowly, so pets appear mid-orbit.
+    for j = 0, f - 1 do turn = turn + .05 + .5 * ease(SPIN_START, fuse, j) end
+    return { rx = rx, ry = rx * .27, spin = spin, turn = turn, cx = x, cy = y + 2 }
 end
 
-function Devour.mawPose(scene, f)
-    local k = scene.devour
-    local opening = ease(k.open - 1, k.open + 1, f)
-    local closing = ease(k.close, k.closed, f)
-    -- An abrupt apparition at the item's depth, never a jaw sliding down from
-    -- above. It seizes the heart in six ticks and is gone four ticks later.
-    return { width = 112, yOffset = 0, gape = opening * (1 - closing),
-        alpha = ease(k.open - 1, k.open, f) * (1 - ease(k.closed + 1, k.gone, f)) }
+function Devour.point(ring, phase, rx, ry)
+    local px, py = math.cos(phase) * (rx or ring.rx), math.sin(phase) * (ry or ring.ry)
+    return ring.cx + px * math.cos(TILT) - py * math.sin(TILT),
+        ring.cy + px * math.sin(TILT) + py * math.cos(TILT), math.sin(phase) > 0
+end
+
+-- Lerp-to-white strength of the item: rises before impact, then fades out.
+function Devour.white(scene, f, ease)
+    if f < scene.impact then
+        local p = math.max(0, math.min(1, (f - WHITE_START) / (scene.impact - WHITE_START)))
+        return p * p
+    end
+    return 1 - ease(scene.impact, scene.impact + COLOR_RETURN, f)
+end
+
+local function arc(scene, h, ring, rx, ry, from, to, rgb, alpha, width)
+    local steps = math.max(2, math.ceil(math.abs(to - from) / (math.pi / 16)))
+    local px, py = Devour.point(ring, from, rx, ry)
+    for i = 1, steps do
+        local x, y = Devour.point(ring, from + (to - from) * i / steps, rx, ry)
+        h.line(scene, px, py, x, y, rgb, alpha, width)
+        px, py = x, y
+    end
+end
+
+local function spark(scene, h, x, y)
+    -- The preview's 3 px cross: a dark outline under a pale core.
+    h.rect(scene, x - 3, y, 7, 1, SPARK, 1); h.rect(scene, x, y - 3, 1, 7, SPARK, 1)
+    h.rect(scene, x - 2, y, 5, 1, PALE, 1); h.rect(scene, x, y - 2, 1, 5, PALE, 1)
+end
+
+local function pass(scene, h, x, y, front)
+    local f, k = scene.frame, Devour.frames(scene)
+    local ring = Devour.ring(scene, f, x, y, h.ease)
+    local count = math.max(1, #scene.pets)
+    local glow = f < k.impact and h.ease(36, 60, f) or 0
+    if glow > 0 then
+        local size = f >= k.collapse and COLLAPSE[math.min(4, f - k.collapse + 1)] or ring.rx
+        local bright = f >= k.fuse
+        arc(scene, h, ring, size, math.max(1, size * .27), front and 0 or math.pi, front and math.pi or 2 * math.pi,
+            bright and PALE or GOLD, glow * (bright and 1 or .75), bright and 3 or 1.5)
+    end
+    for i, pet in ipairs(scene.pets) do
+        local born = APPEAR_AT + (i - 1) * APPEAR_STEP
+        local show = h.ease(born, born + APPEAR_LEN, f)
+        if show > 0 and f < k.fuse then
+            local phase = ring.turn + (i - 1) * 2 * math.pi / count + math.pi
+            local ox, oy, near = Devour.point(ring, phase)
+            if near == front then
+                if ring.spin > .2 then
+                    arc(scene, h, ring, ring.rx, ring.ry, phase - .6 * ring.spin, phase, GOLD, .45 * ring.spin, 2)
+                end
+                local s = (1 - .55 * ring.spin) * (.3 + .7 * show)
+                -- Familiar art sits above its pivot; centre it on the orbit.
+                h.draw(pet, ox, oy + 10 * s, s, s, h.color(1, 1, 1, show))
+            end
+        end
+    end
+    if front and f >= k.fuse and f < k.fuse + 2 then
+        for i = 1, #scene.pets do
+            local px, py = Devour.point(ring, ring.turn + (i - 1) * 2 * math.pi / count + math.pi)
+            spark(scene, h, px, py)
+        end
+    end
 end
 
 function Devour.render(scene, x, y, h)
-    local f, k = scene.frame, scene.devour
-    local draw, asset, color = h.draw, h.asset, h.color
-    local mouth = Devour.mawPose(scene, f)
-    local scale = mouth.width / 64
-    local mouthY = y + mouth.yOffset
-    if mouth.alpha > 0 then
-        -- Only the black cavity changes height. Teeth/gums keep their shape;
-        -- the two separate jaws translate toward each other to deliver the bite.
-        draw(asset(scene, "maw_all"), x, mouthY, scale, scale * (.15 + .85 * mouth.gape),
-            color(.025, .018, .025, mouth.alpha))
-    end
-    local function jaws()
-        if mouth.alpha <= 0 then return end
-        local shift = 14 * scale * (1 - mouth.gape)
-        draw(asset(scene, "maw_upper"), x, mouthY + shift, scale, scale, color(1, 1, 1, mouth.alpha))
-        draw(asset(scene, "maw_lower"), x, mouthY - shift, scale, scale, color(1, 1, 1, mouth.alpha))
-        draw(asset(scene, "maw_sides"), x, mouthY, scale, scale * (.46 + .54 * mouth.gape),
-            color(1, 1, 1, mouth.alpha))
-    end
-    -- The whole apparition starts BEHIND the item; only the closing tooth
-    -- rows cross in front while it is seized into the depth of the throat.
-    if f < k.close then jaws() end
-    for i, pet in ipairs(scene.pets) do
-        local p = Devour.petPose(scene, i, f, x, y)
-        if p.visible and p.alpha > 0 then
-            if p.pull > .03 then
-                for trail = 2, 1, -1 do
-                    local old = Devour.petPose(scene, i, f - trail * 2, x, y)
-                    draw(pet, old.x, old.y + 10 * old.scale, old.scale, old.scale,
-                        color(.35, .25, .32, p.alpha * .12 / trail))
-                end
-            end
-            local shade = 1 - .6 * p.pull
-            draw(pet, p.x, p.y + 10 * p.scale, p.scale, p.scale,
-                color(shade, shade, shade, p.alpha))
-        end
-    end
+    local f = scene.frame
+    local white = Devour.white(scene, f, h.ease)
+    if h.sample then h.sample(scene, "white", white) end
+    -- Interpolate toward white (as the crown does) rather than adding light.
+    local tint = h.color(1 - white, 1 - white, 1 - white, 1, white)
+    pass(scene, h, x, y, false)
     if f < scene.impact then
-        local swallow = ease(k.swallow, k.swallowed, f)
-        if f < k.swallowed then
-            local shade = 1 - .75 * swallow
-            h.drawItem(scene, false, x, y, 1 - swallow * .96,
-                1 - swallow * .96, color(shade, shade, shade, 1 - ease(.65, 1, swallow)))
-        end
+        h.drawItem(scene, false, x, y, 1, 1, tint)
     else
-        -- The closed jaws already conceal the change. Reveal at their last
-        -- visible frame, without an empty pause or a second fade from zero.
-        h.drawItem(scene, true, x, y, 1, 1, color(1, 1, 1, 1))
+        local land = LAND[f - scene.impact + 1] or { 1, 1 }
+        h.drawItem(scene, true, x, y, land[1], land[2], tint)
     end
-    if f >= k.close then jaws() end
+    pass(scene, h, x, y, true)
 end
 
 return Devour

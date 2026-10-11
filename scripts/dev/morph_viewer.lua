@@ -191,6 +191,13 @@ ConchBlessing:AddCallback(ModCallbacks.MC_POST_UPDATE, function()
             log("MORPH " .. string.lower(scene.key) .. " target=" .. pickup.Variant .. ":" .. pickup.SubType
                 .. " itemRenderer=" .. (native and "native" or visual and "layer" or "native-default"))
         end
+        -- How the applied presentation ended: "after:complete" at its last
+        -- frame is the healthy case; an early frame shows what cut it short.
+        if visual and visual.endReason and visual.endReason ~= scene.endReported then
+            scene.endReported = visual.endReason
+            log(string.format("END %s %s frame=%d impact=%d duration=%d", string.lower(scene.key),
+                visual.endReason, visual.endFrame or -1, visual.impact or -1, visual.duration or -1))
+        end
         if job.status == "complete" and not job.templateState.upgradeAnim and not scene.displayReported then
             scene.displayReported = true
             -- Property evidence after the shared template releases the pickup;

@@ -108,6 +108,11 @@ ConchBlessing.CallbackManager.callbackMapping = {
         callback = getRepentogonCallback("MC_EVALUATE_TEAR_HIT_PARAMS"),
         needsId = false, requires = "REPENTOGON", optional = true
     },
+    -- Return false to cancel a sound before it plays.
+    preSfxPlay = {
+        callback = getRepentogonCallback("MC_PRE_SFX_PLAY"),
+        needsId = false, requires = "REPENTOGON", optional = true
+    },
     preTearUpdate = {
         callback = getRepentogonCallback("MC_PRE_TEAR_UPDATE"),
         needsId = false, requires = "REPENTOGON", optional = true

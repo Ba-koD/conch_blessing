@@ -2,7 +2,7 @@
   <Info CreatedBy="ConchBlessing" Version="20" Fps="30" />
   <Content>
     <Spritesheets>
-      <Spritesheet Id="0" Path="effect_005_fire_red.png" />
+      <Spritesheet Id="0" Path="effect_005_fire.png" />
     </Spritesheets>
     <Layers>
       <Layer Id="0" Name="Visual" SpritesheetId="0" />

@@ -26,6 +26,7 @@ class MorphVisualTests(unittest.TestCase):
             testModules['scripts.dev.test_bench']={isRunning=function() return benchRunning end}
             package=nil
             callbacks={}; errors={}; messages={}; drawings={}; sounds={}; pitches={}; paused=false; pressed={}
+            soundNames={['Conch Upgrade Thunder Strike']=901,['Conch Upgrade Rain']=902,['Conch Upgrade Clock Tick']=903,['Conch Upgrade Clock Tock']=904,['Conch Upgrade Clock Bell']=905}
             ModCallbacks={MC_POST_UPDATE=1,MC_POST_RENDER=2,MC_POST_NEW_ROOM=3,MC_POST_GAME_STARTED=4,
                 MC_PRE_GAME_EXIT=5,MC_EXECUTE_CMD=6,MC_INPUT_ACTION=7,MC_PRE_BACKDROP_RENDER_WATER=8,
                 MC_POST_BACKDROP_PRE_RENDER_WALLS=9}
@@ -38,7 +39,7 @@ class MorphVisualTests(unittest.TestCase):
             SoundEffect={SOUND_HOLY=1,SOUND_THUNDER=2,SOUND_ROCKET_LAUNCH=3,SOUND_BOSS1_EXPLOSIONS=4,
                 SOUND_CANDLE_LIGHT=5,SOUND_FLAME_BURST=6,SOUND_FREEZE=7,SOUND_SMB_LARGE_CHEWS_4=8,SOUND_VAMP_GULP=9,
                 SOUND_PORTAL_OPEN=10,SOUND_BEEP=11,SOUND_ANGEL_WING=12,SOUND_LOW_INHALE=13,
-                SOUND_REDLIGHTNING_ZAP_STRONG=14,SOUND_BONE_SNAP=15,SOUND_LIGHTBOLT=16}
+                SOUND_REDLIGHTNING_ZAP_STRONG=14,SOUND_BONE_SNAP=15,SOUND_LIGHTBOLT=16,SOUND_ROCKET_EXPLOSION=17,SOUND_SPIN_TO_WIN=18,SOUND_ROCK_SHINE=19,SOUND_MOTHER_SPIN_START=20,SOUND_SUMMONSOUND=21,SOUND_DR_REMOTE_WARNING=22}
             function Vector(x,y) return {X=x,Y=y} end
             function GetPtrHash(entity) return tostring(entity) end
             EntityPtr=setmetatable({}, {__call=function(_,entity)
@@ -87,6 +88,7 @@ class MorphVisualTests(unittest.TestCase):
                 Stop=function() error('must not stop shared sounds') end,
                 AdjustVolume=function() error('must not change shared sound volume') end} end
             room={GetCenterPos=function() return Vector(320,180) end,
+                GetTopLeftPos=function() return Vector(40,40) end,
                 GetBottomRightPos=function() return Vector(600,320) end,
                 GetGridSize=function() return 9 end,
                 GetGridPosition=function(_,i) return Vector(240+i%3*40,140+math.floor(i/3)*40) end,
@@ -106,6 +108,7 @@ class MorphVisualTests(unittest.TestCase):
                     return live
                 end,
                 GetItemIdByName=function() return 401 end,GetTrinketIdByName=function() return 42 end,
+                GetSoundIdByName=function(name) return soundNames[name] or -1 end,
                 GetScreenWidth=function() return 640 end,GetScreenHeight=function() return 360 end,
                 RenderText=function(...) end,GetTextWidth=function(s) return #s*5 end,
                 ConsoleOutput=function(s) messages[#messages+1]=s end,DebugString=function() end,
@@ -201,21 +204,24 @@ class MorphVisualTests(unittest.TestCase):
                     s.frame=f; V.renderFloor(s); V.render(s)
                 end
             end
-            assert(applied==12 and #errors==0 and #drawings>1000)
+            assert(applied==13 and #errors==0 and #drawings>1000)
         ''')
 
     def test_hidden_item_layer_holds_until_commit_without_hiding_pedestal(self):
         self.lua.execute('''
             p=pickup(); state={}; custom=T.forItem('DRAGON','positive')
-            assert(custom.onBeforeChange(p.Position,p,state)==45 and not p.sprite:GetLayer(1):IsVisible())
+            assert(custom.onBeforeChange(p.Position,p,state)==70 and not p.sprite:GetLayer(1):IsVisible())
             assert(p.sprite.Color.A==0.8 and p.sprite:GetLayer(0):IsVisible())
-            for i=1,70 do T.updateAllAnimations(); T.renderAllAnimations() end
-            assert(state.morphScene.frame==44 and not p.sprite:GetLayer(1):IsVisible() and #T._activeAnimations==1)
+            for i=1,95 do T.updateAllAnimations(); T.renderAllAnimations() end
+            assert(state.morphScene.frame==69 and not p.sprite:GetLayer(1):IsVisible() and #T._activeAnimations==1)
             T.cancelForPickup(p); assert(p.sprite.Color.original and p.sprite:GetLayer(1):IsVisible())
             p.SubType=456
-            assert(custom.onAfterChange(p.Position,p,state)==57)
-            assert(state.morphScene.frame==45 and state.morphScene.after.sheet=='c456.png')
-            for i=1,57 do T.updateAllAnimations() end
+            -- 127-70 frames after the held commit frame, plus the ending update.
+            assert(custom.onAfterChange(p.Position,p,state)==59)
+            assert(state.morphScene.frame==70 and state.morphScene.after.sheet=='c456.png')
+            for i=1,58 do T.updateAllAnimations() end
+            assert(#T._activeAnimations==1 and state.morphScene.frame==127, 'the last frame is still drawn')
+            T.updateAllAnimations()
             assert(#T._activeAnimations==0 and p.sprite.Color.original and p.sprite.Color.A==0.8)
         ''')
 
@@ -307,7 +313,7 @@ class MorphVisualTests(unittest.TestCase):
             end
         ''')
 
-    def test_kronos_real_morph_reveals_opaque_result_after_swallow_with_borrowed_color(self):
+    def test_kronos_real_morph_whitens_into_the_ring_and_returns_native_colors(self):
         self.viewer()
         self.lua.execute('''
             for _,ownedPets in ipairs({0,1,3}) do
@@ -324,28 +330,38 @@ class MorphVisualTests(unittest.TestCase):
                 sprite.Color=Color(1,1,1,1)
                 event(1)
                 local job=ConchBlessing._upgradeJobs[1]
-                local visual,revealFrames,settledFrames
-                revealFrames=0; settledFrames=0
-                for tick=1,180 do
+                local visual,revealFrames,settledFrames,whitest,firstAfter,lastAfter=nil,0,0,0
+                -- Borrowed colours are restored right after each draw; read the
+                -- white offset while the item layer is actually rendering.
+                local render=sprite.RenderLayer
+                function sprite:RenderLayer(id,pos)
+                    if id==1 then
+                        if job.committed then firstAfter=firstAfter or self.Color.RO; lastAfter=self.Color.RO
+                        else whitest=math.max(whitest,self.Color.RO) end
+                    end
+                    return render(self,id,pos)
+                end
+                for tick=1,240 do
                     event(1); drawings={}; event(2)
                     visual=job.templateState.morphScene or visual
-                    assert(sprite.Color.A==1, 'temporary swallow/reveal alpha leaked into the native item')
-                    assert(sprite.Scale.X==1 and sprite.Scale.Y==1, 'swallow must not leave the result shrunk')
+                    assert(sprite.Color.A==1 and sprite.Color.RO==0, 'temporary white leaked into the native item')
+                    assert(sprite.Scale.X==1 and sprite.Scale.Y==1, 'the landing squash must not stay on the pickup')
                     assert(sprite:GetLayer(0):IsVisible(), 'native pedestal stays visible')
+                    for _,d in ipairs(drawings) do
+                        assert(not (d.path or ''):find('maw'), 'the retired mouth never draws')
+                    end
                     if job.committed and job.templateState.upgradeAnim then
                         assert(p.SubType==ConchBlessing.ItemData.KRONOS.id)
                         revealFrames=revealFrames+1
-                        assert(visual.impact==visual.devour.gone, 'no empty delay after mouth disappearance')
-                        assert(sprite:GetLayer(1):IsVisible(), 'native result shows from the actual commit')
-                        for _,draw in ipairs(drawings) do
-                            assert(draw.native~=sprite, 'released item is drawn only by the engine')
-                        end
                     elseif job.committed then
                         settledFrames=settledFrames+1
                         assert(sprite:GetLayer(1):IsVisible(), 'completed native Kronos remains visible')
                     end
                 end
-                assert(revealFrames>=9 and settledFrames>30)
+                assert(visual.impact==120 and visual.duration==170)
+                assert(revealFrames>=45 and settledFrames>30)
+                assert(whitest>.9, 'the heart turns white before the conversion')
+                assert(firstAfter>.9 and lastAfter<.05, 'Kronos slowly regains its colours')
                 assert(#visual.pets==(ownedPets==0 and 3 or ownedPets))
                 assert(W.isRunning() and p:Exists() and #T._activeAnimations==0 and #errors==0)
                 event(6,'conch_morph','stop')
@@ -416,8 +432,10 @@ class MorphVisualTests(unittest.TestCase):
             assert(custom.onBeforeChange(p.Position,p,state)==60 and state.morphFallback)
             assert(p.sprite:GetLayer(1):IsVisible() and p.sprite:GetLayer(0):IsVisible())
             for i=1,60 do T.updateAllAnimations() end
-            assert(p.sprite.Color.original and #errors==1)
+            -- The flag animation holds its full tint until the commit or a cancel.
+            assert(not p.sprite.Color.original and #T._activeAnimations==1 and #errors==1)
             T.cancelForPickup(p)
+            assert(p.sprite.Color.original and #T._activeAnimations==0)
         ''')
 
     def test_item_frame_disappearance_releases_all_applied_visuals_to_native_animation(self):
@@ -632,15 +650,13 @@ class MorphVisualTests(unittest.TestCase):
             for i=1,10 do V.render(s) end
             assert(#sounds==0 and s.frame==0)
             for i=1,102 do V.update(s) end
-            assert(#sounds==5 and shakes==1)
-            assert(sounds[1]==SoundEffect.SOUND_BEEP and sounds[2]==sounds[1] and sounds[3]==sounds[1])
-            assert(pitches[1]<pitches[2] and pitches[2]<pitches[3])
-            assert(sounds[4]==SoundEffect.SOUND_ROCKET_LAUNCH and sounds[5]==SoundEffect.SOUND_BOSS1_EXPLOSIONS)
+            -- The lock-on warning as the reticle appears, then rocket and blast.
+            assert(#sounds==3 and shakes==1)
+            assert(sounds[1]==SoundEffect.SOUND_DR_REMOTE_WARNING and sounds[2]==SoundEffect.SOUND_ROCKET_LAUNCH)
+            assert(sounds[3]==SoundEffect.SOUND_ROCKET_EXPLOSION)
             local after=V.create('SOFLAM',Vector(320,180),100,1,53)
-            V.update(after); V.update(after); assert(shakes==2 and #sounds==7)
-            assert(sounds[6]~=SoundEffect.SOUND_BEEP and sounds[7]~=SoundEffect.SOUND_BEEP)
-            SoundEffect.SOUND_BEEP=nil
-            local compatible=V.create('SOFLAM',Vector(320,180)); for i=1,60 do V.update(compatible) end
+            V.update(after); V.update(after); assert(shakes==2 and #sounds==4)
+            assert(sounds[4]==SoundEffect.SOUND_ROCKET_EXPLOSION, 'a late commit never replays the build-up')
             assert(#errors==0)
         ''')
 
@@ -804,12 +820,12 @@ class MorphVisualTests(unittest.TestCase):
         for index, row in enumerate(rows, 1):
             self.assertEqual(row['key'], catalog[index].key)
             self.assertEqual(row['applied'], bool(catalog[index].effect))
-        self.assertEqual(sum(row['applied'] for row in rows), 12)
+        self.assertEqual(sum(row['applied'] for row in rows), 13)
         self.assertFalse(next(row['applied'] for row in rows if row['key'] == 'ATROPOS'))
         self.assertIn('id="filter-applied"', html)
         self.assertIn('id="filter-pending"', html)
 
-    def test_devour_freezes_only_owners_pets_and_preserves_live_sprites(self):
+    def test_kronos_snapshots_only_owners_pets_and_preserves_live_sprites(self):
         self.lua.execute('''
             local foreign={InitSeed=456}
             local live=Sprite(); live:Load('modded-pet.anm2'); live:SetFrame('FloatDown',3)
@@ -829,7 +845,7 @@ class MorphVisualTests(unittest.TestCase):
             assert(s.pets[1].animation=='FloatDown' and s.pets[1].frame==3)
             assert(live.animation=='ShootDown' and live.frame==9 and live.Scale.X==1 and live.Scale.Y==1)
             local empty=V.create('KRONOS',Vector(320,180))
-            assert(empty.petSource=='random' and #empty.pets==3 and empty.impact>s.impact)
+            assert(empty.petSource=='random' and #empty.pets==3 and empty.impact==s.impact, 'catalog timing for any roster')
             assert(empty.pets[1].path~=empty.pets[2].path and empty.pets[2].path~=empty.pets[3].path)
             players=2
             local unknown=V.create('KRONOS',Vector(320,180))
@@ -838,7 +854,7 @@ class MorphVisualTests(unittest.TestCase):
             assert(explicit.petSource=='random' and #explicit.pets==3)
         ''')
 
-    def test_devour_copy_fallback_and_unreadable_owned_roster_never_fills_random(self):
+    def test_kronos_copy_fallback_and_unreadable_owned_roster_never_fills_random(self):
         self.lua.execute('''
             local live=Sprite(); live:Load('original-familiar.anm2'); live:SetFrame('FloatDown',5)
             local pet={Player=owner,InitSeed=22,GetSprite=function() return live end}
@@ -850,88 +866,84 @@ class MorphVisualTests(unittest.TestCase):
             assert(failed.petSource=='owned' and #failed.pets==0 and #errors==1)
         ''')
 
-    def test_devour_mouth_closes_before_reveal_and_actual_transaction_restores(self):
+    def test_saturn_ring_turns_with_the_icon_closes_in_and_transaction_restores(self):
         self.lua.execute('''
+            local D=require('scripts.lib.upgrade_devour')
+            local function ease(a,b,x) local p=math.max(0,math.min(1,(x-a)/(b-a))); return p*p*(3-2*p) end
             local s=V.create('KRONOS',Vector(320,180))
-            assert(s.devour.open>58 and s.impact>s.devour.closed)
-            for f=s.devour.swallowed,s.impact-1 do
-                drawings={}; s.frame=f; V.render(s)
-                for _,d in ipairs(drawings) do assert(d.sheet~=s.before.sheet and d.sheet~=s.after.sheet) end
-            end
+            assert(s.impact==120 and s.duration==170, 'timing comes from the catalog')
+            -- The icon is the Saturn sign turned 232 degrees; the near half of
+            -- the ring therefore passes above the item instead of below it.
+            local ring=D.ring(s,80,320,158,ease)
+            local nx,ny,near=D.point(ring,math.pi/2)
+            assert(near and ny<ring.cy)
+            local _,fy,far=D.point(ring,-math.pi/2)
+            assert(not far and fy>ring.cy)
+            local early,late=D.ring(s,50,320,158,ease),D.ring(s,s.impact-14,320,158,ease)
+            assert(late.rx<early.rx*.5, 'the orbit closes in on the item')
+            assert(D.ring(s,51,320,158,ease).turn-early.turn<late.turn-D.ring(s,s.impact-15,320,158,ease).turn, 'and accelerates')
+            assert(D.white(s,60,ease)==0 and D.white(s,s.impact-1,ease)>.9 and D.white(s,s.impact,ease)==1)
+            assert(D.white(s,s.impact+20,ease)>0 and D.white(s,s.impact+45,ease)==0, 'colours return over 1.5 s')
             p=pickup(); state={}; local custom=T.forItem('KRONOS','positive')
             local before=custom.onBeforeChange(p.Position,p,state)
+            assert(before==s.impact)
             for i=1,before+20 do T.updateAllAnimations() end
             assert(state.morphScene.frame==before-1 and not p.sprite:GetLayer(1):IsVisible())
             T.cancelForPickup(p); p.SubType=555
             local after=custom.onAfterChange(p.Position,p,state)
-            for i=1,after do T.updateAllAnimations(); T.renderAllAnimations() end
+            T.updateAllAnimations(); assert(state.morphScene.frame==s.impact, 'the commit frame itself is shown')
+            for i=2,after do T.updateAllAnimations(); T.renderAllAnimations() end
             assert(#T._activeAnimations==0 and p.sprite.Color.original)
         ''')
 
-    def test_devour_suction_has_no_arms_spin_or_bff_bounce_and_rigid_jaws(self):
+    def test_saturn_pets_fade_in_orbit_both_sides_and_cue_once(self):
         self.lua.execute('''
-            local D=require('scripts.lib.upgrade_devour')
             local s=V.create('KRONOS',Vector(320,180))
-            local previous=100
-            for f=s.devour.first,s.devour.first+20 do
-                local p=D.petPose(s,1,f,320,158)
-                local distance=(p.x-320)^2+(p.y-161)^2
-                assert(distance<=previous*previous)
-                previous=math.sqrt(distance)
-            end
-            for f=0,s.duration do
+            local petPaths={}
+            for _,pet in ipairs(s.pets) do petPaths[pet.path]=true end
+            local function pass(f)
                 s.frame=f; drawings={}; V.render(s)
-                for _,d in ipairs(drawings) do
-                    assert(not d.path:find('conch_upgrade_pixel'), 'no hands or grabbing lines')
-                    assert(d.rotation==0, 'no cartoon spin')
-                    if d.sheet==s.before.sheet and f<s.devour.swallow then
-                        assert(d.scale.X==1 and d.scale.Y==1)
-                    end
-                    if d.path:find('maw_upper') or d.path:find('maw_lower') then
-                        assert(d.scale.X==d.scale.Y, 'teeth must not squash')
-                    end
+                local item,pets=nil,{}
+                for i,d in ipairs(drawings) do
+                    if d.sheet==s.before.sheet or d.sheet==s.after.sheet then item=i end
+                    if petPaths[d.path] then pets[#pets+1]={index=i,alpha=d.alpha} end
+                    if item==i or petPaths[d.path] then assert(d.rotation==0, 'no spinning sprites') end
+                end
+                return item,pets
+            end
+            local _,first=pass(2)
+            assert(#first==0, 'pets do not pop in')
+            local _,fading=pass(14)
+            assert(#fading>0 and fading[1].alpha>0 and fading[1].alpha<1, 'pets fade in slowly')
+            -- They appear already riding the orbit, which turns from the start.
+            local D=require('scripts.lib.upgrade_devour')
+            local function ease(a,b,x) local p=math.max(0,math.min(1,(x-a)/(b-a))); return p*p*(3-2*p) end
+            local ring=D.ring(s,14,320,158,ease)
+            assert(ring.turn>0, 'the orbit is already turning while pets appear')
+            local ox,oy=D.point(ring,ring.turn+math.pi)
+            local first
+            for _,d in ipairs(drawings) do if petPaths[d.path] and not first then first=d end end
+            local scale=.3+.7*ease(4,28,14)
+            assert(math.abs(first.pos.X-ox)<1e-6 and math.abs(first.pos.Y-(oy+10*scale))<1e-6, 'pets appear on the orbit')
+            local behind,ahead=false,false
+            for f=50,s.impact-13 do
+                local item,pets=pass(f)
+                for _,pet in ipairs(pets) do
+                    if pet.index<item then behind=true else ahead=true end
                 end
             end
-            local open=D.mawPose(s,s.devour.swallow)
-            local shut=D.mawPose(s,s.devour.closed)
-            assert(open.gape==1 and shut.gape==0 and open.width==shut.width)
-            assert(open.width>=3*32 and open.yOffset==0 and shut.yOffset==0)
-            assert(s.devour.closed-s.devour.open<=6 and s.devour.gone-s.devour.open<=10)
-            assert(D.mawPose(s,s.devour.gone).alpha==0 and s.impact==s.devour.gone)
-            -- Depth is proved by draw order, not merely a fixed screen Y.
-            s.frame=s.devour.open+1; drawings={}; V.render(s)
-            assert(drawings[#drawings].sheet==s.before.sheet, 'mouth appears behind the heart')
-            s.frame=s.devour.close+1; drawings={}; V.render(s)
-            local sourceIndex,lastJaw
-            for i,d in ipairs(drawings) do
-                if d.sheet==s.before.sheet then
-                    sourceIndex=i; assert(d.pos.X==320 and d.pos.Y==158)
-                    assert(d.scale.X==d.scale.Y, 'heart recedes into depth without vertical dragging')
-                end
-                if d.path:find('maw_upper') then lastJaw=i end
-            end
-            assert(sourceIndex and lastJaw>sourceIndex, 'jaws cross in front only during the bite')
-            for f=s.devour.gone,s.duration do
-                s.frame=f; drawings={}; V.render(s)
-                for _,d in ipairs(drawings) do assert(not d.path:find('maw_'), 'no lingering mouth') end
-            end
+            assert(behind and ahead, 'pets pass behind and in front of the item on the orbit')
+            local _,fused=pass(s.impact-12)
+            assert(#fused==0, 'pets have fused into the ring')
+            local item=select(1,pass(s.impact))
+            assert(drawings[item].sheet==s.after.sheet and drawings[item].scale.X==1.25, 'Kronos lands with a squash')
             sounds={}; shakes=0; s.frame=0
             for f=1,s.duration do V.update(s) end
-            local bites=0
-            for _,sound in ipairs(sounds) do if sound==SoundEffect.SOUND_BONE_SNAP then bites=bites+1 end end
-            assert(bites==1, 'only the final mouth bites; BFF does not chew')
-            assert(#sounds==2 and sounds[1]==SoundEffect.SOUND_PORTAL_OPEN)
-            assert(sounds[2]==SoundEffect.SOUND_BONE_SNAP and shakes==1)
+            assert(#sounds==2 and sounds[1]==SoundEffect.SOUND_MOTHER_SPIN_START and sounds[2]==SoundEffect.SOUND_SUMMONSOUND)
+            assert(shakes==1)
+            sounds={}; V.update(V.create('KRONOS',Vector(320,180),nil,nil,120))
+            assert(#sounds==1 and sounds[1]==SoundEffect.SOUND_SUMMONSOUND, 'a late commit never replays the build-up')
         ''')
-
-    def test_authored_jaws_leave_center_throat_open_in_front_of_bff(self):
-        for part in ('upper', 'lower', 'sides'):
-            tree = ET.parse(ROOT / f'resources/gfx/effects/conch_upgrade_maw_{part}.anm2')
-            self.assertEqual(tree.find('.//Spritesheet').get('Path'), 'conch_upgrade_maw.png')
-            for f in tree.findall('.//LayerAnimation/Frame'):
-                px, py, w, h = [float(f.get(k)) for k in ('XPivot', 'YPivot', 'Width', 'Height')]
-                self.assertFalse(-px <= 0 < w-px and -py <= 0 < h-py,
-                                 'opaque throat crop would hide the heart before the bite')
 
     def test_flood_uses_per_frame_floor_pass_and_fades_without_mutating_room(self):
         self.viewer()
@@ -942,14 +954,14 @@ class MorphVisualTests(unittest.TestCase):
             drawings={}; event(8); assert(#drawings==9); local first=drawings[1].alpha
             for i=1,40 do event(1) end
             drawings={}; event(8); assert(#drawings==9 and drawings[1].alpha>first)
-            for i=1,80 do event(1) end
+            for i=1,110 do event(1) end
             drawings={}; event(8); assert(#drawings==0)
             event(6,'conch_morph','stop'); event(8); assert(#drawings==0)
         ''')
 
     def test_rain_strikes_accumulate_tint_only_before_conversion_and_replay_resets(self):
         self.lua.execute('''
-            for _,key in ipairs({'MONEY_TEAR','TIME_TEAR'}) do
+            for _,key in ipairs({'MONEY_TEAR'}) do
                 local s=V.create(key,Vector(320,180))
                 local function at(f)
                     s.frame=f; drawings={}; V.render(s)
@@ -958,8 +970,9 @@ class MorphVisualTests(unittest.TestCase):
                     end
                     error('missing item')
                 end
-                assert(at(13).color.BO==0, 'original color before the first hit')
-                for _,landing in ipairs({14,22,30,38,46}) do
+                assert(s.impact==96 and at(23).color.BO==0, 'original color before the first hit')
+                -- Five drops spread over the longer wait, 16 ticks apart.
+                for _,landing in ipairs({24,40,56,72,88}) do
                     local before=at(landing-1)
                     local struck=at(landing)
                     local after=at(landing+1)
@@ -973,16 +986,23 @@ class MorphVisualTests(unittest.TestCase):
                         'blue absorption continues between impacts')
                 end
                 local previous=0
-                for f=15,s.impact-1 do
+                for f=25,s.impact-1 do
                     local wet=at(f).color.BO
                     assert(wet>previous and wet<=.35, 'continuous monotonic buildup')
                     previous=wet
                 end
                 assert(at(s.impact-1).color.BO==.35)
-                for _,f in ipairs({s.impact,s.impact+1,s.duration}) do
-                    local after=at(f)
-                    assert(after.sheet==s.after.sheet and after.color.R==1 and after.color.G==1)
-                    assert(after.color.B==1 and after.color.BO==0 and after.color.GO==0)
+                -- The converted item starts as wet as the original ended, then dries.
+                assert(at(s.impact).sheet==s.after.sheet and math.abs(at(s.impact).color.BO-.35)<1e-9)
+                local last=.35
+                for f=s.impact+1,s.impact+45 do
+                    local c=at(f).color
+                    assert(c.BO<=last+1e-12 and last-c.BO<=.35*.05, 'dries gradually after the change')
+                    last=c.BO
+                end
+                for _,f in ipairs({s.impact+45,s.duration}) do
+                    local c=at(f).color
+                    assert(c.R==1 and c.G==1 and c.B==1 and c.BO==0 and c.GO==0, 'fully dry')
                 end
                 assert(at(0).color.R==1 and at(0).color.BO==0, 'replay cannot retain wetness')
             end
@@ -990,7 +1010,7 @@ class MorphVisualTests(unittest.TestCase):
 
     def test_rain_waiting_for_commit_stays_blue_and_cancellation_preserves_pickup_color(self):
         self.lua.execute('''
-            for _,key in ipairs({'MONEY_TEAR','TIME_TEAR'}) do
+            for _,key in ipairs({'MONEY_TEAR'}) do
                 local p=pickup(); local state={}; local custom=T.forItem(key,'positive')
                 local original=p.sprite.Color
                 local function lastNativeColor()
@@ -1000,14 +1020,15 @@ class MorphVisualTests(unittest.TestCase):
                     error('native item was not rendered')
                 end
                 custom.onBeforeChange(p.Position,p,state)
-                for i=1,90 do T.updateAllAnimations() end
+                for i=1,120 do T.updateAllAnimations() end
                 T.renderAllAnimations()
-                assert(state.morphScene.frame==53 and lastNativeColor().BO>0)
+                assert(state.morphScene.frame==95 and lastNativeColor().BO>0)
                 assert(original.original and original.A==0.8, 'source Color never mutated')
                 T.cancelForPickup(p); assert(p.sprite.Color==original)
                 p.SubType=456; custom.onAfterChange(p.Position,p,state); T.renderAllAnimations()
-                assert(state.morphScene.frame==54 and lastNativeColor().BO==0)
-                assert(lastNativeColor().R==1)
+                -- No snap at the commit: the result starts wet and dries afterwards.
+                assert(state.morphScene.frame==96 and math.abs(lastNativeColor().BO-.35)<1e-9)
+                assert(math.abs(lastNativeColor().R-.3)<1e-9)
                 event(3); assert(p.sprite.Color==original and #T._activeAnimations==0)
             end
         ''')
@@ -1291,7 +1312,7 @@ class MorphVisualTests(unittest.TestCase):
             spawnFails=false; spawnReplaced=true; event(6,'conch_morph','dragon')
             assert(not W.isRunning() and not spawned[#spawned]:Exists())
             spawnReplaced=false; event(6,'conch_morph','dragon'); local p=spawned[#spawned]
-            morphFails=true; for i=1,65 do event(1) end
+            morphFails=true; for i=1,90 do event(1) end
             assert(not p:Exists() and not W.isRunning() and #ConchBlessing._upgradeJobs==0 and #T._activeAnimations==0)
             morphFails=false; event(6,'conch_morph','dragon'); p=spawned[#spawned]
             for i=1,7 do event(1) end
@@ -1334,27 +1355,42 @@ class MorphVisualTests(unittest.TestCase):
             local early=aperture(9).alpha
             local dark=aperture(20).alpha
             assert(early>0 and early<dark and dark<1)
-            assert(#veils(44)==0 and #drawings==6, 'one aperture, four edge fills, no early lightning')
-            local hit=veils(45)
+            assert(s.impact==70 and aperture(40).alpha==dark and aperture(69).alpha==dark, 'the darkness holds until the strike')
+            assert(#veils(69)==0 and #drawings==6, 'one aperture, four edge fills, no early lightning')
+            local hit=veils(70)
             assert(#hit==1 and hit[1].color.R>0.9, 'darkness clears exactly on the strike')
             assert(drawings[1].sheet==s.after.sheet, 'conversion exactly at lightning')
-            for f=45,s.duration do assert(not aperture(f), 'no darkness after lightning') end
-            assert(#veils(52)==0 and #drawings==1, 'only the result remains after the brief flash')
-            assert(#veils(75)==0 and #veils(s.duration)==0)
+            for f=70,s.duration do assert(not aperture(f), 'no darkness after lightning') end
+            -- Like the preview: the fixed bolt (glow, core, branch) lasts seven
+            -- ticks, while a pale ground ring spreads and fades for ~16 ticks.
+            local bolt=0
+            veils(70); for _,d in ipairs(drawings) do if d.scale.Y==7 then bolt=bolt+1 end end
+            assert(bolt==5, 'five glow segments of the preview bolt')
+            assert(#veils(77)==0 and #drawings==25, 'after the flash only the result and its ground ring remain')
+            assert(#veils(86)==0 and #drawings==1, 'only the result remains after the ring fades')
+            assert(#veils(100)==0 and #veils(s.duration)==0)
             s.frame=0; sounds={}; pitches={}
-            for f=1,19 do V.update(s) end
-            assert(#sounds==0)
-            V.update(s); assert(#sounds==1 and sounds[1]==SoundEffect.SOUND_THUNDER and pitches[1]<1)
-            for f=21,44 do V.update(s) end
+            V.update(s); assert(#sounds==0)
+            V.update(s); assert(#sounds==1 and sounds[1]==SoundEffect.SOUND_THUNDER and pitches[1]<1, 'the rumble rolls in with the blackout')
+            for f=3,69 do V.update(s) end
             assert(#sounds==1)
-            V.update(s); assert(#sounds==2 and sounds[2]==SoundEffect.SOUND_LIGHTBOLT and pitches[2]==1)
-            for f=46,s.duration do V.update(s) end
+            V.update(s); assert(#sounds==2 and sounds[2]==901 and pitches[2]==1, 'registered nearby strike')
+            for f=71,s.duration do V.update(s) end
             assert(#sounds==2, 'each cue plays once')
-            sounds={}; pitches={}; local late=V.create('DRAGON',Vector(320,180),nil,nil,45)
-            V.update(late); assert(#sounds==1 and sounds[1]==SoundEffect.SOUND_LIGHTBOLT and pitches[1]==1)
-            SoundEffect.SOUND_LIGHTBOLT=nil
-            sounds={}; V.update(V.create('DRAGON',Vector(320,180),nil,nil,45))
-            assert(#sounds==0, 'missing lightning must not substitute thunder or a tech zap')
+            sounds={}; pitches={}; local late=V.create('DRAGON',Vector(320,180),nil,nil,70)
+            V.update(late); assert(#sounds==1 and sounds[1]==901 and pitches[1]==1)
+            -- A build that failed to load content/sounds.xml reports once and
+            -- never substitutes thunder, the electric bolt or a tech zap.
+            testModules['scripts.lib.upgrade_visuals']=nil; V=require('scripts.lib.upgrade_visuals')
+            soundNames={}; errors={}
+            sounds={}; V.update(V.create('DRAGON',Vector(320,180),nil,nil,70))
+            V.update(V.create('DRAGON',Vector(320,180),nil,nil,70))
+            assert(#sounds==0, 'missing strike must not substitute another sound')
+            local reported=0
+            for _,e in pairs(errors) do if tostring(e):find('Thunder Strike',1,true) then reported=reported+1 end end
+            assert(reported==1, 'missing strike reported once')
+            testModules['scripts.lib.upgrade_visuals']=nil; V=require('scripts.lib.upgrade_visuals')
+            soundNames={['Conch Upgrade Thunder Strike']=901,['Conch Upgrade Rain']=902,['Conch Upgrade Clock Tick']=903,['Conch Upgrade Clock Tock']=904,['Conch Upgrade Clock Bell']=905}
         ''')
         self.viewer()
         self.lua.execute('''
@@ -1425,28 +1461,28 @@ class MorphVisualTests(unittest.TestCase):
             for _,d in ipairs(drawings) do assert(d.path~='gfx/1000.031_dr. fetus rocket.anm2') end
         ''')
 
-    def test_clock_completes_one_smooth_turn_then_disappears(self):
+    def test_clock_turns_six_times_six_to_twelve_then_disappears(self):
         self.lua.execute('''
-            local s=V.create('TIME_MONEY',Vector(320,180)); local rotations={}
-            for f=s.impact-28,s.impact do
+            local s=V.create('TIME_MONEY',Vector(320,180)); local rotations={}; local hours={}
+            for f=1,s.impact do
                 s.frame=f; drawings={}; V.render(s)
                 assert(drawings[1].sheet, 'item is behind the clock')
                 local hand=drawings[4]
                 assert(drawings[2].path:find('clock_rim') and drawings[3].path:find('clock_hour'))
                 assert(hand.path:find('clock_minute') and hand.scale.X==2/3 and hand.scale.Y==2/3)
-                rotations[#rotations+1]=hand.rotation
+                rotations[#rotations+1]=hand.rotation; hours[#hours+1]=drawings[3].rotation
             end
             local total=0
             for i=2,#rotations do
-                local step=(rotations[i]-rotations[i-1])%360
-                assert(step>0 and step<20); total=total+step
+                local step=rotations[i]-rotations[i-1]
+                assert(math.abs(step-22.5)<1e-9, 'one constant speed'); total=total+step
             end
-            assert(math.abs(total-360)<.001)
+            -- Frame 0 is fully transparent; the hands already move from 6:00.
+            assert(math.abs(total+22.5-2160)<.001, 'six full minute turns')
+            assert(math.abs(hours[1]-181.875)<1e-9 and math.abs(hours[#hours]-360)<1e-9, 'the hour hand runs from 6 to 12')
             s.frame=s.impact+11; drawings={}; V.render(s)
             assert(drawings[1].sheet==s.after.sheet)
-            for _,d in ipairs(drawings) do
-                assert(d.sheet or d.scale.X<2) -- only the small falling coin remains.
-            end
+            assert(#drawings==1, 'only the converted item remains once the clock has gone')
         ''')
 
     def test_clock_fits_item_box_in_front_for_every_time_item(self):

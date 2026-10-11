@@ -92,6 +92,21 @@ function PickupVisual.center(view, sourcePoint)
     return Vector(pos.X + offset.X + x, pos.Y + offset.Y + y)
 end
 
+-- Tint multiplies and offset adds, like the HTML preview's per-pixel math.
+-- The engine's Color * Color does not document how offsets combine, so the
+-- white of a lerp-to-white must not depend on it. Colorize is kept when the
+-- REPENTOGON getter can read it.
+function PickupVisual.combine(base, mod)
+    local out = Color(base.R * mod.R, base.G * mod.G, base.B * mod.B, base.A * mod.A,
+        base.RO + mod.RO, base.GO + mod.GO, base.BO + mod.BO)
+    if base.GetColorize and out.SetColorize then
+        local c = base:GetColorize()
+        local amount = c and (c.A or c[4]) or 0
+        if amount ~= 0 then out:SetColorize(c.R or c[1], c.G or c[2], c.B or c[3], amount) end
+    end
+    return out
+end
+
 function PickupVisual.render(view, x, y, sx, sy, color, rotation)
     if view.released or not view.visible then return end
     local s, layer = view.sprite, view.sprite:GetLayer(view.id)
@@ -102,7 +117,7 @@ function PickupVisual.render(view, x, y, sx, sy, color, rotation)
     local ok, err = pcall(function()
         s.Scale = Vector(previousScale.X * (sx or 1), previousScale.Y * (sy or sx or 1))
         s.Rotation = previousRotation + (rotation or 0)
-        s.Color = previousColor * color
+        s.Color = PickupVisual.combine(previousColor, color)
         layer:SetVisible(view.visible)
         local cx, cy = spriteCenter(view)
         s:RenderLayer(view.id, Vector(x - cx, y - cy))

@@ -726,6 +726,7 @@ ConchBlessing.ItemData = {
             tearCollision = "soflam.onTearCollision",
             postEntityTakeDmg = "soflam.onPostEntityTakeDamage",
             update = "soflam.onUpdate",
+            preSfxPlay = "soflam.onPreSfxPlay",
             postNewRoom = "soflam.onNewRoom",
             gameStarted = "soflam.onGameStarted"
         },
@@ -1930,6 +1931,14 @@ do
     local ok, err = pcall(require, "scripts.dev.locale_probe")
     if not ok then
         ConchBlessing.printError("[LocaleProbe] load failed: " .. tostring(err))
+    end
+end
+
+-- Dev tooling: registers the conch_test morph upgrade-presentation bench. Safe to remove.
+do
+    local ok, err = pcall(require, "scripts.dev.morph_probe")
+    if not ok then
+        ConchBlessing.printError("[MorphProbe] load failed: " .. tostring(err))
     end
 end
 

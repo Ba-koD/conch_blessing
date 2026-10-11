@@ -1,0 +1,18 @@
+<sounds root="sfx/">
+	<!-- Upgrade presentation sounds; generate_upgrade_visual_assets.py writes the samples. -->
+	<sound name="Conch Upgrade Thunder Strike">
+		<sample weight="1" path="conch_upgrade_thunder_strike.wav" />
+	</sound>
+	<sound name="Conch Upgrade Rain">
+		<sample weight="1" path="conch_upgrade_rain.wav" />
+	</sound>
+	<sound name="Conch Upgrade Clock Tick">
+		<sample weight="1" path="conch_upgrade_clock_tick.wav" />
+	</sound>
+	<sound name="Conch Upgrade Clock Tock">
+		<sample weight="1" path="conch_upgrade_clock_tock.wav" />
+	</sound>
+	<sound name="Conch Upgrade Clock Bell">
+		<sample weight="1" path="conch_upgrade_clock_bell.wav" />
+	</sound>
+</sounds>

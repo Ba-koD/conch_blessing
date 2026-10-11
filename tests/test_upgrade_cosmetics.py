@@ -30,7 +30,9 @@ class UpgradeCosmeticsTests(unittest.TestCase):
                 local result={}
                 for k,v in pairs(a) do result[k]=type(v)=='number' and v+(b[k]-v)*t or v end
                 return result
-            end}, {__call=function(_,...) return {...} end})
+            end}, {__call=function(_,r,g,b,a,ro,go,bo)
+                return {R=r,G=g,B=b,A=a or 1,RO=ro or 0,GO=go or 0,BO=bo or 0}
+            end})
             SoundEffect={SOUND_HOLY=1,SOUND_POWERUP_SPEWER=2}
             function SFXManager() return {
                 Stop=function() error('stops unrelated playback of this sound ID') end,
@@ -47,7 +49,7 @@ class UpgradeCosmeticsTests(unittest.TestCase):
                 visuals[#visuals+1]=s; return s
             end})
             function pickup()
-                local p={alive=true,sprite={Color={original=true}}}
+                local p={alive=true,sprite={Color={R=1,G=1,B=1,A=.8,RO=0,GO=0,BO=0,original=true}}}
                 function p:Exists() return self.alive end
                 function p:GetSprite() return self.sprite end
                 return p
@@ -127,6 +129,19 @@ class UpgradeCosmeticsTests(unittest.TestCase):
             T.neutral.onBeforeChange(pos,p,data)
             assert(old.lightSprite==nil and #T._activeAnimations==1)
             callbacks[2](); assert(visuals[1].renders==0)
+        ''')
+
+    def test_debug_mode_logs_default_cue_and_engine_playback(self):
+        self.lua.execute('''
+            local logs={}; ConchBlessing.printDebug=function(t) logs[#logs+1]=t end
+            T.neutral.onBeforeChange(pos,p,data)
+            for _,line in ipairs(logs) do assert(not line:find('SOUND',1,true), 'debug off logs no cue') end
+            ConchBlessing.Config={debugMode=true}; logs={}
+            T.cancelForPickup(p); T.positive.onBeforeChange(pos,p,data)
+            local found
+            for _,line in ipairs(logs) do if line:find('[Upgrade] SOUND',1,true) then found=line end end
+            assert(found=='[Upgrade] SOUND positive id=1 volume=0.70 playing=unknown', tostring(found))
+            ConchBlessing.Config=nil
         ''')
 
 

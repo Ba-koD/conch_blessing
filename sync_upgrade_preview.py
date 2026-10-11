@@ -28,14 +28,23 @@ def synchronize(check=False):
             row['effectAnchor'] = [float(value[1]) for value in anchor]
         else:
             row.pop('effectAnchor', None)
+        # Both renderers read the impact and scene length from the catalog.
+        for field in ('impact', 'duration'):
+            value = re.search(field + r'\s*=\s*(\d+)', entries[row['key']])
+            if value:
+                row[field] = int(value[1])
+            else:
+                row.pop(field, None)
     data = json.dumps(rows, ensure_ascii=False, separators=(',', ':'))
     updated = html[:match.start(2)] + data + html[match.end(2):]
     # Reuse authored runtime art and ANM2 geometry in the standalone preview.
     def read_data(key):
         return json.loads(re.search(r'id="' + key + r'"[^>]*>(.*?)</script>', updated, re.S)[1])
     assets, animations = read_data('room-assets'), read_data('effect-animations')
-    assets['mawJaw'] = 'data:image/png;base64,' + base64.b64encode(
-        (ROOT / 'resources/gfx/effects/conch_upgrade_maw.png').read_bytes()).decode('ascii')
+    # The retired Kronos mouth no longer ships; drop its embedded copies.
+    assets.pop('mawJaw', None)
+    for key in ('maw_all', 'maw_upper', 'maw_lower', 'maw_sides'):
+        animations.pop(key, None)
     def frames(node):
         return [{k: (v == 'true' if v in ('true', 'false') else float(v))
                  for k, v in frame.attrib.items()} for frame in node.findall('Frame')]
@@ -50,9 +59,7 @@ def synchronize(check=False):
                           ('targetSheet0', 'gfx/effects/effect_000_target.png'),
                           ('targetSheet1', 'gfx/effects/effect_000_target_line.png')]:
         assets[key] = 'data:image/png;base64,' + base64.b64encode((VANILLA / relative).read_bytes()).decode('ascii')
-    definitions = [(f'maw_{p}', ROOT / f'resources/gfx/effects/conch_upgrade_maw_{p}.anm2', 'mawJaw', None)
-                   for p in ('all', 'upper', 'lower', 'sides')]
-    definitions += [(f'clock_{p}', ROOT / f'resources/gfx/effects/conch_upgrade_clock_{p}.anm2', 'clockArt', None)
+    definitions = [(f'clock_{p}', ROOT / f'resources/gfx/effects/conch_upgrade_clock_{p}.anm2', 'clockArt', None)
                     for p in ('rim', 'minute', 'hour')]
     definitions += [('spotlight', ROOT / 'resources/gfx/effects/conch_upgrade_spotlight.anm2', 'spotlight', None),
                     ('halo', ROOT / 'resources/gfx/effects/conch_upgrade_halo.anm2', 'halo', None),
@@ -66,10 +73,29 @@ def synchronize(check=False):
                        for layer in animation.findall('./LayerAnimations/LayerAnimation')]}
     sounds = read_data('effect-audio')
     sounds.pop('mawInhale', None)
-    for key, relative in [('lock', 'sfx/feedback/beep.wav'), ('wing', 'sfx/v2/angel_wing1.wav'),
-                          ('holy', 'sfx/feedback/holy!.wav'), ('bite', 'sfx/Bone Snap.wav'),
-                          ('thunder', 'sfx/thunder1.wav'), ('lightning', 'sfx/V2/light_bolt_02.wav')]:
-        sounds[key] = 'data:audio/wav;base64,' + base64.b64encode((VANILLA / relative).read_bytes()).decode('ascii')
+    # Embed every sample of the SoundEffect the game plays; the engine picks
+    # one of several at random, and the preview does the same.
+    registry = (VANILLA / 'sounds.xml').read_text(encoding='utf-8')
+
+    def sample(relative):
+        folder, name = (VANILLA / 'sfx' / relative).parent, Path(relative).name
+        match = [entry for entry in folder.iterdir() if entry.name.lower() == name.lower()]
+        assert len(match) == 1, 'missing vanilla sample ' + relative
+        return 'data:audio/wav;base64,' + base64.b64encode(match[0].read_bytes()).decode('ascii')
+    for key, sound_id in [('lock', 855), ('wing', 275), ('holy', 54), ('bite', 462), ('thunder', 472),
+                          ('candle', 471), ('flame', 483), ('freeze', 496), ('launch', 537),
+                          ('impact', 587), ('inhale', 957),
+                          # Kronos concept comparison (HTML only until one is chosen).
+                          ('scythes', 695), ('swing', 538), ('plant', 463), ('spin', 636),
+                          ('gulp', 157), ('summon', 265), ('holeOpen', 947), ('holeExit', 948)]:
+        entry = re.search(r'<sound id="%d">(.*?)</sound>' % sound_id, registry, re.S)
+        samples = [sample(relative) for relative in re.findall(r'path="([^"]+)"', entry[1])]
+        sounds[key] = samples[0] if len(samples) == 1 else samples
+    sounds.pop('shine', None)
+    # The game plays these exact single samples through content/sounds.xml.
+    for key, name in [('lightning', 'thunder_strike'), ('rain', 'rain'), ('tick', 'clock_tick'), ('tock', 'clock_tock'), ('bell', 'clock_bell')]:
+        sounds[key] = 'data:audio/wav;base64,' + base64.b64encode(
+            (ROOT / f'resources/sfx/conch_upgrade_{name}.wav').read_bytes()).decode('ascii')
     for key, value in [('room-assets', assets), ('effect-animations', animations), ('effect-audio', sounds)]:
         updated = re.sub(r'(id="' + key + r'"[^>]*>)(.*?)(</script>)',
                          lambda m: m[1] + json.dumps(value, ensure_ascii=False, separators=(',', ':')) + m[3],

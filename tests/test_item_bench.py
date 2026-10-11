@@ -421,6 +421,17 @@ class BenchTests(unittest.TestCase):
             package.loaded['scripts.dev.stat_rounding_probe']={execute=function(params) rounding=params end}
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','rng 2000 luck 5'); assert(rng=='2000 luck 5')
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','rounding sweep 6'); assert(rounding=='sweep 6')
+            local listed=0
+            package.loaded['scripts.dev.morph_probe']={list=function() listed=listed+1; return {'a','b'} end,
+                commandFor=function(word)
+                    if word==nil then return 'conch_test morph' end
+                    if word=='kronos' then return 'conch_test morph kronos' end
+                end}
+            started=nil; dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','morph'); assert(started=='conch_test morph')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','morph kronos'); assert(started=='conch_test morph kronos')
+            started=nil; dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','morph list'); assert(listed==1 and started==nil)
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','morph live_eye'); assert(started==nil,'pending item has no applied bench')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','morph kronos extra'); assert(started==nil,'trailing words rejected')
             bench.isRunning=function() return true end
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','rng 9'); assert(rng=='2000 luck 5')
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','kronos detail caption 9'); assert(helper=='caption 8')
@@ -681,6 +692,38 @@ class BenchTests(unittest.TestCase):
             assert(check(player,ctx))
             ctx.target.HitPoints=100000; assert(not check(player,ctx)) -- a spawned but harmless missile
             ctx.target.HitPoints=99989.5; assert(not check(player,ctx)) -- stale 3.5 damage
+        """)
+
+    def test_soflam_lock_warning_oracle_uses_engine_playback(self):
+        self.run_lua("""
+            package.loaded['scripts.lib.damage_provenance']={hasAppliedDamageCallback=function() return true end}
+            C=require('scripts.dev.item_test_combat')
+            SoundEffect=SoundEffect or {}; SoundEffect.SOUND_DR_REMOTE_WARNING=855
+            local playing=false
+            SFXManager=function() return {IsPlaying=function(_,id) assert(id==855); return playing end} end
+            local checks,waits={},{}
+            local plan=setmetatable({check=function(label,fn) checks[label]=fn end,
+                waitUntil=function(fn,_,label) waits[label]=fn end},
+                {__index=function() return function() end end})
+            C.SOFLAM.stage(plan,7,1)
+            local reticle=checks['lock-on warning plays as the reticle appears; silent when removed']
+            local landing=checks['lock-on warning does not replay when the missile lands']
+            local listen=waits['listen after the missile lands']
+            assert(reticle and landing and listen)
+            local function fresh() return {warningStarts=0,warningPlaying=false} end
+            local ctx=fresh(); playing=true; assert(reticle(player,ctx))
+            playing=false; local done
+            for _=1,10 do done=listen(player,ctx) end
+            assert(done and landing(player,ctx), 'one warning, then silence at landing')
+            ctx=fresh(); playing=true; reticle(player,ctx)
+            playing=false; listen(player,ctx); playing=true; listen(player,ctx)
+            assert(not landing(player,ctx), 'a replay at landing is caught')
+            ctx=fresh(); playing=false; assert(not reticle(player,ctx), 'a silent reticle is caught')
+            checks={}; C.SOFLAM.stage(plan,7,0)
+            local removed=checks['lock-on warning plays as the reticle appears; silent when removed']
+            assert(checks['lock-on warning does not replay when the missile lands']==nil)
+            ctx=fresh(); assert(removed(player,ctx))
+            ctx=fresh(); playing=true; assert(not removed(player,ctx), 'a warning without the item is caught')
         """)
 
     def test_lua_syntax(self):

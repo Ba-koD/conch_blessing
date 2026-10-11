@@ -246,6 +246,15 @@ end, stage = function(plan,_,n)
     plan.act(function(_,ctx) if ctx.target then ctx.target:Remove();ctx.target=nil end end)
 end }
 
+-- SFXManager reports whether the lock-on sample is actually playing, which is
+-- engine evidence independent of SOFLAM's own sound callbacks.
+local function trackLockWarning(ctx)
+    local id=SoundEffect.SOUND_DR_REMOTE_WARNING
+    local playing=id~=nil and SFXManager():IsPlaying(id)
+    if playing and not ctx.warningPlaying then ctx.warningStarts=(ctx.warningStarts or 0)+1 end
+    ctx.warningPlaying=playing
+end
+
 C.SOFLAM = { prepare = function(plan)
     plan.act(function(player)
         for _=1,200 do player:AddCollectible(CollectibleType.COLLECTIBLE_LUCKY_FOOT,0,false) end
@@ -265,18 +274,34 @@ end, stage = function(plan,_,n)
         ctx.target=H.target(player)
         ctx.procDamage=player.Damage
         ctx.strikesBefore=#ConchBlessing.soflam._pendingStrikes
+        ctx.warningStarts=0;ctx.warningPlaying=false
     end)
     H.fireWeaponAtTarget(plan,n>0 and "laser" or "tear")
     plan.check("one strike per real attack, independent of item copies; zero when removed",function(_,ctx)
         return H.expect(#ConchBlessing.soflam._pendingStrikes-ctx.strikesBefore,n>0 and 1 or 0)
+    end)
+    plan.check("lock-on warning plays as the reticle appears; silent when removed",function(_,ctx)
+        if not SoundEffect.SOUND_DR_REMOTE_WARNING then return nil,"lock-on warning sound unavailable" end
+        trackLockWarning(ctx)
+        return H.expect(ctx.warningStarts,n>0 and 1 or 0)
     end)
     plan.wait(2)
     plan.act(function(_,ctx) ctx.hpBeforeStrike=ctx.target.HitPoints end)
     if n>0 then
         plan.waitUntil(function(_,ctx)
             ctx.target.Position=ctx.weaponTargetPosition; ctx.target.Velocity=Vector.Zero
+            trackLockWarning(ctx)
             return ctx.target.HitPoints<ctx.hpBeforeStrike and #ConchBlessing.soflam._pendingStrikes==ctx.strikesBefore
         end,120,"laser-designated missile actually damages target and finishes")
+        -- The bomb explodes after the strike settles; keep listening past it.
+        plan.waitUntil(function(_,ctx)
+            trackLockWarning(ctx); ctx.warningTail=(ctx.warningTail or 0)+1
+            return ctx.warningTail>=10
+        end,12,"listen after the missile lands")
+        plan.check("lock-on warning does not replay when the missile lands",function(_,ctx)
+            if not SoundEffect.SOUND_DR_REMOTE_WARNING then return nil,"lock-on warning sound unavailable" end
+            return ctx.warningStarts==1,"warning starts="..tostring(ctx.warningStarts).." expected=1"
+        end)
         plan.check("actual missile HP loss is three times current damage",function(_,ctx)
             local actual,expected=ctx.hpBeforeStrike-ctx.target.HitPoints,ctx.procDamage*3
             return math.abs(actual-expected)<=math.max(0.02,expected*0.002),"HP loss="..actual.." expected="..expected

@@ -28,6 +28,14 @@ ConchBlessing.soflam.data = {
 
 -- Active strikes list (persists across frames within a room)
 ConchBlessing.soflam._pendingStrikes = ConchBlessing.soflam._pendingStrikes or {}
+-- Detonation bombs that have not exploded yet (runtime references only).
+ConchBlessing.soflam._liveBombs = ConchBlessing.soflam._liveBombs or {}
+
+-- Strike lifecycle lines for log.txt; formatted only while debug mode is on.
+local function debugLog(format, ...)
+    if not (ConchBlessing.Config and ConchBlessing.Config.debugMode) then return end
+    ConchBlessing.printDebug("[SOFLAM] " .. string.format(format, ...))
+end
 
 -- ===================================================================
 -- Utility helpers
@@ -258,7 +266,11 @@ local function detonateAtPosition(player, position, inheritedProvenance)
         bomb.IsFetus = true
         if bomb.SetExplosionCountdown then
             bomb:SetExplosionCountdown(0)
+            table.insert(ConchBlessing.soflam._liveBombs, bomb)
+            debugLog("detonation bomb variant=%d damage=%.2f mrMega=%d radiusMultiplier=%.3f explodes next update",
+                bombVariant, damage, mrMegaCount, bomb.RadiusMultiplier or 1)
         else
+            debugLog("detonation without countdown: direct explosion damage=%.2f mrMega=%d", damage, mrMegaCount)
             local customScale = 1
             if customRadius > 0 then
                 customScale = naturalRadius / customRadius
@@ -285,6 +297,8 @@ local function detonateAtPosition(player, position, inheritedProvenance)
         local radius=getBombRadiusFromDamage(100)
         if mrMegaCount>0 then radius=radius*(ConchBlessing.soflam.data.mrMegaRadiusMultiplier or 1.5) end
         local scale=radius/getBombRadiusFromDamage(damage)
+        debugLog("detonation without a bomb entity: fallback explosion damage=%.2f mrMega=%d scale=%.3f",
+            damage, mrMegaCount, scale)
         DamageProvenance.withTriggeredSource(player, PROC_KEY, inheritedProvenance, PROC_ORIGIN, function()
             game:BombExplosionEffects(
                 position,
@@ -319,6 +333,19 @@ local function queueStrike(player, npc, inheritedProvenance)
 
     local sfx = SFXManager()
     sfx:Play(SoundEffect.SOUND_BIRD_FLAP, 0.6, 0, false, 1.5)
+    -- The lock-on warning (Doctor's Remote's beeping) sounds the moment the
+    -- reticle appears instead of only when the missile is already falling.
+    local warning = SoundEffect.SOUND_DR_REMOTE_WARNING
+    if warning then
+        ConchBlessing.soflam._playingLockWarning = true
+        local ok, err = pcall(sfx.Play, sfx, warning, 0.8, 0, false, 1)
+        ConchBlessing.soflam._playingLockWarning = false
+        if ok then
+            debugLog("lock-on warning played at the reticle")
+        else
+            ConchBlessing.printError("SOFLAM lock-on warning failed: " .. tostring(err))
+        end
+    end
 
     table.insert(ConchBlessing.soflam._pendingStrikes, {
         phase             = "lockon",
@@ -333,12 +360,17 @@ local function queueStrike(player, npc, inheritedProvenance)
         remainingRockets  = rocketCount,
         inheritedProvenance = inheritedProvenance,
     })
+    debugLog("strike queued target=%s.%s seed=%s rockets=%d lockOn=%d crosshair=%s",
+        tostring(npc.Type), tostring(npc.Variant), tostring(npc.InitSeed), rocketCount,
+        ConchBlessing.soflam.data.lockOnDelayFrames or 120, crosshair and "spawned" or "missing")
 end
 
 local function startRocketFall(strike, player)
     strike.phase = "rocket"
     strike.countdown = ConchBlessing.soflam.data.rocketTravelFrames or 15
     strike.rocketEffect = spawnRocketEffect(strike.lastKnownPosition, player, strike.inheritedProvenance)
+    debugLog("rocket falls remaining=%d travel=%d visual=%s", strike.remainingRockets or 1,
+        strike.countdown, strike.rocketEffect and "spawned" or "missing")
 end
 
 -- ===================================================================
@@ -355,10 +387,14 @@ end
 
 local function clearPendingStrikes()
     local strikes = ConchBlessing.soflam._pendingStrikes
+    if #strikes > 0 or #(ConchBlessing.soflam._liveBombs or {}) > 0 then
+        debugLog("cleared %d pending strikes and %d live bombs", #strikes, #(ConchBlessing.soflam._liveBombs or {}))
+    end
     for i = #strikes, 1, -1 do
         removeStrikeEffects(strikes[i])
         strikes[i] = nil
     end
+    ConchBlessing.soflam._liveBombs = {}
 end
 
 -- ===================================================================
@@ -458,6 +494,7 @@ ConchBlessing.soflam.onUpdate = function(_)
 
         -- Remove if room changed
         if strike.roomIndex ~= roomIndex then
+            debugLog("strike dropped: room changed")
             removeStrikeEffects(strike)
             table.remove(strikes, i)
             goto continue
@@ -466,6 +503,7 @@ ConchBlessing.soflam.onUpdate = function(_)
         -- Remove if player no longer has the item
         local player = findPlayerByInitSeed(strike.playerInitSeed)
         if not (player and player:HasCollectible(SOFLAM_ID)) then
+            debugLog("strike dropped: owner no longer holds SOFLAM")
             removeStrikeEffects(strike)
             table.remove(strikes, i)
             goto continue
@@ -558,6 +596,39 @@ ConchBlessing.soflam.onGameStarted = function(_)
             end
         end
     end
+end
+
+-- The vanilla rocket and Epic Fetus bomb replay the same warning when the
+-- missile lands. SOFLAM already warns when its reticle appears, so cancel
+-- every warning it did not play itself from the reticle until its detonation
+-- bomb has exploded; the bomb explodes on its own update after the strike has
+-- settled. A Doctor's Remote used in that same moment would also lose its
+-- warning; that overlap is rare.
+local function soflamStrikeActive()
+    if #(ConchBlessing.soflam._pendingStrikes or {}) > 0 then return "strike" end
+    local bombs = ConchBlessing.soflam._liveBombs or {}
+    for i = #bombs, 1, -1 do
+        if bombs[i]:Exists() then return "bomb" end
+        table.remove(bombs, i)
+        debugLog("detonation bomb exploded; %d still live", #bombs)
+    end
+    return nil
+end
+ConchBlessing.soflam.onPreSfxPlay = function(_, soundId)
+    local warning = SoundEffect.SOUND_DR_REMOTE_WARNING
+    local isWarning = warning ~= nil and soundId == warning
+    -- With debug mode on, every sound during a strike is logged so an
+    -- unexpected repeat can be identified by its SoundEffect ID.
+    local debug = ConchBlessing.Config and ConchBlessing.Config.debugMode
+    if (not isWarning and not debug) or ConchBlessing.soflam._playingLockWarning then return nil end
+    local active = soflamStrikeActive()
+    if not active then return nil end
+    if isWarning then
+        debugLog("cancelled engine lock-on warning during %s", active)
+        return false
+    end
+    debugLog("sound %s played during %s", tostring(soundId), active)
+    return nil
 end
 
 -- Test hooks for scripts/dev/rng_probe.lua. Pure helpers, no gameplay use.
