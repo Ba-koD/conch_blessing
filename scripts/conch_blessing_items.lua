@@ -1155,6 +1155,13 @@ ConchBlessing.ItemData = {
 ConchBlessing.Locale = require("scripts.locale.init")
 ConchBlessing.Locale.applyItemData(ConchBlessing.ItemData)
 
+-- Cards and runes have their own registry, apart from ItemData, so a card ID is
+-- never read as a collectible (scripts/conch_blessing_pockets.lua).
+do
+    local ok, err = pcall(require, "scripts.conch_blessing_pockets")
+    if not ok then ConchBlessing.printError("[Pockets] load failed: " .. tostring(err)) end
+end
+
 --[[
 Capricorn(염소자리)
 ↑ {{Heart}}최대 체력 +1
@@ -1949,6 +1956,14 @@ do
     local ok, err = pcall(require, "scripts.dev.liveeye_probe")
     if not ok then
         ConchBlessing.printError("[LiveEyeProbe] load failed: " .. tostring(err))
+    end
+end
+
+-- Dev tooling: registers the conch_test thurisaz rune bench. Safe to remove.
+do
+    local ok, err = pcall(require, "scripts.dev.thurisaz_probe")
+    if not ok then
+        ConchBlessing.printError("[ThurisazProbe] load failed: " .. tostring(err))
     end
 end
 

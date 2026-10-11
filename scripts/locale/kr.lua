@@ -681,6 +681,19 @@ return {
             },
         },
     },
+    -- Pocket items (cards and runes), keyed like ConchBlessing.PocketData.
+    pockets = {
+        THURISAZ = {
+            name = "투리사즈",
+            description = "포식",
+            eid = {
+                "사용 시 내가 가진 펫 중 무작위 3마리를 {own:KRONOS} 크로노스처럼 흡수합니다",
+                "#흡수한 펫마다 {{Damage}} 공격력 +2와 그 펫의 고유 능력을 영구히 얻습니다 (크로노스가 없어도 유지)",
+                "#3마리보다 적으면 있는 만큼 흡수합니다",
+                "#{{Warning}} REPENTOGON 권장",
+            },
+        },
+    },
     ui = {
         real_eyes = {
             prediction = "예측: %s",

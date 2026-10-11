@@ -203,6 +203,11 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
         if case then out("Usage: conch_test locale"); return end
         TestBench.start("conch_test locale",true); return
     end
+    if action == "thurisaz" then
+        if case then out("Usage: conch_test thurisaz"); return end
+        if Game():GetNumPlayers() ~= 1 then out("Start a single-player test run first."); return end
+        TestBench.start("conch_test thurisaz",true); return
+    end
     if action == "morph" then
         local loaded, Morph = pcall(require, "scripts.dev.morph_probe")
         if not loaded then out("FAIL morph bench unavailable: " .. tostring(Morph)); return end
@@ -262,6 +267,7 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
         end
         out("For individual cases: conch_test ITEM list (example: conch_test kronos list).")
         out("Short names: conch_test appraisal, conch_test belt. Shared checks: conch_test locale, conch_test morph [ITEM | default | list], conch_test rng [samples] [luck N].")
+        out("Pocket items: conch_test thurisaz (the Kronos rune).")
         out("Stat math: conch_test rounding [multiplier | sweep [stacks]] [pN].")
         return
     end

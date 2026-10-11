@@ -17,9 +17,9 @@ class EntityDefinitionsTests(unittest.TestCase):
                                'entity': {'variant': 777}, 'anm2': 'time_money.anm2'}}
         with tempfile.TemporaryDirectory() as folder, contextlib.redirect_stdout(io.StringIO()):
             path = Path(folder) / 'entities2.xml'
-            generate_xml.create_entities2_xml(items, str(path), definitions)
+            generate_xml.create_entities2_xml(items, str(path), definitions, {})
             first = path.read_bytes()
-            generate_xml.create_entities2_xml(items, str(path), definitions)
+            generate_xml.create_entities2_xml(items, str(path), definitions, {})
             self.assertEqual(first, path.read_bytes())
             rows = ET.parse(path).getroot().findall('entity')
             self.assertEqual(len(rows), 2)

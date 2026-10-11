@@ -148,7 +148,7 @@ return {
         },
         KRONOS = {
             name = "Kronos",
-            description = "Devours its offspring",
+            description = "Devours its family",
             eid = {
                 "Absorbs familiars to gain their unique abilities and 2 damage.",
                 "#Some familiars cannot be absorbed according to the exclusion list.",
@@ -693,6 +693,19 @@ return {
                     "25% chance for the Angel Treasure Room to be blessed: one extra {{AngelRoom}}Angel Room item and an {{EternalHeart}}Eternal Heart",
                     "33% chance for the Angel Treasure Room to be blessed: one extra {{AngelRoom}}Angel Room item and an {{EternalHeart}}Eternal Heart",
                 },
+            },
+        },
+    },
+    -- Pocket items (cards and runes), keyed like ConchBlessing.PocketData.
+    pockets = {
+        THURISAZ = {
+            name = "Thurisaz",
+            description = "Devour",
+            eid = {
+                "Absorbs 3 random familiars you have, like {own:KRONOS} Kronos",
+                "#Each absorbed familiar permanently grants {{Damage}} +2 damage and its unique ability, even without Kronos",
+                "#With fewer than 3, absorbs those you have",
+                "#{{Warning}} REPENTOGON recommended",
             },
         },
     },

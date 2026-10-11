@@ -10,6 +10,9 @@ Prints every problem and exits 1 if there is one. It checks that
     language has an entry for an item that does not exist
   * every other language mirrors English line for line: the same fields, the same
     number of EID lines, the same synergy lines and the same specials
+  * every card and rune in scripts/items/cards/definitions.lua has an English name,
+    description and EID lines under pockets (the name is its pocketitems.xml name),
+    and every language mirrors them; no language has a pocket entry that does not exist
   * each synergy entry in ItemData names an English line, and each English line is used
   * icon tokens resolve: {c:}, {t:} and {card:} names exist in the game's enums.lua
     (checked when the mod sits in the game's mods folder), {own:KEY} is an ItemData key
@@ -35,6 +38,8 @@ ENUMS_PATH = os.path.normpath(os.path.join(ROOT, "..", "..", "resources", "scrip
 FALLBACK = "en"
 ENGLISH_ONLY = ("ui.mcm",)
 ITEM_FIELDS = ("name", "description", "eid", "synergies", "specials")
+POCKETS_PATH = os.path.join(ROOT, "scripts", "items", "cards", "definitions.lua")
+POCKET_FIELDS = ("name", "description", "eid")
 ICON = re.compile(r"\{(\w+):([^{}]+)\}")
 DYNAMIC = re.compile(r"%([A-Z_]+)%")
 ENUM_TABLES = {"c": ("CollectibleType", "COLLECTIBLE_"), "t": ("TrinketType", "TRINKET_"), "card": ("Card", "CARD_")}
@@ -337,6 +342,8 @@ def main():
             if not english_only(path) and path not in ui:
                 error("%s.lua: %s is missing" % (lang, path))
 
+    check_pockets(tables)
+
     glyphs = read_caption_glyphs()
     if glyphs is None:
         error("%s is missing; run python generate_caption_glyphs.py" % os.path.relpath(CAPTION_GLYPHS_PATH, ROOT))
@@ -352,6 +359,37 @@ def main():
     return finish(tables, registry)
 
 
+def check_pockets(tables):
+    """Cards and runes: pockets.<KEY> text for every registry entry, in every language."""
+    registry = lua_data.load(POCKETS_PATH)
+    en_pockets = tables[FALLBACK].get("pockets", {})
+    for key in registry:
+        entry = en_pockets.get(key)
+        if not isinstance(entry, dict) or not all(isinstance(entry.get(f), str) for f in ("name", "description")) \
+                or not isinstance(entry.get("eid"), list):
+            error("en.lua: pockets.%s needs a name, a description and eid lines (the name is its "
+                  "pocketitems.xml name)" % key)
+    for lang, table in tables.items():
+        pockets = table.get("pockets", {})
+        for key, entry in pockets.items():
+            if key not in registry:
+                error("%s.lua: pockets.%s is not a card in scripts/items/cards/definitions.lua" % (lang, key))
+            elif not isinstance(entry, dict):
+                error("%s.lua: pockets.%s should be a table" % (lang, key))
+            else:
+                for field in entry:
+                    if field not in POCKET_FIELDS:
+                        error("%s.lua: pockets.%s.%s is not a text field (%s)" % (lang, key, field, ", ".join(POCKET_FIELDS)))
+        if lang != FALLBACK:
+            for key, en_entry in en_pockets.items():
+                if key not in pockets:
+                    error("%s.lua: pockets.%s is missing" % (lang, key))
+                    continue
+                found = shape_diff(en_entry, pockets[key], "pockets." + key)
+                if found:
+                    error("%s.lua: %s" % (lang, found))
+
+
 def finish(tables, registry):
     for message in errors:
         print(message)
@@ -359,7 +397,9 @@ def finish(tables, registry):
         print("check_locale: %d problem(s)" % len(errors))
         return 1
     lines = sum(len(info["synergies"]) for info in registry.values())
-    print("check_locale: OK (%s; %d items, %d synergy lines)" % (", ".join(tables), len(registry), lines))
+    pockets = len(lua_data.load(POCKETS_PATH))
+    print("check_locale: OK (%s; %d items, %d pocket items, %d synergy lines)"
+          % (", ".join(tables), len(registry), pockets, lines))
     return 0
 
 

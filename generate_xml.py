@@ -271,6 +271,102 @@ def parse_pool_array(pool_data):
     print(f"  Final pools: {pools}")
     return pools
 
+# Cards and runes: their own data-only registry, apart from ItemData.
+POCKET_DEFINITIONS_PATH = "scripts/items/cards/definitions.lua"
+POCKET_RESOURCES = "resources/gfx"
+POCKET_FRAME = 32
+POCKET_HUD_X = 64   # pocket-slot art sits third on each card's spritesheet
+POCKET_FIELDS = {"type", "pickup", "hud", "anm2", "gfx", "mimiccharge", "script"}
+
+
+def load_pockets(definitions_path=POCKET_DEFINITIONS_PATH, locale_path=LOCALE_EN_PATH):
+    """Card/rune definitions in registry order, with their English name and
+    description from the locale file. Fails on anything the game would misread."""
+    definitions = lua_data.load(definitions_path)
+    text = lua_data.load(locale_path).get("pockets", {})
+    pockets, pickups, huds = {}, set(), set()
+    for key, definition in definitions.items():
+        if not isinstance(definition, dict) or set(definition) != POCKET_FIELDS:
+            raise ValueError(f"pocket {key}: fields must be exactly {sorted(POCKET_FIELDS)}")
+        entry = text.get(key) if isinstance(text, dict) else None
+        name = entry.get("name") if isinstance(entry, dict) else None
+        description = entry.get("description") if isinstance(entry, dict) else None
+        if not isinstance(name, str) or not name or not isinstance(description, str):
+            raise ValueError(f"pocket {key}: needs a name and description under pockets in {locale_path}")
+        if definition["type"] not in ("rune", "card"):
+            raise ValueError(f"pocket {key}: type must be rune or card")
+        pickup, charge = definition["pickup"], definition["mimiccharge"]
+        if type(pickup) is not int or pickup < 1000 or pickup in pickups:
+            raise ValueError(f"pocket {key}: pickup must be a unique subtype of 1000 or more")
+        if type(charge) is not int or charge < 0:
+            raise ValueError(f"pocket {key}: mimiccharge must be a whole number")
+        for field, suffix in (("anm2", ".anm2"), ("gfx", ".png")):
+            path = definition[field]
+            if not isinstance(path, str) or not path.endswith(suffix) or ".." in path or ":" in path:
+                raise ValueError(f"pocket {key}: invalid {field}")
+            if not os.path.isfile(os.path.join(POCKET_RESOURCES, path)):
+                raise ValueError(f"pocket {key}: {POCKET_RESOURCES}/{path} is missing (run generate_rune_assets.py)")
+        if not isinstance(definition["hud"], str) or not definition["hud"] or definition["hud"] in huds:
+            raise ValueError(f"pocket {key}: hud must be a unique animation name")
+        pickups.add(pickup)
+        huds.add(definition["hud"])
+        pockets[key] = {**definition, "name": name, "description": description}
+    return pockets
+
+
+def create_pocketitems_xml(pockets, output_path):
+    """content/pocketitems.xml: one <rune>/<card> per registry entry, in order,
+    since the engine numbers modded cards in file order."""
+    root = ET.Element("pocketitems")
+    for pocket in pockets.values():
+        elem = ET.SubElement(root, "rune" if pocket["type"] == "rune" else "card")
+        for field in ("type", "name", "description", "hud", "pickup", "mimiccharge"):
+            elem.set(field, str(pocket[field]))
+    xml_str = minidom.parseString(ET.tostring(root)).toprettyxml(indent="    ")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(xml_str)
+    print(f"pocketitems.xml created: {output_path}")
+
+
+def create_card_fronts_anm2(pockets, output_path):
+    """content/gfx/ui_cardfronts.anm2: the pocket-slot art the `hud` names,
+    read from each card's own spritesheet under resources/gfx."""
+    root = ET.Element("AnimatedActor")
+    ET.SubElement(root, "Info", CreatedBy="ConchBlessing", Version="20", Fps="30")
+    content = ET.SubElement(root, "Content")
+    sheets = ET.SubElement(content, "Spritesheets")
+    layers = ET.SubElement(content, "Layers")
+    layer_of = {}
+    for pocket in pockets.values():
+        if pocket["gfx"] not in layer_of:
+            index = str(len(layer_of))
+            ET.SubElement(sheets, "Spritesheet", Id=index, Path="../../" + POCKET_RESOURCES + "/" + pocket["gfx"])
+            ET.SubElement(layers, "Layer", Id=index, Name=pocket["hud"], SpritesheetId=index)
+            layer_of[pocket["gfx"]] = index
+    ET.SubElement(content, "Nulls")
+    ET.SubElement(content, "Events")
+    first = next(iter(pockets.values()))["hud"] if pockets else ""
+    animations = ET.SubElement(root, "Animations", DefaultAnimation=first)
+    frame = dict(XPosition="0", YPosition="0", XScale="100", YScale="100", Delay="1", Visible="true",
+                 RedTint="255", GreenTint="255", BlueTint="255", AlphaTint="255",
+                 RedOffset="0", GreenOffset="0", BlueOffset="0", Rotation="0", Interpolated="false")
+    for pocket in pockets.values():
+        animation = ET.SubElement(animations, "Animation", Name=pocket["hud"], FrameNum="1", Loop="false")
+        ET.SubElement(ET.SubElement(animation, "RootAnimation"), "Frame", **frame)
+        track = ET.SubElement(ET.SubElement(animation, "LayerAnimations"), "LayerAnimation",
+                              LayerId=layer_of[pocket["gfx"]], Visible="true")
+        ET.SubElement(track, "Frame", **frame, XPivot=str(POCKET_FRAME // 2), YPivot=str(POCKET_FRAME // 2),
+                      XCrop=str(POCKET_HUD_X), YCrop="0", Width=str(POCKET_FRAME), Height=str(POCKET_FRAME))
+        ET.SubElement(animation, "NullAnimations")
+        ET.SubElement(animation, "Triggers")
+    ET.indent(root, space="  ")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(ET.tostring(root, encoding="unicode") + "\n")
+    print(f"ui_cardfronts.anm2 created: {output_path}")
+
+
 def load_english_names(path=LOCALE_EN_PATH):
     """item key -> English name, read from the locale file without running Lua"""
     entries = lua_data.load(path).get("items", {})
@@ -582,8 +678,9 @@ def parse_lua_file(file_path):
     
     return items
 
-def create_entities2_xml(items, output_path, extra_entities=None):
-    """Generate familiar rows plus the separate, data-only entity definitions."""
+def create_entities2_xml(items, output_path, extra_entities=None, pockets=None):
+    """Generate familiar rows, each card's floor pickup row, and the separate,
+    data-only entity definitions."""
     root = ET.Element("entities")
     root.set("anm2root", "gfx/")
     root.set("version", "5")
@@ -630,6 +727,18 @@ def create_entities2_xml(items, output_path, extra_entities=None):
         gibs_elem = ET.SubElement(entity_elem, "gibs")
         for k, default_val in defaults.items():
             gibs_elem.set(k, str(gibs_data.get(k, default_val)))
+
+    # A card's floor sprite: the pickup row (id 5, variant 300) whose subtype is
+    # the card's `pickup` in pocketitems.xml. Physics match the vanilla cards.
+    if pockets is None:
+        pockets = load_pockets()
+    for pocket in pockets.values():
+        ET.SubElement(root, "entity", {
+            "name": f"Conch Blessing {pocket['name']}", "id": "5", "variant": "300",
+            "subtype": str(pocket["pickup"]), "anm2path": pocket["anm2"], "baseHP": "0", "boss": "0",
+            "champion": "0", "collisionDamage": "0", "collisionMass": "3", "collisionRadius": "12",
+            "friction": "1", "numGridCollisionPoints": "24", "shadowSize": "16", "stageHP": "0",
+        })
 
     if extra_entities is None:
         extra_entities = lua_data.load("scripts/entities/definitions.lua")
@@ -1132,8 +1241,12 @@ def main():
     create_items_xml(items, items_xml_path)
     create_costumes_xml(items, "content/costumes2.xml")
     create_itempools_xml(items, itempools_xml_path)
+    # Cards and runes: pocketitems.xml, their pickup rows and pocket-slot art.
+    pockets = load_pockets()
+    create_pocketitems_xml(pockets, "content/pocketitems.xml")
+    create_card_fronts_anm2(pockets, "content/gfx/ui_cardfronts.anm2")
     # Create entities2.xml for familiars/entities
-    create_entities2_xml(items, entities2_xml_path)
+    create_entities2_xml(items, entities2_xml_path, pockets=pockets)
     create_death_items_anm2(items, death_items_anm2_path)
     
     # Generate death_items.png from individual item images.

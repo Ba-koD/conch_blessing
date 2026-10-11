@@ -3,7 +3,8 @@
 --   * loads those tables (English is the fallback for anything missing),
 --   * turns item icon tokens into EID markup,
 --   * fills ConchBlessing.ItemData's name/description/eid/synergies/specials in
---     the language-keyed tables the EID and HUD code read,
+--     the language-keyed tables the EID and HUD code read, and likewise the
+--     pocket items (cards and runes) of ConchBlessing.PocketData from pockets.<KEY>,
 --   * serves UI strings through Locale.text / Locale.textIn / Locale.linesIn.
 --
 -- Icon tokens, resolved when the text is read. A token is the markup alone, so
@@ -194,6 +195,28 @@ local ITEM_TEXT_FIELDS = { "name", "description", "eid" }
 local function itemEntry(lang, itemKey)
     local tbl = Locale.tables[lang]
     return tbl and type(tbl.items) == "table" and tbl.items[itemKey] or nil
+end
+
+--- Fill every pocket item's name, description and EID lines from pockets.<KEY>.
+--- Pocket items are cards and runes, kept apart from ItemData so a card ID is
+--- never mistaken for a collectible with the same number.
+function Locale.applyPocketData(pocketData)
+    Locale.pocketData = pocketData
+    for key, data in pairs(pocketData) do
+        if type(data) == "table" then
+            for _, field in ipairs(ITEM_TEXT_FIELDS) do
+                local byLang = {}
+                for lang, tbl in pairs(Locale.tables) do
+                    local entry = type(tbl.pockets) == "table" and tbl.pockets[key] or nil
+                    if entry and entry[field] ~= nil then byLang[lang] = expandDeep(entry[field]) end
+                end
+                if next(byLang) then data[field] = byLang end
+            end
+            if not (type(data.name) == "table" and data.name[Locale.FALLBACK]) then
+                printError(key .. " has no English name under pockets in scripts/locale/en.lua")
+            end
+        end
+    end
 end
 
 --- Fill every item's text fields from the locale tables. ItemData keeps only

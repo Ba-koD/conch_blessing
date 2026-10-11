@@ -446,6 +446,77 @@ local function findKronosOwner()
     return nil
 end
 
+-- The main chunk sits at Lua's 200-local limit, so the helpers added for
+-- Thurisaz share this one table.
+local Rune = {}
+
+-- Thurisaz (the rune) devours familiars for good, with or without Kronos. Its
+-- ledger is the player's own run save, so losing Kronos never hands them back:
+-- { absorbed = { fam_<id> = n }, generic = n, grants = { fam_<id> = n } }.
+-- `generic` counts familiars with no collectible behind them (blue flies,
+-- wisps...), which give only the flat damage; `grants` counts conversion items.
+function Rune.ledger(player, create)
+    local sm = ConchBlessing.SaveManager
+    if not (player and sm and type(sm.GetRunSave) == "function") then return nil end
+    local save = sm.GetRunSave(player)
+    if type(save) ~= "table" then return nil end
+    if create and type(save.thurisaz) ~= "table" then
+        save.thurisaz = { absorbed = {}, generic = 0, grants = {} }
+    end
+    local ledger = save.thurisaz
+    if type(ledger) ~= "table" then return nil end
+    if type(ledger.absorbed) ~= "table" then ledger.absorbed = {} end
+    if type(ledger.grants) ~= "table" then ledger.grants = {} end
+    return ledger
+end
+
+function Rune.count(player, famId)
+    local ledger = Rune.ledger(player, false)
+    if not ledger then return 0 end
+    return math.max(0, math.floor(tonumber(ledger.absorbed["fam_" .. tostring(famId)]) or 0))
+end
+
+-- Hit and collision callbacks ask every frame, so the total is kept for the
+-- frame; a rune absorption or a new run drops it at once. A Glowing Hourglass
+-- rewind of the run save is picked up on the next frame.
+Rune.totals = {}
+function Rune.total(player)
+    if not player then return 0 end
+    local key = GetPtrHash(player)
+    local game = Game()
+    local frame = game.GetFrameCount and game:GetFrameCount() or nil
+    local cached = Rune.totals[key]
+    if frame and cached and cached.frame == frame then return cached.total end
+    local total = 0
+    local ledger = Rune.ledger(player, false)
+    if ledger then
+        total = math.max(0, math.floor(tonumber(ledger.generic) or 0))
+        for _, count in pairs(ledger.absorbed) do
+            total = total + math.max(0, math.floor(tonumber(count) or 0))
+        end
+    end
+    Rune.totals[key] = { frame = frame, total = total }
+    return total
+end
+
+-- Absorbed abilities work for a Kronos holder and for anyone Thurisaz fed.
+function Rune.hasEffects(player)
+    return player ~= nil and (player:HasCollectible(KRONOS_ID) or Rune.total(player) > 0)
+end
+
+-- Shared absorbed-ability state (floor serial, room-clear counters, Paschal
+-- earnings) has one owner: the Kronos holder first, else a player Thurisaz fed.
+function Rune.effectOwner()
+    local owner = findKronosOwner()
+    if owner then return owner end
+    local game = Game()
+    for i = 0, game:GetNumPlayers() - 1 do
+        local player = game:GetPlayer(i)
+        if player and Rune.total(player) > 0 then return player end
+    end
+    return nil
+end
+
 local function clearKronosRuntime(player)
     if not player then return end
 
@@ -583,17 +654,31 @@ local function getTemporaryCount(rs, famId)
     return count
 end
 
+-- Kronos's ledger, floor picks and temporary sources count only while Kronos is
+-- held; Thurisaz's familiars count for their own player with or without it.
 local function getEffectCountBeforeBox(player, famId)
+    if not player then return 0 end
+    local holds = player:HasCollectible(KRONOS_ID)
+    local count = Rune.count(player, famId)
+    if not (holds or Rune.total(player) > 0) then return 0 end
     local rs = getRunSave(player)
-    if not rs then return 0 end
-    local absorbed = ConchBlessing.kronos._getAbsorbedCount(player, famId)
-    local count = absorbed + getFloorPickCount(rs, famId) + getTemporaryCount(rs, famId)
-        + absorbed * (roomTemp.twins[famId] or 0)
+    if not rs then return count end
+    count = count + getFloorPickCount(rs, famId)
+    if holds then
+        local absorbed = ConchBlessing.kronos._getAbsorbedCount(player, famId)
+        count = count + absorbed + getTemporaryCount(rs, famId)
+            + absorbed * (roomTemp.twins[famId] or 0)
+    end
     return count
 end
 
+-- Box of Friends doubles absorbed abilities only for a Kronos holder.
+function Rune.boxDouble(player)
+    return player and player:HasCollectible(KRONOS_ID) and roomTemp.double or 0
+end
+
 function ConchBlessing.kronos._getEffectCount(player, famId)
-    return getEffectCountBeforeBox(player, famId) * (1 + roomTemp.double)
+    return getEffectCountBeforeBox(player, famId) * (1 + Rune.boxDouble(player))
 end
 
 function ConchBlessing.kronos._getRoomTemporary()
@@ -1490,7 +1575,7 @@ end
 -- too. When the absorption expires, stop renewing and let the engine expire it.
 local STAR_AURA_GRACE_FRAMES = 3
 function ConchBlessing.kronos._maintainStarOfBethlehemAura(player)
-    if not player or not player:HasCollectible(KRONOS_ID)
+    if not Rune.hasEffects(player)
         or ConchBlessing.kronos._getEffectCount(player, CollectibleType.COLLECTIBLE_STAR_OF_BETHLEHEM) <= 0 then
         return false
     end
@@ -1665,6 +1750,18 @@ ConchBlessing.kronos.onPickup = function(_, player, collectibleType)
     if changed then ConchBlessing.kronos._finalizeAbsorb(player) end
 end
 
+-- Pinned stand-ins and other per-update upkeep for every absorbed ability.
+function Rune.runAbsorbActions(player)
+    local absorbActions = ConchBlessing.kronos.data.absorbActions
+    if not absorbActions then return end
+    for familiarId, action in pairs(absorbActions) do
+        local count = ConchBlessing.kronos._getEffectCount(player, familiarId)
+        if count > 0 and type(action) == "function" then
+            action(player, count, 0)
+        end
+    end
+end
+
 ConchBlessing.kronos.onPlayerUpdate = function(_, player)
     if not player then return end
 
@@ -1687,15 +1784,7 @@ ConchBlessing.kronos.onPlayerUpdate = function(_, player)
         ConchBlessing.kronos._syncAbsorbedDamage(player)
 
         -- Auto-execute absorbActions for all absorbed familiars
-        local absorbActions = ConchBlessing.kronos.data.absorbActions
-        if absorbActions then
-            for familiarId, action in pairs(absorbActions) do
-                local count = ConchBlessing.kronos._getEffectCount(player, familiarId)
-                if count > 0 and type(action) == "function" then
-                    action(player, count, 0)
-                end
-            end
-        end
+        Rune.runAbsorbActions(player)
     elseif pdata.__kronosHadCollectible then
         pdata.__kronosHadCollectible = false
         clearKronosRuntime(player)
@@ -1710,6 +1799,11 @@ ConchBlessing.kronos.onPlayerUpdate = function(_, player)
             ConchBlessing.kronos._revertAll(player)
         end
     end
+    -- Thurisaz's familiars keep working without Kronos.
+    if not player:HasCollectible(KRONOS_ID) and Rune.total(player) > 0 then
+        ConchBlessing.kronos._syncAbsorbedDamage(player)
+        Rune.runAbsorbActions(player)
+    end
 end
 
 -- Room entry is where the pinned Star of Bethlehem aura kept dropping out, so a
@@ -1721,13 +1815,13 @@ ConchBlessing.kronos.onNewRoom = function()
     local game = Game()
     for i = 0, game:GetNumPlayers() - 1 do
         local player = game:GetPlayer(i)
-        if player and player:HasCollectible(KRONOS_ID) then
+        if player and Rune.hasEffects(player) then
             if ConchBlessing.kronos._getEffectCount(player, CollectibleType.COLLECTIBLE_STAR_OF_BETHLEHEM) > 0 then
                 ConchBlessing.kronos._ensureStarOfBethlehemStack(player, true)
                 ConchBlessing.kronos._updateStarOfBethlehemAnchors(player)
             end
             ConchBlessing.kronos._topUpMongoMinisaacs(player)
-            ConchBlessing.kronos._scanTwins(player)
+            if player:HasCollectible(KRONOS_ID) then ConchBlessing.kronos._scanTwins(player) end
         end
     end
     ConchBlessing.kronos._payLostSoulReward()
@@ -1735,7 +1829,7 @@ end
 
 ConchBlessing.kronos.onEvaluateCache = function(_, player, cacheFlag)
     if not player then return end
-    if not player:HasCollectible(KRONOS_ID) then return end
+    if not Rune.hasEffects(player) then return end
     
     -- Grant flying ability when Seraphim is absorbed
     if cacheFlag == CacheFlag.CACHE_FLYING then
@@ -1770,7 +1864,7 @@ ConchBlessing.kronos.onEvaluateCache = function(_, player, cacheFlag)
         if rs then
             -- Earned Paschal tears are permanent while absorbed; Box only
             -- multiplies their current application, never the saved earnings.
-            bonusSPS = bonusSPS + (tonumber(rs.paschalHundredths) or 0) / 100 * (1 + roomTemp.double)
+            bonusSPS = bonusSPS + (tonumber(rs.paschalHundredths) or 0) / 100 * (1 + Rune.boxDouble(player))
         end
         if bonusSPS > 0 and ConchBlessing.stats and ConchBlessing.stats.tears and ConchBlessing.stats.tears.applyAddition then
             ConchBlessing.stats.tears.applyAddition(player, bonusSPS, nil)
@@ -1799,8 +1893,10 @@ ConchBlessing.kronos.onGameStarted = function(_)
     -- first MC_POST_NEW_LEVEL of a run fires before it, while SaveManager can still
     -- expose the previous run's table.
     ConchBlessing.kronos._runReady = true
+    for key in pairs(Rune.totals) do Rune.totals[key] = nil end
     local player = findKronosOwner()
     if not player then
+        -- _revertAll also settles Thurisaz's familiars, which outlive Kronos.
         local firstPlayer = Isaac.GetPlayer(0)
         if firstPlayer then
             ConchBlessing.kronos._revertAll(firstPlayer)
@@ -1914,11 +2010,36 @@ end
 -- Absorbed-effect state that only means something while Kronos is held.
 local EFFECT_STATE_KEYS = { "spared", "floorPicks", "paschalHundredths", "milkSerial", "clearCounters", "lostSoulRewardPending",
     "tempFloor", "tempPermanent", "prettyFlies" }
+-- Ability state Thurisaz's familiars keep using after Kronos is gone, and the
+-- familiar each one belongs to. Floor picks are drawn again for what remains.
+Rune.KEPT_STATE = {
+    paschalHundredths = CollectibleType.COLLECTIBLE_PASCHAL_CANDLE,
+    milkSerial = CollectibleType.COLLECTIBLE_MILK,
+    lostSoulRewardPending = CollectibleType.COLLECTIBLE_LOST_SOUL,
+}
+
+function Rune.keeps(famId)
+    local game = Game()
+    for i = 0, game:GetNumPlayers() - 1 do
+        local player = game:GetPlayer(i)
+        if player and Rune.count(player, famId) > 0 then return true end
+    end
+    return false
+end
 
 local function clearEffectState(rs)
     local cleared = false
     for _, key in ipairs(EFFECT_STATE_KEYS) do
-        if rs[key] ~= nil then
+        if key == "clearCounters" and type(rs.clearCounters) == "table" then
+            for counterKey in pairs(rs.clearCounters) do
+                local famId = tonumber(tostring(counterKey):match("^fam_(%d+)$"))
+                if not (famId and Rune.keeps(famId)) then
+                    rs.clearCounters[counterKey] = nil
+                    cleared = true
+                end
+            end
+            if next(rs.clearCounters) == nil then rs.clearCounters = nil end
+        elseif rs[key] ~= nil and not (Rune.KEPT_STATE[key] and Rune.keeps(Rune.KEPT_STATE[key])) then
             rs[key] = nil
             cleared = true
         end
@@ -1926,7 +2047,7 @@ local function clearEffectState(rs)
     return cleared
 end
 
-function ConchBlessing.kronos._revertAll(player)
+function Rune.revertKronos(player)
     clearKronosRuntime(player)
     local rs = getRunSave(player)
     if not rs or not rs.absorbed then return false end
@@ -2019,6 +2140,19 @@ function ConchBlessing.kronos._revertAll(player)
     end
 
     return false
+end
+
+--- Kronos is gone: hand back what it held. Thurisaz's familiars were never
+--- Kronos's, so their damage (withdrawn with the shared contribution) and floor
+--- picks are settled again for whoever still has them.
+function ConchBlessing.kronos._revertAll(player)
+    local reverted = Rune.revertKronos(player)
+    local owner = Rune.effectOwner()
+    if owner then
+        ConchBlessing.kronos._ensureFloorPicks(owner)
+        refreshEffectCaches()
+    end
+    return reverted
 end
 
 ConchBlessing.kronos.onFamiliarUpdate = function(_, fam)
@@ -2173,7 +2307,7 @@ end
 -- Also track actual firing direction from tear velocity for Angelic Prism positioning
 ConchBlessing.kronos.onFireTear = function(_, tear)
     local player = tear.SpawnerEntity and tear.SpawnerEntity:ToPlayer() or nil
-    if not player or not player:HasCollectible(KRONOS_ID) then return end
+    if not Rune.hasEffects(player) then return end
     
     -- Track actual tear firing direction (360 degrees, accurate for analog sticks and items like Marked)
     local pdata = player:GetData()
@@ -2430,7 +2564,7 @@ end
 -- a proc, and each proc's output carries its key so nothing it causes re-enters it.
 local function tryAttackProc(source, extraSource, procKey, chanceFor, rngItem, apply)
     local attackEntity, player, provenance = DamageProvenance.getEligiblePlayerAttack(source, extraSource, procKey)
-    if not (attackEntity and player and player:HasCollectible(KRONOS_ID)) then return end
+    if not (attackEntity and Rune.hasEffects(player)) then return end
     local chance = chanceFor(player)
     if chance <= 0 then return end
     if not DamageProvenance.tryClaimAttackProc(attackEntity, procKey) then return end
@@ -2495,7 +2629,7 @@ local function applyHitEffects(npc, source, extraSource)
     local effectCount = ConchBlessing.kronos._getEffectCount
 
     local _, player = DamageProvenance.getEligiblePlayerAttack(source, extraSource, STATUS_KEY)
-    if player and player:HasCollectible(KRONOS_ID) then
+    if Rune.hasEffects(player) then
         if effectCount(player, CollectibleType.COLLECTIBLE_LIL_HAUNT) > 0 then
             npc:AddFear(EntityRef(player), STATUS_FRAMES)
         end
@@ -2660,7 +2794,7 @@ local function processPendingHurts()
     pendingHurts = {}
     for _, entry in pairs(batch) do
         local player = entry.player
-        if player and player:Exists() and player:HasCollectible(KRONOS_ID) then
+        if player and player:Exists() and Rune.hasEffects(player) then
             for _ = 1, math.min(entry.count, 3) do
                 runHurtEffects(player)
             end
@@ -2671,7 +2805,7 @@ end
 -- Gemini: contact damage from the player to touching enemies, rate-limited per enemy.
 ConchBlessing.kronos.onPrePlayerCollision = function(_, player, collider)
     local npc = collider and collider:ToNPC()
-    if not (npc and player and player:HasCollectible(KRONOS_ID)) then return end
+    if not (npc and Rune.hasEffects(player)) then return end
     if not isHostileTarget(npc) then return end
     local copies = ConchBlessing.kronos._getEffectCount(player, CollectibleType.COLLECTIBLE_GEMINI)
     if copies <= 0 then return end
@@ -2720,7 +2854,7 @@ end
 ConchBlessing.kronos.onEntityTakeDamage = function(_, entity, amount, flags, source, countdown)
     local player = entity and entity:ToPlayer()
     if player then
-        if not player:HasCollectible(KRONOS_ID) then return end
+        if not Rune.hasEffects(player) then return end
         if source and source.Type == EntityType.ENTITY_PROJECTILE then
             local chance = getProjectileBlockChance(getProjectileBlockCounts(player),
                 ConchBlessing.kronos._getPrettyFlyCount(player))
@@ -2750,7 +2884,7 @@ ConchBlessing.kronos.onPostEntityTakeDamage = function(_, entity, amount, _flags
     if not entity then return end
     local player = entity:ToPlayer()
     if player then
-        if player:HasCollectible(KRONOS_ID) then queueHurt(player) end
+        if Rune.hasEffects(player) then queueHurt(player) end
         return
     end
     if (tonumber(amount) or 0) <= 0 then return end
@@ -2782,7 +2916,7 @@ end
 -- MC_PRE_SPAWN_CLEAN_AWARD. The absorbed pool is shared by every Kronos holder,
 -- so a room clear pays out once. The engine's award RNG is left untouched.
 ConchBlessing.kronos.onRoomClear = function(_, _rng, spawnPosition)
-    local player = findKronosOwner()
+    local player = Rune.effectOwner()
     if not player then return end
     local rs = getRunSave(player)
     if not rs then return end
@@ -2826,7 +2960,7 @@ ConchBlessing.kronos.onRoomClear = function(_, _rng, spawnPosition)
         local game = Game()
         for i = 0, game:GetNumPlayers() - 1 do
             local holder = game:GetPlayer(i)
-            if holder and holder:HasCollectible(KRONOS_ID) then
+            if holder and Rune.hasEffects(holder) then
                 holder:AddCacheFlags(CacheFlag.CACHE_FIREDELAY)
                 holder:EvaluateItems()
             end
@@ -2843,7 +2977,7 @@ refreshEffectCaches = function()
     local game = Game()
     for i = 0, game:GetNumPlayers() - 1 do
         local holder = game:GetPlayer(i)
-        if holder and holder:HasCollectible(KRONOS_ID) then
+        if holder and Rune.hasEffects(holder) then
             ConchBlessing.kronos._syncAbsorbedDamage(holder)
             holder:AddCacheFlags(CacheFlag.CACHE_DAMAGE | CacheFlag.CACHE_FIREDELAY | CacheFlag.CACHE_SPEED | CacheFlag.CACHE_FLYING)
             holder:EvaluateItems()
@@ -2859,7 +2993,7 @@ function ConchBlessing.kronos._ensureFloorPicks(player)
     if not rs then return false end
     local wanted = 0
     for _, id in ipairs(FLOOR_PICK_SOURCES) do
-        wanted = wanted + ConchBlessing.kronos._getAbsorbedCount(player, id)
+        wanted = wanted + ConchBlessing.kronos._getAbsorbedCount(player, id) + Rune.count(player, id)
     end
     local serial = tonumber(rs.floorSerial) or 0
     local current = rs.floorPicks
@@ -2887,7 +3021,7 @@ end
 ConchBlessing.kronos.onNewLevel = function()
     if not ConchBlessing.kronos._runReady then return end
     ConchBlessing.kronos._resetRoomTemporary()
-    local player = findKronosOwner()
+    local player = Rune.effectOwner()
     if not player then return end
     local rs = getRunSave(player)
     if not rs then return end
@@ -2915,7 +3049,7 @@ end
 
 function ConchBlessing.kronos._payLostSoulReward()
     if not ConchBlessing.kronos._runReady then return end
-    local player = findKronosOwner()
+    local player = Rune.effectOwner()
     if not player then return end
     local rs = getRunSave(player)
     local pending = rs and math.floor(tonumber(rs.lostSoulRewardPending) or 0) or 0
@@ -3113,9 +3247,12 @@ function ConchBlessing.kronos._syncAbsorbedDamage(player)
     if not (player and um and type(um.SetItemAddition) == "function") then return end
     local rs = getRunSave(player)
     if not rs then return end
-    local copies = player:HasCollectible(KRONOS_ID)
+    local holds = player:HasCollectible(KRONOS_ID)
+    local copies = holds
         and (math.max(0, tonumber(rs.totalAbsorbed) or 0)
             + ConchBlessing.kronos._getTemporaryDamageCopies(player)) or 0
+    -- Thurisaz's familiars, with or without Kronos (Box doubles them under Kronos).
+    copies = copies + Rune.total(player) * (1 + Rune.boxDouble(player))
     local wanted = copies * ConchBlessing.kronos.STATS.DAMAGE_PER_FAMILIAR
     local state = ConchBlessing.getUnifiedMultiplierState(player, um)
     local entry = state and state.itemAdditions and state.itemAdditions[KRONOS_ID]
@@ -4252,6 +4389,7 @@ ConchBlessing.kronos.onPreGameExit = function()
     pendingHurts = {}
     transferEffects = {}
     stompVisuals = {}
+    for key in pairs(Rune.totals) do Rune.totals[key] = nil end
 end
 
 -- Test/diagnostic hooks for the RNG and Kronos probes.
@@ -4346,6 +4484,161 @@ ConchBlessing.kronos._test = {
     CLEAR_REWARD_INTERVAL = CLEAR_REWARD_INTERVAL,
 }
 
+-- ------------------------------------------------------------ Thurisaz
+-- Kronos's own stand-ins (pinned anchors, Mongo's Minisaacs) are not the
+-- player's familiars to devour.
+Rune.ANCHOR_KEYS = { "__kronosTwistedPair", "__kronosIncubus", "__kronosSuccubus", "__kronosCenser",
+    "__kronosStarOfBethlehem", "__kronosBloodshotEye", "__kronosAngelicPrism", "__kronosMongoMinisaac" }
+
+function Rune.isKronosAnchor(fam)
+    local data = fam:GetData()
+    for _, key in ipairs(Rune.ANCHOR_KEYS) do
+        if data[key] then return true end
+    end
+    return false
+end
+
+-- The collectible behind a live familiar (REPENTOGON): `itemId` when it is a
+-- familiar collectible, `iconId` for any item (a wisp's active) to draw.
+function Rune.familiarItemOf(fam)
+    local ok, config = pcall(fam.GetItemConfig, fam)
+    if not (ok and config) then return nil, nil end
+    local id = tonumber(config.ID)
+    if not id or id <= 0 then return nil, nil end
+    if config.Type == ItemType.ITEM_FAMILIAR then return id, id end
+    return nil, id
+end
+
+--- What Thurisaz can devour for `player`: each of their familiars in the room,
+--- temporary ones included. Without REPENTOGON's familiar-to-item lookup only
+--- their owned familiar collectibles count, one entry per copy.
+function ConchBlessing.kronos.runeCandidates(player)
+    local candidates = {}
+    if not player then return candidates end
+    local owner = GetPtrHash(player)
+    local blacklist = ConchBlessing.kronos.data.blacklist or {}
+    local familiars, mapped = {}, true
+    for _, entity in ipairs(Isaac.FindByType(EntityType.ENTITY_FAMILIAR)) do
+        local fam = entity:ToFamiliar()
+        if fam and fam:Exists() and not fam:IsDead() and fam.Player and GetPtrHash(fam.Player) == owner
+            and not Rune.isKronosAnchor(fam) then
+            familiars[#familiars + 1] = fam
+            mapped = mapped and type(fam.GetItemConfig) == "function"
+        end
+    end
+    if mapped then
+        for _, fam in ipairs(familiars) do
+            local itemId, iconId = Rune.familiarItemOf(fam)
+            if not (itemId and blacklist[itemId]) then
+                candidates[#candidates + 1] = { familiar = fam, itemId = itemId, iconId = iconId }
+            end
+        end
+        return candidates
+    end
+    local owned = countOwnedFamiliarCollectibles(player)
+    local ids = {}
+    for id in pairs(owned) do
+        if not blacklist[id] then ids[#ids + 1] = id end
+    end
+    table.sort(ids)
+    for _, id in ipairs(ids) do
+        for _ = 1, owned[id] do
+            candidates[#candidates + 1] = { itemId = id, iconId = id }
+        end
+    end
+    return candidates
+end
+
+-- A familiar Kronos would turn into an item does so here as well, within the
+-- same limits, counted per player over the run; the item is the player's to keep.
+function Rune.grantConversion(player, ledger, itemId)
+    local conversion = ConchBlessing.kronos.data.familiarToItemMap[itemId]
+    if type(conversion) ~= "table" or type(conversion.itemId) ~= "number" then return end
+    local key = "fam_" .. tostring(itemId)
+    local granted = math.max(0, math.floor(tonumber(ledger.grants[key]) or 0))
+    local maxGrants = math.max(0, math.floor(tonumber(conversion.maxGrants) or 0))
+    if maxGrants > 0 and granted >= maxGrants then return end
+    player:AddCollectible(conversion.itemId, 0, true)
+    ledger.grants[key] = granted + 1
+end
+
+-- Take one candidate away from the player and enter it in the rune ledger.
+-- A temporary copy goes before an owned one, and the engine retires the
+-- familiar of a removed collectible itself. Returns false when it is gone.
+function Rune.devourOne(player, ledger, pick)
+    local fam, itemId = pick.familiar, pick.itemId
+    if fam and not fam:Exists() then return false end
+    if itemId then
+        local effects = player:GetEffects()
+        if effects:GetCollectibleEffectNum(itemId) > 0 then
+            effects:RemoveCollectibleEffect(itemId, 1)
+            if fam then fam:Remove() end
+        elseif player:GetCollectibleNum(itemId, true) > 0 then
+            player:RemoveCollectible(itemId)
+        elseif fam then
+            fam:Remove()
+        else
+            return false
+        end
+        local key = "fam_" .. tostring(itemId)
+        ledger.absorbed[key] = math.max(0, math.floor(tonumber(ledger.absorbed[key]) or 0)) + 1
+        Rune.grantConversion(player, ledger, itemId)
+    else
+        fam:Remove()
+        ledger.generic = math.max(0, math.floor(tonumber(ledger.generic) or 0)) + 1
+    end
+    if fam then
+        Isaac.Spawn(EntityType.ENTITY_EFFECT, EffectVariant.POOF02, 0, fam.Position, Vector.Zero, nil)
+    end
+    return true
+end
+
+--- Thurisaz: devour up to `count` of `player`'s familiars, chosen by
+--- randomInt(n) -> 0..n-1, for good. Returns how many were taken.
+function ConchBlessing.kronos.devourWithRune(player, count, randomInt)
+    if not player then return 0 end
+    local picks = pickRandomCopies(ConchBlessing.kronos.runeCandidates(player), count, randomInt)
+    if #picks == 0 then
+        dbg("Thurisaz: no familiar to devour")
+        return 0
+    end
+    local ledger = Rune.ledger(player, true)
+    if not ledger then return 0 end
+    local taken, devoured = 0, {}
+    for _, pick in ipairs(picks) do
+        if Rune.devourOne(player, ledger, pick) then
+            taken = taken + 1
+            devoured[#devoured + 1] = pick
+        end
+    end
+    if taken == 0 then return 0 end
+    Rune.totals[GetPtrHash(player)] = nil
+    ConchBlessing.SaveManager.Save()
+    local actions = ConchBlessing.kronos.data.absorbActions or {}
+    for _, pick in ipairs(devoured) do
+        local fn = pick.itemId and actions[pick.itemId]
+        if type(fn) == "function" then
+            pcall(fn, player, ConchBlessing.kronos._getEffectCount(player, pick.itemId), 1)
+        end
+        if pick.iconId then ConchBlessing.kronos._queueTransferEffect(player, pick.iconId, false) end
+    end
+    player:AddCacheFlags(CacheFlag.CACHE_ALL)
+    ConchBlessing.kronos._finalizeAbsorb(player)
+    ConchBlessing.kronos._ensureFloorPicks(Rune.effectOwner() or player)
+    ConchBlessing.kronos._topUpMongoMinisaacs(player)
+    dbg(string.format("Thurisaz devoured %d familiar(s); rune total %d", taken, Rune.total(player)))
+    return taken
+end
+
+--- Familiars Thurisaz has devoured for `player` (all kinds), and of one kind.
+function ConchBlessing.kronos.getRuneTotal(player)
+    return Rune.total(player)
+end
+
+function ConchBlessing.kronos.getRuneCount(player, famId)
+    return Rune.count(player, famId)
+end
+
 -- Live totals of the stacking chances. EID fills synergy lines with them (no
 -- player argument: the Kronos owner), and an absorption shows the new value for
 -- the absorbing player. Each reads the same getter its roll uses.
@@ -4353,7 +4646,7 @@ ConchBlessing.EIDDynamicTokens = ConchBlessing.EIDDynamicTokens or {}
 do
 local function chanceToken(chance)
     return function(player)
-        player = player or findKronosOwner() or Isaac.GetPlayer(0)
+        player = player or Rune.effectOwner() or Isaac.GetPlayer(0)
         if not player then return nil end
         return ConchBlessing.Locale.formatPercent(string.format("%g", math.floor(chance(player) * 1000 + 0.5) / 10))
     end

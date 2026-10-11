@@ -61,6 +61,7 @@ SOFLAM 지연·상태 이상 지속 시간과 기존 상세 벤치의 캡션 렌
 | `conch_test kronos auras` | 오라·추가 발사 펫 7종을 같은 런에서 순차 검사 |
 | `conch_test kronos abilities` | 스탯·피격 능력 펫 10종을 같은 런에서 순차 검사 |
 | `conch_test locale` | 언어·설명·EID 검증 |
+| `conch_test thurisaz` | 투리사즈 룬을 실제로 사용: 펫 3마리 영구 흡수, 공격력·능력·변환 아이템, 펫 없음, 파란 파리, 크로노스 상실 후에도 유지 |
 | `conch_test morph [아이템 \| default \| list]` | 강화 연출 자동 검사: 적용 연출 13종과 기본 긍정·중립·부정 애니메이션을 실제 강화 처리로 재생하고 효과음·프레임·색 복원을 확인 |
 | `conch_test rng [샘플 수] [luck 행운]` | 확률 함수·분포 검증 |
 | `conch_test rounding [sweep] [숫자]` | 반올림/올림/내림의 배율 계산 및 복원 검증 |

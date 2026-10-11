@@ -681,6 +681,19 @@ return {
             },
         },
     },
+    -- Pocket items (cards and runes), keyed like ConchBlessing.PocketData.
+    pockets = {
+        THURISAZ = {
+            name = "투리사즈",
+            description = "집어삼킴",
+            eid = {
+                "쓰면 내 길동무 가운데 무작위로 3마리를 {own:KRONOS} 크로노스처럼 삼킵니다",
+                "#삼킨 길동무마다 {{Damage}} 때리는 힘 +2와 그 길동무만의 힘을 영영 얻습니다 (크로노스가 없어도 남습니다)",
+                "#3마리보다 적으면 있는 만큼 삼킵니다",
+                "#{{Warning}} 덧붙임 도우미(REPENTOGON)를 쓰면 좋습니다",
+            },
+        },
+    },
     ui = {
         real_eyes = {
             prediction = "미리 보기: %s",

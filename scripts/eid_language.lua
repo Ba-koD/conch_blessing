@@ -145,6 +145,31 @@ ConchBlessing.EID.addOptLangDescription = function(itemId, itemData)
     }
 end
 
+-- Cards and runes (ConchBlessing.PocketData) register as cards, under their own
+-- "K:" key, so a card never overwrites a collectible sharing its number.
+ConchBlessing.EID.addOptLangCard = function(cardId, cardData)
+    if not EID or type(EID.addCard) ~= "function" then return end
+    if not cardData or not cardData.name or not cardData.eid then return end
+    local regKey = "K:" .. tostring(cardId)
+    local cache = ConchBlessing._eidRegistered
+    cache[regKey] = cache[regKey] or {}
+    for _, language in ipairs(registrationLanguages()) do
+        local name = extractText(cardData.name, language.source)
+        local description = extractText(cardData.eid, language.source)
+        if name and description then
+            local signature = name .. "\0" .. description
+            if cache[regKey][language.target] ~= signature then
+                EID:addCard(cardId, description, name, language.target)
+                cache[regKey][language.target] = signature
+            end
+        end
+    end
+    -- Clear Rune and Blank Card read a card's copy charge and rune flag here.
+    if type(EID.addCardMetadata) == "function" and cardData.mimiccharge then
+        EID:addCardMetadata(cardId, cardData.mimiccharge, cardData.type == "rune")
+    end
+end
+
 ConchBlessing.EID.AddEIDCollectible = function(id, name, description, eidDescription)
     if EID then
         EID:addCollectible(id, eidDescription, name)
@@ -275,6 +300,11 @@ ConchBlessing.EID.registerAllItems = function()
             -- addOptLangDescription now uses type-prefixed keys internally, so nothing else needed here
         else
             ConchBlessing.printDebug("Skipping " .. itemKey .. " - invalid item ID")
+        end
+    end
+    for _, cardData in pairs(ConchBlessing.PocketData or {}) do
+        if type(cardData.id) == "number" and cardData.id > 0 then
+            ConchBlessing.EID.addOptLangCard(cardData.id, cardData)
         end
     end
 
