@@ -12,7 +12,8 @@ Outputs (all generator-owned; edit this file, not the outputs):
     resources/gfx/dragon.anm2
     resources/gfx/effects/conch_dragon_lightning.png
     resources/gfx/effects/conch_dragon_lightning.anm2
-    resources/sfx/conch_dragon_crackle.wav   (registered in content/sounds.xml)
+    resources/sfx/conch_dragon_bolt_1..5.wav     (registered in content/sounds.xml)
+    resources/sfx/conch_dragon_thunder_1..2.wav  (registered in content/sounds.xml)
     resources/sfx/conch_dragon_twister.wav   (registered in content/sounds.xml)
 """
 import math
@@ -577,44 +578,81 @@ def spark(frame):
     return img
 
 
-# ---------------------------------------------------------------- crackle
-def crackle(seconds=0.8, seed=0x51A7):
-    """A light strike for 진's frequent weather bolts.
+# ---------------------------------------------------------------- weather sounds
+# 진's bolts come several times a second for a whole fight, so they follow what
+# makes a repeated sound grating (Zwicker and Fastl's annoyance terms and game
+# audio practice) and avoid each part of it: loudness (they are played quiet),
+# roughness (no crackling clicks), pulsing near 4 Hz (a soft onset and a tail
+# long enough that bolts blend into one rolling rumble), sharpness (almost
+# nothing above 1 kHz) and identical repeats (five takes, a small pitch spread).
+def loudest_db(samples):
+    """The tests' measure: the loudest 50 ms, as RMS in dB."""
+    window, energy, best = int(SAMPLE_RATE * .05), 0.0, 0.0
+    for i, v in enumerate(samples):
+        energy += v * v
+        if i >= window:
+            energy -= samples[i - window] ** 2
+        best = max(best, energy / window)
+    return 10 * math.log10(max(best, 1e-12))
 
-    The upgrade's thunder strike is a heavy crack and boom; heard twice a
-    second it wears on the ear. This keeps a short tearing snap, a soft body
-    and a quick low tail, with no boom and nothing above ~4 kHz.
-    """
+
+def at_level(samples, target=-10.0):
+    """Scale so the loudest 50 ms sits at `target` dB, every take alike; the
+    cue volume in dragon.lua then sets the level the game plays it at."""
+    gain = 10 ** ((target - loudest_db(samples)) / 20)
+    gain = min(gain, 0.98 / max(abs(v) for v in samples))
+    return [v * gain for v in samples]
+
+
+def fade_end(x, seconds, tail):
+    return 1.0 if x < seconds - tail else 0.5 + 0.5 * math.cos(math.pi * (x - seconds + tail) / tail)
+
+
+def brown(rng, n, keep=0.99, step=0.14):
+    last, out = 0.0, []
+    for _ in range(n):
+        last = keep * last + step * (rng.random() * 2 - 1)
+        out.append(last)
+    return out
+
+
+def small_thunder(seed, seconds=0.85):
+    """One bolt: a quiet, muffled roll, a soft swell and a smaller roll after it."""
     rng = random.Random(seed)
     n = int(SAMPLE_RATE * seconds)
-
-    def noise():
-        return rng.random() * 2 - 1
-
-    snap, t = [0.0] * n, 0.0
-    while t < 0.12:
-        begin, tau = int(t * SAMPLE_RATE), 0.0002 + 0.0006 * rng.random()
-        amp = (0.4 + 0.6 * rng.random()) * (1 - t / 0.12) ** 1.5
-        for i in range(int(tau * 7 * SAMPLE_RATE)):
-            if begin + i < n:
-                ramp = min(1, i / (0.0003 * SAMPLE_RATE))
-                snap[begin + i] += amp * noise() * ramp * math.exp(-i / (tau * SAMPLE_RATE))
-        t += (0.001 + 0.007 * (t / 0.12) ** 2) * (0.5 + rng.random())
-    snap = normalized(biquad(biquad(snap, 'high', 400), 'low', 4200))
-    body = [noise() * min(1, i / (0.003 * SAMPLE_RATE)) * math.exp(-i / (0.05 * SAMPLE_RATE)) for i in range(n)]
-    body = normalized(biquad(biquad(body, 'low', 900), 'high', 90))
-    last, tail = 0.0, []
-    for _ in range(n):
-        last = 0.97 * last + 0.25 * noise()
-        tail.append(last)
-    tail = biquad(biquad(tail, 'low', 300), 'high', 40)
+    low = normalized(biquad(biquad(brown(rng, n), 'low', 320), 'high', 40))
+    mid = normalized(biquad(biquad([rng.random() * 2 - 1 for _ in range(n)], 'low', 750), 'high', 260))
+    second = 0.2 + 0.12 * rng.random()
+    mix = []
     for i in range(n):
         x = i / SAMPLE_RATE
-        fade = 1.0 if x < seconds - 0.25 else 0.5 + 0.5 * math.cos(math.pi * (x - seconds + 0.25) / 0.25)
-        tail[i] *= min(1, x / 0.03) * math.exp(-x / 0.22) * fade
-    tail = normalized(tail)
-    mix = [snap[i] * 0.55 + body[i] * 0.5 + tail[i] * 0.55 for i in range(n)]
-    return [v * 0.8 for v in normalized(biquad(mix, 'high', 45))]
+        swell = min(1, x / 0.02) * math.exp(-x / 0.22)
+        if x > second:
+            d = x - second
+            swell += 0.42 * min(1, d / 0.07) * math.exp(-d / 0.24)
+        mix.append((low[i] * 0.85 + mid[i] * 0.28) * swell * fade_end(x, seconds, 0.22))
+    return normalized(biquad(mix, 'high', 35))
+
+
+def rolling_thunder(seed, seconds=2.4):
+    """The thunderclap every few seconds: the same smooth roll, larger, with no
+    sharp crack: a muffled break, a low boom and three slow rolls that fade."""
+    rng = random.Random(seed)
+    n = int(SAMPLE_RATE * seconds)
+    low = normalized(biquad(biquad(brown(rng, n, 0.992, 0.12), 'low', 200), 'high', 30))
+    mid = normalized(biquad(biquad([rng.random() * 2 - 1 for _ in range(n)], 'low', 700), 'high', 150))
+    rolls = [(0.0, 0.35, 1.0)] + [(0.35 + 0.38 * k + 0.2 * rng.random(), 0.45 + 0.2 * rng.random(), 0.6 - 0.15 * k)
+                                  for k in range(3)]
+    mix = []
+    for i in range(n):
+        x = i / SAMPLE_RATE
+        swell = sum(h * min(1, (x - s) / 0.07) * math.exp(-(x - s) / w) for s, w, h in rolls if x >= s)
+        mix.append((low[i] * 0.72 + mid[i] * 0.35) * swell * min(1, x / 0.025) * fade_end(x, seconds, 0.5))
+    return normalized(biquad(mix, 'high', 30))
+
+
+BOLT_TAKES = 5
+THUNDER_TAKES = 2
 
 
 def twister_wind(seconds=5.3, seed=0x7417):
@@ -723,7 +761,10 @@ def main():
     bolts.save(GFX / 'effects/conch_dragon_lightning.png')
     write_anm2(GFX / 'effects/conch_dragon_lightning.anm2', 'conch_dragon_lightning.png', 'Strike', animations)
     (ROOT / 'resources/sfx').mkdir(parents=True, exist_ok=True)
-    write_wav(ROOT / 'resources/sfx/conch_dragon_crackle.wav', crackle())
+    for k in range(BOLT_TAKES):
+        write_wav(ROOT / f'resources/sfx/conch_dragon_bolt_{k + 1}.wav', at_level(small_thunder(0xE500 + k)))
+    for k in range(THUNDER_TAKES):
+        write_wav(ROOT / f'resources/sfx/conch_dragon_thunder_{k + 1}.wav', at_level(rolling_thunder(0xF600 + k)))
     write_wav(ROOT / 'resources/sfx/conch_dragon_twister.wav', twister_wind())
     print('dragon assets written')
 

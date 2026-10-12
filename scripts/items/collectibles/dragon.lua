@@ -6,10 +6,10 @@
 -- a second (tears 5 strikes once a second), times the copies held, so copies
 -- add up linearly as independent storms.
 -- A bolt lands close to a random enemy (never far off, so it always catches
--- that enemy) and hurts every enemy around it for the holder's damage. Bolts
--- crackle lightly; a full thunderclap, which lights the room for a moment,
--- comes only every few seconds, and a quiet distant rumble rolls now and then
--- for as long as it is held. With two or more copies a bolt may rise as a
+-- that enemy) and hurts every enemy around it for the holder's damage. Each
+-- bolt rolls as a quiet small thunder; a full thunderclap, which lights the
+-- room for a moment, comes only every few seconds, and a quiet distant rumble
+-- rolls now and then for as long as it is held. With two or more copies a bolt may rise as a
 -- dragon twister instead (Hush's tear pillar, drawn as a plain sprite): it
 -- stays where it rose, pulls enemies in and hurts what it touches every tick.
 -- The long dragon familiar this item once summoned is the console-only Azure
@@ -19,8 +19,8 @@ local DamageProvenance = require("scripts.lib.damage_provenance")
 ConchBlessing.dragon = {}
 
 local DRAGON_ID = Isaac.GetItemIdByName("Dragon")
-local THUNDER_SOUND = "Conch Upgrade Thunder Strike"
-local CRACKLE_SOUND = "Conch Dragon Crackle"
+local THUNDER_SOUND = "Conch Dragon Thunder"
+local BOLT_SOUND = "Conch Dragon Bolt"
 local TWISTER_SOUND = "Conch Dragon Twister"
 local BOLT_PROC_KEY = "dragon_bolt"
 local TWISTER_PROC_KEY = "dragon_twister"
@@ -46,9 +46,11 @@ ConchBlessing.dragon.data = {
     boltScale = { 0.85, 1.1 },           -- each bolt drawn a little smaller or larger
     scorchTicks = 60,                    -- the burnt patch fades over two seconds
     -- Cue volume x the sample's loudest 50 ms must reach -18 dB or it is lost
-    -- under gameplay (tests/test_dragon_weather_contracts.py measures it).
-    crackleVolume = 0.65,                -- the light crackle peaks at -13.6 dB: -17.3 dB, every bolt
-    thunderVolume = 0.45,                -- the full strike peaks at -10.3 dB: -17.2 dB, at most every thunderGap
+    -- under gameplay (tests/test_dragon_weather_contracts.py measures it); the
+    -- bolt alone sits lower because the user asked for it quieter.
+    boltVolume = 0.2,                    -- every take peaks at -10 dB: -24 dB, every bolt (user decision 2026-10-12)
+    boltPitch = { 0.9, 1.1 },            -- a small spread, so repeats never sound identical
+    thunderVolume = 0.43,                -- every take peaks at -10 dB: -17.3 dB, at most every thunderGap
     thunderGap = 150,                    -- five seconds between full thunderclaps
     twisterVolume = 0.6,                 -- the twister's wind peaks at -12.8 dB: -17.3 dB, for its whole life
     flashTicks = 6,                      -- a thunderclap lifts the dark this long
@@ -190,7 +192,7 @@ local function strikePosition(rng, enemies)
     return spot
 end
 
--- Every bolt crackles; a full thunderclap, with a flash, at most every thunderGap.
+-- Every bolt rolls quietly; a full thunderclap, with a flash, at most every thunderGap.
 local function sound(bolts)
     local d = ConchBlessing.dragon.data
     local sky = ConchBlessing.dragon._sky
@@ -201,9 +203,11 @@ local function sound(bolts)
         if id then SFXManager():Play(id, d.thunderVolume, 0, false, 1) end
         return "thunder"
     end
-    local id = soundId(CRACKLE_SOUND)
-    if id then SFXManager():Play(id, d.crackleVolume, 0, false, 0.85 + hash(sky.cracks) * 0.3) end
-    return "crackle"
+    local id = soundId(BOLT_SOUND)
+    if id then
+        SFXManager():Play(id, d.boltVolume, 0, false, d.boltPitch[1] + hash(sky.cracks) * (d.boltPitch[2] - d.boltPitch[1]))
+    end
+    return "bolt"
 end
 
 local function bolt(player, position, enemies)

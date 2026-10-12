@@ -3,7 +3,7 @@
 Expected values come from the item's design: rain and a dimmed room while held;
 while enemies are present tears stat / 5 x copies held bolts a second, on their
 own (tears 5 with one copy: once a second), each landing close to a random enemy
-and hitting enemies within about 1.5 tiles for 1x damage; light crackles with a
+and hitting enemies within about 1.5 tiles for 1x damage; a quiet small thunder per bolt with a
 full thunderclap at most every five seconds and a quiet distant rumble; with two
 or more copies a bolt has a 5% chance to rise as a twister instead (at most 5 at
 once) that stays 5 seconds, pulls enemies in and hits what it touches for 5% of
@@ -67,7 +67,7 @@ class DragonWeatherContracts(unittest.TestCase):
                 GetRoomEntities=function() scans=scans+1; return entities end,
                 WorldToScreen=function(p) return Vector(p.X,p.Y) end,
                 GetScreenWidth=function() return 480 end,GetScreenHeight=function() return 270 end,
-                GetSoundIdByName=function(name) return ({['Conch Upgrade Thunder Strike']=901,['Conch Dragon Crackle']=902})[name] or -1 end}
+                GetSoundIdByName=function(name) return ({['Conch Dragon Thunder']=901,['Conch Dragon Bolt']=902})[name] or -1 end}
             ConchBlessing={Config={debugMode=false},printDebug=function(t) logs[#logs+1]=t end,printError=function(t) errors[#errors+1]=t end}
             -- A seeded stand-in for the collectible RNG: a fixed list of floats, then a plain LCG.
             function makeRng(list)
@@ -195,7 +195,7 @@ class DragonWeatherContracts(unittest.TestCase):
             inVoid=nil
         ''')
 
-    def test_light_crackles_with_a_thunderclap_and_flash_at_most_every_five_seconds(self):
+    def test_quiet_bolts_with_a_thunderclap_and_flash_at_most_every_five_seconds(self):
         self.run_lua('''
             ConchBlessing.Config.debugMode=true
             local p=makePlayer({delay=0}); enemy(320,280)
@@ -205,7 +205,7 @@ class DragonWeatherContracts(unittest.TestCase):
             for _,l in ipairs(logs) do if l:find('[Dragon] bolt',1,true) then bolts=bolts+1 end end
             for _,s in ipairs(sounds) do
                 if s.id==901 then claps=claps+1; near(s.volume,D.data.thunderVolume) end
-                if s.id==902 then cracks=cracks+1; near(s.volume,D.data.crackleVolume); assert(s.pitch>=0.85 and s.pitch<=1.15) end
+                if s.id==902 then cracks=cracks+1; near(s.volume,D.data.boltVolume); assert(s.pitch>=0.9 and s.pitch<=1.1) end
             end
             assert(bolts>50 and claps+cracks==bolts, 'every bolt makes a sound: bolts='..bolts..' claps='..claps..' cracks='..cracks)
             assert(claps==2, 'ten seconds hold two thunderclaps at most: '..claps)
@@ -367,14 +367,24 @@ class DragonWeatherContracts(unittest.TestCase):
             self.skipTest(str(skip))
         probe = levels.UpgradeSoundLevelTests()
         source = (ROOT / 'scripts/items/collectibles/dragon.lua').read_text(encoding='utf-8')
-        cues = (('crackleVolume', 'Conch Dragon Crackle'), ('thunderVolume', 'Conch Upgrade Thunder Strike'),
-                ('rumbleVolume', 'SOUND_THUNDER'), ('twisterVolume', 'Conch Dragon Twister'))
+        cues = (('thunderVolume', 'Conch Dragon Thunder'), ('rumbleVolume', 'SOUND_THUNDER'),
+                ('twisterVolume', 'Conch Dragon Twister'))
+        volume = lambda name: float(re.search(name + r'\s*=\s*([\d.]+)', source)[1])
+        loudest = {}
         for name, sound in cues:
-            volume = float(re.search(name + r'\s*=\s*([\d.]+)', source)[1])
-            self.assertLessEqual(volume, 1)
+            self.assertLessEqual(volume(name), 1)
             for sample in probe.samples(sound):
-                level = levels.loudest_db(sample) + 20 * math.log10(volume)
+                level = levels.loudest_db(sample) + 20 * math.log10(volume(name))
+                loudest[name] = max(loudest.get(name, -99), level)
                 self.assertGreaterEqual(level, levels.QUIETEST_DB, f'{name} on {sample.name}: {level:.1f} dB')
+        # The bolt, heard several times a second, is quiet on purpose (user decision
+        # 2026-10-12): every take sits at -24 dB, under the thunderclap.
+        takes = probe.samples('Conch Dragon Bolt')
+        self.assertEqual(len(takes), 5)
+        for sample in takes:
+            level = levels.loudest_db(sample) + 20 * math.log10(volume('boltVolume'))
+            self.assertAlmostEqual(level, -24.0, delta=0.5, msg=f'bolt on {sample.name}: {level:.1f} dB')
+            self.assertLess(level, loudest['thunderVolume'] - 5)
 
     def test_rooms_reset_and_missing_art_reports_once(self):
         self.run_lua('''

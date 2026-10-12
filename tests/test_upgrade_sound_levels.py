@@ -57,13 +57,14 @@ class UpgradeSoundLevelTests(unittest.TestCase):
         cls.enums = {m[1]: int(m[2]) for m in re.finditer(r'\b(SOUND_[A-Z0-9_]+)\s*=\s*(\d+)', ENUMS.read_text(encoding='utf-8'))}
         cls.registry = (VANILLA / 'sounds.xml').read_text(encoding='utf-8')
         custom = (ROOT / 'content/sounds.xml').read_text(encoding='utf-8')
-        cls.custom = {name: ROOT / 'resources/sfx' / path
-                      for name, path in re.findall(r'<sound name="([^"]+)">\s*<sample [^>]*path="([^"]+)"', custom)}
+        # Every sample of each project sound: the engine picks one at random.
+        cls.custom = {name: [ROOT / 'resources/sfx' / path for path in re.findall(r'path="([^"]+)"', body)]
+                      for name, body in re.findall(r'<sound name="([^"]+)">(.*?)</sound>', custom, re.S)}
         cls.lua = (ROOT / 'scripts/lib/upgrade_visuals.lua').read_text(encoding='utf-8')
 
     def samples(self, sound):
         if sound in self.custom:
-            return [self.custom[sound]]
+            return self.custom[sound]
         entry = re.search(r'<sound id="%d">(.*?)</sound>' % self.enums[sound], self.registry, re.S)
         found = []
         for relative in re.findall(r'path="([^"]+)"', entry[1]):
