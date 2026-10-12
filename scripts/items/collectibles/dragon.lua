@@ -52,7 +52,8 @@ ConchBlessing.dragon.data = {
     boltPitch = { 0.9, 1.1 },            -- a small spread, so repeats never sound identical
     thunderVolume = 0.43,                -- every take peaks at -10 dB: -17.3 dB, at most every thunderGap
     thunderGap = 150,                    -- five seconds between full thunderclaps
-    twisterVolume = 0.6,                 -- the twister's wind peaks at -12.8 dB: -17.3 dB, for its whole life
+    twisterVolume = 0.2,                 -- every take peaks at -10 dB: -24 dB, for its whole life (user decision 2026-10-12)
+    twisterWindGap = 90,                 -- a twister rising within three seconds of the last wind joins it: two winds at most
     flashTicks = 6,                      -- a thunderclap lifts the dark this long
     rumbleVolume = 0.3,                  -- vanilla thunder peaks at -5.5 to -7.4 dB: -16 to -18 dB, quiet but heard
     rumblePitch = 0.85,                  -- a little lower, so it sounds far away
@@ -69,7 +70,7 @@ ConchBlessing.dragon._scorches = {}
 ConchBlessing.dragon._twisters = {}
 ConchBlessing.dragon._charge = {}         -- per player: bolts owed, by pointer hash
 ConchBlessing.dragon._rumble = { count = 0 }  -- the distant thunder's countdown
-ConchBlessing.dragon._sky = { sinceThunder = math.huge, flash = 0, cracks = 0, bolts = 0 }
+ConchBlessing.dragon._sky = { sinceThunder = math.huge, sinceWind = math.huge, flash = 0, cracks = 0, bolts = 0 }
 local enemyCache = { frame = -1, list = {} }
 local reported = {}
 local sounds = {}
@@ -238,8 +239,12 @@ end
 local function raiseTwister(player, position)
     local twisters = ConchBlessing.dragon._twisters
     twisters[#twisters + 1] = { position = Vector(position.X, position.Y), age = 0, player = EntityPtr(player) }
-    local id = soundId(TWISTER_SOUND)
-    if id then SFXManager():Play(id, ConchBlessing.dragon.data.twisterVolume, 0, false, 1) end
+    local d, sky = ConchBlessing.dragon.data, ConchBlessing.dragon._sky
+    if sky.sinceWind >= d.twisterWindGap then
+        sky.sinceWind = 0
+        local id = soundId(TWISTER_SOUND)
+        if id then SFXManager():Play(id, d.twisterVolume, 0, false, 1) end
+    end
     debugLog("twister rises at %.0f,%.0f (%d in the room)", position.X, position.Y, #twisters)
 end
 
@@ -337,6 +342,7 @@ ConchBlessing.dragon.onUpdate = function()
     local game = Game()
     local sky = ConchBlessing.dragon._sky
     sky.sinceThunder = sky.sinceThunder + 1
+    sky.sinceWind = sky.sinceWind + 1
     if sky.flash > 0 then sky.flash = sky.flash - 1 end
     local held = false
     local enemies = roomEnemies()

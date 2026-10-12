@@ -321,18 +321,25 @@ class DragonWeatherContracts(unittest.TestCase):
             assert(seen.Strike and seen.Strike2 and seen.Strike3 and seen.Strike4, 'all four shapes are drawn')
         ''')
 
-    def test_a_twister_roars_with_its_own_wind(self):
+    def test_a_twister_roars_with_its_own_wind_and_winds_never_pile_up(self):
         self.run_lua('''
             GetSound=Isaac.GetSoundIdByName
             Isaac.GetSoundIdByName=function(name) if name=='Conch Dragon Twister' then return 903 end return GetSound(name) end
-            local p=makePlayer({items=2,rolls={0,0,0,0}}); enemy(320,280)
-            for i=1,40 do tick(); if #D._twisters>0 then break end end
-            local wind=0
-            for _,s in ipairs(sounds) do
-                assert(s.id~=425, 'no Hush sound')
-                if s.id==903 then wind=wind+1; near(s.volume,D.data.twisterVolume) end
+            -- Fast tears, so twisters rise faster than the gap between winds.
+            local p=makePlayer({items=2,delay=0,rolls={0,0,0,0}}); enemy(320,280)
+            local winds, joined = {}, false
+            for i=1,240 do
+                local before=#sounds; tick()
+                for k=before+1,#sounds do
+                    local s=sounds[k]
+                    assert(s.id~=425, 'no Hush sound')
+                    if s.id==903 then winds[#winds+1]=i; near(s.volume,D.data.twisterVolume) end
+                end
+                if #winds==1 and #D._twisters>1 then joined=true end
             end
-            assert(wind==1, 'one wind roar as it rises')
+            assert(#winds>=2, 'a wind roars as the first twister rises, and again later: '..#winds)
+            assert(joined, 'twisters rising within the gap join the wind already blowing')
+            for k=2,#winds do assert(winds[k]-winds[k-1]>=D.data.twisterWindGap, 'winds start at least the gap apart') end
             local strong=T.pullToward(Vector(0,0),Vector(100,0),false)
             assert(strong:Length()>=4, 'a strong pull: '..strong:Length())
         ''')
@@ -367,8 +374,7 @@ class DragonWeatherContracts(unittest.TestCase):
             self.skipTest(str(skip))
         probe = levels.UpgradeSoundLevelTests()
         source = (ROOT / 'scripts/items/collectibles/dragon.lua').read_text(encoding='utf-8')
-        cues = (('thunderVolume', 'Conch Dragon Thunder'), ('rumbleVolume', 'SOUND_THUNDER'),
-                ('twisterVolume', 'Conch Dragon Twister'))
+        cues = (('thunderVolume', 'Conch Dragon Thunder'), ('rumbleVolume', 'SOUND_THUNDER'))
         volume = lambda name: float(re.search(name + r'\s*=\s*([\d.]+)', source)[1])
         loudest = {}
         for name, sound in cues:
@@ -377,14 +383,16 @@ class DragonWeatherContracts(unittest.TestCase):
                 level = levels.loudest_db(sample) + 20 * math.log10(volume(name))
                 loudest[name] = max(loudest.get(name, -99), level)
                 self.assertGreaterEqual(level, levels.QUIETEST_DB, f'{name} on {sample.name}: {level:.1f} dB')
-        # The bolt, heard several times a second, is quiet on purpose (user decision
-        # 2026-10-12): every take sits at -24 dB, under the thunderclap.
-        takes = probe.samples('Conch Dragon Bolt')
-        self.assertEqual(len(takes), 5)
-        for sample in takes:
-            level = levels.loudest_db(sample) + 20 * math.log10(volume('boltVolume'))
-            self.assertAlmostEqual(level, -24.0, delta=0.5, msg=f'bolt on {sample.name}: {level:.1f} dB')
-            self.assertLess(level, loudest['thunderVolume'] - 5)
+        # The bolt (several times a second) and the twister's wind (five seconds
+        # at a time) are quiet on purpose (user decisions 2026-10-12): every take
+        # sits at -24 dB, under the thunderclap.
+        for name, sound, count in (('boltVolume', 'Conch Dragon Bolt', 5), ('twisterVolume', 'Conch Dragon Twister', 2)):
+            takes = probe.samples(sound)
+            self.assertEqual(len(takes), count)
+            for sample in takes:
+                level = levels.loudest_db(sample) + 20 * math.log10(volume(name))
+                self.assertAlmostEqual(level, -24.0, delta=0.5, msg=f'{name} on {sample.name}: {level:.1f} dB')
+                self.assertLess(level, loudest['thunderVolume'] - 5)
 
     def test_rooms_reset_and_missing_art_reports_once(self):
         self.run_lua('''

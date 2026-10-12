@@ -14,7 +14,7 @@ Outputs (all generator-owned; edit this file, not the outputs):
     resources/gfx/effects/conch_dragon_lightning.anm2
     resources/sfx/conch_dragon_bolt_1..5.wav     (registered in content/sounds.xml)
     resources/sfx/conch_dragon_thunder_1..2.wav  (registered in content/sounds.xml)
-    resources/sfx/conch_dragon_twister.wav   (registered in content/sounds.xml)
+    resources/sfx/conch_dragon_twister_1..2.wav  (registered in content/sounds.xml)
 """
 import math
 import random
@@ -655,35 +655,33 @@ BOLT_TAKES = 5
 THUNDER_TAKES = 2
 
 
-def twister_wind(seconds=5.3, seed=0x7417):
-    """The roar of a dragon twister for its whole life: wind swirling round.
+def twister_wind(seed, seconds=5.3):
+    """The wind of a dragon twister for its whole life: a low swirling roar.
 
-    Band-limited noise whose loudness and brightness sweep round about three
-    times a second, over a low roar, with a soft whistle that rises as it
-    winds up. It fades in as the pillar rises and out as it falls.
+    Made by the same rules as the bolt: no pure tone (the old whistle was
+    one), swells far slower than the 2-4 Hz pulsing that annoys most (about
+    every two seconds), almost no hiss, and long soft fades. A broad band of
+    noise, not a tone, rises and falls over the roar as the twister turns.
     """
     rng = random.Random(seed)
     n = int(SAMPLE_RATE * seconds)
-
-    def noise():
-        return rng.random() * 2 - 1
-
-    hiss = normalized(biquad(biquad([noise() for _ in range(n)], 'high', 350), 'low', 1800))
-    last, roar = 0.0, []
-    for _ in range(n):
-        last = 0.985 * last + 0.15 * noise()
-        roar.append(last)
-    roar = normalized(biquad(biquad(roar, 'low', 260), 'high', 40))
+    roar = normalized(biquad(biquad(brown(rng, n, 0.995, 0.08), 'low', 260), 'high', 35))
+    air = normalized(biquad(biquad([rng.random() * 2 - 1 for _ in range(n)], 'low', 900), 'high', 180))
+    band = normalized(biquad(biquad(biquad(biquad([rng.random() * 2 - 1 for _ in range(n)], 'high', 240),
+                                           'low', 650), 'high', 240), 'low', 650))
+    phase = rng.random() * 2 * math.pi
+    rate, depth = 0.45, 0.3
     mix = []
-    phase = 0.0
     for i in range(n):
         x = i / SAMPLE_RATE
-        swirl = 0.55 + 0.45 * math.sin(2 * math.pi * 2.8 * x + 0.6 * math.sin(2 * math.pi * 0.4 * x))
-        phase += 2 * math.pi * (520 + 160 * min(1, x / 1.5) + 40 * math.sin(2 * math.pi * 2.8 * x)) / SAMPLE_RATE
-        whistle = math.sin(phase) * 0.06 * swirl
-        envelope = min(1, x / 0.35) * (1 if x < seconds - 0.6 else 0.5 + 0.5 * math.cos(math.pi * (x - seconds + 0.6) / 0.6))
-        mix.append((hiss[i] * 0.55 * swirl + roar[i] * 0.6 + whistle) * envelope)
-    return [v * 0.8 for v in normalized(biquad(mix, 'high', 45))]
+        swirl = 1 - depth / 2 + depth / 2 * math.sin(2 * math.pi * rate * x + phase + 0.8 * math.sin(2 * math.pi * 0.23 * x))
+        envelope = min(1, x / 0.6) ** 2 * fade_end(x, seconds, 0.9)
+        v = roar[i] * 0.62 + air[i] * 0.2 * swirl + band[i] * 0.42 * (0.55 + 0.45 * (swirl - (1 - depth)) / depth)
+        mix.append(v * envelope * (0.88 + 0.12 * swirl))
+    return normalized(biquad(mix, 'high', 30))
+
+
+TWISTER_TAKES = 2
 
 
 # ---------------------------------------------------------------- ANM2
@@ -765,7 +763,8 @@ def main():
         write_wav(ROOT / f'resources/sfx/conch_dragon_bolt_{k + 1}.wav', at_level(small_thunder(0xE500 + k)))
     for k in range(THUNDER_TAKES):
         write_wav(ROOT / f'resources/sfx/conch_dragon_thunder_{k + 1}.wav', at_level(rolling_thunder(0xF600 + k)))
-    write_wav(ROOT / 'resources/sfx/conch_dragon_twister.wav', twister_wind())
+    for k in range(TWISTER_TAKES):
+        write_wav(ROOT / f'resources/sfx/conch_dragon_twister_{k + 1}.wav', at_level(twister_wind(0xB800 + k)))
     print('dragon assets written')
 
 

@@ -29,6 +29,7 @@
 		<sample weight="1" path="conch_dragon_thunder_2.wav" />
 	</sound>
 	<sound name="Conch Dragon Twister">
-		<sample weight="1" path="conch_dragon_twister.wav" />
+		<sample weight="1" path="conch_dragon_twister_1.wav" />
+		<sample weight="1" path="conch_dragon_twister_2.wav" />
 	</sound>
 </sounds>
