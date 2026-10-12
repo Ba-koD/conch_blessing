@@ -109,7 +109,8 @@ return {
             description = "God of Weather",
             eid = {
                 "It always rains, and the room darkens as if under dark clouds.",
-                "#{{Tears}} Lightning strikes enemies every tears / 5 seconds.",
+                "#{{Tears}} Lightning strikes enemies every 5 / tears seconds.",
+                "#{{Luck}} Lightning hits 50% of the time by default. (+5% per luck, 10% minimum)",
                 "#Lightning deals your damage.",
             },
             synergies = {

@@ -51,7 +51,15 @@ class DragonWeatherContracts(unittest.TestCase):
             game={GetFrameCount=function() return frame end,GetNumPlayers=function() return #players end,
                 GetRoom=function() return room end,Darken=function(_,v,t) darken[#darken+1]={v=v,t=t} end}
             function Game() return game end
-            function SFXManager() return {Play=function(_,id,v,_,_,pitch) sounds[#sounds+1]={id=id,volume=v,pitch=pitch} end} end
+            playing={}; stopped={}
+            local sfx={}
+            function sfx:Play(id,v,delay,loop,pitch) sounds[#sounds+1]={id=id,volume=v,pitch=pitch,loop=loop}; if loop then playing[id]=true end end
+            function sfx:IsPlaying(id) return playing[id]==true end
+            function sfx:Stop(id) playing[id]=nil; stopped[#stopped+1]=id end
+            function SFXManager() return sfx end
+            RAIN=904
+            -- Only the one-shot cues, without the rain loop.
+            function cues() local list={} for _,s in ipairs(sounds) do if s.id~=RAIN then list[#list+1]=s end end return list end
             spriteLog={}
             Sprite=setmetatable({},{__call=function()
                 local s={}
@@ -67,7 +75,7 @@ class DragonWeatherContracts(unittest.TestCase):
                 GetRoomEntities=function() scans=scans+1; return entities end,
                 WorldToScreen=function(p) return Vector(p.X,p.Y) end,
                 GetScreenWidth=function() return 480 end,GetScreenHeight=function() return 270 end,
-                GetSoundIdByName=function(name) return ({['Conch Dragon Thunder']=901,['Conch Dragon Bolt']=902})[name] or -1 end}
+                GetSoundIdByName=function(name) return ({['Conch Dragon Thunder']=901,['Conch Dragon Bolt']=902,['Conch Dragon Rain']=904})[name] or -1 end}
             ConchBlessing={Config={debugMode=false},printDebug=function(t) logs[#logs+1]=t end,printError=function(t) errors[#errors+1]=t end}
             -- A seeded stand-in for the collectible RNG: a fixed list of floats, then a plain LCG.
             function makeRng(list)
@@ -82,7 +90,9 @@ class DragonWeatherContracts(unittest.TestCase):
             end
             function makePlayer(opts)
                 opts=opts or {}
+                -- Luck 10 by default: every strike catches its enemy unless a test sets it.
                 local p={Position=Vector(320,280),Damage=opts.damage or 10,MaxFireDelay=opts.delay or 10,items=opts.items or 1,
+                    Luck=opts.luck or 10,
                     TearFlags=opts.flags or 0,alive=true,rng=makeRng(opts.rolls)}
                 function p:GetCollectibleNum() return self.items end
                 function p:GetCollectibleRNG() return self.rng end
@@ -151,9 +161,9 @@ class DragonWeatherContracts(unittest.TestCase):
 
     def test_bolt_hits_enemies_within_reach_for_full_damage(self):
         self.run_lua('''
-            -- Rolls: the first enemy, angle 0, distance 0, then a bolt.
+            -- Rolls: the first enemy, angle 0, distance 0, a hit, then a bolt.
             -- Tears 30: a bolt every five updates.
-            local p=makePlayer({damage=7,delay=0,rolls={0,0,0,0.9, 0,0,0,0.9, 0,0,0,0.9}})
+            local p=makePlayer({damage=7,delay=0,rolls={0,0,0,0,0.9, 0,0,0,0,0.9, 0,0,0,0,0.9}})
             local anchor=enemy(320,280)
             local inside=enemy(320+65,280,{size=10}); local edge=enemy(320,280+70,{size=10}); local out=enemy(320+75,280,{size=10})
             for i=1,15 do tick() end
@@ -161,6 +171,47 @@ class DragonWeatherContracts(unittest.TestCase):
             near(anchor.hits[1].amount,7); assert(anchor.hits[1].source==p, 'the holder is the damage source')
             assert(DamageProvenanceCalls[1]=='dragon_bolt', 'bolts carry their own proc key')
             assert(#D._bolts>=1 and #D._scorches>=1, 'the bolt is drawn and leaves a burn')
+        ''')
+
+    def test_luck_sets_how_often_a_strike_catches_its_enemy(self):
+        self.run_lua('''
+            -- 50% at luck 0, 5 points more per luck, between 10% and 100% (always from luck 10).
+            near(T.boltHitChance(0),0.5); near(T.boltHitChance(1),0.55); near(T.boltHitChance(5),0.75)
+            near(T.boltHitChance(9),0.95); near(T.boltHitChance(10),1); near(T.boltHitChance(25),1)
+            near(T.boltHitChance(-5),0.25); near(T.boltHitChance(-8),0.1); near(T.boltHitChance(-30),0.1)
+            near(T.boltHitChance(nil),0.5)
+            -- A miss lands past the bolt's reach from its enemy, never on it.
+            for i=0,20 do
+                for _,r in ipairs({0,0.5,1}) do
+                    local d=T.missSpot(Vector(300,300),i/20,r,13):Distance(Vector(300,300))
+                    assert(d>D.data.boltRadius+13 and d<=D.data.boltRadius+13+4+D.data.boltMissReach+1e-6, 'miss at '..d)
+                end
+            end
+        ''')
+
+    def test_at_luck_zero_a_high_hit_roll_misses_and_a_low_one_hits(self):
+        self.run_lua('''
+            -- Rolls: the enemy, angle 0, distance 0, the hit roll, a bolt; a strike every five updates.
+            local p=makePlayer({delay=0,luck=0,rolls={0,0,0,0.6,0.9, 0,0,0,0.3,0.9}})
+            local target=enemy(320,280,{size=13}); local beside=enemy(320+60+13+4,280,{size=10})
+            for i=1,5 do tick() end
+            assert(#target.hits==0, 'a 0.6 roll at luck 0 (50%) misses its enemy')
+            assert(#beside.hits==1, 'but catches the enemy standing where it lands')
+            for i=1,5 do tick() end
+            assert(#target.hits==1, 'a 0.3 roll hits')
+        ''')
+
+    def test_a_miss_turns_away_from_a_wall(self):
+        self.run_lua('''
+            local p=makePlayer({delay=0,luck=0,rolls={0,0,0,0.6,0.9}})
+            local target=enemy(320,280,{size=13})
+            -- Everything to the right is outside the room: the miss swings to the left.
+            inVoid=function(pos) return pos.X>330 end
+            ConchBlessing.Config.debugMode=true
+            for i=1,5 do tick() end
+            local x
+            for _,l in ipairs(logs) do x=x or tonumber(l:match('%[Dragon%] bolt at (%-?%d+),')) end
+            assert(x and x<320-60-13 and #target.hits==0, 'landed at '..tostring(x))
         ''')
 
     def test_bolts_land_close_to_a_random_enemy(self):
@@ -224,7 +275,7 @@ class DragonWeatherContracts(unittest.TestCase):
     def test_twister_stays_pulls_and_hurts_five_percent_a_tick(self):
         self.run_lua('''
             -- Rolls: the first enemy (at the centre), angle and distance 0, then 0 for the kind: a twister.
-            local p=makePlayer({items=2,damage=10,delay=10,rolls={0,0,0,0}})
+            local p=makePlayer({items=2,damage=10,delay=10,rolls={0,0,0,0,0}})
             local anchor=enemy(320,280,{size=10}); local near1=enemy(320+20,280,{size=10})
             local pulled=enemy(320+100,280,{size=10}); local boss=enemy(320-100,280,{size=10,boss=true})
             local far=enemy(320,280+200,{size=10})
@@ -253,7 +304,7 @@ class DragonWeatherContracts(unittest.TestCase):
 
     def test_twister_fades_when_its_owner_is_gone(self):
         self.run_lua('''
-            local p=makePlayer({items=2,rolls={0,0,0,0}}); local e=enemy(330,280)
+            local p=makePlayer({items=2,rolls={0,0,0,0,0}}); local e=enemy(330,280)
             for i=1,40 do tick(); if #D._twisters>0 then break end end
             assert(#D._twisters==1)
             p.alive=false; p.MaxFireDelay=1e9
@@ -326,7 +377,7 @@ class DragonWeatherContracts(unittest.TestCase):
             GetSound=Isaac.GetSoundIdByName
             Isaac.GetSoundIdByName=function(name) if name=='Conch Dragon Twister' then return 903 end return GetSound(name) end
             -- Fast tears, so twisters rise faster than the gap between winds.
-            local p=makePlayer({items=2,delay=0,rolls={0,0,0,0}}); enemy(320,280)
+            local p=makePlayer({items=2,delay=0,rolls={0,0,0,0,0}}); enemy(320,280)
             local winds, joined = {}, false
             for i=1,240 do
                 local before=#sounds; tick()
@@ -344,20 +395,38 @@ class DragonWeatherContracts(unittest.TestCase):
             assert(strong:Length()>=4, 'a strong pull: '..strong:Length())
         ''')
 
+    def test_the_rain_is_heard_while_anyone_holds_it(self):
+        self.run_lua('''
+            local p=makePlayer()
+            for i=1,90 do tick() end
+            local rains=0
+            for _,s in ipairs(sounds) do
+                if s.id==RAIN then rains=rains+1; assert(s.loop==true and s.volume==D.data.rainVolume) end
+            end
+            assert(rains==1 and playing[RAIN], 'one rain loop, started once: '..rains)
+            D.onNewRoom(); for i=1,30 do tick() end
+            assert(playing[RAIN] and #stopped==0, 'the rain carries on into the next room')
+            p.items=0; tick()
+            assert(not playing[RAIN] and stopped[1]==RAIN, 'it stops once nobody holds it')
+            p.items=1; tick(); assert(playing[RAIN], 'and comes back with the item')
+            D.onPreGameExit(); assert(not playing[RAIN], 'leaving the game stops it')
+            p.items=1; tick(); D.onGameStarted(); assert(not playing[RAIN], 'a new game starts quiet')
+        ''')
+
     def test_a_quiet_distant_rumble_rolls_while_held(self):
         self.run_lua('''
             -- 3-8 s after entering, then every 12-20 s, with or without enemies.
             makePlayer()
             local at={}
-            for i=1,1800 do tick(); if #sounds>#at then at[#at+1]=frame end end
-            for _,s in ipairs(sounds) do assert(s.id==472 and s.volume==D.data.rumbleVolume and s.pitch<1) end
+            for i=1,1800 do tick(); if #cues()>#at then at[#at+1]=frame end end
+            for _,s in ipairs(cues()) do assert(s.id==472 and s.volume==D.data.rumbleVolume and s.pitch<1) end
             local first=at[1]-(frame-1800)
             assert(first>=D.data.rumbleFirst[1] and first<=D.data.rumbleFirst[2], 'first rumble at '..first)
             for k=2,#at do local gap=at[k]-at[k-1]; assert(gap>=D.data.rumbleGap[1] and gap<=D.data.rumbleGap[2], 'gap '..gap) end
             assert(#at>=3 and #at<=5, 'rumbles in a minute: '..#at)
             players[1].items=0; sounds={}
             for i=1,900 do tick() end
-            assert(#sounds==0, 'silent once nobody holds it')
+            assert(#sounds==0 and not playing[RAIN], 'silent once nobody holds it')
             assert(T.rumbleWait({10,20},1)>=10 and T.rumbleWait({10,20},1)<=20 and T.rumbleWait({10,20},3)==T.rumbleWait({10,20},3))
         ''')
 
@@ -383,16 +452,17 @@ class DragonWeatherContracts(unittest.TestCase):
                 level = levels.loudest_db(sample) + 20 * math.log10(volume(name))
                 loudest[name] = max(loudest.get(name, -99), level)
                 self.assertGreaterEqual(level, levels.QUIETEST_DB, f'{name} on {sample.name}: {level:.1f} dB')
-        # The bolt (several times a second) and the twister's wind (five seconds
-        # at a time) are quiet on purpose (user decisions 2026-10-12): every take
-        # sits at -24 dB, under the thunderclap.
-        for name, sound, count in (('boltVolume', 'Conch Dragon Bolt', 5), ('twisterVolume', 'Conch Dragon Twister', 2)):
+        # The user's levels (2026-10-13): bolt -7 dB, thunderclap and twister
+        # -6 dB, the rain loop -15 dB.
+        for name, sound, count, want in (('boltVolume', 'Conch Dragon Bolt', 5, -7.0),
+                                         ('twisterVolume', 'Conch Dragon Twister', 2, -6.0),
+                                         ('thunderVolume', 'Conch Dragon Thunder', 2, -6.0),
+                                         ('rainVolume', 'Conch Dragon Rain', 1, -15.0)):
             takes = probe.samples(sound)
-            self.assertEqual(len(takes), count)
+            self.assertEqual(len(takes), count, sound)
             for sample in takes:
                 level = levels.loudest_db(sample) + 20 * math.log10(volume(name))
-                self.assertAlmostEqual(level, -24.0, delta=0.5, msg=f'{name} on {sample.name}: {level:.1f} dB')
-                self.assertLess(level, loudest['thunderVolume'] - 5)
+                self.assertAlmostEqual(level, want, delta=0.5, msg=f'{name} on {sample.name}: {level:.1f} dB')
 
     def test_rooms_reset_and_missing_art_reports_once(self):
         self.run_lua('''

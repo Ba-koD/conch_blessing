@@ -330,7 +330,8 @@ ConchBlessing.ItemData = {
             postRender = "dragon.onRender",
             postRoomRenderEntities = "dragon.onRoomRender",
             postNewRoom = "dragon.onNewRoom",
-            gameStarted = "dragon.onGameStarted"
+            gameStarted = "dragon.onGameStarted",
+            preGameExit = "dragon.onPreGameExit"
         },
     },
     SNAKE = {

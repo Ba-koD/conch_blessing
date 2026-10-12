@@ -389,6 +389,29 @@ function probe.dragonTwister(samples)
     end
 end
 
+-- --------------------------------------------------------------- dragon accuracy
+function probe.dragonAccuracy(samples)
+    header("Dragon strike accuracy (a strike catches its enemy, by the holder's luck)")
+    local module = ConchBlessing.dragon
+    local t = module and module._test
+    if not t or not t.rollHit or not t.boltHitChance then out("SKIPPED (module not loaded)") return end
+    local rng = RNG()
+    local seed = Random()
+    if seed == 0 then seed = 1 end
+    rng:SetSeed(seed, 35)
+    for _, luck in ipairs({ -10, -5, 0, 1, 3, 5, 7, 9, 10, 15 }) do
+        local hits = quietly(function()
+            local n = 0
+            for _ = 1, samples do
+                if t.rollHit(rng:RandomFloat(), luck) then n = n + 1 end
+            end
+            return n
+        end)
+        out(string.format("  Luck %-4s configured=%6.2f%%  measured=%7.3f%%", tostring(luck),
+            t.boltHitChance(luck) * 100, hits / samples * 100))
+    end
+end
+
 -- --------------------------------------------------------------- death spiral
 function probe.injectableDeath()
     header("Injectable Steroids instant death (cumulative over one floor)")
@@ -473,6 +496,7 @@ function probe.run(params)
     probe.kronos(samples)
     probe.liveEye(samples, luck)
     probe.dragonTwister(samples)
+    probe.dragonAccuracy(samples)
     probe.injectableDeath()
     out("")
     out("conch_test rng: done")

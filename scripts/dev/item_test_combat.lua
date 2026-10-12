@@ -248,10 +248,12 @@ C.AZURE_DRAGON = { stage = function(plan, _, n)
 end }
 
 -- 진 (Dragon) weather: while enemies are present, tears stat / 5 bolts a second
--- per copy, on their own. Every bolt lands close to an enemy and catches it, so
--- with targets far apart each bolt hits exactly one. The holder never shoots
--- here, so every hit whose source is the player itself is the weather's: bolts
--- for 1x damage, twister touches for 5%. Rain and the dim room are visual only.
+-- per copy, on their own. A bolt catches its enemy only as often as the holder's
+-- luck allows (50% at Isaac's luck 0), so strikes are counted from the weather's
+-- own bolt counter, never from hits. The holder never shoots here, so every hit
+-- whose source is the player itself is the weather's: bolts for 1x damage,
+-- twister touches for 5%. Rain and the dim room are visual only; the rain loop
+-- and the hit odds are covered offline and by conch_test rng.
 local WEATHER_SPOTS = { { -220, -100 }, { 0, 110 }, { 220, -100 } }
 local function pinWeatherTargets(ctx)
     for i, target in ipairs(ctx.targets or {}) do
@@ -296,6 +298,7 @@ C.DRAGON = { stage = function(plan, _, n)
         ctx.hp = {}
         for i, target in ipairs(ctx.targets) do ctx.hp[i] = target.HitPoints end
         ctx.ticks, ctx.risen, ctx.seenTwisters = 0, 0, {}
+        ctx.boltsStart = ConchBlessing.dragon._sky.bolts
         for _, twister in ipairs(ConchBlessing.dragon._twisters) do ctx.seenTwisters[twister] = true end
     end)
     plan.waitUntil(function(player, ctx)
@@ -310,11 +313,16 @@ C.DRAGON = { stage = function(plan, _, n)
         return ctx.settle >= 6
     end, 8, "HP settles")
     plan.check("bolts follow the tears stat and copies (tears / 5 a second per copy)", function(player, ctx)
-        local bolts = #H.playerHits(nil, player.Damage * 0.5)
+        local bolts = ConchBlessing.dragon._sky.bolts - ctx.boltsStart
         local expected = weatherStrikesExpected(player, n, ctx.ticks)
         local strikes = bolts + ctx.risen
         return math.abs(strikes - expected) <= 1.01, string.format("bolts=%d twisters=%d expected=%.2f copies=%d MaxFireDelay=%.2f",
             bolts, ctx.risen, expected, n, player.MaxFireDelay)
+    end)
+    plan.check("no bolt hits more than one of the far-apart targets", function(player, ctx)
+        local hits = #H.playerHits(nil, player.Damage * 0.5)
+        local bolts = ConchBlessing.dragon._sky.bolts - ctx.boltsStart
+        return hits <= bolts, string.format("hits=%d bolts=%d luck=%.1f", hits, bolts, player.Luck)
     end)
     if n > 0 then
         plan.check("every bolt hits for 1x current damage and HP loss matches", function(player, ctx)

@@ -28,6 +28,9 @@
 		<sample weight="1" path="conch_dragon_thunder_1.wav" />
 		<sample weight="1" path="conch_dragon_thunder_2.wav" />
 	</sound>
+	<sound name="Conch Dragon Rain">
+		<sample weight="1" path="conch_dragon_rain.wav" />
+	</sound>
 	<sound name="Conch Dragon Twister">
 		<sample weight="1" path="conch_dragon_twister_1.wav" />
 		<sample weight="1" path="conch_dragon_twister_2.wav" />

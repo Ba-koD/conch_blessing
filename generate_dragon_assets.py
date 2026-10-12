@@ -15,6 +15,7 @@ Outputs (all generator-owned; edit this file, not the outputs):
     resources/sfx/conch_dragon_bolt_1..5.wav     (registered in content/sounds.xml)
     resources/sfx/conch_dragon_thunder_1..2.wav  (registered in content/sounds.xml)
     resources/sfx/conch_dragon_twister_1..2.wav  (registered in content/sounds.xml)
+    resources/sfx/conch_dragon_rain.wav          (registered in content/sounds.xml)
 """
 import math
 import random
@@ -651,8 +652,42 @@ def rolling_thunder(seed, seconds=2.4):
     return normalized(biquad(mix, 'high', 30))
 
 
+def louder(samples, target, threshold=0.25, ratio=3.0, attack=0.005, release=0.12, knee=0.7):
+    """A sample as loud as the game needs without clipping, since cue volumes
+    stay at or below 1: a smooth compressor (envelope follower, quick attack,
+    slow release) evens out the peaks, then make-up gain brings the loudest
+    50 ms to `target` dB through a soft knee that rounds off the few peaks above
+    it. The make-up is corrected a few times, because the knee itself takes a
+    little loudness away."""
+    peak = max(abs(v) for v in samples) or 1
+    a_att, a_rel = math.exp(-1 / (attack * SAMPLE_RATE)), math.exp(-1 / (release * SAMPLE_RATE))
+    env, even = 0.0, []
+    for v in samples:
+        v /= peak
+        coef = a_att if abs(v) > env else a_rel
+        env = coef * env + (1 - coef) * abs(v)
+        even.append(v * (1.0 if env <= threshold else (threshold / env) ** (1 - 1 / ratio)))
+    room = 0.98 - knee
+
+    def shaped(gain):
+        out = []
+        for v in even:
+            y = v * gain
+            if abs(y) > knee:
+                y = math.copysign(knee + room * math.tanh((abs(y) - knee) / room), y)
+            out.append(y)
+        return out
+
+    gain = 10 ** ((target - loudest_db(even)) / 20)
+    for _ in range(4):
+        gain *= 10 ** ((target - loudest_db(shaped(gain))) / 20)
+    return shaped(gain)
+
+
 BOLT_TAKES = 5
 THUNDER_TAKES = 2
+BOLT_LEVEL = -7.0       # dB in the file; dragon.lua plays it at volume 1 for -7 dB
+STORM_LEVEL = -6.0      # thunderclap and twister, played at volume 1 for -6 dB
 
 
 def twister_wind(seed, seconds=5.3):
@@ -682,6 +717,123 @@ def twister_wind(seed, seconds=5.3):
 
 
 TWISTER_TAKES = 2
+
+
+# ---------------------------------------------------------------- rain
+# 진's rain while anyone holds it: a light, realistic indoor rain made of what
+# rain is made of (a warm wash of distant drops and a stream of fine drops
+# heard in a small room). The user removed the eave drips and water plinks and
+# asked for a light shower, so there are no pitched drops at all.
+def pink_noise(rng, n):
+    """Paul Kellet's pink-noise filter: the warm wash of countless far drops."""
+    b0 = b1 = b2 = b3 = b4 = b5 = b6 = 0.0
+    out = []
+    for _ in range(n):
+        w = rng.random() * 2 - 1
+        b0 = 0.99886 * b0 + w * 0.0555179
+        b1 = 0.99332 * b1 + w * 0.0750759
+        b2 = 0.96900 * b2 + w * 0.1538520
+        b3 = 0.86650 * b3 + w * 0.3104856
+        b4 = 0.55000 * b4 + w * 0.5329522
+        b5 = -0.7616 * b5 - w * 0.0168980
+        out.append(b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362)
+        b6 = w * 0.115926
+    return out
+
+
+def bandpass(samples, freq, q):
+    w = 2 * math.pi * freq / SAMPLE_RATE
+    alpha = math.sin(w) / (2 * q)
+    a0, a1, a2 = 1 + alpha, -2 * math.cos(w), 1 - alpha
+    b0, b2 = alpha / a0, -alpha / a0
+    a1, a2 = a1 / a0, a2 / a0
+    out, x1, x2, y1, y2 = [], 0.0, 0.0, 0.0, 0.0
+    for x in samples:
+        y = b0 * x + b2 * x2 - a1 * y1 - a2 * y2
+        x2, x1, y2, y1 = x1, x, y1, y
+        out.append(y)
+    return out
+
+
+def small_room(samples, wet=0.22, feedback=0.78, damp=0.35):
+    """Freeverb-style: four damped combs into two all-passes."""
+    n = len(samples)
+    combs = []
+    for delay in (1557, 1617, 1491, 1422):
+        buf, idx, store, out = [0.0] * delay, 0, 0.0, [0.0] * n
+        for i in range(n):
+            y = buf[idx]
+            store = y * (1 - damp) + store * damp
+            buf[idx] = samples[i] + store * feedback
+            idx = idx + 1 if idx + 1 < delay else 0
+            out[i] = y
+        combs.append(out)
+    mixed = [(combs[0][i] + combs[1][i] + combs[2][i] + combs[3][i]) * 0.25 for i in range(n)]
+    for delay in (556, 441):
+        buf, idx, out = [0.0] * delay, 0, [0.0] * n
+        for i in range(n):
+            b = buf[idx]
+            out[i] = -mixed[i] + b
+            buf[idx] = mixed[i] + b * 0.5
+            idx = idx + 1 if idx + 1 < delay else 0
+        mixed = out
+    return [samples[i] * (1 - wet) + mixed[i] * wet for i in range(n)]
+
+
+def fine_drops(target, rng, seconds, rate, band, level):
+    """A Poisson stream of tiny drops, each a millisecond noise tick through
+    its own band-pass at a random pitch and level."""
+    t = rng.expovariate(rate)
+    while t < seconds:
+        begin = int(t * SAMPLE_RATE)
+        length = int(SAMPLE_RATE * (0.002 + 0.004 * rng.random()))
+        tau = 0.0004 + 0.0012 * rng.random()
+        burst = [(rng.random() * 2 - 1) * math.exp(-(i / SAMPLE_RATE) / tau) for i in range(length)]
+        freq = band[0] * (band[1] / band[0]) ** rng.random()
+        amp = level * math.exp(rng.gauss(0, 0.6))
+        for i, v in enumerate(bandpass(burst, freq, 1.4)):
+            if begin + i < len(target):
+                target[begin + i] += v * amp
+            else:
+                break
+        t += rng.expovariate(rate)
+
+
+def leveled(samples, target=-12.0, knee=0.6):
+    """The loudest 50 ms at `target` dB, the few drop peaks above `knee`
+    rounded off with a soft curve instead of capping the gain."""
+    gain = 10 ** ((target - loudest_db(samples)) / 20)
+    room_left = 0.98 - knee
+    out = []
+    for v in samples:
+        y = v * gain
+        a = abs(y)
+        if a > knee:
+            y = math.copysign(knee + room_left * math.tanh((a - knee) / room_left), y)
+        out.append(y)
+    return out
+
+
+def light_rain(seed=0xD103, seconds=10.0, wash=0.28, drops_per_second=70, band=(1800, 7000), drop_level=0.5,
+               top=9500, wet=0.22):
+    """A seamless ten-second loop: the tail crossfades into the head."""
+    rng = random.Random(seed)
+    tail = 1.2
+    body, overlap = int(SAMPLE_RATE * seconds), int(SAMPLE_RATE * tail)
+    n = body + overlap
+    bed = normalized(biquad(biquad(pink_noise(rng, n), 'high', 110), 'low', top))
+    drops = [0.0] * n
+    fine_drops(drops, rng, seconds + tail, drops_per_second, band, drop_level)
+    drops = biquad(drops, 'low', top)
+    phase = rng.random() * 6.28
+    mix = [bed[i] * wash * (1 + 0.06 * math.sin(2 * math.pi * 0.07 * i / SAMPLE_RATE + phase)) + drops[i]
+           for i in range(n)]
+    mix = normalized(biquad(small_room(mix, wet=wet), 'high', 45))
+    out = mix[:body]
+    for i in range(overlap):
+        t = i / overlap
+        out[i] = mix[body + i] * math.cos(t * math.pi / 2) + mix[i] * math.sin(t * math.pi / 2)
+    return leveled(out)
 
 
 # ---------------------------------------------------------------- ANM2
@@ -760,11 +912,12 @@ def main():
     write_anm2(GFX / 'effects/conch_dragon_lightning.anm2', 'conch_dragon_lightning.png', 'Strike', animations)
     (ROOT / 'resources/sfx').mkdir(parents=True, exist_ok=True)
     for k in range(BOLT_TAKES):
-        write_wav(ROOT / f'resources/sfx/conch_dragon_bolt_{k + 1}.wav', at_level(small_thunder(0xE500 + k)))
+        write_wav(ROOT / f'resources/sfx/conch_dragon_bolt_{k + 1}.wav', louder(small_thunder(0xE500 + k), BOLT_LEVEL))
     for k in range(THUNDER_TAKES):
-        write_wav(ROOT / f'resources/sfx/conch_dragon_thunder_{k + 1}.wav', at_level(rolling_thunder(0xF600 + k)))
+        write_wav(ROOT / f'resources/sfx/conch_dragon_thunder_{k + 1}.wav', louder(rolling_thunder(0xF600 + k), STORM_LEVEL))
     for k in range(TWISTER_TAKES):
-        write_wav(ROOT / f'resources/sfx/conch_dragon_twister_{k + 1}.wav', at_level(twister_wind(0xB800 + k)))
+        write_wav(ROOT / f'resources/sfx/conch_dragon_twister_{k + 1}.wav', louder(twister_wind(0xB800 + k), STORM_LEVEL))
+    write_wav(ROOT / 'resources/sfx/conch_dragon_rain.wav', light_rain())
     print('dragon assets written')
 
 

@@ -1,12 +1,15 @@
 -- 진 (Dragon), God of Weather.
 --
--- While any player holds it, it always rains and the room is dimmed as if under
--- dark clouds (well short of Curse of Darkness). Lightning strikes on its own,
+-- While any player holds it, it always rains (and the rain is heard, a quiet
+-- loop) and the room is dimmed as if under dark clouds (well short of Curse of
+-- Darkness). Lightning strikes on its own,
 -- whether or not anyone shoots: each holder's tears stat divided by 5 is bolts
 -- a second (tears 5 strikes once a second), times the copies held, so copies
 -- add up linearly as independent storms.
--- A bolt lands close to a random enemy (never far off, so it always catches
--- that enemy) and hurts every enemy around it for the holder's damage. Each
+-- A bolt is aimed at a random enemy and catches it as often as the holder's
+-- luck allows (50% at luck 0, 5 points more per luck, always from luck 10);
+-- a miss lands just past its reach, where it may still catch another enemy.
+-- It hurts every enemy around where it lands for the holder's damage. Each
 -- bolt rolls as a quiet small thunder; a full thunderclap, which lights the
 -- room for a moment, comes only every few seconds, and a quiet distant rumble
 -- rolls now and then for as long as it is held. With two or more copies a bolt may rise as a
@@ -22,13 +25,19 @@ local DRAGON_ID = Isaac.GetItemIdByName("Dragon")
 local THUNDER_SOUND = "Conch Dragon Thunder"
 local BOLT_SOUND = "Conch Dragon Bolt"
 local TWISTER_SOUND = "Conch Dragon Twister"
+local RAIN_SOUND = "Conch Dragon Rain"
 local BOLT_PROC_KEY = "dragon_bolt"
 local TWISTER_PROC_KEY = "dragon_twister"
 
 ConchBlessing.dragon.data = {
     tearsDivisor = 5,                    -- bolts a second = tears stat / 5 x copies held (tears 5, one copy: once a second)
     boltRadius = 60,                     -- about one and a half tiles, plus the enemy's size
-    boltScatter = 40,                    -- lands this close to its enemy at most, so the enemy is always caught
+    boltScatter = 40,                    -- a hit lands this close to its enemy at most, so the enemy is caught
+    -- Accuracy (user decision 2026-10-13): the chance a strike catches its enemy.
+    boltHitBase = 0.5,                   -- at luck 0
+    boltHitPerLuck = 0.05,               -- more per point of luck: always from luck 10
+    boltHitMin = 0.1,                    -- however low the luck
+    boltMissReach = 80,                  -- a miss lands up to this far past the bolt's reach from its enemy
     boltDamageMultiplier = 1,            -- of the holder's damage
     twisterChance = 0.05,                -- with twisterMinCopies or more, a bolt rises as a twister instead
     twisterMinCopies = 2,
@@ -46,16 +55,19 @@ ConchBlessing.dragon.data = {
     boltScale = { 0.85, 1.1 },           -- each bolt drawn a little smaller or larger
     scorchTicks = 60,                    -- the burnt patch fades over two seconds
     -- Cue volume x the sample's loudest 50 ms must reach -18 dB or it is lost
-    -- under gameplay (tests/test_dragon_weather_contracts.py measures it); the
-    -- bolt alone sits lower because the user asked for it quieter.
-    boltVolume = 0.2,                    -- every take peaks at -10 dB: -24 dB, every bolt (user decision 2026-10-12)
+    -- under gameplay (tests/test_dragon_weather_contracts.py measures it). The
+    -- levels are the user's (2026-10-13): bolt -7 dB, the thunderclap and the
+    -- twister -6 dB, the rain -15 dB, the distant rumble 6 dB up too. The samples
+    -- are generated loud (bolt -7 dB, storm -6 dB) so volumes stay <= 1.
+    boltVolume = 1.0,                    -- every take sits at -7 dB: -7 dB, every bolt
     boltPitch = { 0.9, 1.1 },            -- a small spread, so repeats never sound identical
-    thunderVolume = 0.43,                -- every take peaks at -10 dB: -17.3 dB, at most every thunderGap
+    thunderVolume = 1.0,                 -- every take sits at -6 dB: -6 dB, at most every thunderGap
     thunderGap = 150,                    -- five seconds between full thunderclaps
-    twisterVolume = 0.2,                 -- every take peaks at -10 dB: -24 dB, for its whole life (user decision 2026-10-12)
+    twisterVolume = 1.0,                 -- every take sits at -6 dB: -6 dB, for its whole life
+    rainVolume = 0.82,                   -- the loop sits at -13.3 dB: -15 dB, for as long as anyone holds it
     twisterWindGap = 90,                 -- a twister rising within three seconds of the last wind joins it: two winds at most
     flashTicks = 6,                      -- a thunderclap lifts the dark this long
-    rumbleVolume = 0.3,                  -- vanilla thunder peaks at -5.5 to -7.4 dB: -16 to -18 dB, quiet but heard
+    rumbleVolume = 0.6,                  -- vanilla thunder peaks at -5.5 to -7.4 dB: -10 to -12 dB
     rumblePitch = 0.85,                  -- a little lower, so it sounds far away
     rumbleGap = { 360, 600 },            -- 12-20 s between rumbles (the vanilla samples run 8-13 s)
     rumbleFirst = { 90, 240 },           -- the first one 3-8 s after entering a room
@@ -128,11 +140,33 @@ local function rollStrikeKind(roll, count, twisters)
     return "bolt"
 end
 
--- Where a bolt lands for two rolls in [0, 1): up to boltScatter from its enemy,
--- in any direction.
+-- Where a bolt that hits lands for two rolls in [0, 1): up to boltScatter
+-- from its enemy, in any direction.
 local function scatter(center, angleRoll, distanceRoll)
     local angle = angleRoll * 2 * math.pi
     local distance = distanceRoll * ConchBlessing.dragon.data.boltScatter
+    return Vector(center.X + math.cos(angle) * distance, center.Y + math.sin(angle) * distance)
+end
+
+-- The chance a strike catches its enemy for the holder's luck: 50% at luck 0,
+-- 5 points more per luck, between 10% and 100%.
+local function boltHitChance(luck)
+    local d = ConchBlessing.dragon.data
+    return math.max(d.boltHitMin, math.min(1, d.boltHitBase + d.boltHitPerLuck * (tonumber(luck) or 0)))
+end
+
+-- Whether a strike with this roll in [0, 1) catches its enemy.
+local function rollHit(roll, luck)
+    return roll < boltHitChance(luck)
+end
+
+-- Where a bolt that misses lands for two rolls in [0, 1): in a ring just past
+-- the bolt's reach from its enemy (the enemy's size included), so it never
+-- catches that enemy but may catch another one standing there.
+local function missSpot(center, angleRoll, distanceRoll, enemySize)
+    local d = ConchBlessing.dragon.data
+    local angle = angleRoll * 2 * math.pi
+    local distance = d.boltRadius + (enemySize or 0) + 4 + distanceRoll * d.boltMissReach
     return Vector(center.X + math.cos(angle) * distance, center.Y + math.sin(angle) * distance)
 end
 
@@ -185,12 +219,26 @@ local function soundId(name)
 end
 
 -- ------------------------------------------------------------------ strikes
-local function strikePosition(rng, enemies)
+-- Rolls, in order: the enemy, the angle, the distance, then whether it hits.
+local function strikePosition(rng, enemies, luck)
     local enemy = enemies[rng:RandomInt(#enemies) + 1]
-    local spot = scatter(enemy.Position, rng:RandomFloat(), rng:RandomFloat())
+    local angleRoll, distanceRoll = rng:RandomFloat(), rng:RandomFloat()
+    local hit = rollHit(rng:RandomFloat(), luck)
     local room = Game():GetRoom()
-    if room and room.IsPositionInRoom and not room:IsPositionInRoom(spot, 0) then return enemy.Position end
-    return spot
+    local function inRoom(spot)
+        return not (room and room.IsPositionInRoom) or room:IsPositionInRoom(spot, 0)
+    end
+    if hit then
+        local spot = scatter(enemy.Position, angleRoll, distanceRoll)
+        return inRoom(spot) and spot or enemy.Position, true
+    end
+    -- A miss that would leave the room turns to another side of its enemy;
+    -- walled in on every side, it lands on the enemy after all.
+    for _, turn in ipairs({ 0, 0.5, 0.25, 0.75 }) do
+        local spot = missSpot(enemy.Position, angleRoll + turn, distanceRoll, enemy.Size)
+        if inRoom(spot) then return spot, false end
+    end
+    return enemy.Position, true
 end
 
 -- Every bolt rolls quietly; a full thunderclap, with a flash, at most every thunderGap.
@@ -211,7 +259,7 @@ local function sound(bolts)
     return "bolt"
 end
 
-local function bolt(player, position, enemies)
+local function bolt(player, position, enemies, aimed)
     local d = ConchBlessing.dragon.data
     local damage = boltDamage(player.Damage)
     local hit = 0
@@ -233,7 +281,8 @@ local function bolt(player, position, enemies)
     local scorches = ConchBlessing.dragon._scorches
     scorches[#scorches + 1] = { position = at, age = 0 }
     local cue = sound(bolts)
-    debugLog("bolt at %.0f,%.0f damage=%.2f hit=%d sound=%s", position.X, position.Y, damage, hit, cue)
+    debugLog("bolt at %.0f,%.0f damage=%.2f hit=%d sound=%s aim=%s", position.X, position.Y, damage, hit, cue,
+        aimed and "on" or "miss")
 end
 
 local function raiseTwister(player, position)
@@ -250,11 +299,11 @@ end
 
 local function strike(player, count, enemies)
     local rng = player:GetCollectibleRNG(DRAGON_ID)
-    local position = strikePosition(rng, enemies)
+    local position, aimed = strikePosition(rng, enemies, player.Luck)
     if rollStrikeKind(rng:RandomFloat(), count, #ConchBlessing.dragon._twisters) == "twister" then
         raiseTwister(player, position)
     else
-        bolt(player, position, enemies)
+        bolt(player, position, enemies, aimed)
     end
 end
 
@@ -305,6 +354,23 @@ local function updateRumble(held)
     local id = SoundEffect and SoundEffect.SOUND_THUNDER
     if id then SFXManager():Play(id, d.rumbleVolume, 0, false, d.rumblePitch) end
     debugLog("distant thunder (next in %d updates)", rumble.wait)
+end
+
+-- ------------------------------------------------------------------ rain sound
+-- The rain loop plays while anyone holds it, across rooms, and stops when
+-- nobody does or the game is left. The sound is this item's own, so stopping
+-- it touches nothing else.
+local function stopRainSound()
+    local id = soundId(RAIN_SOUND)
+    if id and SFXManager():IsPlaying(id) then SFXManager():Stop(id) end
+end
+
+local function updateRainSound(held)
+    if not held then stopRainSound(); return end
+    local id = soundId(RAIN_SOUND)
+    if id and not SFXManager():IsPlaying(id) then
+        SFXManager():Play(id, ConchBlessing.dragon.data.rainVolume, 0, true, 1)
+    end
 end
 
 -- ------------------------------------------------------------------ update
@@ -373,6 +439,7 @@ ConchBlessing.dragon.onUpdate = function()
         game:Darken(d.overcast, 2)
     end
     updateRumble(held)
+    updateRainSound(held)
     local twisters = ConchBlessing.dragon._twisters
     for i = #twisters, 1, -1 do
         if not updateTwister(twisters[i]) then table.remove(twisters, i) end
@@ -530,7 +597,12 @@ ConchBlessing.dragon.onNewRoom = function()
     clearEffects()
 end
 
+ConchBlessing.dragon.onPreGameExit = function()
+    stopRainSound()
+end
+
 ConchBlessing.dragon.onGameStarted = function()
+    stopRainSound()
     clearEffects()
 end
 
@@ -541,6 +613,9 @@ ConchBlessing.dragon._test = {
     twisterTickDamage = twisterTickDamage,
     rollStrikeKind = rollStrikeKind,
     scatter = scatter,
+    boltHitChance = boltHitChance,
+    rollHit = rollHit,
+    missSpot = missSpot,
     pullToward = pullToward,
     twisterFrame = twisterFrame,
     strikeFrame = strikeFrame,

@@ -617,6 +617,23 @@ def build(samples: int, seed: int) -> str:
         rows.append([str(delay), f"{sps:.2f}", f"{sps / divisor:.2f}", f"{2 * sps / divisor:.2f}"])
     w("\n".join(table(["MaxFireDelay", "Tears stat", "Strikes/s, 1 copy", "Strikes/s, 2 copies"], rows)))
     w("")
+    base, base_cite = const("dragon", "boltHitBase")
+    per, per_cite = const("dragon", "boltHitPerLuck")
+    floor_, floor_cite = const("dragon", "boltHitMin")
+    w("Each strike is aimed at a random enemy and catches it when its fourth roll (after the enemy,")
+    w(f"angle and distance) is `RandomFloat() < clamp({base:g} + {per:g} * Luck, {floor_:g}, 1)` on the holder's")
+    w(f"Dragon RNG ({base_cite}, {per_cite}, {floor_cite}); a miss lands just past the bolt's reach.")
+    w("")
+    rows = []
+    for luck in (-10, -5, 0, 1, 3, 5, 7, 9, 10, 15):
+        p = max(floor_, min(1.0, base + per * luck))
+        hits = sum(1 for _ in range(samples) if rng.random() < p)
+        rows.append([str(luck), f"**{p:.0%}**", f"{hits / samples:.3%}"])
+    w("\n".join(table(["Luck", "Exact P (catches its enemy)", "Measured"], rows)))
+    w("")
+    w(f"Always on target from Luck {math.ceil(round((1 - base) / per, 9)):g}; at most "
+      f"{floor_:.0%} below Luck {math.floor(round((floor_ - base) / per, 9)):g}.")
+    w("")
 
     return "\n".join(md) + "\n"
 
