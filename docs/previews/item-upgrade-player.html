@@ -97,7 +97,10 @@ footer { text-align:center; font-size:11px; color:#79736a; }
 .embed main { width:100%; gap:6px 10px; grid-template-columns:auto minmax(0,1fr); align-items:center; }
 .embed header, .embed .details, .embed #kronos-options, .embed .library, .embed footer, .embed .comparison,
 .embed .loop, .embed #upgrade-phase, .embed #upgrade-volume-label { display:none !important; }
-.embed .game-frame { grid-row:1; grid-column:1 / -1; box-shadow:none; }
+.embed .game-frame { grid-row:1; grid-column:1 / -1; box-shadow:none; position:relative; cursor:pointer; }
+#stage-play { position:absolute; inset:0; margin:auto; width:58px; height:58px; padding:0 0 0 4px; border-radius:50%;
+  font-size:22px; color:#221d14; background:#d1b37bdd; border:2px solid #f0d9a8; box-shadow:0 4px 18px #0009; }
+#stage-play:hover { background:#e5c68d; }
 .embed canvas { width:100%; }
 .embed .controls { grid-row:2; grid-column:1; gap:6px; flex-wrap:nowrap; }
 .embed .controls button { min-height:30px; padding:4px 10px; }
@@ -120,7 +123,7 @@ footer { text-align:center; font-size:11px; color:#79736a; }
     <div class="sound"><label class="sound-toggle"><input id="upgrade-sound" type="checkbox" checked>효과음</label><input id="upgrade-volume" type="range" min="0" max="100" step="5" value="100" aria-label="효과음 크기"><span id="upgrade-volume-label">100%</span></div>
     <label class="repeat loop"><input id="upgrade-repeat" type="checkbox">반복</label>
   </div>
-  <div class="game-frame"><canvas id="upgrade-stage" width="640" height="360" role="img" aria-label="아이작 아이템 강화 애니메이션 미리보기"></canvas></div>
+  <div class="game-frame"><canvas id="upgrade-stage" width="640" height="360" role="img" aria-label="아이작 아이템 강화 애니메이션 미리보기"></canvas><button id="stage-play" type="button" hidden aria-label="강화 연출 재생">▶</button></div>
   <div class="details">
     <div><strong id="upgrade-name"></strong><span id="upgrade-category"></span><span id="upgrade-status"></span></div>
     <p id="upgrade-description" aria-live="polite"></p>
@@ -177,6 +180,8 @@ footer { text-align:center; font-size:11px; color:#79736a; }
   // embed it and size the frame from the height this page reports.
   let EMBED = false; try { EMBED = new URLSearchParams(location.search).has('embed'); } catch (_) {}
   if (EMBED) document.documentElement.classList.add('embed');
+  // The embedded player waits on a still frame and plays only when pressed.
+  const stagePlay = root.querySelector('#stage-play');
   const spec = {
     LIVE_EYE:['eye','#75a9dc','#e6f7ff','푸른 홍채에 흰빛이 맺힘 → 한 번 깜빡이며 강화'],
     VOID_DAGGER:['void','#796193','#c6b8df','작은 검은 안개가 칼자루의 공허 문양으로 점점 작아지며 흡수'],
@@ -1013,7 +1018,7 @@ footer { text-align:center; font-size:11px; color:#79736a; }
     g.restore();slider.value=time;root.querySelector('#upgrade-time-label').textContent=`${time.toFixed(1)} / ${duration().toFixed(1)}초`;
     const labels={devour:['패밀리어 소환','흡수 · 삼키기','크로노스 등장'],target:laserVariant?['조준','레이저 변환','마무리']:['조준 · 낙하','명중 · 폭발','연기 가라앉기'],void:['안개 생성','공허로 흡수','흡수 완료'],cointear:['빗방울 · 파란 물듦','변환 · 원래 색으로','침수'],timeclock:['6시부터 째깍','12시 · 댕 · 변환','시계 사라짐'],neglect:['왼쪽이 어두워짐','어둠 속 변환','다시 보임'],dragon:['번개 예고','낙뢰 · 변환','잔광'],crown:['하얀 빛','정화','축복'],ice:['촛심 점화','불꽃 분출','서리의 숨결'],fire:['촛심 점화','불꽃 분출','화염의 숨결']};
     const phases=labels[mode()]||['시작','변환','마무리'];root.querySelector('#upgrade-phase').textContent=mode()==='devour'?kronosPhase(t):mode()==='dragon'?(t<phaseTime()?'어둠 속 천둥 · 아이템만 밝게':t<phaseTime()+7/30?'낙뢰 · 어둠 걷힘':'변환 완료'):phases[t<phaseTime()-.4?0:t<phaseTime()+.4?1:2];
-    pause.disabled=!running&&(time<=0||time>=duration());pause.textContent=EMBED?(running?'❚❚':'▶'):running?'일시 정지':'계속 재생';if(EMBED)pause.setAttribute('aria-label',running?'일시 정지':'계속 재생');
+    pause.disabled=!running&&(time<=0||time>=duration());pause.textContent=EMBED?(running?'❚❚':'▶'):running?'일시 정지':'계속 재생';if(EMBED){pause.setAttribute('aria-label',running?'일시 정지':'계속 재생');stagePlay.hidden=running;}
     canvas.setAttribute('aria-label',`${selected.name}: ${spec[selected.key][3]}`);
   }
   // Decode embedded vanilla WAVs only after an explicit playback gesture.
@@ -1149,10 +1154,20 @@ footer { text-align:center; font-size:11px; color:#79736a; }
   // Without one, the last item chosen in this browser.
   const linked=()=>{try{const key=decodeURIComponent(location.hash.slice(1)).toUpperCase();return rows.some(r=>r.key===key)?key:null;}catch(_){return null;}};
   let savedItem='LIVE_EYE';try{savedItem=localStorage.getItem('conch-upgrade-item')||savedItem;}catch(_){}
-  const linkedItem=linked();choose(linkedItem||savedItem,false,linkedItem!==null);
-  window.addEventListener('hashchange',()=>{const key=linked();if(key)choose(key,false,true);});
-  // The site stops a player it hides (a closed sheet, the other tab).
-  window.addEventListener('message',e=>{if(e.source===window.parent&&e.data&&e.data.type==='conch-upgrade'&&e.data.action==='stop')stop();});
+  const linkedItem=linked();choose(linkedItem||savedItem,false,linkedItem!==null&&!EMBED);
+  window.addEventListener('hashchange',()=>{const key=linked();if(key)choose(key,false,!EMBED);});
+  if(EMBED){
+    const press=()=>{if(running)stop();else start(time<=0||time>=duration());};
+    stagePlay.addEventListener('click',e=>{e.stopPropagation();press();});
+    canvas.addEventListener('click',press);
+  }
+  // The site stops a player it hides (a closed sheet, the other tab) and tells
+  // a kept player which item to show next, without a navigation.
+  window.addEventListener('message',e=>{
+    const d=e.data;if(e.source!==window.parent||!d||d.type!=='conch-upgrade')return;
+    if(d.action==='stop')stop();
+    else if(d.action==='show'){const key=String(d.key||'').toUpperCase();if(key!==selected.key&&rows.some(r=>r.key===key))choose(key,false,false);}
+  });
   let reportedHeight=0;
   function reportSize(){
     requestAnimationFrame(()=>{const height=Math.ceil(root.getBoundingClientRect().height);
