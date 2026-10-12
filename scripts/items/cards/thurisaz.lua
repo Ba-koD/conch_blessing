@@ -1,10 +1,10 @@
--- Thurisaz (ᚦ, "giant"): the Kronos rune. Using it devours up to three random
--- familiars of the user's, the way Kronos does, and keeps them for good: each
--- one gives +2 damage and its absorbed ability whether or not Kronos is held.
+-- Thurisaz (ᚦ, "giant"): the Kronos rune. Using it devours one random familiar
+-- of the user's, the way Kronos does, and keeps it for good: each one gives +2
+-- damage and its absorbed ability whether or not Kronos is held.
 -- The ledger and the abilities are Kronos's (ConchBlessing.kronos.devourWithRune).
 ConchBlessing.thurisaz = ConchBlessing.thurisaz or {}
 ConchBlessing.thurisaz.data = {
-    devour = 3, -- familiars taken per use
+    devour = 1, -- familiars taken per use (user decision 2026-10-12)
 }
 
 local CARD = ConchBlessing.PocketData.THURISAZ.id

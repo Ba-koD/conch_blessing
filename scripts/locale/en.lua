@@ -702,7 +702,7 @@ return {
             name = "Thurisaz",
             description = "Devour",
             eid = {
-                "Absorbs 3 random familiars.",
+                "Absorbs a random familiar.",
                 "#Each absorbed familiar permanently grants {{Damage}} +2 damage and its unique ability, even without Kronos",
                 "#{{Warning}} REPENTOGON recommended",
             },

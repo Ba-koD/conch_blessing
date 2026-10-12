@@ -1,6 +1,6 @@
 """Thurisaz, the Kronos rune: production Lua with engine/provider doubles.
 
-The rune devours up to three of the user's familiars for good, giving each one's
+The rune devours one of the user's familiars a use, for good, giving each one's
 +2 damage and absorbed ability with or without Kronos, and Kronos's loss never
 hands them back. These doubles do not prove native familiar removal, the card's
 use animation or the pocket-slot art; the in-game bench covers those.
@@ -183,7 +183,27 @@ class ThurisazTests(unittest.TestCase):
             assert(player:GetCollectibleNum(bobby)==0 and familiars[3]:Exists())
         """)
 
-    def test_card_callback_uses_the_card_rng_and_three_picks(self):
+    def test_a_second_copy_stays_devourable_whichever_copy_the_engine_retires(self):
+        self.lua.execute("""
+            dropKronos()
+            local bobby=owned('BROTHER_BOBBY'); owned('BROTHER_BOBBY')
+            -- The engine's next familiar update keeps as many live copies as are
+            -- owned and retires the newest extras, not necessarily the picked one.
+            local function retire(id)
+                local live={}
+                for _,f in ipairs(familiars) do
+                    local config=f.GetItemConfig and f:GetItemConfig()
+                    if f:Exists() and config and config.ID==id then live[#live+1]=f end
+                end
+                for k=#live,player:GetCollectibleNum(id)+1,-1 do live[k]:Remove() end
+            end
+            assert(K.devourWithRune(player,1,first)==1)
+            retire(bobby)
+            assert(K.devourWithRune(player,1,first)==1,'the remaining copy can still be devoured')
+            assert(K.getRuneCount(player,bobby)==2 and player:GetCollectibleNum(bobby)==0)
+        """)
+
+    def test_card_callback_uses_the_card_rng_and_one_pick(self):
         self.lua.execute("""
             dropKronos()
             ConchBlessing.PocketData={THURISAZ={id=77}}
@@ -198,8 +218,16 @@ class ThurisazTests(unittest.TestCase):
             local use=callbacks[ModCallbacks.MC_USE_CARD][77]
             use(nil,76,player); assert(#draws==0,'another card does nothing')
             use(nil,77,player)
-            assert(#draws==3 and draws[1]==4 and draws[2]==3 and draws[3]==2)
-            assert(K.getRuneTotal(player)==3)
+            assert(#draws==1 and draws[1]==4, 'one pick among the four')
+            assert(K.getRuneTotal(player)==1)
+            use(nil,77,player); use(nil,77,player); use(nil,77,player)
+            -- The engine retires a removed collectible's familiar only at its next
+            -- update, as these doubles do: back-to-back uses must still take four
+            -- different familiars, never the one just devoured.
+            assert(K.getRuneTotal(player)==4, 'one more familiar each use')
+            for _,name in ipairs({'BROTHER_BOBBY','GUARDIAN_ANGEL','SACK_OF_PENNIES','LIL_HAUNT'}) do
+                assert(K.getRuneCount(player,CollectibleType['COLLECTIBLE_'..name])==1, name..' taken once')
+            end
         """)
 
 
@@ -211,13 +239,13 @@ class ThurisazContentTests(unittest.TestCase):
         self.assertEqual((rune['name'], rune['type'], rune['hud']), ('Thurisaz', 'rune', 'Thurisaz'))
         for lang in ('en', 'kr', 'urimal'):
             entry = lua_data.load(f'scripts/locale/{lang}.lua')['pockets']['THURISAZ']
-            # User-designated copy: three random familiars, then the reward, then the note.
+            # User-designated copy: one random familiar, then the reward, then the note.
             self.assertEqual(len(entry['eid']), 3, lang)
             self.assertFalse(entry['eid'][0].startswith('#'), lang)
-            self.assertIn('3', entry['eid'][0], lang)
+            self.assertNotIn('3', entry['eid'][0], lang)
             self.assertNotIn('{own:KRONOS}', ''.join(entry['eid']), lang)
         kr = lua_data.load('scripts/locale/kr.lua')['pockets']['THURISAZ']['eid']
-        self.assertEqual(kr[0], '랜덤 펫 3마리를 흡수합니다.')
+        self.assertEqual(kr[0], '랜덤 펫 한 마리를 흡수합니다.')
         self.assertNotIn('적으면', ''.join(kr))
         sheet = Image.open(ROOT / 'resources/gfx' / rune['gfx']).convert('RGBA')
         self.assertEqual(sheet.size, (96, 32))

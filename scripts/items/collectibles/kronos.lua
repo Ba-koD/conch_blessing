@@ -4521,7 +4521,7 @@ function ConchBlessing.kronos.runeCandidates(player)
     for _, entity in ipairs(Isaac.FindByType(EntityType.ENTITY_FAMILIAR)) do
         local fam = entity:ToFamiliar()
         if fam and fam:Exists() and not fam:IsDead() and fam.Player and GetPtrHash(fam.Player) == owner
-            and not Rune.isKronosAnchor(fam) then
+            and not Rune.isKronosAnchor(fam) and not fam:GetData().__ConchBlessingThurisazDevoured then
             familiars[#familiars + 1] = fam
             mapped = mapped and type(fam.GetItemConfig) == "function"
         end
@@ -4563,8 +4563,12 @@ function Rune.grantConversion(player, ledger, itemId)
 end
 
 -- Take one candidate away from the player and enter it in the rune ledger.
--- A temporary copy goes before an owned one, and the engine retires the
--- familiar of a removed collectible itself. Returns false when it is gone.
+-- A temporary copy goes before an owned one. The picked familiar itself is
+-- removed and marked: with several copies the engine would otherwise retire
+-- whichever copy it likes at its next familiar update and leave the picked one
+-- standing, and the mark keeps another use in the same moment (Clear Rune,
+-- Echo Chamber) from taking it twice. The engine respawns a familiar for any
+-- copy still owned. Returns false when it is gone.
 function Rune.devourOne(player, ledger, pick)
     local fam, itemId = pick.familiar, pick.itemId
     if fam and not fam:Exists() then return false end
@@ -4575,6 +4579,7 @@ function Rune.devourOne(player, ledger, pick)
             if fam then fam:Remove() end
         elseif player:GetCollectibleNum(itemId, true) > 0 then
             player:RemoveCollectible(itemId)
+            if fam then fam:Remove() end
         elseif fam then
             fam:Remove()
         else
@@ -4588,6 +4593,7 @@ function Rune.devourOne(player, ledger, pick)
         ledger.generic = math.max(0, math.floor(tonumber(ledger.generic) or 0)) + 1
     end
     if fam then
+        fam:GetData().__ConchBlessingThurisazDevoured = true
         Isaac.Spawn(EntityType.ENTITY_EFFECT, EffectVariant.POOF02, 0, fam.Position, Vector.Zero, nil)
     end
     return true

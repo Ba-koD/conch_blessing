@@ -1,6 +1,6 @@
 -- conch_test thurisaz [CASE | list | give [N] | spawn | familiars | ledger]
 -- The Kronos rune, used for real through EntityPlayer:UseCard (and Clear Rune,
--- and a real pocket drop). It devours up to three of the user's familiars for
+-- and a real pocket drop). Each use devours one of the user's familiars for
 -- good: +2 damage each plus the familiar's absorbed ability, with or without
 -- Kronos, and Kronos's loss never hands them back. Every case starts from a
 -- clean run and is fully automatic; results land in log.txt. The manual helpers
@@ -140,30 +140,36 @@ local function case(name, title, build)
     })
 end
 
-case("basic", "devours three familiars without Kronos", function(plan)
-    give(plan, { BOBBY, ANGEL, ROBO })
+case("basic", "one familiar a use, without Kronos", function(plan)
+    give(plan, { BOBBY })
     useRune(plan, 0)
-    plan.check("all three familiar collectibles are gone", function(player)
-        return owned(player, BOBBY) + owned(player, ANGEL) + owned(player, ROBO) == 0, "none left"
+    plan.check("Brother Bobby's collectible is gone", function(player)
+        return owned(player, BOBBY) == 0, "Bobby owned " .. owned(player, BOBBY)
     end)
-    plan.check("the rune's ledger holds each of them once", function(player)
-        return runeTotal(player) == 3 and runeCount(player, BOBBY) == 1 and runeCount(player, ANGEL) == 1
-            and runeCount(player, ROBO) == 1, "total " .. runeTotal(player)
+    plan.check("the rune's ledger holds it once", function(player)
+        return runeTotal(player) == 1 and runeCount(player, BOBBY) == 1, "total " .. runeTotal(player)
     end)
-    expectAddition(plan, "+2 damage per devoured familiar in StatsAPI", 3)
+    expectAddition(plan, "+2 damage for the devoured familiar in StatsAPI", 1)
     plan.check("the displayed damage rose", function(player, ctx)
         return player.Damage > ctx.base.Damage + 1, string.format("%.2f -> %.2f", ctx.base.Damage, player.Damage)
     end)
     expectBobbyTears(plan, "Brother Bobby's ability: +2 tears a second", 1)
-    plan.check("Guardian Angel's ability: +0.3 speed", function(player, ctx)
-        return H.expect(player.MoveSpeed - ctx.base.Speed, K().STATS.GUARDIAN_ANGEL_SPEED)
-    end)
-    plan.check("Robo-Baby turns into Technology", function(player)
-        return player:HasCollectible(C.COLLECTIBLE_TECHNOLOGY), "Technology owned"
-    end)
     plan.check("Kronos's own ledger is untouched", function(player)
         return K()._getAbsorbedCount(player, BOBBY) == 0, "Kronos Bobby " .. K()._getAbsorbedCount(player, BOBBY)
     end)
+    plan.section("THURISAZ basic: Guardian Angel, then Robo-Baby, one use each")
+    give(plan, { ANGEL })
+    useRune(plan, 0)
+    plan.check("Guardian Angel's ability: +0.3 speed", function(player, ctx)
+        return H.expect(player.MoveSpeed - ctx.base.Speed, K().STATS.GUARDIAN_ANGEL_SPEED)
+    end)
+    give(plan, { ROBO })
+    useRune(plan, 0)
+    plan.check("Robo-Baby turns into Technology", function(player)
+        return player:HasCollectible(C.COLLECTIBLE_TECHNOLOGY), "Technology owned"
+    end)
+    expectTotal(plan, "three uses, three familiars", 3)
+    expectAddition(plan, "+6 damage for three", 3)
     plan.section("THURISAZ basic: with no familiar left nothing changes")
     useRune(plan, 0)
     expectTotal(plan, "the ledger stays at three", 3)
@@ -174,36 +180,59 @@ case("basic", "devours three familiars without Kronos", function(plan)
     expectBobbyTears(plan, "Bobby's tears stay after the room change", 1)
 end)
 
-case("more", "with five familiars it takes exactly three", function(plan)
-    local five = { BOBBY, ANGEL, ROBO, C.COLLECTIBLE_SACK_OF_PENNIES, C.COLLECTIBLE_LIL_HAUNT }
-    give(plan, five)
+case("more", "with three familiars it takes exactly one a use", function(plan)
+    local three = { BOBBY, ANGEL, ROBO }
+    give(plan, three)
     useRune(plan, 2)
-    plan.check("three of the five collectibles are gone", function(player)
+    plan.check("one of the three collectibles is gone", function(player)
         local left = 0
-        for _, id in ipairs(five) do left = left + owned(player, id) end
+        for _, id in ipairs(three) do left = left + owned(player, id) end
         return left == 2, left .. " still owned"
     end)
-    plan.check("the ledger holds exactly the three that went", function(player)
+    plan.check("the ledger holds exactly the one that went", function(player)
         local taken = 0
-        for _, id in ipairs(five) do taken = taken + runeCount(player, id) end
-        return taken == 3 and runeTotal(player) == 3, "ledger " .. taken .. ", total " .. runeTotal(player)
+        for _, id in ipairs(three) do taken = taken + runeCount(player, id) end
+        return taken == 1 and runeTotal(player) == 1, "ledger " .. taken .. ", total " .. runeTotal(player)
     end)
-    expectAddition(plan, "+6 damage for three", 3)
-    plan.section("THURISAZ more: a second use takes the other two")
+    expectAddition(plan, "+2 damage for one", 1)
+    plan.section("THURISAZ more: two more uses take the other two, one each")
+    useRune(plan, 1)
+    expectTotal(plan, "two after the second use", 2)
     useRune(plan, 0)
-    expectTotal(plan, "all five are the rune's now", 5)
-    expectAddition(plan, "+10 damage for five", 5)
+    expectTotal(plan, "all three are the rune's now", 3)
+    expectAddition(plan, "+6 damage for three", 3)
+    plan.section("THURISAZ more: two uses in the same moment take two different familiars")
+    local pair = { C.COLLECTIBLE_SACK_OF_PENNIES, C.COLLECTIBLE_LIL_HAUNT }
+    give(plan, pair)
+    plan.act(function(player)
+        player:UseCard(cardId(), UseFlag.USE_NOANIM | UseFlag.USE_NOANNOUNCER)
+        player:UseCard(cardId(), UseFlag.USE_NOANIM | UseFlag.USE_NOANNOUNCER)
+    end)
+    plan.waitUntil(function(player) return #ownFamiliars(player) == 0, #ownFamiliars(player) .. " left" end,
+        30, "both familiars leave the room")
+    plan.wait(4)
+    plan.check("each is in the ledger once, none twice", function(player)
+        return runeCount(player, pair[1]) == 1 and runeCount(player, pair[2]) == 1 and runeTotal(player) == 5,
+            string.format("sack %d, haunt %d, total %d", runeCount(player, pair[1]), runeCount(player, pair[2]),
+                runeTotal(player))
+    end)
 end)
 
 case("flies", "familiars with no item give the flat damage", function(plan)
     plan.act(function(player) player:AddBlueFlies(2, player.Position, nil) end)
     plan.waitUntil(function(player) return #ownFamiliars(player) == 2, #ownFamiliars(player) .. " flies" end,
         30, "two blue flies")
-    useRune(plan, 0)
-    plan.check("the ledger counts them as familiars with no item", function(player)
+    useRune(plan, 1)
+    plan.check("the ledger counts one as a familiar with no item", function(player)
         local ledger = H.save(player).thurisaz or {}
-        return ledger.generic == 2 and runeTotal(player) == 2,
+        return ledger.generic == 1 and runeTotal(player) == 1,
             "generic " .. tostring(ledger.generic) .. ", total " .. runeTotal(player)
+    end)
+    expectAddition(plan, "+2 damage for it", 1)
+    useRune(plan, 0)
+    plan.check("the second fly too", function(player)
+        local ledger = H.save(player).thurisaz or {}
+        return ledger.generic == 2 and runeTotal(player) == 2, "generic " .. tostring(ledger.generic)
     end)
     expectAddition(plan, "+2 damage each", 2)
     plan.check("no other stat changes", function(player, ctx)
@@ -212,16 +241,23 @@ case("flies", "familiars with no item give the flat damage", function(plan)
     end)
 end)
 
-case("temporary", "a Box of Friends copy is kept for good", function(plan)
+case("temporary", "a Box of Friends copy goes first and is kept for good", function(plan)
     give(plan, { BOBBY })
     plan.act(function(player) player:UseActiveItem(C.COLLECTIBLE_BOX_OF_FRIENDS, UseFlag.USE_NOANIM, -1) end)
     plan.waitUntil(function(player) return #ownFamiliars(player) == 2, #ownFamiliars(player) .. " Bobbies" end,
         30, "Box of Friends doubles Brother Bobby")
-    useRune(plan, 0)
-    plan.check("both the owned copy and the temporary copy are taken", function(player)
+    useRune(plan, 1)
+    plan.check("the temporary copy is taken before the owned one", function(player)
         local effect = player:GetEffects():GetCollectibleEffectNum(BOBBY)
-        return owned(player, BOBBY) == 0 and effect == 0 and runeCount(player, BOBBY) == 2,
+        return owned(player, BOBBY) == 1 and effect == 0 and runeCount(player, BOBBY) == 1,
             string.format("owned %d, effect %d, ledger %d", owned(player, BOBBY), effect, runeCount(player, BOBBY))
+    end)
+    expectAddition(plan, "+2 damage for it", 1)
+    plan.section("THURISAZ temporary: the next use takes the owned copy")
+    useRune(plan, 0)
+    plan.check("both Bobbies are the rune's", function(player)
+        return owned(player, BOBBY) == 0 and runeCount(player, BOBBY) == 2,
+            string.format("owned %d, ledger %d", owned(player, BOBBY), runeCount(player, BOBBY))
     end)
     expectAddition(plan, "+2 damage for each Bobby", 2)
     expectBobbyTears(plan, "two Bobbies' tears", 2)
@@ -323,6 +359,8 @@ end)
 case("conversion", "conversion items keep Kronos's limits", function(plan)
     local brain = C.COLLECTIBLE_BOBS_BRAIN
     give(plan, { brain, brain, ROBO })
+    useRune(plan, 2)
+    useRune(plan, 1)
     useRune(plan, 0)
     plan.check("two Bob's Brains give Ipecac once", function(player)
         return H.expect(owned(player, C.COLLECTIBLE_IPECAC), 1)
@@ -340,6 +378,8 @@ end)
 
 case("gb_bug", "GB Bug is just another familiar to the rune", function(plan)
     give(plan, { C.COLLECTIBLE_GB_BUG, BOBBY, ANGEL })
+    useRune(plan, 2)
+    useRune(plan, 1)
     useRune(plan, 0)
     plan.wait(10)
     plan.check("nothing is handed back", function(player)
