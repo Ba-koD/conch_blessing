@@ -26,6 +26,12 @@ button:hover { background:#343028; border-color:#8d7e64; }
 .comparison .arrow { color:#d1b37b; font-size:18px; padding:0 2px; }
 .repeat { display:flex; align-items:center; gap:5px; color:#b3a999; font-size:12px; white-space:nowrap; }
 .repeat input { accent-color:#d1b37b; min-height:0; margin:0; }
+.sound { display:flex; align-items:center; gap:6px; color:#b3a999; font-size:12px; white-space:nowrap; }
+.sound-toggle { display:flex; align-items:center; gap:5px; }
+.sound-toggle input { accent-color:#d1b37b; min-height:0; margin:0; }
+#upgrade-volume { width:84px; min-height:18px; margin:0; padding:0; border:0; background:none; accent-color:#d1b37b; cursor:pointer; }
+#upgrade-volume:disabled { opacity:.4; cursor:default; }
+#upgrade-volume-label { min-width:3.2em; text-align:right; font-variant-numeric:tabular-nums; }
 button:disabled { opacity:.4; cursor:default; }
 :focus-visible { outline:2px solid #e5c68d; outline-offset:3px; }
 .game-frame { display:grid; place-items:center; background:#090808; border:1px solid #39322a; box-shadow:0 14px 55px #0007; border-radius:3px; overflow:hidden; }
@@ -69,7 +75,7 @@ footer { text-align:center; font-size:11px; color:#79736a; }
  .controls { flex-wrap:wrap; }
  .comparison { flex:1; }
  .comparison .caption { display:none; }
- .repeat { flex-basis:100%; justify-content:flex-end; }
+ .repeat, .sound { flex-basis:100%; justify-content:flex-end; }
  .controls button { padding:7px 10px; }
  .library-bar { gap:8px; }
  #item-search { width:180px; min-width:0; }
@@ -85,6 +91,20 @@ footer { text-align:center; font-size:11px; color:#79736a; }
 .pet-choice img { width:24px; height:24px; image-rendering:pixelated; }
 .pet-choice[aria-pressed="true"] { border-color:#dfb980; background:#493329; color:#f2d9b1; }
 #kronos-pet-source { color:#cbb8ad; font-size:11px; line-height:1.5; }
+/* ?embed: only the stage and its controls, for the codex site's item details. */
+:root.embed { background:transparent; }
+.embed body { display:block; min-height:0; padding:0; }
+.embed main { width:100%; gap:6px 10px; grid-template-columns:auto minmax(0,1fr); align-items:center; }
+.embed header, .embed .details, .embed #kronos-options, .embed .library, .embed footer, .embed .comparison,
+.embed .loop, .embed #upgrade-phase, .embed #upgrade-volume-label { display:none !important; }
+.embed .game-frame { grid-row:1; grid-column:1 / -1; box-shadow:none; }
+.embed canvas { width:100%; }
+.embed .controls { grid-row:2; grid-column:1; gap:6px; flex-wrap:nowrap; }
+.embed .controls button { min-height:30px; padding:4px 10px; }
+.embed .sound { flex-basis:auto; }
+.embed #upgrade-volume { width:64px; }
+.embed .timeline { grid-row:2; grid-column:2; grid-template-columns:minmax(0,1fr) auto; gap:8px; font-size:11px; }
+@media (max-width:420px) { .embed main { grid-template-columns:minmax(0,1fr); } .embed .timeline { grid-row:3; grid-column:1; } }
 </style>
 </head>
 <body>
@@ -97,8 +117,8 @@ footer { text-align:center; font-size:11px; color:#79736a; }
     <div class="comparison" aria-label="아이템 강화 전후"><span class="caption">강화 전</span><img id="origin-icon" alt="강화 전 아이템"><span class="arrow" aria-hidden="true">→</span><img id="result-icon" alt="강화 후 아이템"><span class="caption">강화 후</span></div>
     <button class="primary" id="upgrade-play" type="button">▶ 다시 재생</button>
     <button id="upgrade-pause" type="button">일시 정지</button>
-    <label class="repeat"><input id="upgrade-sound" type="checkbox" checked>효과음</label>
-    <label class="repeat"><input id="upgrade-repeat" type="checkbox">반복</label>
+    <div class="sound"><label class="sound-toggle"><input id="upgrade-sound" type="checkbox" checked>효과음</label><input id="upgrade-volume" type="range" min="0" max="100" step="5" value="100" aria-label="효과음 크기"><span id="upgrade-volume-label">100%</span></div>
+    <label class="repeat loop"><input id="upgrade-repeat" type="checkbox">반복</label>
   </div>
   <div class="game-frame"><canvas id="upgrade-stage" width="640" height="360" role="img" aria-label="아이작 아이템 강화 애니메이션 미리보기"></canvas></div>
   <div class="details">
@@ -152,6 +172,11 @@ footer { text-align:center; font-size:11px; color:#79736a; }
   const canvas = root.querySelector('canvas'), g = canvas.getContext('2d');
   const slider = root.querySelector('#upgrade-time');
   const play = root.querySelector('#upgrade-play'), pause = root.querySelector('#upgrade-pause');
+  const soundToggle = root.querySelector('#upgrade-sound'), volumeInput = root.querySelector('#upgrade-volume');
+  // ?embed shows only the stage and its controls; the codex site's item details
+  // embed it and size the frame from the height this page reports.
+  let EMBED = false; try { EMBED = new URLSearchParams(location.search).has('embed'); } catch (_) {}
+  if (EMBED) document.documentElement.classList.add('embed');
   const spec = {
     LIVE_EYE:['eye','#75a9dc','#e6f7ff','푸른 홍채에 흰빛이 맺힘 → 한 번 깜빡이며 강화'],
     VOID_DAGGER:['void','#796193','#c6b8df','작은 검은 안개가 칼자루의 공허 문양으로 점점 작아지며 흡수'],
@@ -988,18 +1013,18 @@ footer { text-align:center; font-size:11px; color:#79736a; }
     g.restore();slider.value=time;root.querySelector('#upgrade-time-label').textContent=`${time.toFixed(1)} / ${duration().toFixed(1)}초`;
     const labels={devour:['패밀리어 소환','흡수 · 삼키기','크로노스 등장'],target:laserVariant?['조준','레이저 변환','마무리']:['조준 · 낙하','명중 · 폭발','연기 가라앉기'],void:['안개 생성','공허로 흡수','흡수 완료'],cointear:['빗방울 · 파란 물듦','변환 · 원래 색으로','침수'],timeclock:['6시부터 째깍','12시 · 댕 · 변환','시계 사라짐'],neglect:['왼쪽이 어두워짐','어둠 속 변환','다시 보임'],dragon:['번개 예고','낙뢰 · 변환','잔광'],crown:['하얀 빛','정화','축복'],ice:['촛심 점화','불꽃 분출','서리의 숨결'],fire:['촛심 점화','불꽃 분출','화염의 숨결']};
     const phases=labels[mode()]||['시작','변환','마무리'];root.querySelector('#upgrade-phase').textContent=mode()==='devour'?kronosPhase(t):mode()==='dragon'?(t<phaseTime()?'어둠 속 천둥 · 아이템만 밝게':t<phaseTime()+7/30?'낙뢰 · 어둠 걷힘':'변환 완료'):phases[t<phaseTime()-.4?0:t<phaseTime()+.4?1:2];
-    pause.disabled=!running&&(time<=0||time>=duration());pause.textContent=running?'일시 정지':'계속 재생';
+    pause.disabled=!running&&(time<=0||time>=duration());pause.textContent=EMBED?(running?'❚❚':'▶'):running?'일시 정지':'계속 재생';if(EMBED)pause.setAttribute('aria-label',running?'일시 정지':'계속 재생');
     canvas.setAttribute('aria-label',`${selected.name}: ${spec[selected.key][3]}`);
   }
   // Decode embedded vanilla WAVs only after an explicit playback gesture.
   // Rendering/scrubbing never plays sound; generation tokens cancel late decodes.
-  let audioContext=null,audioGeneration=0;
+  let audioContext=null,audioGeneration=0,masterGain=null;
   const audioBuffers=new Map(),audioSources=new Set(),firedCues=new Set();
   function haltAudio(){audioGeneration++;for(const s of audioSources){try{s.stop();}catch(_){}}audioSources.clear();}
   function prepareAudio(){
     if(!root.querySelector('#upgrade-sound').checked)return;
     try{const Audio=window.AudioContext||window.webkitAudioContext;if(!Audio)return;
-      audioContext??=new Audio();audioContext.resume().catch(()=>{});
+      audioContext??=new Audio();audioContext.resume().catch(()=>{});if(!masterGain){masterGain=audioContext.createGain();masterGain.connect(audioContext.destination);}applyVolume();
       for(const [name,value] of Object.entries(soundData))if(!audioBuffers.has(name)){
         audioBuffers.set(name,Promise.all((Array.isArray(value)?value:[value]).map(url=>{
           const bytes=Uint8Array.from(atob(url.split(',')[1]),c=>c.charCodeAt(0));
@@ -1039,7 +1064,7 @@ footer { text-align:center; font-size:11px; color:#79736a; }
     const source=audioContext.createBufferSource(),gain=audioContext.createGain();
     source.buffer=buffers[Math.floor(Math.random()*buffers.length)];gain.gain.value=volume;
     if(source.playbackRate)source.playbackRate.value=pitch;
-    source.connect(gain);gain.connect(audioContext.destination);audioSources.add(source);source.onended=()=>audioSources.delete(source);source.start();
+    source.connect(gain);gain.connect(masterGain||audioContext.destination);audioSources.add(source);source.onended=()=>audioSources.delete(source);source.start();
   }
   function advanceSound(before,after){for(const [at,name,volume,pitch] of soundCues())if(before<at&&after>=at&&!firedCues.has(name+'@'+at)){firedCues.add(name+'@'+at);void cue(name,volume,pitch);}}
 
@@ -1072,7 +1097,26 @@ footer { text-align:center; font-size:11px; color:#79736a; }
     if(persist)save();fitView();
   }
   variant.addEventListener('click',()=>{laserVariant=!laserVariant;variant.setAttribute('aria-pressed',String(laserVariant));variant.textContent=laserVariant?'비교: 새 미사일 연출':'비교: 기존 레이저 연출';choose('SOFLAM',false,true);});
-  root.querySelector('#upgrade-sound').addEventListener('change',()=>{haltAudio();if(running)prepareAudio();});
+  // The volume scales every cue together and is only the viewer's preference:
+  // at 100% each cue plays at exactly the volume the game uses (soundCues).
+  function applyVolume(){
+    root.querySelector('#upgrade-volume-label').textContent=volumeInput.value+'%';
+    volumeInput.disabled=!soundToggle.checked;
+    if(masterGain)masterGain.gain.value=Number(volumeInput.value)/100;
+  }
+  function loadVolume(){
+    try{const v=localStorage.getItem('conch-upgrade-volume'),on=localStorage.getItem('conch-upgrade-sound');
+      if(v!==null&&v.trim()!==''&&Number.isFinite(Number(v)))volumeInput.value=String(Math.max(0,Math.min(100,Math.round(Number(v)))));
+      if(on!==null)soundToggle.checked=on!=='0';}catch(_){}
+    applyVolume();
+  }
+  function saveVolume(){try{localStorage.setItem('conch-upgrade-volume',volumeInput.value);localStorage.setItem('conch-upgrade-sound',soundToggle.checked?'1':'0');}catch(_){}}
+  soundToggle.addEventListener('change',()=>{haltAudio();applyVolume();saveVolume();if(running)prepareAudio();});
+  volumeInput.addEventListener('input',()=>{applyVolume();saveVolume();});
+  // Another player on the same site (the effects tab or an item's small player) changed it.
+  window.addEventListener('storage',e=>{if(e.key==='conch-upgrade-volume'||e.key==='conch-upgrade-sound'){loadVolume();if(!soundToggle.checked)haltAudio();}});
+  loadVolume();
+  if(EMBED){play.textContent='↻';play.setAttribute('aria-label','다시 재생');}
   let composing=false;
   function filterItems(){
     const query=search.value.trim().toLocaleLowerCase().replace(/\s+/g,'');let count=0;
@@ -1107,6 +1151,13 @@ footer { text-align:center; font-size:11px; color:#79736a; }
   let savedItem='LIVE_EYE';try{savedItem=localStorage.getItem('conch-upgrade-item')||savedItem;}catch(_){}
   const linkedItem=linked();choose(linkedItem||savedItem,false,linkedItem!==null);
   window.addEventListener('hashchange',()=>{const key=linked();if(key)choose(key,false,true);});
+  // The site stops a player it hides (a closed sheet, the other tab).
+  window.addEventListener('message',e=>{if(e.source===window.parent&&e.data&&e.data.type==='conch-upgrade'&&e.data.action==='stop')stop();});
+  let reportedHeight=0;
+  function reportSize(){
+    requestAnimationFrame(()=>{const height=Math.ceil(root.getBoundingClientRect().height);
+      if(height&&height!==reportedHeight){reportedHeight=height;try{window.parent.postMessage({type:'conch-upgrade-size',height},'*');}catch(_){}}});
+  }
   Promise.all(ready).then(()=>{
     const failed=[...Object.values(scenery),...Array.from(icons.values()).flatMap(pair=>[pair.origin,pair.icon])].some(img=>!img.naturalWidth);
     if(failed)root.querySelector('#preview-note').textContent='이미지 로드에 실패했습니다. HTML 파일을 다시 열어 주세요.';
@@ -1121,8 +1172,9 @@ footer { text-align:center; font-size:11px; color:#79736a; }
       +parseFloat(body.paddingTop)+parseFloat(body.paddingBottom)+2;
     const availableWidth=Math.max(240,window.innerWidth-parseFloat(body.paddingLeft)-parseFloat(body.paddingRight)-2);
     const availableHeight=Math.max(180,window.innerHeight-verticalSpace);
-    const width=Math.floor(Math.min(1280,availableWidth,availableHeight*W/H));
+    const width=Math.floor(EMBED?availableWidth:Math.min(1280,availableWidth,availableHeight*W/H));
     root.style.setProperty('--stage-width',`${width}px`);
+    if(EMBED)reportSize();
   }
   window.addEventListener('resize',fitView);fitView();
   if(typeof ResizeObserver!=='undefined'){
