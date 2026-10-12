@@ -173,6 +173,32 @@ class DragonWeatherContracts(unittest.TestCase):
             assert(#D._bolts>=1 and #D._scorches>=1, 'the bolt is drawn and leaves a burn')
         ''')
 
+    def test_rare_bolts_play_louder_and_a_busy_storm_stays_at_the_usual_level(self):
+        self.run_lua('''
+            local full=D.data.boltVolume*10^(D.data.boltRareBoostDb/20)
+            near(T.boltVolumeForGap(D.data.boltRareGap),full,1e-9); near(T.boltVolumeForGap(1000),full,1e-9)
+            near(T.boltVolumeForGap(D.data.boltBusyGap),D.data.boltVolume,1e-9); near(T.boltVolumeForGap(1),D.data.boltVolume,1e-9)
+            local mid=math.sqrt(D.data.boltRareGap*D.data.boltBusyGap)
+            near(T.boltVolumeForGap(mid),D.data.boltVolume*10^(D.data.boltRareBoostDb/40),1e-9)
+            assert(T.boltVolumeForGap(30)>T.boltVolumeForGap(20), 'rarer is louder')
+            -- Base stats (tears 2.73): a strike about every 55 updates, most of the boost.
+            local p=makePlayer({delay=10,rolls={}}); enemy(320,280)
+            for i=1,400 do tick() end
+            local last
+            for _,s in ipairs(sounds) do if s.id==902 then last=s.volume end end
+            assert(last and last>D.data.boltVolume*10^(4/20) and last<=full+1e-9, 'a rare bolt is boosted: '..tostring(last))
+        ''')
+
+    def test_a_busy_storm_plays_bolts_at_the_usual_level(self):
+        self.run_lua('''
+            -- Tears 30 with two copies: twelve strikes a second.
+            local p=makePlayer({delay=0,items=2}); enemy(320,280)
+            for i=1,120 do tick() end
+            local last
+            for _,s in ipairs(sounds) do if s.id==902 then last=s.volume end end
+            near(last,D.data.boltVolume,1e-6)
+        ''')
+
     def test_luck_sets_how_often_a_strike_catches_its_enemy(self):
         self.run_lua('''
             -- 50% at luck 0, 5 points more per luck, between 10% and 100% (always from luck 10).
@@ -256,7 +282,7 @@ class DragonWeatherContracts(unittest.TestCase):
             for _,l in ipairs(logs) do if l:find('[Dragon] bolt',1,true) then bolts=bolts+1 end end
             for _,s in ipairs(sounds) do
                 if s.id==901 then claps=claps+1; near(s.volume,D.data.thunderVolume) end
-                if s.id==902 then cracks=cracks+1; near(s.volume,D.data.boltVolume); assert(s.pitch>=0.9 and s.pitch<=1.1) end
+                if s.id==902 then cracks=cracks+1; assert(s.volume>=D.data.boltVolume-1e-9 and s.volume<=T.boltVolumeForGap(1e9)+1e-9); assert(s.pitch>=0.9 and s.pitch<=1.1) end
             end
             assert(bolts>50 and claps+cracks==bolts, 'every bolt makes a sound: bolts='..bolts..' claps='..claps..' cracks='..cracks)
             assert(claps==2, 'ten seconds hold two thunderclaps at most: '..claps)
@@ -452,9 +478,9 @@ class DragonWeatherContracts(unittest.TestCase):
                 level = levels.loudest_db(sample) + 20 * math.log10(volume(name))
                 loudest[name] = max(loudest.get(name, -99), level)
                 self.assertGreaterEqual(level, levels.QUIETEST_DB, f'{name} on {sample.name}: {level:.1f} dB')
-        # The user's levels (2026-10-13): bolt -7 dB, thunderclap and twister
+        # The user's levels (2026-10-13): bolt -5 dB, thunderclap -6 dB, twister
         # -6 dB, the rain loop -15 dB.
-        for name, sound, count, want in (('boltVolume', 'Conch Dragon Bolt', 5, -7.0),
+        for name, sound, count, want in (('boltVolume', 'Conch Dragon Bolt', 5, -5.0),
                                          ('twisterVolume', 'Conch Dragon Twister', 2, -6.0),
                                          ('thunderVolume', 'Conch Dragon Thunder', 2, -6.0),
                                          ('rainVolume', 'Conch Dragon Rain', 1, -15.0)):

@@ -2,7 +2,9 @@
 
 No vanilla texture or sound is copied into the mod. The clock PNG is an
 original authored input; this generator never rewrites it. The thunder
-strike, rain and the clock's tick, tock and bell are synthesized here from fixed seeds. Run from any working directory.
+strike and the clock's tick, tock and bell are synthesized here from fixed
+seeds; the rain upgrade's rain is 진's own rain, written by
+generate_dragon_assets.py. Run from any working directory.
 """
 from pathlib import Path
 import math
@@ -90,6 +92,57 @@ def normalized(samples):
     return [v / peak for v in samples]
 
 
+def loudest_db(samples):
+    """The tests' measure: the loudest 50 ms, as RMS in dB."""
+    window, energy, best = int(SAMPLE_RATE * .05), 0.0, 0.0
+    for i, v in enumerate(samples):
+        energy += v * v
+        if i >= window:
+            energy -= samples[i - window] ** 2
+        best = max(best, energy / window)
+    return 10 * math.log10(max(best, 1e-12))
+
+
+def louder(samples, target, threshold=0.25, ratio=3.0, attack=0.005, release=0.12, knee=0.7):
+    """A sample as loud as the game needs without clipping, since cue volumes
+    stay at or below 1: a smooth compressor (envelope follower, quick attack,
+    slow release) evens out the peaks, then make-up gain brings the loudest
+    50 ms to `target` dB through a soft knee that rounds off the few peaks above
+    it. The make-up is corrected a few times, because the knee itself takes a
+    little loudness away."""
+    peak = max(abs(v) for v in samples) or 1
+    a_att, a_rel = math.exp(-1 / (attack * SAMPLE_RATE)), math.exp(-1 / (release * SAMPLE_RATE))
+    env, even = 0.0, []
+    for v in samples:
+        v /= peak
+        coef = a_att if abs(v) > env else a_rel
+        env = coef * env + (1 - coef) * abs(v)
+        even.append(v * (1.0 if env <= threshold else (threshold / env) ** (1 - 1 / ratio)))
+    room = 0.98 - knee
+
+    def shaped(gain):
+        out = []
+        for v in even:
+            y = v * gain
+            if abs(y) > knee:
+                y = math.copysign(knee + room * math.tanh((abs(y) - knee) / room), y)
+            out.append(y)
+        return out
+
+    gain = 10 ** ((target - loudest_db(even)) / 20)
+    for _ in range(4):
+        gain *= 10 ** ((target - loudest_db(shaped(gain))) / 20)
+    return shaped(gain)
+
+
+# The presentations' own sounds, played at volume 1 for these loudest-50 ms
+# levels (user, 2026-10-13: every upgrade sound louder, 진's at full).
+STRIKE_LEVEL = -4.0
+TICK_LEVEL = -11.0
+TOCK_LEVEL = -9.4
+BELL_LEVEL = -5.0
+
+
 def thunder_strike(seconds=2.6, seed=0x7C0C4):
     """A nearby strike: crack, low boom, then rolls that fade out.
 
@@ -159,48 +212,6 @@ def thunder_strike(seconds=2.6, seed=0x7C0C4):
     # No saturation: soft clipping thickened the boom but made it sound
     # broken. Sub-bass below ~45 Hz only distorts small speakers.
     return [v * 0.85 for v in normalized(biquad(biquad(mix, 'high', 45), 'high', 45))]
-
-
-def rain_shower(seconds=5.8, seed=0x2A1B):
-    """Steady rain for the rain upgrades: a soft hiss under many small drops.
-
-    Vanilla has no rain sound effect (Downpour's rain lives in its music), so
-    this is synthesized. It fades in with the drops and out with the flood.
-    """
-    rng = random.Random(seed)
-    n = int(SAMPLE_RATE * seconds)
-
-    def noise():
-        return rng.random() * 2 - 1
-
-    hiss = normalized(biquad(biquad(biquad([noise() for _ in range(n)], 'high', 500), 'low', 4500), 'low', 4500))
-    for i in range(n):
-        x = i / SAMPLE_RATE
-        hiss[i] *= 1 + .15 * math.sin(2 * math.pi * .37 * x) + .1 * math.sin(2 * math.pi * .91 * x + 1.3)
-    drops = [0.0] * n
-    t = 0.0
-    while t < seconds:
-        begin, amp = int(t * SAMPLE_RATE), .2 + .8 * rng.random() ** 2
-        decay = .002 + .006 * rng.random()
-        for i in range(int(decay * 6 * SAMPLE_RATE)):
-            if begin + i < n:
-                drops[begin + i] += amp * noise() * math.exp(-i / (decay * SAMPLE_RATE))
-        if rng.random() < .12:  # an occasional larger plip on a puddle
-            tone, length = 1400 + 1600 * rng.random(), int(.03 * SAMPLE_RATE)
-            for i in range(length):
-                if begin + i < n:
-                    drops[begin + i] += amp * .6 * math.sin(2 * math.pi * tone * i / SAMPLE_RATE) \
-                        * math.exp(-i / (.012 * SAMPLE_RATE))
-        t += -math.log(1 - rng.random()) / 38  # about 38 drops per second
-    drops = normalized(biquad(biquad(drops, 'high', 900), 'low', 6000))
-    mix = []
-    for i in range(n):
-        x = i / SAMPLE_RATE
-        fade_in = min(1, x / .7)
-        fade_out = 1 if x < seconds - 1 else max(0, (seconds - x) / 1)
-        envelope = (fade_in * fade_in * (3 - 2 * fade_in)) * (fade_out * fade_out * (3 - 2 * fade_out))
-        mix.append((hiss[i] * .45 + drops[i] * .75) * envelope)
-    return [v * .8 for v in normalized(mix)]
 
 
 def escapement_strike(out, start, amp, rng, partials):
@@ -298,11 +309,10 @@ def write_wav(path, samples):
 if __name__ == '__main__':
     DEST.mkdir(parents=True, exist_ok=True)
     SFX.mkdir(parents=True, exist_ok=True)
-    write_wav(SFX / 'conch_upgrade_thunder_strike.wav', thunder_strike())
-    write_wav(SFX / 'conch_upgrade_rain.wav', rain_shower())
-    write_wav(SFX / 'conch_upgrade_clock_tick.wav', clock_tick())
-    write_wav(SFX / 'conch_upgrade_clock_tock.wav', clock_tock())
-    write_wav(SFX / 'conch_upgrade_clock_bell.wav', clock_bell())
+    write_wav(SFX / 'conch_upgrade_thunder_strike.wav', louder(thunder_strike(), STRIKE_LEVEL))
+    write_wav(SFX / 'conch_upgrade_clock_tick.wav', louder(clock_tick(), TICK_LEVEL))
+    write_wav(SFX / 'conch_upgrade_clock_tock.wav', louder(clock_tock(), TOCK_LEVEL))
+    write_wav(SFX / 'conch_upgrade_clock_bell.wav', louder(clock_bell(), BELL_LEVEL))
     Image.new('RGBA', (1, 1), (255, 255, 255, 255)).save(DEST / 'conch_upgrade_pixel.png')
     actor('pixel', 'conch_upgrade_pixel.png', [(0, 0, 1, 1, 0, 0)])
     spotlight_mask()

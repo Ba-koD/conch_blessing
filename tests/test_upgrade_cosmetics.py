@@ -140,7 +140,7 @@ class UpgradeCosmeticsTests(unittest.TestCase):
             T.cancelForPickup(p); T.positive.onBeforeChange(pos,p,data)
             local found
             for _,line in ipairs(logs) do if line:find('[Upgrade] SOUND',1,true) then found=line end end
-            assert(found=='[Upgrade] SOUND positive id=1 volume=0.70 playing=unknown', tostring(found))
+            assert(found=='[Upgrade] SOUND positive id=1 volume=1.00 playing=unknown', tostring(found))
             ConchBlessing.Config=nil
         ''')
 

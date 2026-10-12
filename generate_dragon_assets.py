@@ -16,6 +16,7 @@ Outputs (all generator-owned; edit this file, not the outputs):
     resources/sfx/conch_dragon_thunder_1..2.wav  (registered in content/sounds.xml)
     resources/sfx/conch_dragon_twister_1..2.wav  (registered in content/sounds.xml)
     resources/sfx/conch_dragon_rain.wav          (registered in content/sounds.xml)
+    resources/sfx/conch_upgrade_rain.wav         (the rain upgrade's cue, cut from 진's rain)
 """
 import math
 import random
@@ -24,7 +25,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from generate_upgrade_visual_assets import SAMPLE_RATE, biquad, normalized, write_wav
+from generate_upgrade_visual_assets import SAMPLE_RATE, biquad, louder, loudest_db, normalized, write_wav
 
 ROOT = Path(__file__).resolve().parent
 GFX = ROOT / 'resources/gfx'
@@ -586,17 +587,6 @@ def spark(frame):
 # roughness (no crackling clicks), pulsing near 4 Hz (a soft onset and a tail
 # long enough that bolts blend into one rolling rumble), sharpness (almost
 # nothing above 1 kHz) and identical repeats (five takes, a small pitch spread).
-def loudest_db(samples):
-    """The tests' measure: the loudest 50 ms, as RMS in dB."""
-    window, energy, best = int(SAMPLE_RATE * .05), 0.0, 0.0
-    for i, v in enumerate(samples):
-        energy += v * v
-        if i >= window:
-            energy -= samples[i - window] ** 2
-        best = max(best, energy / window)
-    return 10 * math.log10(max(best, 1e-12))
-
-
 def at_level(samples, target=-10.0):
     """Scale so the loudest 50 ms sits at `target` dB, every take alike; the
     cue volume in dragon.lua then sets the level the game plays it at."""
@@ -652,68 +642,57 @@ def rolling_thunder(seed, seconds=2.4):
     return normalized(biquad(mix, 'high', 30))
 
 
-def louder(samples, target, threshold=0.25, ratio=3.0, attack=0.005, release=0.12, knee=0.7):
-    """A sample as loud as the game needs without clipping, since cue volumes
-    stay at or below 1: a smooth compressor (envelope follower, quick attack,
-    slow release) evens out the peaks, then make-up gain brings the loudest
-    50 ms to `target` dB through a soft knee that rounds off the few peaks above
-    it. The make-up is corrected a few times, because the knee itself takes a
-    little loudness away."""
-    peak = max(abs(v) for v in samples) or 1
-    a_att, a_rel = math.exp(-1 / (attack * SAMPLE_RATE)), math.exp(-1 / (release * SAMPLE_RATE))
-    env, even = 0.0, []
-    for v in samples:
-        v /= peak
-        coef = a_att if abs(v) > env else a_rel
-        env = coef * env + (1 - coef) * abs(v)
-        even.append(v * (1.0 if env <= threshold else (threshold / env) ** (1 - 1 / ratio)))
-    room = 0.98 - knee
-
-    def shaped(gain):
-        out = []
-        for v in even:
-            y = v * gain
-            if abs(y) > knee:
-                y = math.copysign(knee + room * math.tanh((abs(y) - knee) / room), y)
-            out.append(y)
-        return out
-
-    gain = 10 ** ((target - loudest_db(even)) / 20)
-    for _ in range(4):
-        gain *= 10 ** ((target - loudest_db(shaped(gain))) / 20)
-    return shaped(gain)
-
-
 BOLT_TAKES = 5
 THUNDER_TAKES = 2
-BOLT_LEVEL = -7.0       # dB in the file; dragon.lua plays it at volume 1 for -7 dB
-STORM_LEVEL = -6.0      # thunderclap and twister, played at volume 1 for -6 dB
+BOLT_LEVEL = -5.0       # dB in the file; dragon.lua plays it at volume 1 for -5 dB
+STORM_LEVEL = -6.0      # thunderclap, played at volume 1 for -6 dB
+TWISTER_LEVEL = -6.0    # twister wind, played at volume 1 for -6 dB
+
+
+def sweeping_band(src, centre, q):
+    """A band-pass whose centre (Hz, a function of time) moves: the turning column."""
+    out, x1, x2, y1, y2 = [], 0.0, 0.0, 0.0, 0.0
+    for i, x in enumerate(src):
+        w = 2 * math.pi * centre(i / SAMPLE_RATE) / SAMPLE_RATE
+        alpha = math.sin(w) / (2 * q)
+        a0 = 1 + alpha
+        b0, b2, a1, a2 = alpha / a0, -alpha / a0, -2 * math.cos(w) / a0, (1 - alpha) / a0
+        y = b0 * x + b2 * x2 - a1 * y1 - a2 * y2
+        x2, x1, y2, y1 = x1, x, y1, y
+        out.append(y)
+    return out
+
+
+def slow_noise(rng, n, hz):
+    """A smooth random drift, for gusts that never repeat exactly."""
+    raw = [rng.random() * 2 - 1 for _ in range(n)]
+    return normalized(biquad(biquad(raw, 'low', hz), 'low', hz))
 
 
 def twister_wind(seed, seconds=5.3):
-    """The wind of a dragon twister for its whole life: a low swirling roar.
-
-    Made by the same rules as the bolt: no pure tone (the old whistle was
-    one), swells far slower than the 2-4 Hz pulsing that annoys most (about
-    every two seconds), almost no hiss, and long soft fades. A broad band of
-    noise, not a tone, rises and falls over the roar as the twister turns.
+    """The wind of a dragon twister for its whole life (the user's choice 'A',
+    2026-10-13): a deep roar under two broad whooshing bands that sweep up and
+    down as the column turns, with slow gusts. The bands put the energy where
+    hearing is most sensitive (300 Hz - 2 kHz), so it sounds louder than a
+    low rumble at the same level. No pure tone (the bands stay broad), swells
+    far slower than the 2-4 Hz pulsing range, soft rise and fall.
     """
     rng = random.Random(seed)
     n = int(SAMPLE_RATE * seconds)
-    roar = normalized(biquad(biquad(brown(rng, n, 0.995, 0.08), 'low', 260), 'high', 35))
-    air = normalized(biquad(biquad([rng.random() * 2 - 1 for _ in range(n)], 'low', 900), 'high', 180))
-    band = normalized(biquad(biquad(biquad(biquad([rng.random() * 2 - 1 for _ in range(n)], 'high', 240),
-                                           'low', 650), 'high', 240), 'low', 650))
-    phase = rng.random() * 2 * math.pi
-    rate, depth = 0.45, 0.3
+    roar = normalized(biquad(biquad(brown(rng, n, 0.995, 0.08), 'low', 220), 'high', 35))
+    p1, p2 = pink_noise(rng, n), pink_noise(rng, n)
+    ph1, ph2 = rng.random() * 6.28, rng.random() * 6.28
+    low_band = normalized(sweeping_band(p1, lambda t: 520 + 260 * math.sin(2 * math.pi * 0.33 * t + ph1), 1.1))
+    high_band = normalized(sweeping_band(p2, lambda t: 1300 + 450 * math.sin(2 * math.pi * 0.27 * t + ph2), 1.3))
+    gust = slow_noise(rng, n, 0.8)
     mix = []
     for i in range(n):
         x = i / SAMPLE_RATE
-        swirl = 1 - depth / 2 + depth / 2 * math.sin(2 * math.pi * rate * x + phase + 0.8 * math.sin(2 * math.pi * 0.23 * x))
-        envelope = min(1, x / 0.6) ** 2 * fade_end(x, seconds, 0.9)
-        v = roar[i] * 0.62 + air[i] * 0.2 * swirl + band[i] * 0.42 * (0.55 + 0.45 * (swirl - (1 - depth)) / depth)
-        mix.append(v * envelope * (0.88 + 0.12 * swirl))
-    return normalized(biquad(mix, 'high', 30))
+        turn = 1 + 0.18 * math.sin(2 * math.pi * 0.33 * x + ph1)
+        swell = 0.85 + 0.15 * gust[i]
+        v = (roar[i] * 0.55 + low_band[i] * 0.55 * turn + high_band[i] * 0.32 * (2 - turn)) * swell
+        mix.append(v * min(1, x / 0.5) ** 1.5 * fade_end(x, seconds, 0.8))
+    return normalized(biquad(mix, 'high', 35))
 
 
 TWISTER_TAKES = 2
@@ -836,6 +815,22 @@ def light_rain(seed=0xD103, seconds=10.0, wash=0.28, drops_per_second=70, band=(
     return leveled(out)
 
 
+UPGRADE_RAIN_LEVEL = -8.0  # the rain upgrade plays it at volume 1: as loud as it goes cleanly
+
+
+def upgrade_rain(rain, seconds=5.8):
+    """The rain upgrade's rain (user, 2026-10-13): the first seconds of 진's
+    own rain loop, fading in with the first drops and out with the flood, at
+    full level. A separate sound, so the presentation never touches 진's loop."""
+    out = []
+    for i in range(int(SAMPLE_RATE * seconds)):
+        x = i / SAMPLE_RATE
+        rise = min(1, x / .7)
+        fall = 1 if x < seconds - 1 else max(0, (seconds - x) / 1)
+        out.append(rain[i] * rise * rise * (3 - 2 * rise) * fall * fall * (3 - 2 * fall))
+    return louder(out, UPGRADE_RAIN_LEVEL)
+
+
 # ---------------------------------------------------------------- ANM2
 COMMON = dict(XPosition='0', YPosition='0', XScale='100', YScale='100', Delay='1', Visible='true',
               RedTint='255', GreenTint='255', BlueTint='255', AlphaTint='255',
@@ -916,8 +911,10 @@ def main():
     for k in range(THUNDER_TAKES):
         write_wav(ROOT / f'resources/sfx/conch_dragon_thunder_{k + 1}.wav', louder(rolling_thunder(0xF600 + k), STORM_LEVEL))
     for k in range(TWISTER_TAKES):
-        write_wav(ROOT / f'resources/sfx/conch_dragon_twister_{k + 1}.wav', louder(twister_wind(0xB800 + k), STORM_LEVEL))
-    write_wav(ROOT / 'resources/sfx/conch_dragon_rain.wav', light_rain())
+        write_wav(ROOT / f'resources/sfx/conch_dragon_twister_{k + 1}.wav', louder(twister_wind(0xE700 + k), TWISTER_LEVEL))
+    rain = light_rain()
+    write_wav(ROOT / 'resources/sfx/conch_dragon_rain.wav', rain)
+    write_wav(ROOT / 'resources/sfx/conch_upgrade_rain.wav', upgrade_rain(rain))
     print('dragon assets written')
 
 

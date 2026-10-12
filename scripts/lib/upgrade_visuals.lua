@@ -370,9 +370,9 @@ function Visuals.update(scene)
         -- nearby strike bangs on the actual conversion. A late commit never
         -- replays the lead-in.
         if scene.frame < scene.impact then
-            soundOnce(scene, "SOUND_THUNDER", 2, 0.45, 0.65)
+            soundOnce(scene, "SOUND_THUNDER", 2, 1, 0.65)
         end
-        soundOnce(scene, customSound("Conch Upgrade Thunder Strike"), scene.impact, 0.85, 1)
+        soundOnce(scene, customSound("Conch Upgrade Thunder Strike"), scene.impact, 1, 1)
     end
     -- Cue volumes stay at or below 1: the engine is not relied on to amplify.
     -- Every cue must be audible over gameplay (tests/test_upgrade_sound_levels.py).
@@ -383,31 +383,31 @@ function Visuals.update(scene)
             -- The last 깍 strikes 12 on the change itself; a late commit never
             -- replays the earlier ones.
             if beat[1] >= scene.impact or scene.frame < scene.impact then
-                if beat[2] == "tick" then soundOnce(scene, tick, beat[1], 0.9)
-                else soundOnce(scene, tock, beat[1], 0.9) end
+                if beat[2] == "tick" then soundOnce(scene, tick, beat[1], 1)
+                else soundOnce(scene, tock, beat[1], 1) end
             end
         end
         -- 댕: a heavy grandfather-clock gong strikes 12 together with the change.
-        soundOnce(scene, customSound("Conch Upgrade Clock Bell"), scene.impact, 0.8)
+        soundOnce(scene, customSound("Conch Upgrade Clock Bell"), scene.impact, 1)
     end
     if effect == "rain" and scene.frame < scene.impact then
-        soundOnce(scene, customSound("Conch Upgrade Rain"), 5, 0.85)
+        soundOnce(scene, customSound("Conch Upgrade Rain"), 5, 1)
     end
     if effect == "fire" or effect == "ice" then
         -- A late commit never replays the ignition or the burst.
         if scene.frame < scene.impact then
-            soundOnce(scene, "SOUND_CANDLE_LIGHT", 5, 0.4)
-            soundOnce(scene, "SOUND_FLAME_BURST", scene.impact - 7, 0.5)
+            soundOnce(scene, "SOUND_CANDLE_LIGHT", 5, 0.8)
+            soundOnce(scene, "SOUND_FLAME_BURST", scene.impact - 7, 1)
         end
-        if effect == "ice" then soundOnce(scene, "SOUND_FREEZE", scene.impact, 0.5) end
+        if effect == "ice" then soundOnce(scene, "SOUND_FREEZE", scene.impact, 1) end
     end
     if effect == "saturn" then
         -- Advance only the snapshot copies, like the preview's living pets.
         for _, pet in ipairs(scene.pets) do if pet.Update then pet:Update() end end
         -- A whirling wind-up as the orbit accelerates, then Kronos's own
         -- absorption sound as the ring collapses into the item.
-        if scene.frame < scene.impact then soundOnce(scene, "SOUND_MOTHER_SPIN_START", 56, 0.5) end
-        soundOnce(scene, "SOUND_SUMMONSOUND", scene.impact, 0.6)
+        if scene.frame < scene.impact then soundOnce(scene, "SOUND_MOTHER_SPIN_START", 56, 1) end
+        soundOnce(scene, "SOUND_SUMMONSOUND", scene.impact, 1)
         if scene.frame >= scene.impact and not scene.ringShook then
             scene.ringShook = true
             if Game().ShakeScreen then Game():ShakeScreen(6) end
@@ -417,10 +417,10 @@ function Visuals.update(scene)
         -- The item's own lock-on warning sounds as the reticle appears, then
         -- the rocket and blast. A late commit never replays the build-up.
         if scene.frame < scene.impact then
-            soundOnce(scene, "SOUND_DR_REMOTE_WARNING", 3, 0.8)
-            soundOnce(scene, "SOUND_ROCKET_LAUNCH", scene.impact - 16, 0.4)
+            soundOnce(scene, "SOUND_DR_REMOTE_WARNING", 3, 1)
+            soundOnce(scene, "SOUND_ROCKET_LAUNCH", scene.impact - 16, 0.8)
         end
-        soundOnce(scene, "SOUND_ROCKET_EXPLOSION", scene.impact, 0.6)
+        soundOnce(scene, "SOUND_ROCKET_EXPLOSION", scene.impact, 1)
         if scene.frame >= scene.impact and not scene.shook then
             scene.shook = true
             if Game().ShakeScreen then Game():ShakeScreen(9) end
@@ -428,8 +428,8 @@ function Visuals.update(scene)
     end
     if effect == "purify" then
         -- Like every lead-in, a late commit never replays the wing beat.
-        if scene.frame < scene.impact then soundOnce(scene, "SOUND_ANGEL_WING", 18, 0.6) end
-        soundOnce(scene, "SOUND_HOLY", scene.impact, 0.7)
+        if scene.frame < scene.impact then soundOnce(scene, "SOUND_ANGEL_WING", 18, 1) end
+        soundOnce(scene, "SOUND_HOLY", scene.impact, 1)
     end
 end
 

@@ -35,33 +35,33 @@ local function expectedCues(effect, impact)
         list[#list + 1] = { sound = sound, at = at, volume = volume, pitch = pitch or 1, order = #list }
     end
     if effect == "lightning" then
-        add("SOUND_THUNDER", 2, 0.45, 0.65)
-        add("Conch Upgrade Thunder Strike", impact, 0.85)
+        add("SOUND_THUNDER", 2, 1, 0.65)
+        add("Conch Upgrade Thunder Strike", impact, 1)
     elseif effect == "saturn" then
-        add("SOUND_MOTHER_SPIN_START", 56, 0.5)
-        add("SOUND_SUMMONSOUND", impact, 0.6)
+        add("SOUND_MOTHER_SPIN_START", 56, 1)
+        add("SOUND_SUMMONSOUND", impact, 1)
     elseif effect == "fire" or effect == "ice" then
-        add("SOUND_CANDLE_LIGHT", 5, 0.4)
-        add("SOUND_FLAME_BURST", impact - 7, 0.5)
-        if effect == "ice" then add("SOUND_FREEZE", impact, 0.5) end
+        add("SOUND_CANDLE_LIGHT", 5, 0.8)
+        add("SOUND_FLAME_BURST", impact - 7, 1)
+        if effect == "ice" then add("SOUND_FREEZE", impact, 1) end
     elseif effect == "missile" then
-        add("SOUND_DR_REMOTE_WARNING", 3, 0.8)
-        add("SOUND_ROCKET_LAUNCH", impact - 16, 0.4)
-        add("SOUND_ROCKET_EXPLOSION", impact, 0.6)
+        add("SOUND_DR_REMOTE_WARNING", 3, 1)
+        add("SOUND_ROCKET_LAUNCH", impact - 16, 0.8)
+        add("SOUND_ROCKET_EXPLOSION", impact, 1)
     elseif effect == "purify" then
-        add("SOUND_ANGEL_WING", 18, 0.6)
-        add("SOUND_HOLY", impact, 0.7)
+        add("SOUND_ANGEL_WING", 18, 1)
+        add("SOUND_HOLY", impact, 1)
     end
-    if effect == "rain" then add("Conch Upgrade Rain", 5, 0.85) end
+    if effect == "rain" then add("Conch Upgrade Rain", 5, 1) end
     if effect and effect:find("clock", 1, true) then
         -- 6:00 to 12:00: one 째깍 per minute turn, evenly from frame 0 to the
         -- change: 째 (Tick) as the hand passes 6, 깍 (Tock) as it reaches 12.
         for j = 1, 12 do
             add(j % 2 == 1 and "Conch Upgrade Clock Tick" or "Conch Upgrade Clock Tock",
-                math.floor(impact * j / 12 + 0.5), 0.9)
+                math.floor(impact * j / 12 + 0.5), 1)
         end
         -- 댕: the bell strikes 12 together with the change, after the last 깍.
-        add("Conch Upgrade Clock Bell", impact, 0.8)
+        add("Conch Upgrade Clock Bell", impact, 1)
     end
     table.sort(list, function(a, b)
         if a.at ~= b.at then return a.at < b.at end

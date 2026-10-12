@@ -56,11 +56,17 @@ ConchBlessing.dragon.data = {
     scorchTicks = 60,                    -- the burnt patch fades over two seconds
     -- Cue volume x the sample's loudest 50 ms must reach -18 dB or it is lost
     -- under gameplay (tests/test_dragon_weather_contracts.py measures it). The
-    -- levels are the user's (2026-10-13): bolt -7 dB, the thunderclap and the
-    -- twister -6 dB, the rain -15 dB, the distant rumble 6 dB up too. The samples
-    -- are generated loud (bolt -7 dB, storm -6 dB) so volumes stay <= 1.
-    boltVolume = 1.0,                    -- every take sits at -7 dB: -7 dB, every bolt
+    -- levels are the user's (2026-10-13): bolt -5 dB, the thunderclap -6 dB, the
+    -- twister -6 dB (louder to the ear), the rain -15 dB, the distant rumble 6 dB up too. The samples
+    -- are generated that loud so volumes stay <= 1.
+    boltVolume = 1.0,                    -- every take sits at -5 dB: -5 dB, every bolt
     boltPitch = { 0.9, 1.1 },            -- a small spread, so repeats never sound identical
+    -- A rare bolt stands out, a busy storm stays at boltVolume (user decision
+    -- 2026-10-13). The boost needs a volume above 1, which other mods use too;
+    -- if the engine ever caps it, rare bolts simply stay at the usual level.
+    boltRareBoostDb = 5,                 -- extra for strikes this rare (0 dB in all)...
+    boltRareGap = 90,                    -- ...a strike every three seconds or slower
+    boltBusyGap = 3,                     -- ten strikes a second or faster play at boltVolume
     thunderVolume = 1.0,                 -- every take sits at -6 dB: -6 dB, at most every thunderGap
     thunderGap = 150,                    -- five seconds between full thunderclaps
     twisterVolume = 1.0,                 -- every take sits at -6 dB: -6 dB, for its whole life
@@ -82,7 +88,8 @@ ConchBlessing.dragon._scorches = {}
 ConchBlessing.dragon._twisters = {}
 ConchBlessing.dragon._charge = {}         -- per player: bolts owed, by pointer hash
 ConchBlessing.dragon._rumble = { count = 0 }  -- the distant thunder's countdown
-ConchBlessing.dragon._sky = { sinceThunder = math.huge, sinceWind = math.huge, flash = 0, cracks = 0, bolts = 0 }
+ConchBlessing.dragon._sky = { sinceThunder = math.huge, sinceWind = math.huge, sinceStrike = math.huge,
+    flash = 0, cracks = 0, bolts = 0 }
 local enemyCache = { frame = -1, list = {} }
 local reported = {}
 local sounds = {}
@@ -146,6 +153,16 @@ local function scatter(center, angleRoll, distanceRoll)
     local angle = angleRoll * 2 * math.pi
     local distance = distanceRoll * ConchBlessing.dragon.data.boltScatter
     return Vector(center.X + math.cos(angle) * distance, center.Y + math.sin(angle) * distance)
+end
+
+-- How loud a bolt plays for the average gap between strikes, in updates: the
+-- whole boost at boltRareGap or more, none at boltBusyGap or less, and in
+-- between by how many times longer the gap is (log scale).
+local function boltVolumeForGap(gap)
+    local d = ConchBlessing.dragon.data
+    local g = math.max(d.boltBusyGap, math.min(d.boltRareGap, tonumber(gap) or d.boltRareGap))
+    local share = math.log(g / d.boltBusyGap) / math.log(d.boltRareGap / d.boltBusyGap)
+    return d.boltVolume * 10 ^ (d.boltRareBoostDb * share / 20)
 end
 
 -- The chance a strike catches its enemy for the holder's luck: 50% at luck 0,
@@ -246,17 +263,22 @@ local function sound(bolts)
     local d = ConchBlessing.dragon.data
     local sky = ConchBlessing.dragon._sky
     sky.cracks = sky.cracks + 1
+    -- How busy the storm is: a running average of the gaps between strikes.
+    local gap = math.min(sky.sinceStrike, d.boltRareGap * 2)
+    sky.gapAverage = sky.gapAverage and (sky.gapAverage + gap) / 2 or gap
+    sky.sinceStrike = 0
     if sky.sinceThunder >= d.thunderGap then
         sky.sinceThunder, sky.flash = 0, d.flashTicks
         local id = soundId(THUNDER_SOUND)
         if id then SFXManager():Play(id, d.thunderVolume, 0, false, 1) end
-        return "thunder"
+        return "thunder", d.thunderVolume, sky.gapAverage
     end
     local id = soundId(BOLT_SOUND)
+    local volume = boltVolumeForGap(sky.gapAverage)
     if id then
-        SFXManager():Play(id, d.boltVolume, 0, false, d.boltPitch[1] + hash(sky.cracks) * (d.boltPitch[2] - d.boltPitch[1]))
+        SFXManager():Play(id, volume, 0, false, d.boltPitch[1] + hash(sky.cracks) * (d.boltPitch[2] - d.boltPitch[1]))
     end
-    return "bolt"
+    return "bolt", volume, sky.gapAverage
 end
 
 local function bolt(player, position, enemies, aimed)
@@ -280,9 +302,9 @@ local function bolt(player, position, enemies, aimed)
     bolts[#bolts + 1] = { position = at, age = 0, shape = shape, flip = flip, scale = scale }
     local scorches = ConchBlessing.dragon._scorches
     scorches[#scorches + 1] = { position = at, age = 0 }
-    local cue = sound(bolts)
-    debugLog("bolt at %.0f,%.0f damage=%.2f hit=%d sound=%s aim=%s", position.X, position.Y, damage, hit, cue,
-        aimed and "on" or "miss")
+    local cue, volume, gap = sound(bolts)
+    debugLog("bolt at %.0f,%.0f damage=%.2f hit=%d sound=%s vol=%.2f (%+.1f dB) gap=%.0f aim=%s", position.X, position.Y,
+        damage, hit, cue, volume, 20 * math.log(volume, 10), gap, aimed and "on" or "miss")
 end
 
 local function raiseTwister(player, position)
@@ -409,6 +431,7 @@ ConchBlessing.dragon.onUpdate = function()
     local sky = ConchBlessing.dragon._sky
     sky.sinceThunder = sky.sinceThunder + 1
     sky.sinceWind = sky.sinceWind + 1
+    sky.sinceStrike = sky.sinceStrike + 1
     if sky.flash > 0 then sky.flash = sky.flash - 1 end
     local held = false
     local enemies = roomEnemies()
@@ -614,6 +637,7 @@ ConchBlessing.dragon._test = {
     rollStrikeKind = rollStrikeKind,
     scatter = scatter,
     boltHitChance = boltHitChance,
+    boltVolumeForGap = boltVolumeForGap,
     rollHit = rollHit,
     missSpot = missSpot,
     pullToward = pullToward,

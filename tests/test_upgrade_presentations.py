@@ -28,27 +28,27 @@ def expected_cues(effect, impact):
     """The approved cue schedule: (sound, scheduled frame, volume, pitch)."""
     cues = []
     if effect == 'lightning':
-        cues += [('SOUND_THUNDER', 2, .45, .65), ('Conch Upgrade Thunder Strike', impact, .85, 1)]
+        cues += [('SOUND_THUNDER', 2, 1, .65), ('Conch Upgrade Thunder Strike', impact, 1, 1)]
     if effect == 'saturn':
-        cues += [('SOUND_MOTHER_SPIN_START', 56, .5, 1), ('SOUND_SUMMONSOUND', impact, .6, 1)]
+        cues += [('SOUND_MOTHER_SPIN_START', 56, 1, 1), ('SOUND_SUMMONSOUND', impact, 1, 1)]
     if effect in ('fire', 'ice'):
-        cues += [('SOUND_CANDLE_LIGHT', 5, .4, 1), ('SOUND_FLAME_BURST', impact - 7, .5, 1)]
+        cues += [('SOUND_CANDLE_LIGHT', 5, .8, 1), ('SOUND_FLAME_BURST', impact - 7, 1, 1)]
         if effect == 'ice':
-            cues.append(('SOUND_FREEZE', impact, .5, 1))
+            cues.append(('SOUND_FREEZE', impact, 1, 1))
     if effect == 'missile':
-        cues += [('SOUND_DR_REMOTE_WARNING', 3, .8, 1), ('SOUND_ROCKET_LAUNCH', impact - 16, .4, 1),
-                 ('SOUND_ROCKET_EXPLOSION', impact, .6, 1)]
+        cues += [('SOUND_DR_REMOTE_WARNING', 3, 1, 1), ('SOUND_ROCKET_LAUNCH', impact - 16, .8, 1),
+                 ('SOUND_ROCKET_EXPLOSION', impact, 1, 1)]
     if effect == 'purify':
-        cues += [('SOUND_ANGEL_WING', 18, .6, 1), ('SOUND_HOLY', impact, .7, 1)]
+        cues += [('SOUND_ANGEL_WING', 18, 1, 1), ('SOUND_HOLY', impact, 1, 1)]
     if effect == 'rain':
-        cues.append(('Conch Upgrade Rain', 5, .85, 1))
+        cues.append(('Conch Upgrade Rain', 5, 1, 1))
     if 'clock' in effect:
         # 6:00 to 12:00: one 째깍 per minute turn, evenly from frame 0 to the
         # change: 째 (Tick) as the hand passes 6, 깍 (Tock) as it reaches 12.
-        cues += [('Conch Upgrade Clock Tick' if j % 2 else 'Conch Upgrade Clock Tock', int(impact * j / 12 + .5), .9, 1)
+        cues += [('Conch Upgrade Clock Tick' if j % 2 else 'Conch Upgrade Clock Tock', int(impact * j / 12 + .5), 1, 1)
                  for j in range(1, 13)]
         # 댕: the bell strikes 12 together with the change, after the last 깍.
-        cues.append(('Conch Upgrade Clock Bell', impact, .8, 1))
+        cues.append(('Conch Upgrade Clock Bell', impact, 1, 1))
     cues.sort(key=lambda c: c[1])
     return ['%s|%d|%d|%.2f|%.2f' % (s, at, at, v, p) for s, at, v, p in cues]
 
