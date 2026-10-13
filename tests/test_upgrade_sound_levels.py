@@ -88,7 +88,7 @@ class UpgradeSoundLevelTests(unittest.TestCase):
         template = (ROOT / 'scripts/template.lua').read_text(encoding='utf-8')
         for block in re.split(r'\nTemplate\.(?=positive|neutral|negative)', template)[1:]:
             sound = re.search(r'soundId or SoundEffect\.(SOUND_\w+)', block)
-            play = re.search(r'sfx:Play\(upgradeAnim\.soundId, ([0-9.]+)', block)
+            play = re.search(r'sfx:Play\(upgradeAnim\.soundId, (?:Sound\.volume\()?([0-9.]+)', block)
             if sound and play:
                 cues.append((sound[1], float(play[1]), '1'))
         for sound, volume, _ in cues:

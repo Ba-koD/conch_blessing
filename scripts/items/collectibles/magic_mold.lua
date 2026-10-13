@@ -131,7 +131,7 @@ ConchBlessing.magicmold.onNewFloor = function(_)
                         for _ = 1, count do
                             player:AddCollectible(target, 0, true)
                         end
-                        SFXManager():Play(SoundEffect.SOUND_POWERUP1, 1.0)
+                        SFXManager():Play(SoundEffect.SOUND_POWERUP1, require("scripts.lib.sound_volume").volume(1.0))
                         refreshCounts(player, pData)
                     end
                 end

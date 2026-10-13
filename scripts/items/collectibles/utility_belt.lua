@@ -75,7 +75,7 @@ local function moveActiveToPocket(player)
     isc:setActiveItem(player, 0, ActiveSlot.SLOT_PRIMARY, 0)
     
     -- Play sound effect
-    SFXManager():Play(SoundEffect.SOUND_POWERUP_SPEWER, 1.0, 0, false, 1.0, 0)
+    SFXManager():Play(SoundEffect.SOUND_POWERUP_SPEWER, require("scripts.lib.sound_volume").volume(1.0), 0, false, 1.0, 0)
     
     ConchBlessing.printDebug("Utility Belt: Successfully moved active to pocket slot!")
     return true

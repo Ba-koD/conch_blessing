@@ -330,7 +330,7 @@ function M.onNewFloor(_)
                         end
                     end
                     if granted then
-                        SFXManager():Play(SoundEffect.SOUND_POWERUP1, 1.0)
+                        SFXManager():Play(SoundEffect.SOUND_POWERUP1, require("scripts.lib.sound_volume").volume(1.0))
                         refreshCounts(player, pData)
                     end
                 end

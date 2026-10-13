@@ -286,7 +286,7 @@ ConchBlessing.sealeddemonsword.onNPCDeath = function(_, npc)
                     for _ = 1, copies do player:AddCollectible(TYRFING_ID, 0, false) end
                     
                     -- Play transformation effect
-                    SFXManager():Play(SoundEffect.SOUND_POWERUP_SPEWER, 1.0)
+                    SFXManager():Play(SoundEffect.SOUND_POWERUP_SPEWER, require("scripts.lib.sound_volume").volume(1.0))
                     Isaac.Spawn(EntityType.ENTITY_EFFECT, EffectVariant.POOF01, 0, player.Position, Vector.Zero, nil)
                     
                     -- Clear sealed demon sword data

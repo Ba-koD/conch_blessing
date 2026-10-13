@@ -425,7 +425,7 @@ local function spawnIceProjectiles(player, direction)
         end
     end
 
-    SFXManager():Play(SoundEffect.SOUND_FLAMETHROWER_END, 1.0, 0, false, 0.8)
+    SFXManager():Play(SoundEffect.SOUND_FLAMETHROWER_END, require("scripts.lib.sound_volume").volume(1.0), 0, false, 0.8)
 end
 
 ConchBlessing.icebreath.onWeaponFired = function(_, fireDirection, _fireAmount, owner, weapon)

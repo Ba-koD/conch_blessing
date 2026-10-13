@@ -8,6 +8,8 @@ local DefaultConfig = {
     debugMode = false,
     spawnCollectibles = false, -- allow collectibles to spawn naturally (default: false)
     spawnTrinkets = false,     -- allow trinkets to spawn naturally (default: false)
+    soundVolume = 10,          -- every sound this mod plays, in 10% steps (scripts/lib/sound_volume.lua)
+    rainVolume = 10,           -- 진's rain loop on top of that, in 10% steps
 }
 
 -- Supported language codes for validation

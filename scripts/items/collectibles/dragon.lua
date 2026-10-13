@@ -18,6 +18,7 @@
 -- The long dragon familiar this item once summoned is the console-only Azure
 -- Dragon (azure_dragon.lua).
 local DamageProvenance = require("scripts.lib.damage_provenance")
+local Sound = require("scripts.lib.sound_volume")
 
 ConchBlessing.dragon = {}
 
@@ -57,7 +58,7 @@ ConchBlessing.dragon.data = {
     -- Cue volume x the sample's loudest 50 ms must reach -18 dB or it is lost
     -- under gameplay (tests/test_dragon_weather_contracts.py measures it). The
     -- levels are the user's (2026-10-13): bolt -5 dB, the thunderclap -6 dB, the
-    -- twister -6 dB (louder to the ear), the rain -15 dB, the distant rumble 6 dB up too. The samples
+    -- twister -6 dB (louder to the ear), the rain -21 dB, the distant rumble 6 dB up too. The samples
     -- are generated that loud so volumes stay <= 1.
     boltVolume = 1.0,                    -- every take sits at -5 dB: -5 dB, every bolt
     boltPitch = { 0.9, 1.1 },            -- a small spread, so repeats never sound identical
@@ -70,7 +71,7 @@ ConchBlessing.dragon.data = {
     thunderVolume = 1.0,                 -- every take sits at -6 dB: -6 dB, at most every thunderGap
     thunderGap = 150,                    -- five seconds between full thunderclaps
     twisterVolume = 1.0,                 -- every take sits at -6 dB: -6 dB, for its whole life
-    rainVolume = 0.82,                   -- the loop sits at -13.3 dB: -15 dB, for as long as anyone holds it
+    rainVolume = 0.41,                   -- the loop sits at -13.3 dB: -21 dB, for as long as anyone holds it
     twisterWindGap = 90,                 -- a twister rising within three seconds of the last wind joins it: two winds at most
     flashTicks = 6,                      -- a thunderclap lifts the dark this long
     rumbleVolume = 0.6,                  -- vanilla thunder peaks at -5.5 to -7.4 dB: -10 to -12 dB
@@ -269,12 +270,12 @@ local function sound(bolts)
     sky.sinceStrike = 0
     if sky.sinceThunder >= d.thunderGap then
         sky.sinceThunder, sky.flash = 0, d.flashTicks
-        local id = soundId(THUNDER_SOUND)
-        if id then SFXManager():Play(id, d.thunderVolume, 0, false, 1) end
-        return "thunder", d.thunderVolume, sky.gapAverage
+        local id, volume = soundId(THUNDER_SOUND), Sound.volume(d.thunderVolume)
+        if id then SFXManager():Play(id, volume, 0, false, 1) end
+        return "thunder", volume, sky.gapAverage
     end
     local id = soundId(BOLT_SOUND)
-    local volume = boltVolumeForGap(sky.gapAverage)
+    local volume = Sound.volume(boltVolumeForGap(sky.gapAverage))
     if id then
         SFXManager():Play(id, volume, 0, false, d.boltPitch[1] + hash(sky.cracks) * (d.boltPitch[2] - d.boltPitch[1]))
     end
@@ -314,7 +315,7 @@ local function raiseTwister(player, position)
     if sky.sinceWind >= d.twisterWindGap then
         sky.sinceWind = 0
         local id = soundId(TWISTER_SOUND)
-        if id then SFXManager():Play(id, d.twisterVolume, 0, false, 1) end
+        if id then SFXManager():Play(id, Sound.volume(d.twisterVolume), 0, false, 1) end
     end
     debugLog("twister rises at %.0f,%.0f (%d in the room)", position.X, position.Y, #twisters)
 end
@@ -374,24 +375,31 @@ local function updateRumble(held)
     rumble.count = rumble.count + 1
     rumble.wait = rumbleWait(d.rumbleGap, rumble.count)
     local id = SoundEffect and SoundEffect.SOUND_THUNDER
-    if id then SFXManager():Play(id, d.rumbleVolume, 0, false, d.rumblePitch) end
+    if id then SFXManager():Play(id, Sound.volume(d.rumbleVolume), 0, false, d.rumblePitch) end
     debugLog("distant thunder (next in %d updates)", rumble.wait)
 end
 
 -- ------------------------------------------------------------------ rain sound
 -- The rain loop plays while anyone holds it, across rooms, and stops when
 -- nobody does or the game is left. The sound is this item's own, so stopping
--- it touches nothing else.
+-- it touches nothing else. Its level follows the MCM sound and rain settings:
+-- a changed setting restarts the loop at the new level, and 0 leaves it off.
+local rainLevel -- the volume the playing loop was started at
 local function stopRainSound()
     local id = soundId(RAIN_SOUND)
+    rainLevel = nil
     if id and SFXManager():IsPlaying(id) then SFXManager():Stop(id) end
 end
 
 local function updateRainSound(held)
     if not held then stopRainSound(); return end
     local id = soundId(RAIN_SOUND)
-    if id and not SFXManager():IsPlaying(id) then
-        SFXManager():Play(id, ConchBlessing.dragon.data.rainVolume, 0, true, 1)
+    if not id then return end
+    local sfx, volume = SFXManager(), Sound.volume(ConchBlessing.dragon.data.rainVolume, "rain")
+    if sfx:IsPlaying(id) and rainLevel ~= volume then sfx:Stop(id) end
+    if volume > 0 and not sfx:IsPlaying(id) then
+        sfx:Play(id, volume, 0, true, 1)
+        rainLevel = volume
     end
 end
 

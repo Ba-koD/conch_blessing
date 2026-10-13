@@ -367,7 +367,7 @@ local function strikeEnemy(familiar, player, enemy)
     strikes[#strikes + 1] = { position = copyVector(enemy.Position), age = 0,
         shape = strikeCount % 4 + 1, flip = strikeCount % 3 == 0 }
     local sound = getThunderSound()
-    if sound then SFXManager():Play(sound, 0.5, 0, false, 1) end
+    if sound then SFXManager():Play(sound, require("scripts.lib.sound_volume").volume(0.5), 0, false, 1) end
     Game():ShakeScreen(3)
     debugLog("strike %s.%s boss=%s damage=%.2f", tostring(enemy.Type), tostring(enemy.Variant), tostring(isBoss), damage)
 end

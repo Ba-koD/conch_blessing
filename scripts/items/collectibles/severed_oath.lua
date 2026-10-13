@@ -1709,7 +1709,7 @@ function M.onUseItem(_, collectibleId, rng, player, useFlags, activeSlot, varDat
         return { Discharge = false, Remove = false, ShowAnim = false }
     end
 
-    SFXManager():Play(SoundEffect.SOUND_POWERUP_SPEWER, 1.0, 0, false, 1.0, 0)
+    SFXManager():Play(SoundEffect.SOUND_POWERUP_SPEWER, require("scripts.lib.sound_volume").volume(1.0), 0, false, 1.0, 0)
     logVerify(string.format("active-result split=%d spawned=%d", splitCount, spawnedCount))
     ConchBlessing.printDebug(string.format("[Severed Oath] Split %d cycling pickups into %d items.", splitCount, spawnedCount))
     return { Discharge = true, Remove = false, ShowAnim = true }

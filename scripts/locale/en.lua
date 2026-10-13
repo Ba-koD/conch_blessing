@@ -112,6 +112,7 @@ return {
                 "#{{Tears}} Lightning strikes enemies every 5 / tears seconds.",
                 "#{{Luck}} Lightning hits 50% of the time by default. (+5% per luck, 10% minimum)",
                 "#Lightning deals your damage.",
+                "#Sound volume can be adjusted in MCM.",
             },
             synergies = {
                 dragon = {
@@ -780,6 +781,18 @@ return {
         mcm = {
             tab_general = "General",
             tab_spawn = "Spawn",
+            tab_sound = "Sound",
+            sound_title = "--- Sound Settings ---",
+            sound_volume = "Sound Effects: %s%%",
+            sound_volume_info = {
+                "Volume of every sound Conch's Blessing plays.",
+                "Default: 100%%",
+            },
+            rain_volume = "Rain: %s%%",
+            rain_volume_info = {
+                "Volume of Dragon's rain, on top of Sound Effects.",
+                "Default: 100%%",
+            },
             options_title = "--- Conch's Blessing Options ---",
             spawn_title = "--- Spawn Settings ---",
             on = "ON",

@@ -971,7 +971,7 @@ end
 -- Delete a pickup item with effect
 local function deletePickupWithEffect(entity)
     local sfxManager = SFXManager()
-    sfxManager:Play(SoundEffect.SOUND_THUMBS_DOWN, 0.7)
+    sfxManager:Play(SoundEffect.SOUND_THUMBS_DOWN, require("scripts.lib.sound_volume").volume(0.7))
     
     -- Spawn poof effect at item position
     Isaac.Spawn(EntityType.ENTITY_EFFECT, EffectVariant.POOF01, 0, entity.Position, Vector.Zero, nil)
@@ -1136,7 +1136,7 @@ local function queueResult(result, explicitPickups)
 
                 if queued then
                     queuedJobs[#queuedJobs + 1] = queued
-                    SFXManager():Play(SoundEffect.SOUND_POWERUP_SPEWER, 0.5)
+                    SFXManager():Play(SoundEffect.SOUND_POWERUP_SPEWER, require("scripts.lib.sound_volume").volume(0.5))
                     ConchBlessing.printDebug("Item conversion in progress for item " .. tostring(entity.SubType))
 
                     upgradeCount = upgradeCount + 1

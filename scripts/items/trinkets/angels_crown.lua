@@ -545,7 +545,7 @@ local function applyBlessing(rng)
 
     local sfx = SFXManager and SFXManager()
     if sfx and SoundEffect and SoundEffect.SOUND_CHOIR_UNLOCK then
-        sfx:Play(SoundEffect.SOUND_CHOIR_UNLOCK)
+        sfx:Play(SoundEffect.SOUND_CHOIR_UNLOCK, require("scripts.lib.sound_volume").volume(1))
     end
 end
 

@@ -3,6 +3,7 @@
 local Visuals = { catalog = require("scripts.upgrade_visual_catalog") }
 local Devour = require("scripts.lib.upgrade_devour")
 local PickupVisual = require("scripts.lib.upgrade_pickup_visual")
+local Sound = require("scripts.lib.sound_volume")
 local profiles = {}
 for _, row in ipairs(Visuals.catalog) do profiles[row.key] = row end
 local PI = math.pi
@@ -205,7 +206,7 @@ local function soundOnce(scene, sound, at, volume, pitch)
         return
     end
     local sfx = SFXManager()
-    sfx:Play(id, volume or 0.5, 0, false, pitch or 1)
+    sfx:Play(id, Sound.volume(volume or 0.5), 0, false, pitch or 1)
     -- Evidence for in-game audibility reports: the cue fired, and whether the
     -- engine actually started the sample (another mod's PRE_SFX_PLAY may not).
     -- The engine may start it on its next audio tick, so the following update

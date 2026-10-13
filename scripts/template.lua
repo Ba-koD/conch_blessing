@@ -5,6 +5,7 @@
 local Template = {}
 local MorphVisuals -- Loaded lazily, after ItemData initialization.
 local PickupVisual = require("scripts.lib.upgrade_pickup_visual")
+local Sound = require("scripts.lib.sound_volume")
 Template._activeAnimations = Template._activeAnimations or {}
 Template._centralUpdaterRegistered = Template._centralUpdaterRegistered or false
 
@@ -249,8 +250,8 @@ Template.positive.onBeforeChange = function(upgradePos, pickup, itemData, soundI
     
     -- One-shot cue; never stop or adjust the shared sound channel.
     local sfx = SFXManager()
-    sfx:Play(upgradeAnim.soundId, 1.0, 0, false, 1.0, 0)
-    debugSound("positive", sfx, upgradeAnim.soundId, 1.0)
+    sfx:Play(upgradeAnim.soundId, Sound.volume(1.0), 0, false, 1.0, 0)
+    debugSound("positive", sfx, upgradeAnim.soundId, Sound.volume(1.0))
     
     registerAnimation(itemData, upgradeAnim)
     
@@ -307,8 +308,8 @@ Template.neutral.onBeforeChange = function(upgradePos, pickup, itemData, soundId
     
     -- One-shot cue; never stop or adjust the shared sound channel.
     local sfx = SFXManager()
-    sfx:Play(upgradeAnim.soundId, 0.7, 0, false, 1.0, 0)
-    debugSound("neutral", sfx, upgradeAnim.soundId, 0.7)
+    sfx:Play(upgradeAnim.soundId, Sound.volume(0.7), 0, false, 1.0, 0)
+    debugSound("neutral", sfx, upgradeAnim.soundId, Sound.volume(0.7))
     
     registerAnimation(itemData, upgradeAnim)
     
@@ -370,8 +371,8 @@ Template.negative.onBeforeChange = function(upgradePos, pickup, itemData, soundI
     
     -- One-shot cue; never stop or adjust the shared sound channel.
     local sfx = SFXManager()
-    sfx:Play(upgradeAnim.soundId, 0.7, 0, false, 1.0, 0)
-    debugSound("negative", sfx, upgradeAnim.soundId, 0.7)
+    sfx:Play(upgradeAnim.soundId, Sound.volume(0.7), 0, false, 1.0, 0)
+    debugSound("negative", sfx, upgradeAnim.soundId, Sound.volume(0.7))
     
     registerAnimation(itemData, upgradeAnim)
     

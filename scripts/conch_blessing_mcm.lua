@@ -53,6 +53,7 @@ function ConchBlessing_MCM.Setup(mod)
         return text(enabled and "on" or "off")
     end
     local GENERAL = text("tab_general")
+    local SOUND = text("tab_sound")
     local SPAWN = text("tab_spawn")
     local category = "Conch's Blessing v" .. tostring(mod.Config.Version or "")
 
@@ -125,6 +126,34 @@ function ConchBlessing_MCM.Setup(mod)
         Info = lines("reset_info")
     })
     
+    -- Sound: every sound this mod plays, and 진's rain on top (10% steps).
+    local Sound = require("scripts.lib.sound_volume")
+    local function soundStep(key)
+        local value = tonumber(mod.Config[key])
+        if not value then return Sound.STEPS end
+        return math.max(0, math.min(Sound.STEPS, math.floor(value + 0.5)))
+    end
+    ModConfigMenu.AddText(category, SOUND, text("sound_title"))
+    for _, setting in ipairs({ { key = Sound.ALL, name = "sound_volume" }, { key = Sound.RAIN, name = "rain_volume" } }) do
+        ModConfigMenu.AddSetting(category, SOUND, {
+            Type = ModConfigMenu.OptionType.NUMBER,
+            Minimum = 0,
+            Maximum = Sound.STEPS,
+            ModifyBy = 1,
+            CurrentSetting = function()
+                return soundStep(setting.key)
+            end,
+            Display = function()
+                return text(setting.name, tostring(soundStep(setting.key) * 100 // Sound.STEPS))
+            end,
+            OnChange = function(value)
+                mod.Config[setting.key] = math.max(0, math.min(Sound.STEPS, math.floor((tonumber(value) or Sound.STEPS) + 0.5)))
+                ConchBlessing_MCM.saveConfigToSaveManager(mod)
+            end,
+            Info = lines(setting.name .. "_info")
+        })
+    end
+
     -- Spawn - Collectibles
     ModConfigMenu.AddText(category, SPAWN, text("spawn_title"))
     ModConfigMenu.AddSetting(category, SPAWN, {

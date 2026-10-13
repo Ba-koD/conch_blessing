@@ -223,7 +223,7 @@ ConchBlessing.powertraining.onUseItem = function(player, collectibleID, useFlags
     -- Always treat as additive multiplier stacking
     rebuildPowerTrainingUnified(player, playerID)
     
-    SFXManager():Play(SoundEffect.SOUND_BATTERYCHARGE, 1.0, 0, false, 1.0, 0)
+    SFXManager():Play(SoundEffect.SOUND_BATTERYCHARGE, require("scripts.lib.sound_volume").volume(1.0), 0, false, 1.0, 0)
     
     player:AnimateCollectible(POWER_TRAINING_ID, "Drop", "PlayerPickupSparkle")
     

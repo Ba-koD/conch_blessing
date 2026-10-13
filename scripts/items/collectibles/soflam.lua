@@ -332,13 +332,13 @@ local function queueStrike(player, npc, inheritedProvenance)
     local crosshair = spawnTargetCrosshair(position, player, inheritedProvenance)
 
     local sfx = SFXManager()
-    sfx:Play(SoundEffect.SOUND_BIRD_FLAP, 0.6, 0, false, 1.5)
+    sfx:Play(SoundEffect.SOUND_BIRD_FLAP, require("scripts.lib.sound_volume").volume(0.6), 0, false, 1.5)
     -- The lock-on warning (Doctor's Remote's beeping) sounds the moment the
     -- reticle appears instead of only when the missile is already falling.
     local warning = SoundEffect.SOUND_DR_REMOTE_WARNING
     if warning then
         ConchBlessing.soflam._playingLockWarning = true
-        local ok, err = pcall(sfx.Play, sfx, warning, 0.8, 0, false, 1)
+        local ok, err = pcall(sfx.Play, sfx, warning, require("scripts.lib.sound_volume").volume(0.8), 0, false, 1)
         ConchBlessing.soflam._playingLockWarning = false
         if ok then
             debugLog("lock-on warning played at the reticle")

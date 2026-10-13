@@ -2609,7 +2609,7 @@ local function daddyStomp(player, center, provenance)
             end
         end
     end)
-    SFXManager():Play(SoundEffect.SOUND_FORESTBOSS_STOMPS, 0.6)
+    SFXManager():Play(SoundEffect.SOUND_FORESTBOSS_STOMPS, require("scripts.lib.sound_volume").volume(0.6))
     Game():ShakeScreen(4)
     addStompVisual(center)
     bump("stomps")
@@ -2767,7 +2767,7 @@ local function runHurtEffects(player)
                 target:TakeDamage(BIRD_CAGE_DAMAGE * birdCage, 0, EntityRef(player), 0)
             end)
             bump("birdCage")
-            SFXManager():Play(SoundEffect.SOUND_FORESTBOSS_STOMPS, 0.8)
+            SFXManager():Play(SoundEffect.SOUND_FORESTBOSS_STOMPS, require("scripts.lib.sound_volume").volume(0.8))
             Game():ShakeScreen(6)
         end
     end
@@ -2845,7 +2845,8 @@ local function showProjectileBlock(player, source)
         spark.DepthOffset = 10
         bump("blockSparks")
     end
-    SFXManager():Play(SoundEffect.SOUND_HOLY_MANTLE, BLOCK_FEEDBACK.SOUND_VOLUME, 0, false, BLOCK_FEEDBACK.SOUND_PITCH)
+    SFXManager():Play(SoundEffect.SOUND_HOLY_MANTLE, require("scripts.lib.sound_volume").volume(BLOCK_FEEDBACK.SOUND_VOLUME), 0, false,
+        BLOCK_FEEDBACK.SOUND_PITCH)
 end
 
 -- Pre-damage: the projectile block for the Kronos owner, plus the base-game
@@ -4314,11 +4315,11 @@ local function updateTransferEffects()
         if not done and not playing[effect.hash] then
             playing[effect.hash] = true
             if effect.tick == 0 and effect.reverse then
-                sfx:Play(SoundEffect.SOUND_SUMMONSOUND, 0.6)
+                sfx:Play(SoundEffect.SOUND_SUMMONSOUND, require("scripts.lib.sound_volume").volume(0.6))
             end
             effect.tick = effect.tick + 1
             if effect.tick == TRANSFER_TOTAL and not effect.reverse then
-                sfx:Play(SoundEffect.SOUND_VAMP_GULP, 0.6)
+                sfx:Play(SoundEffect.SOUND_VAMP_GULP, require("scripts.lib.sound_volume").volume(0.6))
                 effect.value = beginTransferValue(effect, i)
             end
             done = effect.tick >= TRANSFER_TOTAL + (effect.value and VALUE.TOTAL or 0)

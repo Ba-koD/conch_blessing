@@ -287,7 +287,7 @@ ConchBlessing.injectablsteroids.onUseItem = function(_, collectibleID, _rng, pla
     -- Save unified multipliers to SaveManager
     ConchBlessing.stats.unifiedMultipliers:SaveToSaveManager(player)
     
-    SFXManager():Play(SoundEffect.SOUND_ISAAC_HURT_GRUNT, 1.0, 0, false, 1.0, 0)
+    SFXManager():Play(SoundEffect.SOUND_ISAAC_HURT_GRUNT, require("scripts.lib.sound_volume").volume(1.0), 0, false, 1.0, 0)
     
     if not ConchBlessing.injectablsteroids._yellowIntensity then
         ConchBlessing.printDebug("Initializing _yellowIntensity")

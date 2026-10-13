@@ -439,6 +439,36 @@ class DragonWeatherContracts(unittest.TestCase):
             p.items=1; tick(); D.onGameStarted(); assert(not playing[RAIN], 'a new game starts quiet')
         ''')
 
+    def test_the_sound_settings_scale_the_storm_and_restart_the_rain(self):
+        self.run_lua('''
+            local function last(id)
+                local volume
+                for _,s in ipairs(sounds) do if s.id==id then volume=s.volume end end
+                return volume
+            end
+            ConchBlessing.Config={soundVolume=5, rainVolume=10}
+            local p=makePlayer({delay=0}); enemy(320,280)
+            for i=1,60 do tick() end
+            near(last(RAIN), D.data.rainVolume*0.5, 1e-9)
+            assert(last(902) and last(902)<=T.boltVolumeForGap(1e9)*0.5+1e-9 and last(902)>=D.data.boltVolume*0.5-1e-9,
+                'bolts at half: '..tostring(last(902)))
+            -- A changed setting restarts the loop at its new level at once.
+            ConchBlessing.Config.rainVolume=5; tick()
+            near(last(RAIN), D.data.rainVolume*0.25, 1e-9); assert(playing[RAIN])
+            -- Off: the rain stops and stays off; the bolts fall silent too.
+            ConchBlessing.Config.soundVolume=0; tick()
+            assert(not playing[RAIN], 'no rain at 0%')
+            local rains=0
+            for _,s in ipairs(sounds) do if s.id==RAIN then rains=rains+1 end end
+            for i=1,30 do tick() end
+            local again=0
+            for _,s in ipairs(sounds) do if s.id==RAIN then again=again+1 end end
+            assert(again==rains and not playing[RAIN], 'it does not restart while off')
+            assert(last(902)==0, 'bolts play at 0')
+            ConchBlessing.Config={}; tick()
+            near(last(RAIN), D.data.rainVolume, 1e-9); assert(playing[RAIN], 'back at full with the defaults')
+        ''')
+
     def test_a_quiet_distant_rumble_rolls_while_held(self):
         self.run_lua('''
             -- 3-8 s after entering, then every 12-20 s, with or without enemies.
@@ -479,11 +509,11 @@ class DragonWeatherContracts(unittest.TestCase):
                 loudest[name] = max(loudest.get(name, -99), level)
                 self.assertGreaterEqual(level, levels.QUIETEST_DB, f'{name} on {sample.name}: {level:.1f} dB')
         # The user's levels (2026-10-13): bolt -5 dB, thunderclap -6 dB, twister
-        # -6 dB, the rain loop -15 dB.
+        # -6 dB, the rain loop -21 dB (lowered twice by 3 dB the same day).
         for name, sound, count, want in (('boltVolume', 'Conch Dragon Bolt', 5, -5.0),
                                          ('twisterVolume', 'Conch Dragon Twister', 2, -6.0),
                                          ('thunderVolume', 'Conch Dragon Thunder', 2, -6.0),
-                                         ('rainVolume', 'Conch Dragon Rain', 1, -15.0)):
+                                         ('rainVolume', 'Conch Dragon Rain', 1, -21.0)):
             takes = probe.samples(sound)
             self.assertEqual(len(takes), count, sound)
             for sample in takes:

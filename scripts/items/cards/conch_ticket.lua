@@ -174,7 +174,7 @@ local function readInputs(player)
 end
 
 local function sfx(id, volume)
-    if id then SFXManager():Play(id, volume, 0, false, 1) end
+    if id then SFXManager():Play(id, require("scripts.lib.sound_volume").volume(volume), 0, false, 1) end
 end
 
 -- Rising edges from update and render alike, so a tap between updates counts
