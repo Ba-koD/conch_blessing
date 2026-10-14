@@ -197,10 +197,14 @@ local function build(plan)
             local line = "#{{ConchMode}} " .. (template:gsub("{{item_name}}", "{{icon_live_eye}}(" .. data.name[ctx.localeLanguage] .. ")"))
             return contains(describe(CollectibleType.COLLECTIBLE_DEAD_EYE), line), line
         end)
-        plan.check(lang .. ": Rock Bottom shows Live Eye's synergy line", function(_, ctx)
+        plan.check(lang .. ": Rock Bottom shows Live Eye's synergy line under Live Eye's icon", function(_, ctx)
             if not EID then return nil, "EID is not installed" end
-            local line = Locale.expandIcons(Locale.get("items.LIVE_EYE.synergies.rock_bottom", ctx.localeLanguage))
-            return contains(describe(CollectibleType.COLLECTIBLE_ROCK_BOTTOM), line), line
+            -- Read on the target while holding the mod item, the line opens with
+            -- the held item's icon, not Rock Bottom's own.
+            local line = Locale.expandIcons(Locale.get("items.LIVE_EYE.synergies.rock_bottom", ctx.localeLanguage)):gsub("^#+", "")
+            local icon = "{{Collectible" .. tostring(ConchBlessing.ItemData.LIVE_EYE.id) .. "}}"
+            local expected = "#" .. (line:sub(1, #icon) == icon and line or icon .. " " .. line)
+            return contains(describe(CollectibleType.COLLECTIBLE_ROCK_BOTTOM), expected), expected
         end)
         for _, live in ipairs(LIVE_LINES) do
             plan.check(lang .. ": " .. live.item .. " adds its live line", function(_, ctx)

@@ -1685,80 +1685,52 @@ local function loadAllItems()
                             return true
                         end
 
+                        -- A synergy line opens with the icon of the other item of the pair:
+                        -- the held one that makes the synergy, never the item being described.
+                        -- Bob's Brain read while holding Kronos shows Kronos's icon, and Kronos
+                        -- read while holding Bob's Brain shows Bob's Brain's (user, 2026-10-14).
+                        -- A line that already opens with that icon keeps a single one.
+                        local function appendSynergy(iconToken, text)
+                            local t = expandDynamicTokens((type(text) == "table" and (text[lang] or text.en)) or text)
+                            local lines = type(t) == "table" and t or { t }
+                            local msg = ""
+                            for i = 1, #lines do
+                                -- strip leading # to avoid double newlines
+                                local line = (tostring(lines[i] or ""):gsub("^#+", ""))
+                                if line:sub(1, #iconToken) ~= iconToken then line = iconToken .. " " .. line end
+                                msg = msg .. "#" .. line
+                            end
+                            EID:appendToDescription(descObj, msg)
+                        end
+                        local function itemIcon(id, isTrinket)
+                            return (isTrinket and "{{Trinket" or "{{Collectible") .. tostring(id) .. "}}"
+                        end
+
+                        -- The described item is a synergy target: its lines name the held mod item.
                         local targets = ConchBlessing._synergyByTarget and ConchBlessing._synergyByTarget[subId]
                         if targets then
-						for _, entry in ipairs(targets) do
-							local d = ConchBlessing.ItemData[entry.key]
-							local typeMatches = entry.targetIsTrinket == nil
-								or (entry.targetIsTrinket == true and descObj.ObjVariant == 350)
-								or (entry.targetIsTrinket == false and descObj.ObjVariant == 100)
-							if typeMatches and d and d.id and anyPlayerHas(d.id) and shouldAppendSynergy(d.id, subId) then
-								local t = expandDynamicTokens((type(entry.text) == "table" and (entry.text[lang] or entry.text.en)) or entry.text)
-								local iconToken
-								if entry.targetIsTrinket == true then
-									iconToken = "{{Trinket" .. tostring(subId) .. "}}"
-								elseif entry.targetIsTrinket == false then
-									iconToken = "{{Collectible" .. tostring(subId) .. "}}"
-								else
-									iconToken = "{{icon_" .. string.lower(entry.key) .. "}}"
-								end
-                                    local function normLine(s)
-                                        s = tostring(s or "")
-                                        -- strip leading # to avoid double newlines
-                                        return (s:gsub("^#+", ""))
-                                    end
-                                    local msg
-                                    if type(t) == "table" then
-                                        msg = ""
-                                        for i = 1, #t do
-                                            msg = msg .. "#" .. iconToken .. " " .. normLine(t[i])
-                                        end
-                                    else
-                                        msg = "#" .. iconToken .. " " .. normLine(t)
-                                    end
-                                    EID:appendToDescription(descObj, msg)
+                            for _, entry in ipairs(targets) do
+                                local d = ConchBlessing.ItemData[entry.key]
+                                local typeMatches = entry.targetIsTrinket == nil
+                                    or (entry.targetIsTrinket == true and descObj.ObjVariant == 350)
+                                    or (entry.targetIsTrinket == false and descObj.ObjVariant == 100)
+                                if typeMatches and d and d.id and anyPlayerHas(d.id) and shouldAppendSynergy(d.id, subId) then
+                                    appendSynergy(itemIcon(d.id, d.type == "trinket"), entry.text)
                                 end
                             end
                         end
 
+                        -- The described item is the mod item: its lines name the held target.
                         local asMod = ConchBlessing._synergyByMod and ConchBlessing._synergyByMod[subId]
                         if asMod then
                             for _, entry in ipairs(asMod) do
                                 if anyPlayerHas(entry.target, entry.targetIsTrinket) and shouldAppendSynergy(subId, entry.target) then
-                                    local t = expandDynamicTokens((type(entry.text) == "table" and (entry.text[lang] or entry.text.en)) or entry.text)
-                                    local iconToken
-                                    -- Use the explicitly stored targetIsTrinket flag from synergy definition
-                                    eidDebugOnce("[EID Synergy] Processing target ID: " .. tostring(entry.target) .. ", targetIsTrinket flag: " .. tostring(entry.targetIsTrinket))
-                                    if entry.targetIsTrinket == true then
-                                        iconToken = "{{Trinket" .. tostring(entry.target) .. "}}"
-                                        eidDebugOnce("[EID Synergy] Using Trinket icon for ID: " .. tostring(entry.target))
-                                    elseif entry.targetIsTrinket == false then
-                                        iconToken = "{{Collectible" .. tostring(entry.target) .. "}}"
-                                        eidDebugOnce("[EID Synergy] Using Collectible icon for ID: " .. tostring(entry.target))
-                                    else
-                                        -- Fallback: auto-detect if type was not explicitly specified
-                                        local isTrinket = isTrinketId(entry.target)
-                                        eidDebugOnce("[EID Synergy] Auto-detecting type for ID: " .. tostring(entry.target) .. ", isTrinket: " .. tostring(isTrinket))
-                                        if isTrinket then
-                                            iconToken = "{{Trinket" .. tostring(entry.target) .. "}}"
-                                        else
-                                            iconToken = "{{Collectible" .. tostring(entry.target) .. "}}"
-                                        end
-                                    end
-                                    local function normLine(s)
-                                        s = tostring(s or "")
-                                        return (s:gsub("^#+", ""))
-                                    end
-                                    local msg
-                                    if type(t) == "table" then
-                                        msg = ""
-                                        for i = 1, #t do
-                                            msg = msg .. "#" .. iconToken .. " " .. normLine(t[i])
-                                        end
-                                    else
-                                        msg = "#" .. iconToken .. " " .. normLine(t)
-                                    end
-                                    EID:appendToDescription(descObj, msg)
+                                    -- Use the synergy's declared type; detect it only when none was given.
+                                    local isTrinket = entry.targetIsTrinket
+                                    if isTrinket == nil then isTrinket = isTrinketId(entry.target) end
+                                    eidDebugOnce("[EID Synergy] target " .. tostring(entry.target) .. " shown as "
+                                        .. (isTrinket and "trinket" or "collectible"))
+                                    appendSynergy(itemIcon(entry.target, isTrinket), entry.text)
                                 end
                             end
                         end
