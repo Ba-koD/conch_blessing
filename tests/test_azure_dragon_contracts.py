@@ -733,5 +733,70 @@ class AzureDragonContracts(unittest.TestCase):
         self.assertIn('name="Azure Dragon" id="3" variant="778" anm2path="dragon.anm2"', entities)
 
 
+    def test_body_length_follows_range_without_an_upper_limit(self):
+        self.run_lua('''
+            -- Isaac's base range (6.5 tiles) gives the base fourteen-part, 108-unit body.
+            assert(T.partCountFor(260)==14 and T.partCountFor(nil)==14)
+            near(T.bodyLength(14),108)
+            for n=5,120 do near(T.bodyLength(n),20+8*(n-3)) end
+            -- In proportion with range, with no upper limit.
+            local last=0
+            for range=260,4000,20 do
+                local n=T.partCountFor(range)
+                assert(n>=last, 'never shorter for more range')
+                assert(math.abs(T.bodyLength(n)-108*range/260)<=4+1e-9, range..': '..T.bodyLength(n))
+                last=n
+            end
+            assert(T.partCountFor(400)==21 and T.partCountFor(2080)>100, T.partCountFor(2080))
+            -- Never shorter than minLength.
+            assert(T.bodyLength(T.partCountFor(40))>=D.data.minLength-4)
+            -- Legs keep their share; the head and tail stay at the ends.
+            for n=8,120 do
+                local legs=0
+                for i=1,n do if T.isLegPart(i,n) then legs=legs+1; assert(i>1 and i<n) end end
+                assert(legs==2, n..' parts: '..legs..' legs')
+                assert(T.partName(1,n)=='Head' and T.partName(n,n)=='Tail' and T.partName(2,n)=='Body')
+            end
+            assert(T.isLegPart(3,14) and T.isLegPart(9,14))
+        ''')
+
+    def test_more_range_grows_the_body_at_the_tail_without_bunching(self):
+        self.run_lua('''
+            local p=makePlayer(); p.items=1; p.TearRange=260
+            local f=makeFamiliar(p); entities[#entities+1]=f
+            for i=1,30 do tick(f) end
+            local s=f.data.__ConchDragon
+            assert(#s.segments==14, #s.segments)
+            p.TearRange=520                       -- double the range: double the body
+            local counts={}
+            for i=1,120 do
+                tick(f); counts[#counts+1]=#s.segments
+                -- Every gap stays on the trail at its spacing: nothing bunches or kinks.
+                for k=2,#s.segments do
+                    local gap=s.segments[k]:Distance(s.segments[k-1])
+                    assert(gap<=T.gapBefore(k,#s.segments)+1e-6, 'gap '..gap)
+                end
+            end
+            local target=T.partCountFor(520)
+            assert(#s.segments==target, #s.segments..' vs '..target)
+            for k=2,#counts do assert(counts[k]-counts[k-1]<=1, 'one part at a time') end
+            -- Three times the range, orbiting a long while: the turns and orbit stay
+            -- the same (the body may cross over itself), and it never bunches or kinks.
+            p.TearRange=780
+            for i=1,1200 do
+                tick(f)
+                for k=2,#s.segments do
+                    assert(s.segments[k]:Distance(s.segments[k-1])<=T.gapBefore(k,#s.segments)+1e-6)
+                end
+            end
+            assert(#s.segments==T.partCountFor(780), #s.segments)
+            local speed,radius=T.orbitShape(s,s.t)
+            assert(radius<=D.data.orbitRadius+D.data.radiusSwing+D.data.radiusSwing2+1e-9, 'orbit unchanged: '..radius)
+            -- Less range shrinks it back, again a part at a time, dropping every per-part record.
+            p.TearRange=260
+            for i=1,120 do tick(f) end
+            assert(#s.segments==14 and #s.angles==14 and #s.previous==14 and #s.flips<=14, #s.segments)
+        ''')
+
 if __name__ == '__main__':
     unittest.main()

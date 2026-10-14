@@ -18,6 +18,11 @@
 -- body follows: the head always swims forward and its turning speed itself
 -- eases in and out, so its direction never jumps; every other part sits on
 -- the exact trail the head left behind, so the body never bunches or kinks.
+-- The body grows with the player's range, in proportion and without limit:
+-- at Isaac's base range it is the layout below, and more range adds body
+-- parts before the tail. Its turns and orbit stay the same (user decision
+-- 2026-10-14), so a long body may cross over itself (the head draws on top);
+-- it still never bunches or kinks.
 -- The dragon keeps its own head position and sets the entity to it each
 -- update rather than relying on the engine to integrate a velocity.
 -- Motion and drawing are cosmetic; damage always goes through
@@ -28,10 +33,16 @@ local DRAGON_ID = Isaac.GetItemIdByName("Azure Dragon")
 local THUNDER_SOUND = "Conch Upgrade Thunder Strike"
 
 ConchBlessing.azureDragon.data = {
-    -- Head, a long body and the tail; legs hang under the front and hind parts.
+    -- Head, a long body and the tail at Isaac's base range; legs hang under the
+    -- front and hind parts. A longer body keeps the legs at the same share.
     parts = { "Head", "Body", "Body", "Body", "Body", "Body", "Body", "Body",
               "Body", "Body", "Body", "Body", "Body", "Tail" },
     legParts = { [3] = true, [9] = true },
+    -- The body length follows the player's range (user decision 2026-10-14):
+    -- the layout above at baseRange (TearRange of Isaac's 6.5 tiles), in
+    -- proportion with no upper limit, never shorter than minLength. A changed
+    -- range adds or drops one part at the tail every growTicks updates.
+    baseRange = 260, minLength = 60, growTicks = 3,
     flipThreshold = 0.08,                -- heading cosine (about 5 degrees past vertical) at which a part turns round
     spacing = { 10, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 10 },  -- trail distance between part pivots
     taper = 0.35,                        -- the tail end is drawn this much smaller than the head
@@ -87,7 +98,7 @@ ConchBlessing.azureDragon.data = {
     sparkSpread = 5,                     -- off the spine to either side, before scaling
 }
 
-local PART_ANIMATIONS = ConchBlessing.azureDragon.data.parts
+local BASE_PARTS = #ConchBlessing.azureDragon.data.parts
 ConchBlessing.azureDragon._strikes = {}
 local enemyCache = { frame = -1, list = {} }
 -- Every dragon's state and the frame it last updated, so several dragons can
@@ -151,15 +162,54 @@ local function wrapAngle(a)
     return (a + math.pi) % (2 * math.pi) - math.pi
 end
 
-local function trailLength()
+-- ------------------------------------------------------------------ body length
+-- Trail distance from part i-1 to part i of an n-part body: the base layout's
+-- neck and tail gaps at the two ends, its body gap everywhere between.
+local function gapBefore(i, n)
+    local spacing = ConchBlessing.azureDragon.data.spacing
+    if i <= 2 then return spacing[1] end
+    if i >= n then return spacing[#spacing] end
+    return spacing[2]
+end
+
+local function bodyLength(n)
+    n = n or BASE_PARTS
     local total = 0
-    for _, gap in ipairs(ConchBlessing.azureDragon.data.spacing) do total = total + gap end
+    for i = 2, n do total = total + gapBefore(i, n) end
     return total
+end
+
+-- How many parts the body has for a range (TearRange): the base layout at
+-- baseRange, longer or shorter in proportion, never below minLength.
+local function partCountFor(range)
+    local d = ConchBlessing.azureDragon.data
+    range = tonumber(range) or d.baseRange
+    local length = math.max(d.minLength, bodyLength(BASE_PARTS) * range / d.baseRange)
+    local ends = d.spacing[1] + d.spacing[#d.spacing]
+    return math.max(5, math.floor((length - ends) / d.spacing[2] + 0.5) + 3)
+end
+
+local function partName(i, n)
+    if i == 1 then return "Head" end
+    if i == n then return "Tail" end
+    return "Body"
+end
+
+-- Legs hang at the same share of the body as in the base layout.
+local function isLegPart(i, n)
+    for base in pairs(ConchBlessing.azureDragon.data.legParts) do
+        if i == 1 + math.floor((base - 1) / (BASE_PARTS - 1) * (n - 1) + 0.5) then return true end
+    end
+    return false
+end
+
+local function trailLength(n)
+    return bodyLength(n)
 end
 
 -- The head's trail, newest point first. A move shorter than trailStep slides
 -- the newest point instead of adding one; points past the body's length drop off.
-local function pushTrail(trail, head)
+local function pushTrail(trail, head, n)
     local d = ConchBlessing.azureDragon.data
     local first = trail[1]
     if first and first:Distance(head) < d.trailStep and trail[2] then
@@ -167,7 +217,7 @@ local function pushTrail(trail, head)
     else
         table.insert(trail, 1, head)
     end
-    local need, travelled = trailLength() + 4, 0
+    local need, travelled = trailLength(n) + 4, 0
     for i = 2, #trail do
         travelled = travelled + trail[i]:Distance(trail[i - 1])
         if travelled > need then
@@ -195,18 +245,42 @@ local function sampleTrail(trail, distance, heading)
     return last + back:Resized(distance - travelled)
 end
 
+-- sampleTrail for many distances at once: the trail's running lengths are
+-- measured once and each point is found by binary search, so laying out even
+-- a very long body stays cheap. Same points as sampleTrail.
+local function trailSampler(trail, heading)
+    local running, total = { 0 }, 0
+    for i = 2, #trail do
+        total = total + trail[i]:Distance(trail[i - 1])
+        running[i] = total
+    end
+    return function(distance)
+        if #trail < 2 or distance > total then return sampleTrail(trail, distance, heading) end
+        local lo, hi = 2, #trail
+        while lo < hi do
+            local mid = (lo + hi) // 2
+            if running[mid] >= distance then hi = mid else lo = mid + 1 end
+        end
+        local length = running[lo] - running[lo - 1]
+        if length <= 0 then return sampleTrail(trail, distance, heading) end
+        local a, b = trail[lo - 1], trail[lo]
+        return a + (b - a) * ((distance - running[lo - 1]) / length)
+    end
+end
+
 -- Every part's position and angle, laid on the trail; the head points along its heading.
-local function layOut(trail, heading)
-    local d = ConchBlessing.azureDragon.data
+local function layOut(trail, heading, n)
+    n = n or BASE_PARTS
     local positions, angles = {}, {}
     local offset = 0
-    for i = 1, #d.parts do
-        if i > 1 then offset = offset + (d.spacing[i - 1] or d.spacing[#d.spacing]) end
-        positions[i] = sampleTrail(trail, offset, heading)
+    local at = trailSampler(trail, heading)
+    for i = 1, n do
+        if i > 1 then offset = offset + gapBefore(i, n) end
+        positions[i] = at(offset)
         if i == 1 then
             angles[i] = heading
         else
-            local toward = sampleTrail(trail, math.max(0, offset - 5), heading) - sampleTrail(trail, offset + 5, heading)
+            local toward = at(math.max(0, offset - 5)) - at(offset + 5)
             angles[i] = toward:Length() > 0.001 and math.atan(toward.Y, toward.X) or angles[i - 1]
         end
     end
@@ -214,17 +288,17 @@ local function layOut(trail, heading)
 end
 
 -- How large a part is drawn: full size at the head, thinning toward the tail.
-local function partTaper(index)
+local function partTaper(index, n)
     local d = ConchBlessing.azureDragon.data
-    return 1 - d.taper * ((index - 1) / (#d.parts - 1)) ^ 1.4
+    return 1 - d.taper * ((index - 1) / ((n or BASE_PARTS) - 1)) ^ 1.4
 end
 
 -- ------------------------------------------------------------------ state
 local function copyVector(v) return Vector(v.X, v.Y) end
 
-local function straightTrail(position, heading)
+local function straightTrail(position, heading, n)
     local back = Vector(-math.cos(heading), -math.sin(heading))
-    return { copyVector(position), position + back * (trailLength() + 4) }
+    return { copyVector(position), position + back * (trailLength(n) + 4) }
 end
 
 -- Whether a part faces left: past vertical by the flipThreshold band, else
@@ -249,9 +323,11 @@ end
 
 -- Lay the parts on the current trail, keeping the last pose for render interpolation.
 local function settle(state, keepPrevious)
-    local positions, angles = layOut(state.trail, state.dir)
-    for i = 1, #positions do
-        if keepPrevious then
+    local n = state.parts or BASE_PARTS
+    local positions, angles = layOut(state.trail, state.dir, n)
+    for i = 1, n do
+        -- A part just grown at the tail has no last pose yet; it starts where it is.
+        if keepPrevious and state.segments[i] then
             state.previous[i], state.prevAngles[i] = state.segments[i], state.angles[i]
         else
             state.previous[i], state.prevAngles[i] = positions[i], angles[i]
@@ -259,6 +335,10 @@ local function settle(state, keepPrevious)
         end
         state.segments[i], state.angles[i] = positions[i], angles[i]
         state.flips[i] = facesLeft(angles[i], state.flips[i])
+    end
+    -- A shrinking body drops its last parts.
+    for i = #state.segments, n + 1, -1 do
+        state.segments[i], state.previous[i], state.angles[i], state.prevAngles[i], state.flips[i] = nil, nil, nil, nil, nil
     end
 end
 
@@ -271,11 +351,12 @@ local function newState(familiar)
     local offset = familiar.Position - origin
     local theta = offset:Length() > 1 and math.atan(offset.Y, offset.X) or phase(3)
     local dir = theta + math.pi / 2               -- start swimming along the orbit
+    local parts = partCountFor(player and player.TearRange)
     local state = {
         t = 0, p1 = phase(1), p2 = phase(7), p3 = phase(13), p4 = phase(29),
         theta = theta, dir = dir, turnVel = 0, speed = ConchBlessing.azureDragon.data.minSpeed,
         head = copyVector(familiar.Position),
-        velocity = Vector(0, 0), trail = straightTrail(familiar.Position, dir),
+        velocity = Vector(0, 0), trail = straightTrail(familiar.Position, dir, parts), parts = parts,
         segments = {}, previous = {}, angles = {}, prevAngles = {}, flips = {}, passed = {},
         struck = {}, renders = 0,
         sparks = {}, sparkWait = ConchBlessing.azureDragon.data.sparkGap[1], sparkSeed = seed % 2147483647 + 1,
@@ -293,7 +374,7 @@ end
 local function snapTo(state, position)
     state.head = copyVector(position)
     state.playerAt = copyVector(position)
-    state.trail = straightTrail(position, state.dir)
+    state.trail = straightTrail(position, state.dir, state.parts)
     state.velocity = Vector(0, 0)
     state.turnVel, state.prey, state.passing, state.passed = 0, nil, nil, {}
     settle(state, false)
@@ -401,16 +482,16 @@ local function updateSparks(state)
     state.sparkWait = state.sparkWait or d.sparkGap[1]
     state.sparkSeed = state.sparkSeed or 1
     local life = d.sparkFrames * d.sparkFrameTicks
+    local parts = state.parts or BASE_PARTS
     for i = #state.sparks, 1, -1 do
         local spark = state.sparks[i]
         spark.age = spark.age + 1
-        if spark.age >= life then table.remove(state.sparks, i) end
+        if spark.age >= life or spark.part > parts then table.remove(state.sparks, i) end
     end
     state.sparkWait = state.sparkWait - 1
     if state.sparkWait > 0 then return end
     local rolls = {}
     for k = 1, 4 do state.sparkSeed, rolls[k] = cosmeticRoll(state.sparkSeed) end
-    local parts = #d.parts
     state.sparks[#state.sparks + 1] = {
         part = math.min(parts, 1 + math.floor(rolls[1] * parts)),
         angle = rolls[2] * 360,
@@ -478,6 +559,13 @@ local function updateMotion(familiar, state, player)
         snapTo(state, player.Position)
     end
     state.t = state.t + 1
+    -- Grow or shrink toward the length the player's range asks for, one part
+    -- at a time at the tail.
+    local target = partCountFor(player.TearRange)
+    state.parts = state.parts or BASE_PARTS
+    if target ~= state.parts and state.t % d.growTicks == 0 then
+        state.parts = state.parts + (target > state.parts and 1 or -1)
+    end
     local head = state.head
     local prey = not state.passing and choosePrey(state, head)
     local wanted
@@ -533,7 +621,7 @@ local function updateMotion(familiar, state, player)
     familiar.Position = state.head
     familiar.Velocity = Vector(0, 0)
 
-    pushTrail(state.trail, state.head)
+    pushTrail(state.trail, state.head, state.parts)
     settle(state, true)
     state.renders = 0
 end
@@ -602,10 +690,11 @@ end
 
 -- Animation frame for a part: legs stroke through four poses (the front and
 -- hind pairs out of step), the tail tuft flutters between two.
-local function partFrame(index, t)
+local function partFrame(index, t, n)
     local d = ConchBlessing.azureDragon.data
-    if d.legParts[index] then return (t // d.legFrameTicks + index) % 4 end
-    if PART_ANIMATIONS[index] == "Tail" then return (t // d.tailFrameTicks) % 2 end
+    n = n or BASE_PARTS
+    if isLegPart(index, n) then return (t // d.legFrameTicks + index) % 4 end
+    if partName(index, n) == "Tail" then return (t // d.tailFrameTicks) % 2 end
     return 0
 end
 
@@ -644,7 +733,7 @@ ConchBlessing.azureDragon.onFamiliarRender = function(_, familiar, offset)
     shadow.Rotation = 0
     for i = n, 1, -1 do
         if i % 2 == 1 or i == n then
-            local size = scale * partTaper(i)
+            local size = scale * partTaper(i, n)
             shadow.Scale = Vector(size, size)
             shadow:Render(screen[i])
         end
@@ -655,18 +744,18 @@ ConchBlessing.azureDragon.onFamiliarRender = function(_, familiar, offset)
     local d = ConchBlessing.azureDragon.data
     for i = n, 1, -1 do
         local angle = state.prevAngles[i] + wrapAngle(state.angles[i] - state.prevAngles[i]) * alpha
-        local size = Vector(scale * partTaper(i), scale * partTaper(i))
+        local size = Vector(scale * partTaper(i, n), scale * partTaper(i, n))
         local at = screen[i] - Vector(0, partLift(i, time))
-        if d.legParts[i] then
+        if isLegPart(i, n) then
             local legs = sprites.Legs
-            legs:SetFrame("Legs", partFrame(i, state.t))
+            legs:SetFrame("Legs", partFrame(i, state.t, n))
             legs.Scale = size
             orient(legs, angle, state.flips[i])
             legs:Render(at)
         end
-        local name = PART_ANIMATIONS[i]
+        local name = partName(i, n)
         local sprite = sprites[name]
-        sprite:SetFrame(name, name == "Tail" and partFrame(i, state.t) or 0)
+        sprite:SetFrame(name, name == "Tail" and partFrame(i, state.t, n) or 0)
         sprite.Scale = size
         orient(sprite, angle, state.flips[i])
         sprite:Render(at)
@@ -675,13 +764,15 @@ ConchBlessing.azureDragon.onFamiliarRender = function(_, familiar, offset)
     local spark = sprites.Spark
     for _, item in ipairs(state.sparks or {}) do
         local i = item.part
-        local heading = state.angles[i] or 0
-        local size = scale * partTaper(i)
-        local aside = Vector(-math.sin(heading), math.cos(heading)) * (item.side * size)
-        spark:SetFrame("Spark", item.age // d.sparkFrameTicks)
-        spark.Rotation = item.angle
-        spark.Scale = Vector(size, size)
-        spark:Render(screen[i] - Vector(0, partLift(i, time)) + aside)
+        if screen[i] then -- a spark on a part the body just dropped is not drawn
+            local heading = state.angles[i] or 0
+            local size = scale * partTaper(i, n)
+            local aside = Vector(-math.sin(heading), math.cos(heading)) * (item.side * size)
+            spark:SetFrame("Spark", item.age // d.sparkFrameTicks)
+            spark.Rotation = item.angle
+            spark.Scale = Vector(size, size)
+            spark:Render(screen[i] - Vector(0, partLift(i, time)) + aside)
+        end
     end
 end
 
@@ -752,6 +843,8 @@ ConchBlessing.azureDragon.onNewRoom = function()
             -- A new room starts with the dragon on its player.
             local at = familiar.Player and familiar.Player.Position or familiar.Position
             familiar.Position = at
+            -- At its full length for the player's range at once.
+            if familiar.Player then state.parts = partCountFor(familiar.Player.TearRange) end
             snapTo(state, at)
             state.struck, state.sparks = {}, {}
         end
@@ -776,6 +869,11 @@ ConchBlessing.azureDragon._test = {
     orient = orient,
     steerHead = steerHead,
     partTaper = partTaper,
+    partCountFor = partCountFor,
+    bodyLength = bodyLength,
+    gapBefore = gapBefore,
+    isLegPart = isLegPart,
+    partName = partName,
     partLift = partLift,
     strikeFrame = strikeFrame,
     strikeLength = strikeLength,

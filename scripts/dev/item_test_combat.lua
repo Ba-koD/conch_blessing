@@ -129,7 +129,8 @@ C.AZURE_DRAGON = { stage = function(plan, _, n)
         local list, segmented = dragonsOf(player), true
         for _, familiar in ipairs(list) do
             local state = familiar:GetData().__ConchDragon
-            segmented = segmented and state ~= nil and #state.segments == #ConchBlessing.azureDragon.data.parts
+            segmented = segmented and state ~= nil
+                and #state.segments == ConchBlessing.azureDragon._test.partCountFor(player.TearRange)
         end
         local expected = n
         return #list == expected and segmented, string.format("dragons=%d expected=%d copies=%d segments=%s",

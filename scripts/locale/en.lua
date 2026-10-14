@@ -601,6 +601,7 @@ return {
                 "#Enemies touching its body take 5% of your damage every tick",
                 "#Lightning strikes every enemy the dragon's head runs into for 5x your damage (once every 5 seconds each)",
                 "#Bosses take 5x more lightning damage (25x your damage)",
+                "#{{Range}} Its body grows longer in proportion to your range",
             },
         },
 
