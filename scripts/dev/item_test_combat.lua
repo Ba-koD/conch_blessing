@@ -94,11 +94,11 @@ C.TIME_MONEY = { stage = function(plan, _, n)
 end }
 
 -- Azure Dragon (console only): one long familiar per copy, no flight or spectral tears. Contact 5%
--- of damage per tick; lightning for 5x damage on every enemy its snout runs
--- into, once every five seconds each per dragon. The
+-- of damage per tick; lightning for 55% of the damage on every enemy its snout
+-- runs into, once every 5 / tears seconds each per dragon. The
 -- boss multiplier is covered offline (tests/test_dragon_familiar_contracts.py):
 -- spawning a real boss would attack the test player. Its recorded hits
--- separate 5x bolts from 5% body contact, and HP loss must agree with every
+-- separate 55%-damage bolts from 5% body contact, and HP loss must agree with every
 -- recorded hit.
 local function dragonsOf(player)
     local variant = assert(ConchBlessing.ItemData.AZURE_DRAGON.entity.variant, "missing Azure Dragon familiar variant")
@@ -167,7 +167,7 @@ C.AZURE_DRAGON = { stage = function(plan, _, n)
         player.Position = ctx.center
         local struck = 0
         for _, target in ipairs(ctx.targets) do
-            if #H.dragonHits(target, player.Damage * 2) > 0 then struck = struck + 1 end
+            if #H.dragonHits(target, player.Damage * 0.25) > 0 then struck = struck + 1 end
         end
         return struck >= 3, "targets struck=" .. struck
     end, 450, "the dragon runs into and strikes several targets")
@@ -176,11 +176,11 @@ C.AZURE_DRAGON = { stage = function(plan, _, n)
         ctx.settle = (ctx.settle or 0) + 1
         return ctx.settle >= 6
     end, 8, "HP settles")
-    plan.check("every enemy the snout runs into is struck for 5x current damage", function(player, ctx)
-        local expected = player.Damage * 5 * (player:HasCollectible(CollectibleType.COLLECTIBLE_BFFS) and 2 or 1)
+    plan.check("every enemy the snout runs into is struck for 55% of the current damage", function(player, ctx)
+        local expected = player.Damage * ConchBlessing.azureDragon.data.lightningDamageMultiplier * (player:HasCollectible(CollectibleType.COLLECTIBLE_BFFS) and 2 or 1)
         local struck, wrong = 0, {}
         for i, target in ipairs(ctx.targets) do
-            local bolts = H.dragonHits(target, player.Damage * 2)
+            local bolts = H.dragonHits(target, player.Damage * 0.25)
             if #bolts > 0 then struck = struck + 1 end
             for _, bolt in ipairs(bolts) do
                 if not H.near(bolt.amount, expected) then wrong[#wrong + 1] = i .. ":bolt " .. bolt.amount end
@@ -193,15 +193,16 @@ C.AZURE_DRAGON = { stage = function(plan, _, n)
         end
         return struck >= 3 and #wrong == 0, string.format("struck=%d damage=%s wrong=%s", struck, expected, table.concat(wrong, ","))
     end)
-    plan.check("a dragon strikes the same enemy at most once every five seconds", function(player, ctx)
+    plan.check("a dragon strikes the same enemy at most once every 5 / tears seconds", function(player, ctx)
         local gaps = {}
+        local cooldown = ConchBlessing.azureDragon._test.strikeCooldownFor(player.MaxFireDelay)
         for i, target in ipairs(ctx.targets) do
             -- Each dragon keeps its own rhythm; several dragons may strike one enemy.
             local last = {}
-            for _, bolt in ipairs(H.dragonHits(target, player.Damage * 2)) do
+            for _, bolt in ipairs(H.dragonHits(target, player.Damage * 0.25)) do
                 local who = bolt.dragon or 0
                 local gap = last[who] and bolt.frame - last[who]
-                if gap and gap < ConchBlessing.azureDragon.data.strikeCooldown then gaps[#gaps + 1] = i .. ":" .. gap end
+                if gap and gap < cooldown then gaps[#gaps + 1] = i .. ":" .. gap end
                 last[who] = bolt.frame
             end
         end

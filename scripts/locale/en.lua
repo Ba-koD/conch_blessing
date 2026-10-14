@@ -599,9 +599,10 @@ return {
             eid = {
                 "A long dragon weaves around you and lunges at nearby enemies",
                 "#Enemies touching its body take 5% of your damage every tick",
-                "#Lightning strikes every enemy the dragon's head runs into for 5x your damage (once every 5 seconds each)",
-                "#Bosses take 5x more lightning damage (25x your damage)",
+                "#Lightning strikes every enemy the dragon's head runs into for 55% of your damage (once every {{Tears}} 5 / tears seconds each)",
+                "#Bosses take 5x more lightning damage (2.75x your damage)",
                 "#{{Range}} Its body grows longer in proportion to your range",
+                "#{{Shotspeed}} It swims faster in proportion to your shot speed (at least half speed)",
             },
         },
 

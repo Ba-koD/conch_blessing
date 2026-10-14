@@ -2,7 +2,7 @@
 
 Expected values come from the item's design: contact 5% of damage per tick per
 enemy, lightning on every enemy the snout runs into for 5x damage (once
-every five seconds each, one dragon per copy), 5x more on bosses, BFFS
+every 5 / tears seconds each, one dragon per copy), 5x more on bosses, BFFS
 doubling, no flight or spectral tears, and cosmetic sparks along the body.
 Motion contracts: the head turns smoothly and keeps up, the body stays on the
 head's trail without bunching, and turns roll down the body.
@@ -120,8 +120,12 @@ class AzureDragonContracts(unittest.TestCase):
         self.run_lua('''
             near(T.contactDamage(10,false),0.5); near(T.contactDamage(3.5,false),0.175)
             near(T.contactDamage(10,true),1.0)
-            near(T.lightningDamage(10,false,false),50); near(T.lightningDamage(10,true,false),250)
-            near(T.lightningDamage(10,false,true),100); near(T.lightningDamage(10,true,true),500)
+            -- Lightning: 55% of the player's damage, bosses five times more (2.75x), BFFS doubles.
+            near(T.lightningDamage(10,false,false),5.5,1e-9); near(T.lightningDamage(10,true,false),27.5,1e-9)
+            near(T.lightningDamage(10,false,true),11,1e-9); near(T.lightningDamage(10,true,true),55,1e-9)
+            -- Once every 5 / tears seconds per enemy: 5 * (MaxFireDelay + 1) updates.
+            near(T.strikeCooldownFor(10),55); near(T.strikeCooldownFor(nil),55)
+            near(T.strikeCooldownFor(4),25); near(T.strikeCooldownFor(0.5),7.5); near(T.strikeCooldownFor(-1),1)
         ''')
 
     def test_orbit_breathes_and_changes_speed_like_a_creature(self):
@@ -177,7 +181,7 @@ class AzureDragonContracts(unittest.TestCase):
             local e=enemy(0,0,{size=10}); local boss=enemy(0,0,{size=10,boss=true})
             local function bolts(target)
                 local out={}
-                for _,h in ipairs(target.hits) do if h.amount>=20 then out[#out+1]=h end end
+                for _,h in ipairs(target.hits) do if h.amount>=2 then out[#out+1]=h end end
                 return out
             end
             for i=1,600 do
@@ -186,10 +190,10 @@ class AzureDragonContracts(unittest.TestCase):
             end
             local a,b=bolts(e),bolts(boss)
             assert(#a>=2 and #b>=2, 'the dragon keeps running into both: '..#a..','..#b)
-            for _,h in ipairs(a) do near(h.amount,50); assert(h.source==f) end
-            for _,h in ipairs(b) do near(h.amount,250) end
+            for _,h in ipairs(a) do near(h.amount,5.5,1e-9); assert(h.source==f) end
+            for _,h in ipairs(b) do near(h.amount,27.5,1e-9) end
             for _,list in ipairs({a,b}) do
-                for i=2,#list do assert(list[i].frame-list[i-1].frame>=D.data.strikeCooldown, 'once a second per enemy') end
+                for i=2,#list do assert(list[i].frame-list[i-1].frame>=T.strikeCooldownFor(p.MaxFireDelay), 'once per 5 / tears seconds per enemy') end
             end
             assert(#sounds>=4 and sounds[1].id==901 and shakes>=4, 'thunder and a shake with each bolt')
         ''')
@@ -240,7 +244,7 @@ class AzureDragonContracts(unittest.TestCase):
             ConchBlessing.Config.debugMode=true; s.struck={}
             e.Position=snout(); tick(f)
             local text=table.concat(logs,'\\n')
-            assert(text:find('[Azure Dragon] strike 10.0 boss=false damage=50.00',1,true), text)
+            assert(text:find('[Azure Dragon] strike 10.0 boss=false damage=5.50',1,true), text)
         ''')
 
     def test_several_dragons_go_for_different_enemies(self):
@@ -275,7 +279,7 @@ class AzureDragonContracts(unittest.TestCase):
             local e=enemy(0,0,{size=10})
             for i=1,500 do e.Position=p.Position+Vector(-150,-40); tick(f) end
             local bolts=0
-            for _,h in ipairs(e.hits) do if h.amount>=20 then bolts=bolts+1; near(h.amount,50) end end
+            for _,h in ipairs(e.hits) do if h.amount>=2 then bolts=bolts+1; near(h.amount,5.5,1e-9) end end
             assert(bolts>=2, 'three Dragons still strike lightning: '..bolts)
         ''')
 
@@ -796,6 +800,67 @@ class AzureDragonContracts(unittest.TestCase):
             p.TearRange=260
             for i=1,120 do tick(f) end
             assert(#s.segments==14 and #s.angles==14 and #s.previous==14 and #s.flips<=14, #s.segments)
+        ''')
+
+    def test_shot_speed_sets_the_pace_from_half_with_no_upper_limit(self):
+        self.run_lua('''
+            near(T.paceFor(nil),1); near(T.paceFor(1),1); near(T.paceFor(1.5),1.5); near(T.paceFor(10),10)
+            near(T.paceFor(0.5),0.5); near(T.paceFor(0.3),0.5); near(T.paceFor(-2),0.5)
+            near(T.segmentDistance(Vector(5,3),Vector(0,0),Vector(10,0)),3)
+            near(T.segmentDistance(Vector(-4,3),Vector(0,0),Vector(10,0)),5)
+            near(T.segmentDistance(Vector(2,2),Vector(1,1),Vector(1,1)),math.sqrt(2))
+            -- Orbiting, the dragon swims in proportion to shot speed, never below half.
+            local function averageSpeed(shot)
+                local p=makePlayer(); p.items=1; p.ShotSpeed=shot
+                local f=makeFamiliar(p)
+                for i=1,200 do tick(f) end
+                local st=f.data.__ConchDragon
+                local total,last=0,st.head
+                for i=1,900 do tick(f); total=total+st.head:Distance(last); last=st.head end
+                return total/900
+            end
+            local base=averageSpeed(1)
+            local twice,slow=averageSpeed(2),averageSpeed(0.2)
+            assert(math.abs(twice/base-2)<0.25, 'shot speed 2: '..twice/base)
+            assert(math.abs(slow/base-0.5)<0.15, 'shot speed 0.2 swims at half: '..slow/base)
+        ''')
+
+    def test_a_very_fast_dragon_still_runs_through_and_strikes_every_enemy(self):
+        self.run_lua('''
+            local p=makePlayer(); p.items=1; p.ShotSpeed=8; p.Damage=10
+            local f=makeFamiliar(p)
+            local targets={enemy(520,200,{size=8}),enemy(120,360,{size=8}),enemy(420,420,{size=8})}
+            for i=1,450 do tick(f) end
+            local st=f.data.__ConchDragon
+            local passes=0
+            for _ in pairs(st.passed) do passes=passes+1 end
+            assert(passes==3, 'ran through every enemy: '..passes)
+            for k,e in ipairs(targets) do
+                local struck=false
+                for _,h in ipairs(e.hits) do if h.amount==T.lightningDamage(10,false,false) then struck=true end end
+                assert(struck, 'lightning on enemy '..k)
+            end
+        ''')
+
+    def test_lightning_on_one_enemy_comes_every_5_over_tears_seconds(self):
+        self.run_lua('''
+            -- The same snout keeps running into one enemy; faster tears, more bolts.
+            local function bolts(maxFireDelay)
+                local p=makePlayer(); p.items=1; p.Damage=10; p.MaxFireDelay=maxFireDelay
+                local f=makeFamiliar(p); D.onFamiliarInit(nil,f)
+                for i=1,60 do tick(f) end
+                local e=enemy(0,0,{size=10})
+                for i=1,900 do e.Position=p.Position+Vector(-150,-40); tick(f) end
+                local out={}
+                for _,h in ipairs(e.hits) do if h.amount>=2 then out[#out+1]=h.frame end end
+                e.alive=false
+                for i=2,#out do
+                    assert(out[i]-out[i-1]>=T.strikeCooldownFor(maxFireDelay), 'too soon: '..(out[i]-out[i-1]))
+                end
+                return #out
+            end
+            local slow,fast=bolts(10),bolts(2)
+            assert(slow>=2 and fast>slow, 'tears 2.73: '..slow..' bolts, tears 10: '..fast)
         ''')
 
 if __name__ == '__main__':

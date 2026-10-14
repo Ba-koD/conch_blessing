@@ -845,7 +845,9 @@ class BenchTests(unittest.TestCase):
         self.run_lua("""
             C=require('scripts.dev.item_test_combat')
             ConchBlessing.ItemData.AZURE_DRAGON={entity={variant=778}}
-            ConchBlessing.azureDragon={data={strikeCooldown=150,parts={}}}
+            -- Lightning is 55% of damage; one bolt per enemy every 5 * (MaxFireDelay + 1) updates (55 at the base).
+            ConchBlessing.azureDragon={data={lightningDamageMultiplier=0.55,parts={}},
+                _test={strikeCooldownFor=function(delay) return 5*((delay or 10)+1) end}}
             CollectibleType=CollectibleType or {}; CollectibleType.COLLECTIBLE_BFFS=247
             function player:HasCollectible() return false end
             for _, n in ipairs({0,1,2}) do
@@ -856,10 +858,10 @@ class BenchTests(unittest.TestCase):
                 assert(checks['one dragon per copy'], 'missing familiar count check')
                 assert(checks['Azure Dragon grants no flight or spectral tears'], 'missing flag check')
                 if n==0 then
-                    assert(checks['every enemy the snout runs into is struck for 5x current damage']==nil)
+                    assert(checks['every enemy the snout runs into is struck for 55% of the current damage']==nil)
                 else
-                    local strike=checks['every enemy the snout runs into is struck for 5x current damage']
-                    local rhythm=checks['a dragon strikes the same enemy at most once every five seconds']
+                    local strike=checks['every enemy the snout runs into is struck for 55% of the current damage']
+                    local rhythm=checks['a dragon strikes the same enemy at most once every 5 / tears seconds']
                     local contact=checks['contact deals 5% of current damage every tick']
                     assert(strike and rhythm and contact)
                     player.Damage=10
@@ -879,15 +881,15 @@ class BenchTests(unittest.TestCase):
                         H.dragonDamage=function(target) local sum=0 for _,h in ipairs(log[target] or {}) do sum=sum+h[1] end return sum end
                         return {targets=t,hp=hp}
                     end
-                    assert(strike(player,targets({50,50,50,0,0,0})))
-                    assert(strike(player,targets({100.5,50,50,0,0,0},{{{50,10},{50,60},{0.5,61}}})), 'body contact and repeat bolts are accounted for')
-                    assert(not strike(player,targets({50,50,0,0,0,0})), 'too few strikes caught')
-                    assert(not strike(player,targets({50,50,25,0,0,0})), 'weak bolt caught')
-                    assert(not strike(player,targets({60,50,50,0,0,0},{{{50,10}}})), 'unexplained HP loss caught')
-                    assert(rhythm(player,targets({100,0,0,0,0,0},{{{50,10},{50,160}}})))
-                    assert(not rhythm(player,targets({100,0,0,0,0,0},{{{50,10},{50,40}}})), 'double strike caught')
-                    assert(rhythm(player,targets({100,0,0,0,0,0},{{{50,10,'a'},{50,40,'b'}}})), 'two dragons keep their own rhythm')
-                    assert(not rhythm(player,targets({100,0,0,0,0,0},{{{50,10,'a'},{50,40,'b'},{50,60,'a'}}})), 'one dragon striking twice caught')
+                    assert(strike(player,targets({5.5,5.5,5.5,0,0,0})))
+                    assert(strike(player,targets({11.5,5.5,5.5,0,0,0},{{{5.5,10},{5.5,70},{0.5,71}}})), 'body contact and repeat bolts are accounted for')
+                    assert(not strike(player,targets({5.5,5.5,0,0,0,0})), 'too few strikes caught')
+                    assert(not strike(player,targets({5.5,5.5,3,0,0,0})), 'weak bolt caught')
+                    assert(not strike(player,targets({7,5.5,5.5,0,0,0},{{{5.5,10}}})), 'unexplained HP loss caught')
+                    assert(rhythm(player,targets({11,0,0,0,0,0},{{{5.5,10},{5.5,70}}})))
+                    assert(not rhythm(player,targets({11,0,0,0,0,0},{{{5.5,10},{5.5,40}}})), 'double strike caught')
+                    assert(rhythm(player,targets({11,0,0,0,0,0},{{{5.5,10,'a'},{5.5,40,'b'}}})), 'two dragons keep their own rhythm')
+                    assert(not rhythm(player,targets({16.5,0,0,0,0,0},{{{5.5,10,'a'},{5.5,40,'b'},{5.5,60,'a'}}})), 'one dragon striking twice caught')
                     local biter={HitPoints=1000-20}
                     local ctx={contactHp=1000,contactExpected=0.5,biter=biter}
                     local function contactHits(n,extra)
@@ -898,7 +900,7 @@ class BenchTests(unittest.TestCase):
                         H.dragonDamage=function() local sum=0 for _,h in ipairs(list) do sum=sum+h[1] end return sum end
                     end
                     contactHits(40); assert(contact(player,ctx))
-                    contactHits(40,50); biter.HitPoints=1000-70; assert(contact(player,ctx), 'a bolt on top is fine')
+                    contactHits(40,5.5); biter.HitPoints=1000-25.5; assert(contact(player,ctx), 'a bolt on top is fine')
                     contactHits(4); biter.HitPoints=1000-2; assert(not contact(player,ctx), 'missing contact caught')
                     contactHits(200); biter.HitPoints=1000-100; assert(not contact(player,ctx), 'contact counted per part caught')
                 end

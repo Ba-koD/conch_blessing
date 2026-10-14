@@ -4,8 +4,8 @@
 -- The dragon weaves around its player like a living creature and rushes at
 -- any enemy in the room, swimming at it in a gently weaving line (wave
 -- pursuit). It hurts every enemy its body touches each tick, and lightning
--- strikes every enemy its snout runs into, at most once every five seconds each
--- (bosses take five times more). Several dragons spread out, each going for
+-- strikes every enemy its snout runs into for 55% of the player's damage, at
+-- most once every 5 / tears seconds each (bosses take five times more). Several dragons spread out, each going for
 -- an enemy no other dragon is already after when there is one. Small sparks of current crackle along its
 -- body now and then; they are drawn only and hurt nothing.
 -- docs/guidance_methods.md names every steering method used here.
@@ -23,6 +23,9 @@
 -- parts before the tail. Its turns and orbit stay the same (user decision
 -- 2026-10-14), so a long body may cross over itself (the head draws on top);
 -- it still never bunches or kinks.
+-- It swims at a pace set by the player's shot speed: everything it does in
+-- motion (speeds, turning, weaving, the fly-by, the legs' strokes) runs that
+-- many times faster, so it traces the same paths, only quicker.
 -- The dragon keeps its own head position and sets the entity to it each
 -- update rather than relying on the engine to integrate a velocity.
 -- Motion and drawing are cosmetic; damage always goes through
@@ -43,6 +46,10 @@ ConchBlessing.azureDragon.data = {
     -- proportion with no upper limit, never shorter than minLength. A changed
     -- range adds or drops one part at the tail every growTicks updates.
     baseRange = 260, minLength = 60, growTicks = 3,
+    -- Its pace follows the player's shot speed (user decision 2026-10-14): in
+    -- proportion to ShotSpeed (1 at the base 1.0), never below minPace, with
+    -- no upper limit.
+    baseShotSpeed = 1, minPace = 0.5,
     flipThreshold = 0.08,                -- heading cosine (about 5 degrees past vertical) at which a part turns round
     spacing = { 10, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 10 },  -- trail distance between part pivots
     taper = 0.35,                        -- the tail end is drawn this much smaller than the head
@@ -85,9 +92,12 @@ ConchBlessing.azureDragon.data = {
     headReach = 14,                      -- the snout reaches this far ahead of the neck
     contactDamagePercent = 0.05,         -- of the player's damage, per tick, per enemy
     contactRadius = 8,                   -- per part, plus the enemy's own size
-    lightningDamageMultiplier = 5,
+    -- Lightning (user decision 2026-10-14): 55% of the player's damage, bosses five
+    -- times more, once per enemy every strikeTearSeconds / tears seconds per
+    -- dragon (tears = 30 / (MaxFireDelay + 1), Isaac's base MaxFireDelay 10).
+    lightningDamageMultiplier = 0.55,
     lightningBossMultiplier = 5,
-    strikeCooldown = 150,                -- one lightning bolt per enemy every five seconds, per dragon
+    strikeTearSeconds = 5, baseMaxFireDelay = 10,
     bffsDamageMultiplier = 2,
     bffsScale = 1.25,
     strikeFrames = { 1, 2, 2, 2, 2, 2, 3 },  -- ticks per lightning frame: leader, strike, flash, second stroke, flicker, thin, fade
@@ -139,6 +149,14 @@ end
 local function contactDamage(playerDamage, bffs)
     local d = ConchBlessing.azureDragon.data
     return playerDamage * d.contactDamagePercent * (bffs and d.bffsDamageMultiplier or 1)
+end
+
+-- Updates between two bolts on one enemy: strikeTearSeconds / tears seconds,
+-- that is strikeTearSeconds * (MaxFireDelay + 1) updates, at least one.
+local function strikeCooldownFor(maxFireDelay)
+    local d = ConchBlessing.azureDragon.data
+    local delay = tonumber(maxFireDelay) or d.baseMaxFireDelay
+    return math.max(1, d.strikeTearSeconds * (delay + 1))
 end
 
 local function lightningDamage(playerDamage, isBoss, bffs)
@@ -205,6 +223,23 @@ end
 
 local function trailLength(n)
     return bodyLength(n)
+end
+
+-- How many times faster than at the base shot speed the dragon moves.
+local function paceFor(shotSpeed)
+    local d = ConchBlessing.azureDragon.data
+    return math.max(d.minPace, (tonumber(shotSpeed) or d.baseShotSpeed) / d.baseShotSpeed)
+end
+
+-- The shortest distance from a point to the segment a-b: what the snout swept
+-- this update, so a fast dragon cannot skip over an enemy between updates.
+local function segmentDistance(point, a, b)
+    local ab = b - a
+    local lengthSquared = ab.X * ab.X + ab.Y * ab.Y
+    if lengthSquared <= 0 then return point:Distance(a) end
+    local along = ((point.X - a.X) * ab.X + (point.Y - a.Y) * ab.Y) / lengthSquared
+    along = math.max(0, math.min(1, along))
+    return point:Distance(a + ab * along)
 end
 
 -- The head's trail, newest point first. A move shorter than trailStep slides
@@ -353,7 +388,7 @@ local function newState(familiar)
     local dir = theta + math.pi / 2               -- start swimming along the orbit
     local parts = partCountFor(player and player.TearRange)
     local state = {
-        t = 0, p1 = phase(1), p2 = phase(7), p3 = phase(13), p4 = phase(29),
+        t = 0, clock = 0, pace = 1, p1 = phase(1), p2 = phase(7), p3 = phase(13), p4 = phase(29),
         theta = theta, dir = dir, turnVel = 0, speed = ConchBlessing.azureDragon.data.minSpeed,
         head = copyVector(familiar.Position),
         velocity = Vector(0, 0), trail = straightTrail(familiar.Position, dir, parts), parts = parts,
@@ -377,6 +412,7 @@ local function snapTo(state, position)
     state.trail = straightTrail(position, state.dir, state.parts)
     state.velocity = Vector(0, 0)
     state.turnVel, state.prey, state.passing, state.passed = 0, nil, nil, {}
+    state.prevSnout = nil
     settle(state, false)
 end
 
@@ -411,13 +447,19 @@ local function applyContact(familiar, state, player)
     local scale = scaleFor(player)
     local reach = d.contactRadius * scale
     -- The snout, which reaches ahead of the neck, then the parts' pivots.
-    local points = { state.segments[1] + Vector(math.cos(state.dir), math.sin(state.dir)) * (d.headReach * scale) }
+    local snout = state.segments[1] + Vector(math.cos(state.dir), math.sin(state.dir)) * (d.headReach * scale)
+    local sweptFrom = state.prevSnout or snout
+    state.prevSnout = snout
+    local points = { snout }
     for i, segment in ipairs(state.segments) do points[i + 1] = segment end
     local snouted = {}
     for _, enemy in ipairs(roomEnemies()) do
         local limit = reach + (enemy.Size or 0)
         for k, point in ipairs(points) do
-            if point:DistanceSquared(enemy.Position) <= limit * limit then
+            -- The snout counts everything it swept since the last update.
+            local hit = k == 1 and segmentDistance(enemy.Position, sweptFrom, snout) <= limit
+                or k > 1 and point:DistanceSquared(enemy.Position) <= limit * limit
+            if hit then
                 -- Once per enemy per tick, however many parts touch it.
                 enemy:TakeDamage(damage, 0, EntityRef(familiar), 0)
                 if k == 1 then snouted[#snouted + 1] = enemy end
@@ -453,14 +495,14 @@ local function strikeEnemy(familiar, player, enemy)
     debugLog("strike %s.%s boss=%s damage=%.2f", tostring(enemy.Type), tostring(enemy.Variant), tostring(isBoss), damage)
 end
 
--- Lightning on every enemy the snout runs into, once per strikeCooldown each
--- (per dragon: every dragon keeps its own record).
+-- Lightning on every enemy the snout runs into, once per strikeCooldownFor
+-- the player's fire delay each (per dragon: every dragon keeps its own record).
 local function updateLightning(familiar, state, player, snouted)
     local d = ConchBlessing.azureDragon.data
     for _, enemy in ipairs(snouted) do
         local hash = GetPtrHash(enemy)
         local last = state.struck[hash]
-        if not last or state.t - last >= d.strikeCooldown then
+        if not last or state.t - last >= strikeCooldownFor(player.MaxFireDelay) then
             state.struck[hash] = state.t
             strikeEnemy(familiar, player, enemy)
         end
@@ -506,11 +548,15 @@ end
 -- its direction changes smoothly however suddenly the goal moves.
 local function steerHead(state, want, maxTurn, accel)
     local d = ConchBlessing.azureDragon.data
-    accel = accel or d.turnAccel
+    -- At pace p the same path is traced p times faster: turn rates scale by p
+    -- and their easing by p squared.
+    local pace = state.pace or 1
+    accel = (accel or d.turnAccel) * pace * pace
+    maxTurn = maxTurn * pace
     -- Turn rate is capped by speed so the path never curls tighter than minTurnRadius.
     maxTurn = math.min(maxTurn, math.max(state.speed, d.minSpeed) / d.minTurnRadius)
     local err = wrapAngle(want - state.dir)
-    local asked = math.max(-maxTurn, math.min(maxTurn, err * d.turnGain * 6))
+    local asked = math.max(-maxTurn, math.min(maxTurn, err * d.turnGain * 6 * pace))
     state.turnVel = state.turnVel + math.max(-accel, math.min(accel, asked - state.turnVel))
     state.dir = wrapAngle(state.dir + state.turnVel)
     -- How much of its speed the head keeps: less while its goal is off to the side or behind.
@@ -559,6 +605,10 @@ local function updateMotion(familiar, state, player)
         snapTo(state, player.Position)
     end
     state.t = state.t + 1
+    -- The player's shot speed sets the pace; the motion clock runs at it.
+    local pace = paceFor(player.ShotSpeed)
+    state.pace = pace
+    state.clock = (state.clock or 0) + pace
     -- Grow or shrink toward the length the player's range asks for, one part
     -- at a time at the tail.
     local target = partCountFor(player.TearRange)
@@ -572,27 +622,30 @@ local function updateMotion(familiar, state, player)
     if state.passing then
         -- Fly-by: straight on through for a moment before turning for the next.
         steerHead(state, state.dir, d.chaseTurnRate, d.chaseTurnAccel)
-        wanted = d.chaseSpeed
+        wanted = d.chaseSpeed * pace
         state.passing = state.passing - 1
         if state.passing <= 0 then state.passing = nil end
     elseif prey then
         -- Wave pursuit: the bearing to the enemy plus a slow sine weave.
         local toward = prey.Position - head
-        local want = math.atan(toward.Y, toward.X) + math.sin(state.t * d.chaseWeaveRate + state.p2) * d.chaseWeave
-        wanted = d.chaseSpeed * steerHead(state, want, d.chaseTurnRate, d.chaseTurnAccel)
+        local want = math.atan(toward.Y, toward.X) + math.sin(state.clock * d.chaseWeaveRate + state.p2) * d.chaseWeave
+        wanted = d.chaseSpeed * pace * steerHead(state, want, d.chaseTurnRate, d.chaseTurnAccel)
         local hash = GetPtrHash(prey)
         if state.prey ~= hash then
             state.prey = hash
             debugLog("dragon hunts %s.%s", tostring(prey.Type), tostring(prey.Variant))
         end
         local reach = d.headReach * scaleFor(player) + d.passReach + (prey.Size or 0)
-        if toward:Length() <= reach then
-            state.passed[hash], state.prey, state.passing = state.t, nil, d.passTicks
+        -- Also over the step the head took last update, so a fast dragon cannot skip past.
+        local lastStep = head - state.velocity
+        if toward:Length() <= reach or segmentDistance(prey.Position, lastStep, head) <= reach then
+            -- The fly-by covers the same distance at any pace.
+            state.passed[hash], state.prey, state.passing = state.t, nil, math.max(1, math.ceil(d.passTicks / pace))
             debugLog("dragon runs through %s.%s", tostring(prey.Type), tostring(prey.Variant))
         end
     else
         state.prey = nil
-        local angular, radius = orbitShape(state, state.t)
+        local angular, radius = orbitShape(state, state.clock)
         -- Orbit as a steering field: head along the circle's tangent, tilted
         -- inward when outside the breathing radius and outward when inside,
         -- plus a slow side-to-side weave. Worked in unsquashed floor space.
@@ -603,15 +656,15 @@ local function updateMotion(familiar, state, player)
         state.theta = phi
         local miss = r - radius
         local want = phi + (math.pi / 2 + math.atan(miss * d.radialGain))
-            + math.sin(state.t * d.weaveRate + state.p2) * d.weave
+            + math.sin(state.clock * d.weaveRate + state.p2) * d.weave
         want = math.atan(math.sin(want) * d.orbitSquash, math.cos(want))
         -- Left behind, the dragon may turn more sharply and swims faster.
         local hurry = math.min(1, math.max(0, miss) / d.hurryDistance)
         local keep = steerHead(state, want, d.idleTurnRate + (d.hurryTurnRate - d.idleTurnRate) * hurry,
             d.turnAccel * (1 + 1.5 * hurry))
-        wanted = (angular * radius + math.max(0, miss) * d.catchUp) * keep
+        wanted = (angular * radius + math.max(0, miss) * d.catchUp) * keep * pace
     end
-    wanted = math.max(d.minSpeed, math.min(d.maxSpeed, wanted))
+    wanted = math.max(d.minSpeed * pace, math.min(d.maxSpeed * pace, wanted))
     local hunting = state.passing or state.prey
     state.speed = state.speed + (wanted - state.speed) * (hunting and d.chaseSpeedEase or d.speedEase)
     local velocity = Vector(math.cos(state.dir), math.sin(state.dir)) * state.speed
@@ -720,7 +773,9 @@ ConchBlessing.azureDragon.onFamiliarRender = function(_, familiar, offset)
     -- Render runs twice per update; interpolate the pose so the body glides.
     local alpha = math.min(1, state.renders * 0.5)
     state.renders = state.renders + 1
-    local time = state.t - 1 + alpha
+    local pace = state.pace or 1
+    local time = (state.clock or state.t) - pace + pace * alpha
+    local clock = math.floor(state.clock or state.t)
     local n = #state.segments
     local screen = {}
     for i = 1, n do
@@ -748,14 +803,14 @@ ConchBlessing.azureDragon.onFamiliarRender = function(_, familiar, offset)
         local at = screen[i] - Vector(0, partLift(i, time))
         if isLegPart(i, n) then
             local legs = sprites.Legs
-            legs:SetFrame("Legs", partFrame(i, state.t, n))
+            legs:SetFrame("Legs", partFrame(i, clock, n))
             legs.Scale = size
             orient(legs, angle, state.flips[i])
             legs:Render(at)
         end
         local name = partName(i, n)
         local sprite = sprites[name]
-        sprite:SetFrame(name, name == "Tail" and partFrame(i, state.t, n) or 0)
+        sprite:SetFrame(name, name == "Tail" and partFrame(i, clock, n) or 0)
         sprite.Scale = size
         orient(sprite, angle, state.flips[i])
         sprite:Render(at)
@@ -858,6 +913,7 @@ end
 ConchBlessing.azureDragon._test = {
     contactDamage = contactDamage,
     lightningDamage = lightningDamage,
+    strikeCooldownFor = strikeCooldownFor,
     cosmeticRoll = cosmeticRoll,
     updateSparks = updateSparks,
     orbitShape = orbitShape,
@@ -874,6 +930,8 @@ ConchBlessing.azureDragon._test = {
     gapBefore = gapBefore,
     isLegPart = isLegPart,
     partName = partName,
+    paceFor = paceFor,
+    segmentDistance = segmentDistance,
     partLift = partLift,
     strikeFrame = strikeFrame,
     strikeLength = strikeLength,
