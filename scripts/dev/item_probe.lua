@@ -8,6 +8,7 @@ local Scenarios = require("scripts.dev.item_scenarios")
 for _, module in ipairs({"synergies","conditions","damage","kronos_synergies","kronos_batches","kronos_sources","pools","real_eyes","eye_upgrades"}) do
     require("scripts.dev.item_test_" .. module)
 end
+local CycleCompare = require("scripts.dev.item_test_cycle_compare")
 local contracts = {}
 for _, module in ipairs({ "stats", "combat", "special" }) do
     for key, contract in pairs(require("scripts.dev.item_test_" .. module)) do
@@ -176,6 +177,7 @@ local function listItem(key)
     out(prefix .. (ConchBlessing.ItemData[key].WorkingNow == true and " [unfinished: SKIP]" or " [all item tests]"))
     out("  " .. commands[key])
     if deep[key] then out("  " .. prefix .. " detail") end
+    if key == "SEVERED_OATH" then out("  " .. prefix .. " compare [50 isolated native/Oath comparison benches]") end
     for _, row in ipairs(Scenarios.rows) do
         if row.key == key then out("  " .. prefix .. " " .. row.name
             .. (row.bundledInto and " [included in " .. row.bundledInto .. "]" or "")) end
@@ -297,6 +299,9 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
     local key = string.upper(action)
     if commands[key] and (case == "list" or case == "help") then listItem(key); return end
     if Game():GetNumPlayers() ~= 1 then out("Start a single-player test run first."); return end
+    if key == "SEVERED_OATH" and case == "compare" then
+        TestBench.startSuite("conch_test severed_oath compare", CycleCompare.commands); return
+    end
     if action=="synergies" or action=="conditions" or action=="damage" then
         local list,seen={},{}
         local function append(command) if not seen[command] then list[#list+1]=command; seen[command]=true end end

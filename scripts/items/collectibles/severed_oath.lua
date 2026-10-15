@@ -26,6 +26,9 @@ M._cycleRoomKey = M._cycleRoomKey or nil
 M._pendingPoolChecks = M._pendingPoolChecks or {}
 M._cycleRoomSnapshotReady = false
 M._gameStartResolved = false
+-- Scoped native calls may replace GetData/EntityPtr and re-enter callbacks.
+local grantInFlight = {}
+local identityErrorReported = false
 
 local function isValidCollectibleId(itemId)
     if type(itemId) ~= "number" or itemId <= 0 then
@@ -62,20 +65,16 @@ local function getCollectibleCycleValues(pickup)
     end
 
     local ids = {}
-    local function addRawItem(itemId)
-        if isValidCollectibleId(itemId) then
-            table.insert(ids, itemId)
-        end
-    end
-
     for _, itemId in ipairs(cycle) do
-        addRawItem(itemId)
+        if not isValidCollectibleId(itemId) then return {}, false end
+        ids[#ids + 1] = itemId
     end
-    if #ids <= 0 then
-        for _, itemId in pairs(cycle) do
-            addRawItem(itemId)
+    for key in pairs(cycle) do
+        if type(key) ~= "number" or key % 1 ~= 0 or key < 1 or key > #ids then
+            return {}, false -- Never reconstruct a filtered/reordered foreign queue.
         end
     end
+    if #ids > MAX_COLLECTIBLE_CYCLE_ITEMS then return {}, false end
 
     return ids, true
 end
@@ -163,12 +162,10 @@ local function getPickupCycleKey(pickup)
         return nil
     end
 
-    local initSeed = tonumber(pickup.InitSeed) or 0
-    if initSeed ~= 0 then
-        return tostring(initSeed)
-    end
-    if GetPtrHash then
-        return "ptr:" .. tostring(GetPtrHash(pickup))
+    -- Diplopia siblings can have the same seed. Native callback wrappers can
+    -- differ for one entity, so neither seed nor Lua wrapper equality is identity.
+    if type(GetPtrHash) == "function" then
+        return tostring(GetPtrHash(pickup)) .. ":" .. tostring(pickup.InitSeed)
     end
     return nil
 end
@@ -246,6 +243,7 @@ local function markSavedSplitPickup(pickup, itemId)
     save.bonusItem = nil
     save.bonusItems = nil
     save.bonusSeen = nil
+    save.pendingSwap = nil
     saveManagerSave()
 end
 
@@ -295,6 +293,8 @@ local function markSavedBonusState(pickup, state)
     save.bonusItem = tonumber(state.bonusItem)
     save.bonusItems = copyBonusItems(state)
     save.bonusSeen = state.bonusSeen == true
+    local swap = state.pendingSwap
+    save.pendingSwap = swap and {from=swap.from, to=swap.to, slot=swap.slot} or nil
     saveManagerSave()
 end
 
@@ -314,6 +314,19 @@ local function setPickupCycleState(pickup, state)
 
     local key = getPickupCycleKey(pickup)
     if key then
+        local ok, ref = pcall(function()
+            local pointer = EntityPtr(pickup)
+            assert(pointer and pointer.Ref, "missing live pickup reference")
+            return pointer
+        end)
+        if not ok then
+            if not identityErrorReported then
+                identityErrorReported = true
+                ConchBlessing.printError("[Severed Oath] Cannot bind pickup identity: " .. tostring(ref))
+            end
+            return
+        end
+        state.pickupPtr = ref
         M._cyclePickupStates[key] = state
     end
     writeCycleStateToPickup(pickup, state)
@@ -323,7 +336,15 @@ local function getPickupCycleState(pickup)
     ensureCycleRoomState()
 
     local key = getPickupCycleKey(pickup)
-    return key and M._cyclePickupStates[key] or nil
+    local state = key and M._cyclePickupStates[key]
+    if state and state.pickupPtr and state.pickupPtr.Ref
+        and getPickupCycleKey(state.pickupPtr.Ref) == key then
+        return state
+    end
+    -- A native Morph can expire the reference; reload this pickup's own save.
+    -- An expired reference must never claim a later entity at a reused address.
+    if key then M._cyclePickupStates[key] = nil end
+    return nil
 end
 
 local function updateBonusSeen(pickup, state)
@@ -405,14 +426,15 @@ local function getPoolItemId(poolItem)
         or tonumber(getPoolItemField(poolItem, "collectible", "Collectible", nil))
 end
 
-local function copyRemovedCollectibles(pool)
+local function copyRemovedCollectibles(pool, method)
+    method = method or "GetRemovedCollectibles"
     local removedItems = {}
-    if not pool or type(pool.GetRemovedCollectibles) ~= "function" then
+    if not pool or type(pool[method]) ~= "function" then
         return removedItems, nil
     end
 
     local removedOk, removed = pcall(function()
-        return pool:GetRemovedCollectibles()
+        return pool[method](pool)
     end)
     if not removedOk or type(removed) ~= "table" then
         return removedItems, nil
@@ -463,6 +485,9 @@ local function getPoolStats(poolType)
         return stats
     end
 
+    stats.removedItems, stats.removedAll = copyRemovedCollectibles(pool)
+    stats.roomBlacklistedItems, stats.roomBlacklistedCount = copyRemovedCollectibles(pool, "GetRoomBlacklistedCollectibles")
+    stats.eligibilityKnown = stats.removedAll ~= nil and stats.roomBlacklistedCount ~= nil
     stats.ok = true
     for _, poolItem in pairs(poolItems) do
         if type(poolItem) == "table" then
@@ -472,7 +497,8 @@ local function getPoolStats(poolType)
             local isUnlocked = getPoolItemField(poolItem, "isUnlocked", "IsUnlocked", 6)
             stats.entries = stats.entries + 1
             stats.totalWeight = stats.totalWeight + weight
-            if isUnlocked ~= false and weight > removeOn then
+            if isUnlocked ~= false and weight > removeOn
+                and not stats.removedItems[itemId] and not stats.roomBlacklistedItems[itemId] then
                 stats.available = stats.available + 1
             end
             if itemId then
@@ -489,15 +515,14 @@ local function getPoolStats(poolType)
                 if isUnlocked ~= false then
                     itemStats.unlocked = true
                 end
-                if isUnlocked ~= false and weight > removeOn then
+                if isUnlocked ~= false and weight > removeOn
+                    and not stats.removedItems[itemId] and not stats.roomBlacklistedItems[itemId] then
                     itemStats.available = itemStats.available + 1
                 end
                 stats.items[itemId] = itemStats
             end
         end
     end
-
-    stats.removedItems, stats.removedAll = copyRemovedCollectibles(pool)
 
     return stats
 end
@@ -584,8 +609,7 @@ local getUnexpectedItems
 local function logPoolStatsDelta(label, beforeStats, afterStats, poolTypes, allowedItems)
     local function writeLog(text)
         local message = "[Severed Oath][Pool] " .. tostring(text)
-        Isaac.DebugString(message)
-        ConchBlessing.print(message)
+        ConchBlessing.printDebug(message)
     end
 
     local function logItemDiffs(poolType, before, after)
@@ -643,7 +667,7 @@ local function logPoolStatsDelta(label, beforeStats, afterStats, poolTypes, allo
 
         if #changed <= 0 then
             writeLog(string.format("%s pool=%s item-diff none", tostring(label), tostring(poolType)))
-            writeIdChunks(string.format("%s pool=%s item-diff unexpected count=0", tostring(label), tostring(poolType)), {})
+            writeIdChunks(string.format("%s pool=%s item-diff unattributed count=0", tostring(label), tostring(poolType)), {})
             return
         end
 
@@ -667,7 +691,7 @@ local function logPoolStatsDelta(label, beforeStats, afterStats, poolTypes, allo
             ))
         end
         local unexpected = getUnexpectedItems(changedMap, allowedItems)
-        writeIdChunks(string.format("%s pool=%s item-diff unexpected count=%d", tostring(label), tostring(poolType), #collectSortedIds(unexpected)), collectSortedIds(unexpected))
+        writeIdChunks(string.format("%s pool=%s item-diff unattributed count=%d", tostring(label), tostring(poolType), #collectSortedIds(unexpected)), collectSortedIds(unexpected))
     end
 
     for _, poolType in ipairs(poolTypes or {}) do
@@ -716,10 +740,10 @@ local function writePoolDump(text)
     Isaac.ConsoleOutput(message .. "\n")
 end
 
+local manualPoolOutput = false
 local function writePoolTrack(text)
-    local message = "[Severed Oath][PoolTrack] " .. tostring(text)
-    Isaac.DebugString(message)
-    ConchBlessing.print(message)
+    if manualPoolOutput then writePoolDump(text); return end
+    ConchBlessing.printDebug("[Severed Oath][PoolTrack] " .. tostring(text))
 end
 
 collectSortedIds = function(map)
@@ -770,7 +794,8 @@ local function getPoolExcludedItems(stats)
         local weight = tonumber(itemStats.totalWeight) or 0
         local removeOn = tonumber(itemStats.removeOn) or 0
         local unlocked = itemStats.unlocked == true
-        if removed or not unlocked or available <= 0 or weight <= removeOn then
+        if removed or (stats.roomBlacklistedItems and stats.roomBlacklistedItems[itemId])
+            or not unlocked or available <= 0 or weight <= removeOn then
             excluded[itemId] = true
         end
     end
@@ -872,7 +897,7 @@ local function logPoolChangeValidation(label, beforeStatsByPool, afterStatsByPoo
     local changed = collectPoolChangedItems(beforeStatsByPool, afterStatsByPool, poolTypes)
     local unexpectedChanged = getUnexpectedItems(changed, allowedItems)
     writeIdChunks(string.format("%s changed count=%d", tostring(label), #collectSortedIds(changed)), collectSortedIds(changed))
-    writeIdChunks(string.format("%s unexpected changed count=%d", tostring(label), #collectSortedIds(unexpectedChanged)), collectSortedIds(unexpectedChanged))
+    writeIdChunks(string.format("%s unattributed changed count=%d", tostring(label), #collectSortedIds(unexpectedChanged)), collectSortedIds(unexpectedChanged))
 
     local beforeAny = nil
     local afterAny = nil
@@ -883,7 +908,7 @@ local function logPoolChangeValidation(label, beforeStatsByPool, afterStatsByPoo
     local removedAdded = diffIdMaps(beforeAny and beforeAny.removedItems or {}, afterAny and afterAny.removedItems or {})
     local unexpectedRemoved = getUnexpectedItems(removedAdded, allowedItems)
     writeIdChunks(string.format("%s removed added count=%d", tostring(label), #collectSortedIds(removedAdded)), collectSortedIds(removedAdded))
-    writeIdChunks(string.format("%s unexpected removed count=%d", tostring(label), #collectSortedIds(unexpectedRemoved)), collectSortedIds(unexpectedRemoved))
+    writeIdChunks(string.format("%s unattributed removed count=%d", tostring(label), #collectSortedIds(unexpectedRemoved)), collectSortedIds(unexpectedRemoved))
 
     local excludedAddedAll = {}
     for _, poolType in ipairs(poolTypes or {}) do
@@ -898,20 +923,23 @@ local function logPoolChangeValidation(label, beforeStatsByPool, afterStatsByPoo
     end
     local unexpectedExcluded = getUnexpectedItems(excludedAddedAll, allowedItems)
     writeIdChunks(string.format("%s excluded added count=%d", tostring(label), #collectSortedIds(excludedAddedAll)), collectSortedIds(excludedAddedAll))
-    writeIdChunks(string.format("%s unexpected excluded count=%d", tostring(label), #collectSortedIds(unexpectedExcluded)), collectSortedIds(unexpectedExcluded))
+    writeIdChunks(string.format("%s unattributed excluded count=%d", tostring(label), #collectSortedIds(unexpectedExcluded)), collectSortedIds(unexpectedExcluded))
 end
 
 local function logRemovedSnapshot(label, statsByPool, poolTypes)
     local pool = Game():GetItemPool()
     local removedItems, removedCount = copyRemovedCollectibles(pool)
     local removedIds = collectSortedIds(removedItems)
-    writeIdChunks(string.format("%s removed-global count=%s", tostring(label), tostring(removedCount or #removedIds)), removedIds)
+    writeIdChunks(string.format("%s removed-global count=%s", tostring(label), formatMaybeNumber(removedCount)), removedIds)
 
+    local blocked, blockedCount = copyRemovedCollectibles(pool, "GetRoomBlacklistedCollectibles")
+    writeIdChunks(string.format("%s room-blacklisted count=%s", tostring(label), formatMaybeNumber(blockedCount)), collectSortedIds(blocked))
     for _, poolType in ipairs(poolTypes or {}) do
         local stats = statsByPool and statsByPool[poolType] or getPoolStats(poolType)
         if stats and stats.ok then
             local excludedIds = collectSortedIds(getPoolExcludedItems(stats))
-            writeIdChunks(string.format("%s pool=%s excluded count=%d", tostring(label), tostring(poolType), #excludedIds), excludedIds)
+            writeIdChunks(string.format("%s pool=%s excluded count=%d coverage=%s", tostring(label), tostring(poolType), #excludedIds,
+                stats.eligibilityKnown and "native-pool-and-blacklists" or "partial-unavailable-blacklist"), excludedIds)
         else
             writePoolTrack(string.format(
                 "%s pool=%s excluded unavailable error=%s",
@@ -935,7 +963,7 @@ local function logRemovedDelta(label, beforeStatsByPool, afterStatsByPool, poolT
     local afterRemoved = afterAny and afterAny.removedItems or {}
     local globalAdded, globalRestored = diffIdMaps(beforeRemoved, afterRemoved)
     writeIdChunks(string.format("%s removed-global added count=%d", tostring(label), #collectSortedIds(globalAdded)), collectSortedIds(globalAdded))
-    writeIdChunks(string.format("%s removed-global unexpected count=%d", tostring(label), #collectSortedIds(getUnexpectedItems(globalAdded, allowedItems))), collectSortedIds(getUnexpectedItems(globalAdded, allowedItems)))
+    writeIdChunks(string.format("%s removed-global unattributed count=%d", tostring(label), #collectSortedIds(getUnexpectedItems(globalAdded, allowedItems))), collectSortedIds(getUnexpectedItems(globalAdded, allowedItems)))
     writeIdChunks(string.format("%s removed-global restored count=%d", tostring(label), #collectSortedIds(globalRestored)), collectSortedIds(globalRestored))
 
     for _, poolType in ipairs(poolTypes or {}) do
@@ -944,7 +972,7 @@ local function logRemovedDelta(label, beforeStatsByPool, afterStatsByPool, poolT
         if before and after and before.ok and after.ok then
             local excludedAdded, excludedRestored = diffIdMaps(getPoolExcludedItems(before), getPoolExcludedItems(after))
             writeIdChunks(string.format("%s pool=%s excluded added count=%d", tostring(label), tostring(poolType), #collectSortedIds(excludedAdded)), collectSortedIds(excludedAdded))
-            writeIdChunks(string.format("%s pool=%s excluded unexpected count=%d", tostring(label), tostring(poolType), #collectSortedIds(getUnexpectedItems(excludedAdded, allowedItems))), collectSortedIds(getUnexpectedItems(excludedAdded, allowedItems)))
+            writeIdChunks(string.format("%s pool=%s excluded unattributed count=%d", tostring(label), tostring(poolType), #collectSortedIds(getUnexpectedItems(excludedAdded, allowedItems))), collectSortedIds(getUnexpectedItems(excludedAdded, allowedItems)))
             writeIdChunks(string.format("%s pool=%s excluded restored count=%d", tostring(label), tostring(poolType), #collectSortedIds(excludedRestored)), collectSortedIds(excludedRestored))
         else
             writePoolTrack(string.format(
@@ -976,13 +1004,14 @@ local function dumpPoolItem(poolType, itemId)
     local itemStats = stats.items[tonumber(itemId)] or {}
     local removed = stats.removedItems and stats.removedItems[tonumber(itemId)] == true
     writePoolDump(string.format(
-        "pool=%s item=%s weight=%s available=%s entries=%s removed=%s",
+        "pool=%s item=%s weight=%s available=%s entries=%s removed=%s roomBlacklisted=%s",
         tostring(poolType),
         tostring(itemId),
         formatMaybeNumber(tonumber(itemStats.totalWeight) or 0, 2),
-        tostring(tonumber(itemStats.available) or 0),
+        stats.eligibilityKnown and tostring(tonumber(itemStats.available) or 0) or "n/a",
         tostring(tonumber(itemStats.entries) or 0),
-        tostring(removed)
+        stats.removedAll ~= nil and tostring(removed) or "n/a",
+        stats.roomBlacklistedCount ~= nil and tostring(stats.roomBlacklistedItems[tonumber(itemId)] == true) or "n/a"
     ))
 end
 
@@ -994,12 +1023,13 @@ local function dumpPool(poolType, dumpAll)
     end
 
     writePoolDump(string.format(
-        "pool=%s available=%s entries=%s weight=%s removedAll=%s",
+        "pool=%s available=%s entries=%s weight=%s removedAll=%s roomBlacklisted=%s",
         tostring(poolType),
-        tostring(stats.available),
+        stats.eligibilityKnown and tostring(stats.available) or "n/a",
         tostring(stats.entries),
         formatMaybeNumber(stats.totalWeight, 2),
-        formatMaybeNumber(stats.removedAll)
+        formatMaybeNumber(stats.removedAll),
+        formatMaybeNumber(stats.roomBlacklistedCount)
     ))
 
     local items = {}
@@ -1010,6 +1040,7 @@ local function dumpPool(poolType, dumpAll)
             available = tonumber(itemStats.available) or 0,
             entries = tonumber(itemStats.entries) or 0,
             removed = stats.removedItems and stats.removedItems[itemId] == true,
+            roomBlacklisted = stats.roomBlacklistedItems[itemId] == true,
         })
     end
     table.sort(items, function(left, right)
@@ -1020,13 +1051,14 @@ local function dumpPool(poolType, dumpAll)
     for index = 1, limit do
         local itemStats = items[index]
         writePoolDump(string.format(
-            "pool=%s item=%s weight=%s available=%s entries=%s removed=%s",
+            "pool=%s item=%s weight=%s available=%s entries=%s removed=%s roomBlacklisted=%s",
             tostring(poolType),
             tostring(itemStats.itemId),
             formatMaybeNumber(itemStats.totalWeight, 2),
-            tostring(itemStats.available),
+            stats.eligibilityKnown and tostring(itemStats.available) or "n/a",
             tostring(itemStats.entries),
-            tostring(itemStats.removed)
+            stats.removedAll ~= nil and tostring(itemStats.removed) or "n/a",
+            stats.roomBlacklistedCount ~= nil and tostring(itemStats.roomBlacklisted) or "n/a"
         ))
     end
 
@@ -1119,103 +1151,22 @@ local function heldBonusCount()
     return held and 1 or 0
 end
 
-local function getExtraCycleItem(pickup, data, excludedItems)
+local function getExtraCycleItem(pickup, excludedItems)
     local pool = Game():GetItemPool()
-    if not pool then
-        return nil
-    end
-
-    local poolType = tonumber(data and data[CYCLE_POOL_MARKER]) or getRoomPoolType()
-    local seed = tonumber(pickup and pickup.InitSeed) or Game():GetFrameCount()
-    local defaultItem = (CollectibleType and (CollectibleType.COLLECTIBLE_NULL or CollectibleType.NULL)) or 0
-    excludedItems = excludedItems or {}
-
+    if not pool or type(pool.GetCollectible) ~= "function" then return nil end
+    -- GetLastPool is process-wide draw history, not this room's source. A saved
+    -- bonus pool describes a past grant; it must not route a new/top-up grant.
+    local poolType = getRoomPoolType()
+    local seed = tonumber(pickup.InitSeed) or 0
+    local defaultItem = (CollectibleType and CollectibleType.COLLECTIBLE_NULL) or 0
     for attempt = 1, EXTRA_CYCLE_PICK_ATTEMPTS do
         local pickSeed = seed + 7919 + ((attempt - 1) * 104729)
-        local previewOk, previewItem = pcall(function()
-            return pool:GetCollectible(poolType, false, pickSeed, defaultItem)
-        end)
-        if not previewOk then
-            logVerify(string.format(
-                "bonus-cycle-preview failed pool=%s ok=%s seed=%s",
-                tostring(poolType),
-                tostring(previewOk),
-                tostring(pickSeed)
-            ))
-            return nil
-        end
-
-        if isValidCollectibleId(previewItem) then
-            if excludedItems[previewItem] then
-                logVerify(string.format(
-                    "bonus-cycle-preview skip duplicate pool=%s item=%s seed=%s attempt=%d",
-                    tostring(poolType),
-                    tostring(previewItem),
-                    tostring(pickSeed),
-                    attempt
-                ))
-            else
-                local poolTypes = collectAllPoolTypes()
-                local beforePoolStats = capturePoolStats(poolTypes)
-                local ok, itemId = pcall(function()
-                    return pool:GetCollectible(poolType, true, pickSeed, defaultItem)
-                end)
-                local afterPoolStats = capturePoolStats(poolTypes)
-
-                if ok and isValidCollectibleId(itemId) then
-                    logVerify(string.format(
-                        "bonus-cycle-create pool=%s item=%s preview=%s seed=%s attempt=%d",
-                        tostring(poolType),
-                        tostring(itemId),
-                        tostring(previewItem),
-                        tostring(pickSeed),
-                        attempt
-                    ))
-                    logPoolChangeValidation(
-                        "bonus-cycle-create",
-                        beforePoolStats,
-                        afterPoolStats,
-                        poolTypes,
-                        makeItemSet({ itemId })
-                    )
-                    if excludedItems[itemId] then
-                        logVerify(string.format(
-                            "bonus-cycle-create rejected duplicate-after-decrease pool=%s item=%s seed=%s",
-                            tostring(poolType),
-                            tostring(itemId),
-                            tostring(pickSeed)
-                        ))
-                        return nil
-                    end
-                    return itemId
-                end
-
-                logVerify(string.format(
-                    "bonus-cycle-create failed pool=%s item=%s ok=%s seed=%s attempt=%d",
-                    tostring(poolType),
-                    tostring(itemId),
-                    tostring(ok),
-                    tostring(pickSeed),
-                    attempt
-                ))
-                logPoolChangeValidation(
-                    "bonus-cycle-create-failed",
-                    beforePoolStats,
-                    afterPoolStats,
-                    poolTypes,
-                    {}
-                )
-                return nil
-            end
+        local ok, id = pcall(pool.GetCollectible, pool, poolType, false, pickSeed, defaultItem)
+        if not ok then return nil end
+        if isValidCollectibleId(id) and not excludedItems[id] then
+            return id, pickSeed, poolType
         end
     end
-
-    logVerify(string.format(
-        "bonus-cycle-create no non-duplicate candidate pool=%s seed=%s attempts=%d",
-        tostring(poolType),
-        tostring(seed),
-        EXTRA_CYCLE_PICK_ATTEMPTS
-    ))
     return nil
 end
 
@@ -1277,7 +1228,7 @@ local function markPickupCycleState(pickup)
         setPickupCycleState(pickup, {
             eligible = false,
             done = true,
-            poolType = getLastPoolType(),
+            poolType = getRoomPoolType(),
             item = currentItem,
             splitItem = currentItem,
         })
@@ -1307,12 +1258,17 @@ local function markPickupCycleState(pickup)
         local state = {
             eligible = true,
             done = true,
-            poolType = tonumber(savedBonusState.poolType) or getLastPoolType(),
+            poolType = tonumber(savedBonusState.poolType) or getRoomPoolType(),
             item = currentItem,
             bonusItems = bonusItems,
             bonusItem = bonusItems[1],
             bonusSeen = savedBonusState.bonusSeen == true,
         }
+        local swap = savedBonusState.pendingSwap
+        if type(swap) == "table" and isValidCollectibleId(swap.from) and isValidCollectibleId(swap.to)
+            and bonusItems[swap.slot] == swap.from then
+            state.pendingSwap = {from=swap.from, to=swap.to, slot=swap.slot}
+        end
         setPickupCycleState(pickup, state)
         updateBonusSeen(pickup, state)
         logVerify(string.format(
@@ -1336,7 +1292,7 @@ local function markPickupCycleState(pickup)
     local state = {
         eligible = eligible,
         done = not eligible,
-        poolType = getLastPoolType(),
+        poolType = getRoomPoolType(),
         item = currentItem,
         bonusItem = nil,
         bonusItems = {},
@@ -1345,74 +1301,152 @@ local function markPickupCycleState(pickup)
     setPickupCycleState(pickup, state)
 end
 
-local function addHeldBonusCycle(pickup, data)
-    if not pickup or pickup.Variant ~= PickupVariant.PICKUP_COLLECTIBLE then
-        return false, "invalid_pickup"
-    end
-    if not isValidCollectibleId(pickup.SubType) then
-        return false, "invalid_subtype"
-    end
-    if type(pickup.GetCollectibleCycle) ~= "function" then
-        return false, "missing_repentogon"
-    end
+local function sameTail(a, b)
+    if #a ~= #b then return false end
+    for i, id in ipairs(a) do if b[i] ~= id then return false end end
+    return true
+end
 
-    -- This runs after the pedestal's update. Work from its actual queue, not a
-    -- whitelist of cycle-granting items (Birthright alone need not grant a cycle).
-    local rawCycleItems, readable = getCollectibleCycleValues(pickup)
-    if not readable then return false, "unreadable_cycle" end
-
-    if type(pickup.AddCollectibleCycle) ~= "function" then
-        return false, "missing_add_cycle"
-    end
-    if #rawCycleItems >= MAX_COLLECTIBLE_CYCLE_ITEMS then
-        return false, "cycle_full"
-    end
-
-    local existingCycleItems = getCycleItems(pickup)
-    local extraItem = getExtraCycleItem(pickup, data, makeItemSet(existingCycleItems))
-    if not extraItem then
-        return false, "no_pool_item"
-    end
-
-    local ok, added = pcall(function()
-        return pickup:AddCollectibleCycle(extraItem)
+local function rewriteTail(pickup, tail)
+    local ok = pcall(function()
+        pickup:RemoveCollectibleCycle()
+        for _, id in ipairs(tail) do
+            assert(pickup:AddCollectibleCycle(id) ~= false, "cycle append rejected")
+        end
     end)
-    local after = getCollectibleCycleValues(pickup)
-    local exact = #after == #rawCycleItems + 1 and after[#after] == extraItem
-    for i, id in ipairs(rawCycleItems) do exact = exact and after[i] == id end
-    if ok and added ~= false and exact then
-        return true, extraItem
+    local actual, readable = getCollectibleCycleValues(pickup)
+    return ok and readable and sameTail(tail, actual)
+end
+
+-- A paid draw can differ from its preview (including a legitimate duplicate).
+-- Replace only the reserved, unique bonus occurrence; never deduplicate foreign
+-- entries or redraw. The native tail API has no single-slot setter.
+local function settleBonusSwap(pickup, state)
+    local swap = state.pendingSwap
+    if not swap then return end
+    local tail, readable = getCollectibleCycleValues(pickup)
+    if not readable then return end
+    local count, index = pickup.SubType == swap.from and 1 or 0, nil
+    for i, id in ipairs(tail) do
+        if id == swap.from then count = count + 1; index = i end
+    end
+    if count ~= 1 then
+        -- A foreign rewrite/removal or duplication ended our exact reservation.
+        -- The already delivered bonus stays spent; never resurrect its old ID.
+        state.pendingSwap = nil
+        markSavedBonusState(pickup, state)
+        return
+    end
+    if not index then return end -- Displayed head: wait for native rotation.
+    local replacement = {}
+    for i, id in ipairs(tail) do replacement[i] = i == index and swap.to or id end
+    if rewriteTail(pickup, replacement) then
+        state.bonusItems[swap.slot] = swap.to
+        state.bonusItem = state.bonusItems[1]
+        state.pendingSwap = nil
+        markSavedBonusState(pickup, state)
+    elseif not rewriteTail(pickup, tail) then
+        -- Do not attempt to regenerate foreign choices on a later update.
+        state.pendingSwap = nil
+        markSavedBonusState(pickup, state)
+        ConchBlessing.printError("[Severed Oath] Cycle rewrite and rollback failed.")
+    end
+end
+
+local function addHeldBonusCycle(pickup, state)
+    if not isValidCollectibleId(pickup.SubType) then return false, "invalid_subtype" end
+    local tail, readable = getCollectibleCycleValues(pickup)
+    if not readable then return false, "unreadable_cycle" end
+    if type(pickup.AddCollectibleCycle) ~= "function"
+        or type(pickup.RemoveCollectibleCycle) ~= "function" then
+        return false, "missing_cycle_api"
+    end
+    if #tail >= MAX_COLLECTIBLE_CYCLE_ITEMS then return false, "cycle_full" end
+
+    local beforeHead, beforeSeed = pickup.SubType, pickup.InitSeed
+    local extra, seed, poolType = getExtraCycleItem(pickup, makeItemSet(getCycleItems(pickup)))
+    if not extra then return false, "no_pool_item" end
+    -- Preview callbacks are external code too. Do not charge or edit a changed
+    -- source, even if a callback changed it to another valid collectible.
+    local before, beforeReadable = getCollectibleCycleValues(pickup)
+    if not beforeReadable or not sameTail(tail, before)
+        or pickup.SubType ~= beforeHead or pickup.InitSeed ~= beforeSeed then
+        return false, "source_changed"
+    end
+    pcall(pickup.AddCollectibleCycle, pickup, extra)
+    local after, afterReadable = getCollectibleCycleValues(pickup)
+    local expected = {}
+    for i, id in ipairs(tail) do expected[i] = id end
+    expected[#expected + 1] = extra
+    -- The observed append is authoritative even if an interceptor throws after it.
+    if not (afterReadable and sameTail(expected, after)
+        and pickup.SubType == beforeHead and pickup.InitSeed == beforeSeed) then
+        return false, "add_failed"
     end
 
-    return false, "add_failed"
+    -- Delivery precedes depletion. A failed append never makes a decreasing
+    -- draw. Record the delivered slot before calling other mods' pool callbacks.
+    state.bonusItems[#state.bonusItems + 1] = extra
+    state.bonusItem = state.bonusItems[1]
+    state.poolType = poolType
+    markSavedBonusState(pickup, state)
+    local pool = Game():GetItemPool()
+    local paid, actual = pcall(pool.GetCollectible, pool, poolType, true, seed,
+        (CollectibleType and CollectibleType.COLLECTIBLE_NULL) or 0)
+    if paid and isValidCollectibleId(actual) then
+        if actual ~= extra then
+            state.pendingSwap = {from=extra, to=actual, slot=#state.bonusItems}
+            markSavedBonusState(pickup, state)
+            -- Only exchange the exact staged queue. A foreign callback's
+            -- transformation is authoritative and must not be overwritten.
+            local current, valid = getCollectibleCycleValues(pickup)
+            if valid and pickup.SubType == beforeHead and pickup.InitSeed == beforeSeed
+                and sameTail(expected, current) then
+                settleBonusSwap(pickup, state)
+            else
+                state.pendingSwap = nil
+                markSavedBonusState(pickup, state)
+            end
+        end
+    else
+        -- Keep the delivered choice: a throwing pool callback may already have
+        -- depleted stock. Retrying the draw would charge this reward twice.
+        ConchBlessing.printError("[Severed Oath] Pool commit failed after bonus delivery; draw will not be repeated.")
+    end
+    return true, extra
+end
+
+local function retrySignature(pickup, target)
+    local ids = getCollectibleCycleValues(pickup)
+    ids[#ids + 1] = pickup.SubType
+    table.sort(ids)
+    return tostring(target) .. ":" .. table.concat(ids, ",") .. ":"
+        .. tostring(pickup.AddCollectibleCycle) .. ":" .. tostring(pickup.GetCollectibleCycle)
+        .. ":" .. tostring(pickup.RemoveCollectibleCycle)
 end
 
 local function finishHeldBonusCycle(pickup, state, target)
-    if not pickup or not state then
-        return
-    end
-
-    state.done = true
-    state.attemptedBonusCount = target
-    writeCycleStateToPickup(pickup, state)
-
-    local data = pickup:GetData()
+    if state.grantBusy then return end
+    local hash = GetPtrHash(pickup)
+    if grantInFlight[hash] then return end
+    grantInFlight[hash] = true
+    state.grantBusy = true
     state.bonusItems = state.bonusItems or {}
     for _ = #state.bonusItems + 1, target do
-        local added, detail = addHeldBonusCycle(pickup, data)
+        local added, detail = addHeldBonusCycle(pickup, state)
         if not added then
+            state.retrySignature = retrySignature(pickup, target)
+            state.retryFrame = Game():GetFrameCount() + 30
             ConchBlessing.printDebug(string.format(
-                "[Severed Oath] Skipped bonus cycle for pickup %d: %s (seed=%s).",
-                pickup.SubType, tostring(detail), tostring(pickup.InitSeed)))
+                "[Severed Oath] Deferred bonus for %s: %s.", tostring(pickup.InitSeed), tostring(detail)))
             break
         end
-        state.bonusItems[#state.bonusItems + 1] = detail
-        state.bonusItem = state.bonusItems[1]
-        markSavedBonusState(pickup, state)
-        ConchBlessing.printDebug(string.format(
-            "[Severed Oath] Added bonus cycle item to pickup %d (%s, seed=%s).",
-            pickup.SubType, tostring(detail), tostring(pickup.InitSeed)))
+        if state.pendingSwap then break end
     end
+    state.done = #state.bonusItems >= target
+    state.grantBusy = nil
+    grantInFlight[hash] = nil
+    writeCycleStateToPickup(pickup, state)
     updateBonusSeen(pickup, state)
 end
 
@@ -1540,7 +1574,7 @@ local function spawnSplitPickup(itemId, pos, state, player, optionsPickupIndex)
     setPickupCycleState(pickup, {
         eligible = false,
         done = true,
-        poolType = getLastPoolType(),
+        poolType = getRoomPoolType(),
         item = itemId,
         splitItem = itemId,
     })
@@ -1715,37 +1749,9 @@ function M.onUseItem(_, collectibleId, rng, player, useFlags, activeSlot, varDat
     return { Discharge = true, Remove = false, ShowAnim = true }
 end
 
--- Self-heal: once we have committed a bonus item, keep it in the cycle every update.
--- Glitched Crown re-initialises the pedestal on every display step, and can drop our
--- owned choices. Inspect the actual cycle, including its displayed head; native
--- rotations must never create another draw. Other mods need no item whitelist.
-local function reAddDroppedBonus(pickup, state)
-    if not (pickup and state and state.eligible and state.bonusItems) then
-        return
-    end
-    if not isValidCollectibleId(pickup.SubType) then
-        return
-    end
-    if pickup:GetData()[SPLIT_MARKER] then
-        return
-    end
-    if type(pickup.GetCollectibleCycle) ~= "function" or type(pickup.AddCollectibleCycle) ~= "function" then
-        return
-    end
-    local tail, readable = getCollectibleCycleValues(pickup)
-    if not readable then return end
-    local present = { [pickup.SubType] = 1 }
-    for _, id in ipairs(tail) do present[id] = (present[id] or 0) + 1 end
-    local count = #tail
-    for _, id in ipairs(state.bonusItems) do
-        if (present[id] or 0) > 0 then
-            present[id] = present[id] - 1
-        elseif count < MAX_COLLECTIBLE_CYCLE_ITEMS then
-            local ok, added = pcall(pickup.AddCollectibleCycle, pickup, id)
-            if ok and added == true then count = count + 1 end
-        end
-    end
-end
+-- Native rotations preserve the complete circular sequence. Absence alone is
+-- not evidence of a dropped bonus: external rerolls/morphs may intentionally
+-- replace or clear it. Keep the grant ledger, but never re-add historical IDs.
 
 -- Keep this item's owned bonus identity aligned when the central Magic Conch
 -- transaction rewrites one or more members of the same collectible cycle.
@@ -1754,6 +1760,7 @@ function M.onCollectibleCycleRewritten(pickup, replacements)
         return
     end
 
+    markPickupCycleState(pickup)
     local state = getPickupCycleState(pickup)
     if not (state and state.bonusItems) then return end
     local changed = false
@@ -1765,6 +1772,7 @@ function M.onCollectibleCycleRewritten(pickup, replacements)
         end
     end
     if not changed then return end
+    state.pendingSwap = nil
     state.bonusItem = state.bonusItems[1]
     writeCycleStateToPickup(pickup, state)
     markSavedBonusState(pickup, state)
@@ -1777,6 +1785,7 @@ end
 
 function M.onPostPickupInit(_, pickup)
     if M._gameStartResolved ~= true then return end
+    if pickup and type(GetPtrHash) == "function" and grantInFlight[GetPtrHash(pickup)] then return end
     markPickupCycleState(pickup)
 end
 
@@ -1785,6 +1794,7 @@ function M.onPostPickupUpdate(_, pickup)
     if not pickup or pickup.Variant ~= PickupVariant.PICKUP_COLLECTIBLE then
         return
     end
+    if type(GetPtrHash) == "function" and grantInFlight[GetPtrHash(pickup)] then return end
 
     markPickupCycleState(pickup)
     local state = getPickupCycleState(pickup)
@@ -1792,7 +1802,8 @@ function M.onPostPickupUpdate(_, pickup)
         return
     end
     writeCycleStateToPickup(pickup, state)
-    reAddDroppedBonus(pickup, state)
+    if state.grantBusy then return end
+    settleBonusSwap(pickup, state)
 
     if pickup:GetData()[SPLIT_MARKER] then
         state.done = true
@@ -1809,9 +1820,12 @@ function M.onPostPickupUpdate(_, pickup)
     -- The provider may upgrade the held active after this pickup's callback.
     -- Grow our contribution once from one to two; never roll it again on
     -- rotation, owner loss, downgrade, revisit, or continue. Granted choices stay.
-    local attempted = state.attemptedBonusCount or #(state.bonusItems or {})
-    if not state.done or target > attempted then
-        finishHeldBonusCycle(pickup, state, target)
+    local granted = #(state.bonusItems or {})
+    if not state.pendingSwap and target > granted then
+        local signature = retrySignature(pickup, target)
+        if state.retrySignature ~= signature or Game():GetFrameCount() >= (state.retryFrame or 0) then
+            finishHeldBonusCycle(pickup, state, target)
+        end
     end
 end
 
@@ -1858,7 +1872,9 @@ function M.onExecuteCmd(_, command, params)
             local poolType = tonumber(args[1]) or getRoomPoolType()
             poolTypes = { poolType }
         end
+        manualPoolOutput = true
         logRemovedSnapshot("cmd", capturePoolStats(poolTypes), poolTypes)
+        manualPoolOutput = false
         return
     end
 

@@ -290,6 +290,115 @@ local function addedChoices(ctx, extra)
     return true,string.format("existing=%d; added=%d; all existing members retained",ctx.beforeCycle.total,extra)
 end
 
+S.add("SEVERED_OATH","cycle_ownership",{conditions=true},function(plan,id)
+    poolCapability(plan)
+    plan.act(function(_,ctx) H.suppressRandomGoldenPedestals(ctx) end)
+    visitTreasure(plan)
+    cycleCapability(plan)
+    plan.act(function(player)
+        for _,p in ipairs(pedestals()) do p:Remove() end
+        H.pickup(player,CollectibleType.COLLECTIBLE_SAD_ONION)
+    end)
+    plan.wait(4)
+    plan.act(function(player,ctx)
+        local p=pedestals()[1]
+        p:RemoveCollectibleCycle()
+        for _=1,8 do assert(p:AddCollectibleCycle(CollectibleType.COLLECTIBLE_BREAKFAST)) end
+        player:AddCollectible(id,0,false)
+        observe(ctx)
+    end)
+    -- Holding on entry makes the pre-existing fixture eligible.
+    revisit(plan)
+    plan.check("full native queue consumes no pool selections",function(_,ctx)
+        return #ctx.draws==0 and #pedestals()[1]:GetCollectibleCycle()==8,"draws="..#ctx.draws
+    end)
+    plan.act(function(_,ctx)
+        local p=pedestals()[1]
+        p:RemoveCollectibleCycle()
+        assert(p:AddCollectibleCycle(CollectibleType.COLLECTIBLE_BREAKFAST))
+        assert(p:AddCollectibleCycle(CollectibleType.COLLECTIBLE_BREAKFAST))
+        ctx.beforeCycle=cycleSnapshot(p)
+        observe(ctx)
+    end)
+    plan.wait(4)
+    plan.require("freed capacity awards one choice and preserves native duplicates",function(_,ctx)
+        local ok,detail=addedChoices(ctx,1)
+        if not ok then return ok,detail end
+        for item,n in pairs(cycleSnapshot(pedestals()[1]).counts) do
+            if n>(ctx.beforeCycle.counts[item] or 0) then ctx.ownedChoice=item end
+        end
+        return ctx.ownedChoice~=nil,detail
+    end)
+    plan.act(function(player,ctx)
+        local p=pedestals()[1]
+        ctx.copySource=EntityPtr(p); ctx.copySourceHash=GetPtrHash(p); ctx.copySourceSeed=p.InitSeed
+        ctx.copySourceCycle=cycleSnapshot(p); ctx.copyHead=p.SubType
+        player:UseActiveItem(CollectibleType.COLLECTIBLE_DIPLOPIA,UseFlag.USE_NOANIM,-1)
+    end)
+    plan.wait(4)
+    plan.require("native copy retains the displayed choice while source keeps its queue",function(_,ctx)
+        local stock=pedestals()
+        if #stock~=2 then return false,"pedestals="..#stock end
+        if not ctx.copySource.Ref then return false,"original source disappeared" end
+        local source,copy
+        for _,p in ipairs(stock) do
+            if GetPtrHash(p)==ctx.copySourceHash and p.InitSeed==ctx.copySourceSeed then source=p
+            else copy=p end
+        end
+        if not source or not copy then return false,"source/copy identity missing" end
+        local a,b=cycleSnapshot(source),cycleSnapshot(copy)
+        if a.total~=ctx.copySourceCycle.total then return false,"source choice count changed" end
+        for item,n in pairs(ctx.copySourceCycle.counts) do
+            if a.counts[item]~=n then return false,"source lost item "..item end
+        end
+        -- Native Diplopia copies the displayed item, not the source's cycle tail.
+        if b.total~=1 or b.counts[ctx.copyHead]~=1 then return false,"copy differs from native displayed choice" end
+        ctx.changed=EntityPtr(source); ctx.untouched=EntityPtr(copy); ctx.untouchedCycle=b
+        return true,"source choices="..a.total.."; independent copy choices=1"
+    end)
+    plan.act(function(_,ctx)
+        local p=assert(ctx.changed.Ref,"source disappeared"):ToPickup()
+        local tail=p:GetCollectibleCycle()
+        local replacement=CollectibleType.COLLECTIBLE_SAD_ONION
+        if replacement==ctx.ownedChoice then replacement=CollectibleType.COLLECTIBLE_INNER_EYE end
+        local head=p.SubType==ctx.ownedChoice and replacement or p.SubType
+        for i,item in ipairs(tail) do if item==ctx.ownedChoice then tail[i]=replacement end end
+        ctx.expectedChanged={counts={},total=1+#tail}
+        ctx.expectedChanged.counts[head]=1
+        for _,item in ipairs(tail) do ctx.expectedChanged.counts[item]=(ctx.expectedChanged.counts[item] or 0)+1 end
+        local seed=p.InitSeed
+        p:Morph(EntityType.ENTITY_PICKUP,PickupVariant.PICKUP_COLLECTIBLE,head,true,true,true)
+        assert(p.InitSeed==seed,"keep-seed Morph changed seed")
+        p:RemoveCollectibleCycle()
+        for _,item in ipairs(tail) do assert(p:AddCollectibleCycle(item)) end
+        ctx.changed=EntityPtr(p)
+        observe(ctx)
+    end)
+    plan.wait(10)
+    plan.check("foreign same-seed rewrite neither revives old choice nor changes sibling",function(_,ctx)
+        for _,case in ipairs({{ctx.changed,ctx.expectedChanged},{ctx.untouched,ctx.untouchedCycle}}) do
+            local p=case[1].Ref and case[1].Ref:ToPickup()
+            if not p then return false,"fixture disappeared" end
+            local actual,expected=cycleSnapshot(p),case[2]
+            if actual.total~=expected.total then return false,"unexpected extra choice" end
+            for item,n in pairs(expected.counts) do
+                if actual.counts[item]~=n then return false,"changed occurrence count for "..item end
+            end
+        end
+        return #ctx.draws==0,"no regeneration, sibling mutation or new draws; draws="..#ctx.draws
+    end)
+    revisit(plan)
+    plan.act(function(player,ctx)
+        player:UseCard(Card.CARD_SOUL_ISAAC,UseFlag.USE_NOANIM | UseFlag.USE_NOANNOUNCER)
+        ctx.soulSignature=signature() -- The same native operation used by AstroItems.
+    end)
+    plan.wait(10)
+    plan.check("native Soul of Isaac additions remain authoritative",function(_,ctx)
+        return signature()==ctx.soulSignature,"native additions preserved through ordinary updates"
+    end)
+    revisit(plan)
+end)
+
 local function reenterTreasure(plan)
     plan.act(function(player,ctx) Game():StartRoomTransition(ctx.originGrid,Direction.NO_DIRECTION,RoomTransitionAnim.FADE,player) end)
     plan.waitUntil(function(_,ctx) return Game():GetLevel():GetCurrentRoomIndex()==ctx.originGrid end,180,"leave stock room")

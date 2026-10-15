@@ -222,5 +222,37 @@ class FixtureOracleTests(unittest.TestCase):
             tail={22};player.HasCollectible=function() return true end;assert(not baseline(player,{}))
         ''')
 
+    def test_oath_ownership_bench_rejects_resurrection_and_sibling_contamination(self):
+        self.lua.execute('package=nil')
+        self.lua.execute((ROOT/'scripts/dev/item_test_pools.lua').read_text(encoding='utf-8'))
+        self.lua.execute('''
+            builders['SEVERED_OATH cycle_ownership'](plan,999)
+            function pickup(head,tail)
+                return {SubType=head,tail=tail,ToPickup=function(self) return self end,
+                    GetCollectibleCycle=function(self) return self.tail end}
+            end
+            function EntityPtr(p) return {Ref=p} end
+            function GetPtrHash(p) return p.hash end
+            local source=pickup(1,{2,2,200}); local sibling=pickup(1,{})
+            source.hash=10; sibling.hash=20; source.InitSeed=77; sibling.InitSeed=77
+            stock={sibling,source}; local ctx={draws={},copySource=EntityPtr(source),
+                copySourceHash=10,copySourceSeed=77,copyHead=1,
+                copySourceCycle={total=4,counts={[1]=1,[2]=2,[200]=1}}}
+            local copied=requires['native copy retains the displayed choice while source keeps its queue']
+            assert(copied(nil,ctx)); assert(ctx.changed.Ref==source and ctx.untouched.Ref==sibling)
+            sibling.tail={2,2,200}; assert(not copied(nil,ctx))
+            sibling.tail={}; sibling.SubType=2; assert(not copied(nil,ctx)); sibling.SubType=1
+            source.tail={2,3,200}; assert(not copied(nil,ctx)); source.tail={2,2,200}
+            source.hash=30; assert(not copied(nil,ctx)); source.hash=10
+            ctx.copySource.Ref=nil; assert(not copied(nil,ctx)); ctx.copySource=EntityPtr(source)
+            stock={source,sibling}; assert(copied(nil,ctx))
+            source.tail={2,2,55}; ctx.expectedChanged={total=4,counts={[1]=1,[2]=2,[55]=1}}
+            local check=checks['foreign same-seed rewrite neither revives old choice nor changes sibling'][1]
+            assert(check(nil,ctx))
+            source.tail={2,2,55,200}; assert(not check(nil,ctx))
+            source.tail={2,2,55}; sibling.tail={2,2,55}; assert(not check(nil,ctx))
+            sibling.tail={}; ctx.draws={{id=77}}; assert(not check(nil,ctx))
+        ''')
+
 
 if __name__=='__main__': unittest.main()

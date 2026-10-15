@@ -27,6 +27,9 @@ local kronosSeparate = {
     box_of_friends="Box expiry visits native rooms and creates room-clear rewards",
 }
 function M.scenario(key,name)
+    if key=="SEVERED_OATH" and name:match("^compare_") then
+        return false,"native/Oath comparison consumes pools; each arm requires a fresh run"
+    end
     if key=="KRONOS" then return not kronosSeparate[name],kronosSeparate[name] end
     if key=="UTILITY_BELT" then return true end
     return (key=="F_MINUS" or key=="C_MINUS" or key=="B_MINUS") and name=="moms_box"

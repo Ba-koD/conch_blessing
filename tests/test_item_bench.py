@@ -24,6 +24,8 @@ class BenchTests(unittest.TestCase):
                 MC_POST_RENDER=8, MC_POST_NPC_DEATH=9, MC_PRE_SPAWN_CLEAN_AWARD=10,
                 MC_POST_PICKUP_INIT=11, MC_POST_FIRE_TEAR=61 }
             ConchBlessing = { ItemData = {} }
+            EntityType = { ENTITY_PICKUP=5 }
+            PickupVariant = { PICKUP_COLLECTIBLE=100 }
             function ConchBlessing:AddCallback(id, fn)
                 callbacks[id] = callbacks[id] or {}
                 table.insert(callbacks[id], fn)
@@ -396,7 +398,18 @@ class BenchTests(unittest.TestCase):
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','kronos detail')
             assert(started=='conch_test kronos detail')
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','all')
-            assert(label=='conch_test' and #selected==111,'update the documented suite count when it changes')
+            assert(label=='conch_test' and #selected==162,'update the documented suite count when it changes')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','severed_oath compare')
+            assert(label=='conch_test severed_oath compare' and #selected==50)
+            assert(selected[1]=='conch_test severed_oath compare_capacity0_native')
+            assert(selected[2]=='conch_test severed_oath compare_capacity0_oath')
+            for _,name in ipairs(selected) do
+                assert(not bench.get(name).reuseGroup,'comparison arm reused a consumed pool')
+                assert(bench.get(name).resetReason:find('consumes pools',1,true))
+            end
+            local previous=selected
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','severed_oath compare extra')
+            assert(selected==previous,'trailing parameter started a broader suite')
         """)
 
     def test_aliases_detailed_helpers_and_shared_probes_use_the_single_command(self):
