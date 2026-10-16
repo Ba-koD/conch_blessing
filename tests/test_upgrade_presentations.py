@@ -563,6 +563,60 @@ class MorphBenchOracleTests(unittest.TestCase):
         self.assertEqual(self.lua.eval('Probe.commandFor("angels crown")'), 'conch_test morph angels_crown')
         self.assertIsNone(self.lua.eval('Probe.commandFor("live_eye")'), 'pending items have no applied bench')
 
+    def test_rotating_pedestal_stage_passes_a_correct_wheel_and_catches_each_defect(self):
+        self.assertIn('conch_test morph cycle', set(self.lua.eval('benches').keys()))
+        self.assertEqual(self.lua.eval('Probe.commandFor("cycle")'), 'conch_test morph cycle')
+        self.lua.execute('''
+            function cycleRun(mutate)
+                local checks,order={},{}
+                benches['conch_test morph cycle'].build(setmetatable({
+                    check=function(label,fn) checks[label]=fn; order[#order+1]=label end},
+                    {__index=function() return function() end end}))
+                local source,target=7,ConchBlessing.ItemData.LIVE_EYE.id
+                local wheel={entity={SubType=1,cycle={2,target}}, source={source,1,2}, target={target,1,2}, turns={}}
+                function wheel.entity:GetCollectibleCycle() return self.cycle end
+                local function turn(committed, t)
+                    t=t or {}
+                    wheel.turns[#wheel.turns+1]={ptr=t.ptr~=false, data=t.data~=false, seed=true, morphs=t.morphs or 0,
+                        circle=t.circle~=false, committed=committed, locked=t.locked}
+                end
+                for i=1,3 do turn(false) end
+                local ctx={wheel=wheel, turnsBefore=3, job={status='complete',committed=true,endReason='complete'}}
+                turn(false,{locked=true}); turn(true); turn(true)
+                if mutate then mutate(ctx,wheel,turn) end
+                local failed,skipped={},{}
+                for _,label in ipairs(order) do
+                    local ok,detail=checks[label](nil,ctx)
+                    if ok==false then failed[#failed+1]=label end
+                    if ok==nil then skipped[#skipped+1]=label end
+                end
+                return table.concat(failed,' | '), table.concat(skipped,' | '), #order
+            end
+        ''')
+        failed, skipped, count = self.lua.eval('cycleRun()')
+        self.assertEqual((failed, skipped), ('', ''))
+        self.assertGreaterEqual(count, 7)
+        defects = {
+            'native turns keep the same circle': 'function(c,w) w.turns[2].circle=false end',
+            'arrives as a Morph': 'function(c,w) w.turns[1].ptr=false end',
+            'commits while the pedestal turns':
+                "function(c) c.job.status='cancelled'; c.job.committed=false; c.job.endReason='expired' end",
+            'stayed locked': 'function(c,w) w.turns[4].locked=false end',
+            'every other choice stayed': 'function(c,w) w.entity.cycle={7,2} end',
+            'turns through the new circle': 'function(c,w) w.turns[6].circle=false end',
+        }
+        for label, mutate in defects.items():
+            with self.subTest(defect=label):
+                failed, _, _ = self.lua.eval('cycleRun(%s)' % mutate)
+                self.assertIn(label, failed)
+                self.assertEqual(len(failed.split(' | ')), 1, failed)
+        # A re-initializing turn that raised the Morph callback is followable.
+        failed, _, _ = self.lua.eval("cycleRun(function(c,w) w.turns[1].ptr=false; w.turns[1].data=false; w.turns[1].morphs=1 end)")
+        self.assertEqual(failed, '')
+        # No native turn before the change cannot prove anything: SKIP, not PASS.
+        _, skipped, _ = self.lua.eval("cycleRun(function(c,w) table.remove(w.turns,4) end)")
+        self.assertIn('turned before the change', skipped)
+
     def test_bench_cue_oracle_matches_the_approved_schedule(self):
         for key, effect, impact, _ in ROWS:
             with self.subTest(key=key):

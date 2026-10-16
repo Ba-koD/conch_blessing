@@ -248,7 +248,8 @@ local function _jobMatchesPickup(job, pickup)
     -- During the exact Morph call, init callbacks can already see the new
     -- wrapper while the old EntityPtr has expired. This short lease ends as
     -- soon as Morph returns; ordinary updates require the live reference.
-    return pickup and pickup:Exists() and (job.morphing or (live and live:Exists()))
+    -- A native Morph proven at MC_PRE_PICKUP_MORPH holds the same lease.
+    return pickup and pickup:Exists() and (job.morphing or job.nativeMorphLease or (live and live:Exists()))
         and GetPtrHash(pickup) == job.pickupHash
 end
 
@@ -497,8 +498,9 @@ local function _clearPendingMarker(job)
     end
 end
 
-local function _removeUpgradeJob(index, job, cancelAnimation)
+local function _removeUpgradeJob(index, job, cancelAnimation, reason)
     job.status = cancelAnimation and "cancelled" or "complete"
+    job.endReason = reason or job.status
     if cancelAnimation and _jobMatchesPickup(job, job.pickup)
         and ConchBlessing.template
         and type(ConchBlessing.template.cancelForPickup) == "function" then
@@ -567,6 +569,70 @@ local function _sourceStillMatches(job, pickup)
     return liveCycle ~= nil
         and liveCycle.supported
         and _cyclesMatch(job.cyclePlan.sourceCycle, liveCycle.items)
+end
+
+local function _cycleText(pickup)
+    local cycle = _readCollectibleCycle(pickup)
+    return cycle and cycle.supported and table.concat(cycle.items, ",") or tostring(pickup and pickup.SubType)
+end
+
+-- A native Morph reinitializes the pickup: its EntityPtr expires while the
+-- entity lives on under the same pointer hash. A reroll, another mod or a
+-- rotating pedestal turning its choices can morph a pickup in the middle of a
+-- transaction. REPENTOGON's pickup Morph callbacks bracket that exact
+-- operation: PRE proves the job's live identity before the reinitialization,
+-- POST rebinds that very pickup. The source check then decides whether the job
+-- goes on (the same circle, turned) or is cancelled (a reroll).
+local nativeMorphs = {}
+
+local function _onPrePickupMorph(_, pickup)
+    if not pickup or #ConchBlessing._upgradeJobs == 0 then return end
+    local hash = GetPtrHash(pickup)
+    local jobs = {}
+    for _, job in ipairs(ConchBlessing._upgradeJobs) do
+        -- Only the live reference proves identity: an earlier lease on this
+        -- address ends here. The transaction's own Morph rebinds itself in
+        -- _morphUpgradePickup.
+        if job.pickupHash == hash then job.nativeMorphLease = nil end
+        if not job.morphing and _jobMatchesPickup(job, pickup) then jobs[#jobs + 1] = job end
+    end
+    for _, job in ipairs(jobs) do job.nativeMorphLease = true end
+    local template = ConchBlessing.template
+    local anims = #jobs > 0 and template and type(template.animationsForPickup) == "function"
+        and template.animationsForPickup(pickup) or {}
+    nativeMorphs[hash] = #jobs > 0 and { jobs = jobs, anims = anims } or nil
+end
+
+local function _onPostPickupMorph(_, pickup)
+    local hash = pickup and GetPtrHash(pickup)
+    local proven = hash and nativeMorphs[hash]
+    if not proven then return end
+    nativeMorphs[hash] = nil
+    local template = ConchBlessing.template
+    if template and type(template.rebindAnimations) == "function" then
+        template.rebindAnimations(proven.anims, pickup)
+    end
+    for _, job in ipairs(proven.jobs) do
+        job.nativeMorphLease = nil
+        -- A room change may have ended the job while the Morph ran.
+        if job.status ~= "queued" then goto nextJob end
+        _trackJobPickup(job, pickup)
+        if not job.committed then
+            -- The reinitialization may replace GetData; keep the pending lock.
+            local data = pickup:GetData()
+            data[PENDING_UPGRADE_DATA_KEY] = job.token
+            data[PICKUP_LOCK_DATA_KEY] = job.token
+        end
+        if job.onPickupReinitialized then
+            local observed, observeError = pcall(job.onPickupReinitialized, pickup)
+            if not observed then
+                ConchBlessing.printError("[Upgrade] Pickup rebind observer failed: " .. tostring(observeError))
+            end
+        end
+        ConchBlessing.printDebug("[Upgrade] Native Morph rebound " .. tostring(job.itemKey or job.upgradeId)
+            .. " to its pickup; now " .. _cycleText(pickup))
+        ::nextJob::
+    end
 end
 
 local function _preventPendingUpgradePickup(_, pickup, collider)
@@ -670,6 +736,9 @@ end
 
 local function _processUpgradeJobs()
     if Game():IsPaused() then return end
+    -- A Morph cancelled by another mod never reaches POST; its proof ends here.
+    nativeMorphs = {}
+    for _, job in ipairs(ConchBlessing._upgradeJobs) do job.nativeMorphLease = nil end
     if #ConchBlessing._upgradeJobs == 0 then
         return
     end
@@ -678,12 +747,16 @@ local function _processUpgradeJobs()
         local job = ConchBlessing._upgradeJobs[i]
         local pickup = job.pickup and job.pickup:ToPickup() or nil
         if not pickup or not _jobMatchesPickup(job, pickup) then
-            _removeUpgradeJob(i, job, true)
+            ConchBlessing.printDebug("[Upgrade] Pickup reference expired; dropping " .. tostring(job.itemKey or job.upgradeId)
+                .. " (exists=" .. tostring(pickup ~= nil and pickup:Exists()) .. ")")
+            _removeUpgradeJob(i, job, true, "expired")
             goto continue
         end
         if (job.phase == 0 or job.phase == 1) and not _sourceStillMatches(job, pickup) then
-            ConchBlessing.printDebug("[Upgrade] Source pickup changed; cancelling " .. tostring(job.itemKey or job.upgradeId))
-            _removeUpgradeJob(i, job, true)
+            ConchBlessing.printDebug("[Upgrade] Source pickup changed; cancelling " .. tostring(job.itemKey or job.upgradeId)
+                .. " (source " .. table.concat(job.cyclePlan and job.cyclePlan.sourceCycle or { job.sourceSubType }, ",")
+                .. ", now " .. _cycleText(pickup) .. ")")
+            _removeUpgradeJob(i, job, true, "source-changed")
             goto continue
         end
 
@@ -723,7 +796,7 @@ local function _processUpgradeJobs()
                 if job.counter <= 0 then
                     if not _sourceStillMatches(job, pickup) then
                         ConchBlessing.printDebug("[Upgrade] Source pickup changed before morph; cancelling " .. tostring(job.itemKey or job.upgradeId))
-                        _removeUpgradeJob(i, job, true)
+                        _removeUpgradeJob(i, job, true, "source-changed")
                         goto continue
                     end
 
@@ -742,7 +815,7 @@ local function _processUpgradeJobs()
                                     .. ": "
                                     .. tostring(cycleResult)
                             )
-                            _removeUpgradeJob(i, job, true)
+                            _removeUpgradeJob(i, job, true, "cycle-failed")
                             goto continue
                         end
                         titleItemData = cycleResult or titleItemData
@@ -1369,6 +1442,17 @@ ConchBlessing:AddCallback(
 )
 ConchBlessing:AddCallback(ModCallbacks.MC_POST_NEW_ROOM, clearUpgradeJobs)
 ConchBlessing:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, clearUpgradeJobs)
+-- REPENTOGON only. Without it a native Morph still ends the job (fail closed).
+-- PRE observes last, after any other mod had the chance to cancel the Morph.
+if ModCallbacks.MC_PRE_PICKUP_MORPH and ModCallbacks.MC_POST_PICKUP_MORPH then
+    local late = CallbackPriority and CallbackPriority.LATE or 1000
+    if type(ConchBlessing.AddPriorityCallback) == "function" then
+        ConchBlessing:AddPriorityCallback(ModCallbacks.MC_PRE_PICKUP_MORPH, late, _onPrePickupMorph)
+    else
+        ConchBlessing:AddCallback(ModCallbacks.MC_PRE_PICKUP_MORPH, _onPrePickupMorph)
+    end
+    ConchBlessing:AddCallback(ModCallbacks.MC_POST_PICKUP_MORPH, _onPostPickupMorph)
+end
 
 -- Console viewer uses a real, viewer-owned pickup and the transaction above.
 require("scripts.dev.morph_viewer")

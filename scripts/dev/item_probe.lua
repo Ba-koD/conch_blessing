@@ -239,7 +239,7 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
             for _, line in ipairs(Morph.list()) do out(line) end
             return
         end
-        if #words > 2 then out("Usage: conch_test morph [ITEM | default | list]"); return end
+        if #words > 2 then out("Usage: conch_test morph [ITEM | default | cycle | list]"); return end
         local command = Morph.commandFor(case)
         if not command then out("No applied presentation for " .. tostring(case) .. "; use conch_test morph list."); return end
         if Game():GetNumPlayers() ~= 1 then out("Start a single-player test run first."); return end
@@ -290,7 +290,7 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
             out("conch_test " .. string.lower(key) .. (pending and " [unfinished: SKIP]" or ""))
         end
         out("For individual cases: conch_test ITEM list (example: conch_test kronos list).")
-        out("Short names: conch_test appraisal, conch_test belt. Shared checks: conch_test locale, conch_test morph [ITEM | default | list], conch_test rng [samples] [luck N].")
+        out("Short names: conch_test appraisal, conch_test belt. Shared checks: conch_test locale, conch_test morph [ITEM | default | cycle | list], conch_test rng [samples] [luck N].")
         out("Pocket items: conch_test thurisaz [CASE | list | give [N] | spawn | familiars | ledger] (the Kronos rune),")
         out("  conch_test conch_ticket [CASE | list | give [N] | spawn | queue | clear] (the Conch Ticket; short name: ticket).")
         out("Stat math: conch_test rounding [multiplier | sweep [stacks]] [pN].")

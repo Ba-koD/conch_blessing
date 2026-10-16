@@ -1,6 +1,6 @@
 -- conch_test morph: runs every applied upgrade presentation, plus one default
--- flag animation per flag, through the real upgrade transaction on a
--- bench-owned pedestal, and checks what the engine actually did.
+-- flag animation per flag and a rotating pedestal, through the real upgrade
+-- transaction on a bench-owned pedestal, and checks what the engine actually did.
 --
 -- Oracles come from the approved presentation decisions recorded in AGENTS.md
 -- and docs/previews/README.md (cue frames, volumes, pitches, hold/return
@@ -458,6 +458,195 @@ local function stageDefault(plan, flag)
     plan.act(function(_, ctx) removeFixture(ctx) end)
 end
 
+-- A rotating pedestal (REPENTOGON collectible cycle) keeps turning its choices
+-- while the upgrade plays. DIAG lines record what a native turn does to the
+-- pickup (reference, GetData, seed, Morph callbacks); the checks require the
+-- real transaction to convert the matching choice and keep the whole circle.
+local CYCLE_KEY = "LIVE_EYE" -- Dead Eye -> Live Eye, the default positive animation
+local CYCLE_PROBE_KEY = "__ConchBlessingCycleProbe"
+local morphWatch = nil -- Morph callbacks seen for the fixture: { hash, post }
+if ModCallbacks.MC_PRE_PICKUP_MORPH and ModCallbacks.MC_POST_PICKUP_MORPH then
+    ConchBlessing:AddCallback(ModCallbacks.MC_POST_PICKUP_MORPH, function(_, pickup)
+        if morphWatch and GetPtrHash(pickup) == morphWatch.hash then morphWatch.post = morphWatch.post + 1 end
+    end)
+end
+
+local function circleOf(pickup)
+    local ids = { pickup.SubType }
+    for _, id in ipairs(pickup:GetCollectibleCycle()) do ids[#ids + 1] = id end
+    return ids
+end
+
+local function sameCircle(a, b)
+    if #a ~= #b then return false end
+    for offset = 0, #a - 1 do
+        local same = true
+        for i = 1, #a do
+            if a[i] ~= b[(i + offset - 1) % #b + 1] then same = false; break end
+        end
+        if same then return true end
+    end
+    return false
+end
+
+-- Record every native turn of the fixture: the shown choice changed without
+-- the transaction's own commit. The bench follows its own spawn wrapper.
+local function trackTurns(ctx)
+    local w = ctx.wheel
+    local p = w.entity
+    if not p:Exists() or GetPtrHash(p) ~= w.hash then return end
+    ctx.fixture.ptr = EntityPtr(p)
+    local committed = ctx.job ~= nil and ctx.job.committed == true
+    if committed and not w.sawCommit then
+        -- The commit's own Morph changed the head; start again from it.
+        w.sawCommit = true
+        w.head, w.ptr = p.SubType, EntityPtr(p)
+        p:GetData()[CYCLE_PROBE_KEY] = w.token
+        return
+    end
+    if p.SubType == w.head then return end
+    local frame = Game():GetFrameCount()
+    w.turns[#w.turns + 1] = {
+        gap = w.at and frame - w.at or nil,
+        ptr = w.ptr.Ref ~= nil,
+        data = p:GetData()[CYCLE_PROBE_KEY] == w.token,
+        seed = p.InitSeed == w.seed,
+        morphs = morphWatch and morphWatch.post - w.post or 0,
+        circle = sameCircle(circleOf(p), committed and w.target or w.source),
+        committed = committed,
+        locked = not committed and ctx.job ~= nil and ConchBlessing.upgrade.isAnimatingPickup(p) or nil,
+    }
+    w.head, w.at, w.ptr, w.post = p.SubType, frame, EntityPtr(p), morphWatch and morphWatch.post or 0
+    p:GetData()[CYCLE_PROBE_KEY] = w.token
+end
+
+local function turnsWhere(ctx, test)
+    local n = 0
+    for _, turn in ipairs(ctx.wheel.turns) do if test(turn) then n = n + 1 end end
+    return n
+end
+
+local function stageCycle(plan)
+    local key = CYCLE_KEY
+    local item = ConchBlessing.ItemData[key]
+    plan.section("rotating pedestal (" .. string.lower(key) .. ")",
+        "the pedestal keeps turning between Dead Eye, Sad Onion and Inner Eye; Dead Eye turns into Live Eye with the white flash while the pedestal keeps turning")
+    plan.act(function(player, ctx)
+        removeFixture(ctx)
+        local variant, id = Visuals.origin(item)
+        local room = Game():GetRoom()
+        ctx.fixturePos = ctx.fixturePos or room:FindFreePickupSpawnPosition(room:GetCenterPos() + Vector(0, -60), 0, true)
+        player.Position = room:GetCenterPos() + Vector(0, 110)
+        player.Velocity = Vector(0, 0)
+        local entity = Isaac.Spawn(EntityType.ENTITY_PICKUP, variant, id, ctx.fixturePos, Vector(0, 0), nil)
+        ctx.fixture = { ptr = EntityPtr(entity), hash = GetPtrHash(entity), key = key }
+        local pickup = assert(entity:ToPickup(), "origin is not a pickup")
+        pickup.Price, pickup.ShopItemId, pickup.AutoUpdatePrice, pickup.OptionsPickupIndex = 0, -1, false, 0
+        ctx.sourceVariant, ctx.sourceId = variant, id
+    end)
+    plan.waitUntil(function(_, ctx)
+        local pickup = livePickup(ctx)
+        return pickup ~= nil and pickup.FrameCount >= 1, "origin pedestal missing or not initialized"
+    end, 60, key .. ": origin pedestal initialized")
+    plan.require("REPENTOGON collectible cycle API", function(_, ctx)
+        local p = livePickup(ctx)
+        local ok = p and type(p.GetCollectibleCycle) == "function" and type(p.AddCollectibleCycle) == "function"
+            and type(p.RemoveCollectibleCycle) == "function"
+        return ok and true or nil, ok and "EntityPickup cycle methods" or "unavailable without REPENTOGON"
+    end)
+    plan.act(function(_, ctx)
+        local p = assert(livePickup(ctx), "origin pedestal disappeared")
+        p:RemoveCollectibleCycle()
+        for _, extra in ipairs({ CollectibleType.COLLECTIBLE_SAD_ONION, CollectibleType.COLLECTIBLE_INNER_EYE }) do
+            assert(p:AddCollectibleCycle(extra), "AddCollectibleCycle refused " .. extra)
+        end
+        local source, target = circleOf(p), {}
+        for i, id in ipairs(source) do target[i] = id == ctx.sourceId and item.id or id end
+        ctx.wheel = { entity = p, hash = GetPtrHash(p), head = p.SubType, ptr = EntityPtr(p), seed = p.InitSeed,
+            token = {}, turns = {}, source = source, target = target, post = 0 }
+        p:GetData()[CYCLE_PROBE_KEY] = ctx.wheel.token
+        morphWatch = { hash = ctx.wheel.hash, post = 0 }
+    end)
+    plan.waitUntil(function(_, ctx)
+        trackTurns(ctx)
+        return #ctx.wheel.turns >= 3, #ctx.wheel.turns .. " native turns"
+    end, 400, "the pedestal turns by itself")
+    plan.note("native turn", function(_, ctx)
+        local n = #ctx.wheel.turns
+        return string.format("every %s updates; EntityPtr kept %d/%d; GetData kept %d/%d; InitSeed kept %d/%d; MC_POST_PICKUP_MORPH on %d/%d",
+            tostring(ctx.wheel.turns[n].gap), turnsWhere(ctx, function(t) return t.ptr end), n,
+            turnsWhere(ctx, function(t) return t.data end), n, turnsWhere(ctx, function(t) return t.seed end), n,
+            turnsWhere(ctx, function(t) return t.morphs > 0 end), n)
+    end)
+    plan.check("native turns keep the same circle of choices", function(_, ctx)
+        local broken = turnsWhere(ctx, function(t) return not t.committed and not t.circle end)
+        return broken == 0, broken .. " of " .. #ctx.wheel.turns .. " turns broke the circle; now "
+            .. table.concat(circleOf(ctx.wheel.entity), ",")
+    end)
+    plan.check("a turn that re-initializes the pickup arrives as a Morph the transaction can follow", function(_, ctx)
+        local lost = turnsWhere(ctx, function(t) return (not t.ptr or not t.data) and t.morphs == 0 end)
+        return lost == 0, lost == 0 and "every re-initializing turn raised MC_POST_PICKUP_MORPH"
+            or lost .. " turns re-initialized the pickup without MC_POST_PICKUP_MORPH"
+    end)
+    plan.waitUntil(function(_, ctx)
+        trackTurns(ctx)
+        return ctx.wheel.entity.SubType == ctx.sourceId, "showing " .. tostring(ctx.wheel.entity.SubType)
+    end, 400, "Dead Eye shows on the pedestal")
+    plan.act(function(player, ctx)
+        local p = assert(ctx.wheel.entity:ToPickup(), "fixture is not a pickup")
+        local job, reason = ConchBlessing.upgrade.queuePickup(p, key, player)
+        assert(job, "queue refused: " .. tostring(reason))
+        assert(job.cyclePlan, "queued without its cycle plan")
+        ctx.job = job
+        ctx.turnsBefore = #ctx.wheel.turns
+    end)
+    plan.waitUntil(function(_, ctx)
+        trackTurns(ctx)
+        local job = ctx.job
+        return job.status == "complete" or job.status == "cancelled",
+            "job=" .. tostring(job.status) .. " committed=" .. tostring(job.committed == true)
+    end, 400, key .. ": the upgrade transaction finishes")
+    plan.check(key .. ": the upgrade commits while the pedestal turns", function(_, ctx)
+        local job = ctx.job
+        return job.status == "complete" and job.committed == true,
+            "end=" .. tostring(job.endReason) .. " committed=" .. tostring(job.committed == true)
+    end)
+    plan.check(key .. ": the pedestal turned before the change", function(_, ctx)
+        local n = 0
+        for i = ctx.turnsBefore + 1, #ctx.wheel.turns do
+            if not ctx.wheel.turns[i].committed then n = n + 1 end
+        end
+        if n == 0 then return nil, "no native turn before the change; inconclusive" end
+        return true, n .. " turns before the change"
+    end)
+    plan.check(key .. ": the pedestal stayed locked through every turn before the change", function(_, ctx)
+        local open = 0
+        for i = ctx.turnsBefore + 1, #ctx.wheel.turns do
+            if ctx.wheel.turns[i].locked == false then open = open + 1 end
+        end
+        return open == 0, open .. " turns left it collectible"
+    end)
+    plan.check(key .. ": Dead Eye became Live Eye and every other choice stayed, in the same circle", function(_, ctx)
+        local now = circleOf(ctx.wheel.entity)
+        return sameCircle(now, ctx.wheel.target),
+            "now " .. table.concat(now, ",") .. "; want " .. table.concat(ctx.wheel.target, ",")
+    end)
+    plan.waitUntil(function(_, ctx)
+        trackTurns(ctx)
+        return turnsWhere(ctx, function(t) return t.committed end) >= 2, "turns since the change"
+    end, 400, key .. ": the converted pedestal keeps turning")
+    plan.check(key .. ": the converted pedestal turns through the new circle", function(_, ctx)
+        local broken = turnsWhere(ctx, function(t) return t.committed and not t.circle end)
+        return broken == 0, broken .. " turns after the change broke the circle; now "
+            .. table.concat(circleOf(ctx.wheel.entity), ",")
+    end)
+    plan.act(function(_, ctx)
+        morphWatch = nil
+        removeFixture(ctx)
+        ctx.wheel = nil
+    end)
+end
+
 local function build(plan, only)
     plan.section("project sounds", nil)
     plan.check("content/sounds.xml sounds are registered (restart the game after adding them)", function()
@@ -477,14 +666,20 @@ local function build(plan, only)
     if not only or only == "default" then
         for _, flag in ipairs({ "positive", "neutral", "negative" }) do stageDefault(plan, flag) end
     end
+    if not only or only == "cycle" then stageCycle(plan) end
 end
 
-local function cleanup(ctx) removeFixture(ctx) end
+local function cleanup(ctx)
+    morphWatch = nil
+    removeFixture(ctx)
+end
 
 TestBench.register({ command = "conch_test morph", tag = "MorphProbe", duration = "about 75 seconds",
     cleanup = cleanup, build = function(plan) build(plan) end })
 TestBench.register({ command = "conch_test morph default", tag = "MorphProbe", duration = "about 15 seconds",
     cleanup = cleanup, build = function(plan) build(plan, "default") end })
+TestBench.register({ command = "conch_test morph cycle", tag = "MorphProbe", duration = "about 25 seconds",
+    cleanup = cleanup, build = function(plan) build(plan, "cycle") end })
 for _, row in ipairs(Visuals.catalog) do
     if row.effect then
         TestBench.register({ command = "conch_test morph " .. string.lower(row.key), tag = "MorphProbe",
@@ -496,11 +691,13 @@ end
 function Probe.commandFor(word)
     if not word then return "conch_test morph" end
     if word == "default" then return "conch_test morph default" end
+    if word == "cycle" then return "conch_test morph cycle" end
     local key = Visuals.resolveKey(word)
     if key and Visuals.isApplied(key) then return "conch_test morph " .. string.lower(key) end
 end
 function Probe.list()
-    local lines = { "conch_test morph [all applied presentations + default flags]", "conch_test morph default" }
+    local lines = { "conch_test morph [all applied presentations + default flags + rotating pedestal]",
+        "conch_test morph default", "conch_test morph cycle (a rotating pedestal turning during its upgrade)" }
     for _, row in ipairs(Visuals.catalog) do
         if row.effect then lines[#lines + 1] = "conch_test morph " .. string.lower(row.key) .. " (" .. row.effect .. ")" end
     end

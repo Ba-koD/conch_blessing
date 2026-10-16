@@ -168,6 +168,25 @@ function Template.isAnimatingPickup(pickup)
     return false
 end
 
+-- A native Morph expires an animation's EntityPtr while the pickup lives on.
+-- The upgrade transaction proves the live animations at MC_PRE_PICKUP_MORPH
+-- and hands back that very pickup at MC_POST_PICKUP_MORPH to rebind them.
+function Template.animationsForPickup(pickup)
+    local found = {}
+    for _, anim in ipairs(Template._activeAnimations) do
+        if matchesPickup(anim, pickup) then found[#found + 1] = anim end
+    end
+    return found
+end
+
+function Template.rebindAnimations(anims, pickup)
+    for _, anim in ipairs(anims or {}) do
+        anim.pickup = pickup
+        anim.pickupPtr = EntityPtr(pickup)
+        anim.pickupHash = GetPtrHash(pickup)
+    end
+end
+
 -- Positive upgrade animation (bright white fade with Holy Light)
 Template.positive = {}
 
