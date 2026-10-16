@@ -66,7 +66,7 @@ class DragonWeatherContracts(unittest.TestCase):
                 function s:Load(path) if failArt then error('missing '..path) end self.path=path end
                 function s:IsLoaded() return true end
                 function s:SetFrame(name,f) self.anim=name; self.frame=f end
-                function s:Render(pos) spriteLog[#spriteLog+1]={path=self.path,anim=self.anim,frame=self.frame,pos=pos,scale=self.Scale,color=self.Color} end
+                function s:Render(pos) spriteLog[#spriteLog+1]={path=self.path,anim=self.anim,frame=self.frame,pos=pos,scale=self.Scale,color=self.Color,rot=self.Rotation} end
                 return s
             end})
             Isaac={GetItemIdByName=function() return 600 end,
@@ -358,6 +358,31 @@ class DragonWeatherContracts(unittest.TestCase):
             p.items=0; tick(); assert(#darken==1, 'clouds lift when nobody holds it')
             p.items=1; spriteLog={}; D.onRender()
             assert(drawn('gfx/effects/conch_upgrade_pixel.anm2')+drawn('gfx/1000.133_water ripple.anm2')==D.data.rainDrops)
+        ''')
+
+    def test_rain_falls_along_its_own_slant_onto_its_ripple(self):
+        self.run_lua('''
+            ModCallbacks.MC_POST_ROOM_RENDER_ENTITIES=1044
+            local p=makePlayer(); tick()
+            local slant=math.rad(D.data.rainSlant)
+            for drop=1,3 do
+                local tops,spot={},nil
+                for f=1,240 do
+                    renderFrame=renderFrame+1
+                    spriteLog={}; D.onRoomRender()
+                    local e=spriteLog[1+drop]          -- after the veil, the drops in order
+                    if e.path=='gfx/effects/conch_upgrade_pixel.anm2' then tops[#tops+1]=e
+                    elseif not spot then spot=e.pos end
+                end
+                assert(spot and #tops>10, 'drop '..drop..' fell and landed')
+                for _,t in ipairs(tops) do
+                    near(t.rot,D.data.rainSlant)
+                    -- The streak's lower end lies on the slanted line down to its ripple, above it.
+                    local headX,headY=t.pos.X-math.sin(slant)*8,t.pos.Y+math.cos(slant)*8
+                    near((headX-spot.X)*math.cos(slant)+(headY-spot.Y)*math.sin(slant),0,1e-6)
+                    assert(headY<=spot.Y+1e-6 and headX>=spot.X-1e-6, 'falls from the upper right')
+                end
+            end
         ''')
 
     def test_scorch_marks_fade_and_bolts_play_every_frame(self):

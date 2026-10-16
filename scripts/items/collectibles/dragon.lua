@@ -80,7 +80,8 @@ ConchBlessing.dragon.data = {
     rumbleFirst = { 90, 240 },           -- the first one 3-8 s after entering a room
     overcast = 0.32,                     -- veil opacity while held (Curse of Darkness goes much darker)
     rainDrops = 56,
-    rainFall = 110,                      -- pixels a drop falls before it lands
+    rainFall = 110,                      -- pixels a drop travels before it lands
+    rainSlant = 20,                      -- degrees off vertical: drops fall along their own streak (user, 2026-10-15)
     rainAlpha = 0.5,
 }
 
@@ -544,11 +545,15 @@ local function drawRain()
         local p = ((time + hash(i + 300) * period) % period) / period
         local at = Isaac.WorldToScreen(spot)
         if p < 0.7 then
-            local y = at.Y - d.rainFall * (1 - p / 0.7)
+            -- The streak leans rainSlant degrees (top to the right) and the drop
+            -- travels along it, so its lower end lands on the ripple's spot.
+            local slant = math.rad(d.rainSlant)
+            local along = Vector(-math.sin(slant), math.cos(slant))   -- down the streak
+            local head = at - along * (d.rainFall * (1 - p / 0.7))
             pixel.Scale = Vector(1, 8)
-            pixel.Rotation = 20
+            pixel.Rotation = d.rainSlant
             pixel.Color = Color(RAIN[1], RAIN[2], RAIN[3], d.rainAlpha)
-            pixel:Render(Vector(at.X, y - 8))
+            pixel:Render(head - along * 8)
         elseif ripple then
             ripple:SetFrame("Poof", math.min(13, math.floor((p - 0.7) * period * 30)))
             ripple.Scale = Vector(0.22, 0.22)

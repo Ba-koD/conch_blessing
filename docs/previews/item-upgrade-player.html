@@ -434,7 +434,8 @@ footer { text-align:center; font-size:11px; color:#79736a; }
       const start=.12+rand(i+30)*.65,age=t-start;if(age<0)continue;
       const period=1.0+rand(i+70)*.7,p=(age%period)/period;
       const x=151+rand(i+10)*338,ground=95+rand(i+80)*183;
-      if(p<.7){g.globalAlpha=alpha*.6;const yy=ground-110*(1-p/.7);line(x+3,yy-7,x,yy,'#b0d3e1');g.globalAlpha=1;}
+      // Each drop falls along its own streak (3 across for 7 down) onto its ripple.
+      if(p<.7){g.globalAlpha=alpha*.6;const fall=110*(1-p/.7),xx=x+fall*3/7,yy=ground-fall;line(xx+3,yy-7,xx,yy,'#b0d3e1');g.globalAlpha=1;}
       else nativeEffect('ripple',(p-.7)*period,x,ground,.22,alpha*.45);
     }
   }
@@ -459,7 +460,7 @@ footer { text-align:center; font-size:11px; color:#79736a; }
     for(let i=0;i<rainStrikes.length;i++){
       const age=frame-(impact-8-(4-i)*Math.floor((impact-14)/5)),x=X+rainStrikes[i],y=Y-6;
       if(age>=-12&&age<0){
-        const p=(age+12)/12,dx=x+(1-p)*9,dy=y-(1-p)*68;
+        const p=(age+12)/12,dx=x+(1-p)*68/6,dy=y-(1-p)*68;
         g.globalAlpha=smooth(0,.4,t)*.9;line(dx+1,dy-6,dx,dy,'#a6d9ff');
       }else if(age>=0&&age<6){
         const spread=1+age*.9;g.globalAlpha=1-age/6;

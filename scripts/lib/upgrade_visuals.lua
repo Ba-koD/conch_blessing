@@ -481,8 +481,11 @@ local function rain(scene, front)
             local p = (age % period) / period
             local s = Isaac.WorldToScreen(drop.pos)
             if p < 0.7 then
-                local dropY = s.Y - 110 * (1 - p / 0.7)
-                line(scene, s.X + 3, dropY - 7, s.X, dropY, RAIN_DROP, alpha * 0.6)
+                -- Each drop falls along its own streak (3 across for 7 down), so
+                -- it lands on its ripple instead of sliding straight down.
+                local fall = 110 * (1 - p / 0.7)
+                local dropX, dropY = s.X + fall * 3 / 7, s.Y - fall
+                line(scene, dropX + 3, dropY - 7, dropX, dropY, RAIN_DROP, alpha * 0.6)
             else
                 local frame = math.floor((p - 0.7) * period * 30)
                 if frame < 14 then
@@ -527,7 +530,8 @@ local function rainOnItem(scene, x, y)
         local hitX, hitY = x + offset, y - 6
         if age >= -12 and age < 0 then
             local progress = (age + 12) / 12
-            local dropX, dropY = hitX + (1 - progress) * 9, hitY - (1 - progress) * 68
+            -- Along its streak (1 across for 6 down), like the rain around it.
+            local dropX, dropY = hitX + (1 - progress) * 68 / 6, hitY - (1 - progress) * 68
             line(scene, dropX + 1, dropY - 6, dropX, dropY, RAIN_HIT, ease(0, 12, f) * 0.9)
         elseif age >= 0 and age < 6 then
             local spread, fade = 1 + age * 0.9, 1 - age / 6

@@ -363,7 +363,7 @@ each at **1.818%** per pick.
 Temporary familiars reuse the same draws. A Pretty Fly pill fly absorbed under
 REPENTOGON adds **5%** to the projectile block above (`scripts/items/collectibles/kronos.lua:2363`). When The Twins
 duplicates, it picks one absorbed effect familiar uniformly with its trinket RNG. Sacrificial
-Altar takes up to 2 copies (`scripts/items/collectibles/kronos.lua:3213`), owned familiars first and the rest from the
+Altar takes up to 2 copies (`scripts/items/collectibles/kronos.lua:3214`), owned familiars first and the rest from the
 absorbed pool through the same partial Fisher-Yates draw as GB Bug.
 
 ## 11. Live Eye miss forgiveness
@@ -389,10 +389,10 @@ the Live Eye collectible RNG of the tear's owner, so the effective odds equal th
 ## 12. Dragon bolts and twisters
 
 Bolts are not random in number: while enemies are present they strike tears / 5 x copies held
-times a second (`scripts/items/collectibles/dragon.lua:33`), from the tears stat `30 / (MaxFireDelay + 1)`, without counting shots.
-With 2 or more copies (`scripts/items/collectibles/dragon.lua:43`) each strike rolls `RandomFloat() < 0.05`
-(`scripts/items/collectibles/dragon.lua:42`) on the holder's Dragon collectible RNG and rises as a twister instead, unless
-5 twisters already stand (`scripts/items/collectibles/dragon.lua:44`). The roll is a single draw, so the odds equal the constant.
+times a second (`scripts/items/collectibles/dragon.lua:34`), from the tears stat `30 / (MaxFireDelay + 1)`, without counting shots.
+With 2 or more copies (`scripts/items/collectibles/dragon.lua:44`) each strike rolls `RandomFloat() < 0.05`
+(`scripts/items/collectibles/dragon.lua:43`) on the holder's Dragon collectible RNG and rises as a twister instead, unless
+5 twisters already stand (`scripts/items/collectibles/dragon.lua:45`). The roll is a single draw, so the odds equal the constant.
 
 | Copies | Twisters standing | Exact P (twister) | Measured |
 |---|---|---|---|
@@ -411,7 +411,7 @@ With 2 or more copies (`scripts/items/collectibles/dragon.lua:43`) each strike r
 
 Each strike is aimed at a random enemy and catches it when its fourth roll (after the enemy,
 angle and distance) is `RandomFloat() < clamp(0.5 + 0.05 * Luck, 0.1, 1)` on the holder's
-Dragon RNG (`scripts/items/collectibles/dragon.lua:37`, `scripts/items/collectibles/dragon.lua:38`, `scripts/items/collectibles/dragon.lua:39`); a miss lands just past the bolt's reach.
+Dragon RNG (`scripts/items/collectibles/dragon.lua:38`, `scripts/items/collectibles/dragon.lua:39`, `scripts/items/collectibles/dragon.lua:40`); a miss lands just past the bolt's reach.
 
 | Luck | Exact P (catches its enemy) | Measured |
 |---|---|---|
