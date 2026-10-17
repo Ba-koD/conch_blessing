@@ -169,7 +169,7 @@ class FixtureOracleTests(unittest.TestCase):
                 return setmetatable({X=x,Y=y},{__add=function(a,b) return Vector(a.X+b.X,a.Y+b.Y) end}) end})
             frame=0;function Game() return {GetFrameCount=function() return frame end} end
             Isaac={FindByType=function() return stock or {} end}
-            plan={section=function() end,wait=function() end,
+            plan={section=function() end,wait=function() end,note=function() end,
                 act=function(fn) acts[#acts+1]=fn end,
                 require=function(label,fn) requires[label]=fn end,
                 check=function(label,fn) checks[label]=checks[label] or {};table.insert(checks[label],fn) end,
@@ -222,6 +222,49 @@ class FixtureOracleTests(unittest.TestCase):
             tail={22};player.HasCollectible=function() return true end;assert(not baseline(player,{}))
         ''')
 
+    def test_oath_reroll_bench_requires_a_new_seed_and_its_own_grants_in_the_same_room(self):
+        self.lua.execute('package=nil')
+        self.lua.execute((ROOT/'scripts/dev/item_test_pools.lua').read_text(encoding='utf-8'))
+        self.lua.execute('''
+            builders['SEVERED_OATH dice_copy_split'](plan,999)
+            builders['SEVERED_OATH golden_cycle'](plan,999)
+            room=5;function Game() return {GetLevel=function() return {GetCurrentRoomDesc=function() return {ListIndex=room} end} end} end
+            saves={};ConchBlessing.SaveManager={TryGetNoRerollPickupSave=function(p) return saves[p] end}
+            function GetPtrHash(p) return p.hash end
+            function pedestal(seed,head,tail,grants)
+                local p={InitSeed=seed,SubType=head,tail=tail,hash=seed,ToPickup=function(self) return self end,
+                    GetCollectibleCycle=function(self) return self.tail end,Exists=function() return true end}
+                saves[p]=grants and {severedOath={bonusItems=grants}} or nil
+                return p
+            end
+            local ctx={rollSeeds={[1]=true},rollSeedList={'1'},rollRoom=5}
+            local settle=waits['rerolled pedestals settle: D6 1']
+            local regrant=checks['a new-seed pedestal gets its own Oath choice again: D6 1'][1]
+            stock={pedestal(2,10,{50},{50})}; assert(settle(nil,ctx) and regrant(nil,ctx))
+            stock={pedestal(2,50,{10},{50})}; assert(regrant(nil,ctx), 'a turned circle still shows the grant')
+            stock={pedestal(1,10,{50},{50})}; assert(not settle(nil,ctx), 'a kept seed is not a reroll')
+            stock={pedestal(2,10,{},nil)}; assert(not settle(nil,ctx) and not regrant(nil,ctx), 'no new grant')
+            stock={pedestal(2,10,{},{50})}; assert(not regrant(nil,ctx), 'grant not on the pedestal')
+            stock={pedestal(2,10,{50,51},{50,51})}; assert(not regrant(nil,ctx), 'a normal Oath grants one')
+            stock={pedestal(2,10,{50},{50})}; room=6; assert(not regrant(nil,ctx), 'granted only after leaving'); room=5
+            local golden=checks['a new-seed pedestal gets its own Oath choices again: golden D6'][1]
+            stock={pedestal(2,10,{50,51},{50,51})}; assert(golden(nil,ctx))
+            stock={pedestal(2,10,{50},{50})}; assert(not golden(nil,ctx), 'a golden Oath grants two')
+            local copies=checks['Diplopia copies only the shown item while each source keeps its choice'][1]
+            local source,copy=pedestal(7,10,{50},{50}),pedestal(8,10,{},nil)
+            local copyCtx={beforeCopy=1,copySources={[7]={tail=1,seed=7}}}
+            stock={source,copy}; assert(copies(nil,copyCtx))
+            copy.tail={60}; assert(not copies(nil,copyCtx), 'a copy gained a choice'); copy.tail={}
+            source.tail={}; assert(not copies(nil,copyCtx), 'the source lost its choice'); source.tail={50}
+            stock={source}; assert(not copies(nil,copyCtx), 'no copy')
+            local morph=checks['a seed-keeping Morph is not a reroll: no new Oath choice'][1]
+            local m=pedestal(9,1,{},{50})
+            local morphCtx={morphed=m,morphSeed=9,morphGrants='50',morphTail=1}
+            assert(morph(nil,morphCtx))
+            saves[m]={severedOath={bonusItems={50,70}}}; assert(not morph(nil,morphCtx), 'a Morph re-granted')
+            saves[m]={severedOath={bonusItems={50}}}; m.tail={50,70}; assert(not morph(nil,morphCtx), 'choices grew')
+        ''')
+
     def test_oath_ownership_bench_rejects_resurrection_and_sibling_contamination(self):
         self.lua.execute('package=nil')
         self.lua.execute((ROOT/'scripts/dev/item_test_pools.lua').read_text(encoding='utf-8'))
@@ -239,7 +282,7 @@ class FixtureOracleTests(unittest.TestCase):
                 copySourceHash=10,copySourceSeed=77,copyHead=1,
                 copySourceCycle={total=4,counts={[1]=1,[2]=2,[200]=1}}}
             local copied=requires['native copy retains the displayed choice while source keeps its queue']
-            assert(copied(nil,ctx)); assert(ctx.changed.Ref==source and ctx.untouched.Ref==sibling)
+            assert(copied(nil,ctx)); assert(ctx.changed.ptr.Ref==source and ctx.untouched.ptr.Ref==sibling)
             sibling.tail={2,2,200}; assert(not copied(nil,ctx))
             sibling.tail={}; sibling.SubType=2; assert(not copied(nil,ctx)); sibling.SubType=1
             source.tail={2,3,200}; assert(not copied(nil,ctx)); source.tail={2,2,200}
@@ -251,7 +294,11 @@ class FixtureOracleTests(unittest.TestCase):
             assert(check(nil,ctx))
             source.tail={2,2,55,200}; assert(not check(nil,ctx))
             source.tail={2,2,55}; sibling.tail={2,2,55}; assert(not check(nil,ctx))
-            sibling.tail={}; ctx.draws={{id=77}}; assert(not check(nil,ctx))
+            sibling.tail={}; ctx.draws={{id=77}}; assert(not check(nil,ctx)); ctx.draws={}
+            -- A native turn expires the source's EntityPtr; its hash and seed still find it.
+            ctx.changed.ptr={}; assert(check(nil,ctx), 'a turned pedestal is still the fixture')
+            source.hash=30; assert(not check(nil,ctx), 'another pedestal is not the fixture'); source.hash=10
+            source.InitSeed=78; assert(not check(nil,ctx), 'a rerolled pedestal is not the fixture')
         ''')
 
 

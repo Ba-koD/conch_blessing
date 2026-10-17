@@ -51,6 +51,7 @@ SOFLAM 지연·상태 이상 지속 시간과 기존 상세 벤치의 캡션 렌
 | `conch_test realeyes` | Real Eyes 전체 검사 (`real_eyes`도 가능) |
 | `conch_test real_eyes prediction` | 예측과 실제 소라고둥 답변 비교; 테스트 런 필요 |
 | `conch_test severed_oath compare` | 엔진 아이작의 영혼과 적사단지: 25조건 × 2방식, 각 벤치 새 런으로 자동 비교 |
+| `conch_test severed_oath cycles` | 적사단지 회전 배열 묶음: 소유·주사위/복제/분할·중첩(글리치 왕관, 빙 이터, 아이작 생득권)·황금, 리롤마다 새 시드 받침대에 같은 방에서 다시 지급되는지 확인 |
 | `conch_test soflam lifecycle` | 해당 아이템의 생명주기 검사만 실행 |
 | `conch_test kronos box_of_friends` | 크로노스의 친구 상자 시나리오만 실행 |
 | `conch_test kronos conversions` | 지급형 48종을 함께 흡수·중첩하고 대량 반환 및 원래 아이템 보존 검사 |

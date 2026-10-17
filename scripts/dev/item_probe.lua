@@ -177,7 +177,10 @@ local function listItem(key)
     out(prefix .. (ConchBlessing.ItemData[key].WorkingNow == true and " [unfinished: SKIP]" or " [all item tests]"))
     out("  " .. commands[key])
     if deep[key] then out("  " .. prefix .. " detail") end
-    if key == "SEVERED_OATH" then out("  " .. prefix .. " compare [50 isolated native/Oath comparison benches]") end
+    if key == "SEVERED_OATH" then
+        out("  " .. prefix .. " compare [50 isolated native/Oath comparison benches]")
+        out("  " .. prefix .. " cycles [ownership, dice/copy/split, stacking and golden cases in one run]")
+    end
     for _, row in ipairs(Scenarios.rows) do
         if row.key == key then out("  " .. prefix .. " " .. row.name
             .. (row.bundledInto and " [included in " .. row.bundledInto .. "]" or "")) end
@@ -301,6 +304,17 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
     if Game():GetNumPlayers() ~= 1 then out("Start a single-player test run first."); return end
     if key == "SEVERED_OATH" and case == "compare" then
         TestBench.startSuite("conch_test severed_oath compare", CycleCompare.commands); return
+    end
+    if key == "SEVERED_OATH" and case == "cycles" then
+        -- Every rotation case: native queues, dice rerolls, copies, Morphs,
+        -- stacking cycle sources and the golden Oath, without the compare arms.
+        local list = {}
+        for _, name in ipairs({"cycle_ownership", "dice_copy_split", "cycle_stacking", "golden_cycle"}) do
+            list[#list + 1] = assert(Scenarios.find(key, name), "missing Severed Oath case " .. name)
+        end
+        local ok, err = pcall(TestBench.startSuite, "conch_test severed_oath cycles", list)
+        if not ok then out("FAIL suite setup: " .. tostring(err)) end
+        return
     end
     if action=="synergies" or action=="conditions" or action=="damage" then
         local list,seen={},{}

@@ -190,6 +190,68 @@ local function cycleCount(plan,label,count)
     end)
 end
 
+-- The Oath's own grant record for a pedestal (its seed-keyed pickup save).
+local function oathGrants(p)
+    local saves=ConchBlessing.SaveManager
+    local ok,save=pcall(saves.TryGetNoRerollPickupSave,p)
+    local state=ok and type(save)=="table" and save.severedOath or nil
+    local items={}
+    if type(state)=="table" and type(state.bonusItems)=="table" then
+        for _,cid in ipairs(state.bonusItems) do items[#items+1]=cid end
+    end
+    return items
+end
+
+local function circleHas(p,cid)
+    if p.SubType==cid then return true end
+    for _,other in ipairs(p:GetCollectibleCycle()) do if other==cid then return true end end
+    return false
+end
+
+-- Every pedestal's seed and the room, right before a dice roll.
+local function markRoll(ctx)
+    ctx.rollSeeds,ctx.rollSeedList={},{}
+    ctx.rollRoom=Game():GetLevel():GetCurrentRoomDesc().ListIndex
+    for _,p in ipairs(pedestals()) do
+        ctx.rollSeeds[p.InitSeed]=true; ctx.rollSeedList[#ctx.rollSeedList+1]=tostring(p.InitSeed)
+    end
+end
+
+-- A dice reroll that changes a pedestal's InitSeed makes a new pedestal, so a
+-- held Oath grants it again at once, in the same room: one choice, or two
+-- while the held Oath is golden (user rule 2026-10-18).
+local function rerollRegrant(plan,label,grants)
+    grants=grants or 1
+    plan.waitUntil(function(_,ctx)
+        for _,p in ipairs(pedestals()) do
+            if ctx.rollSeeds[p.InitSeed] or #oathGrants(p)~=grants then
+                return false,string.format("item=%s seed=%s granted=%d",p.SubType,p.InitSeed,#oathGrants(p))
+            end
+        end
+        return #pedestals()>0,"no pedestal"
+    end,60,"rerolled pedestals settle: "..label)
+    plan.note("reroll seeds "..label,function(_,ctx)
+        local seeds={}
+        for _,p in ipairs(pedestals()) do seeds[#seeds+1]=tostring(p.InitSeed) end
+        return "before "..table.concat(ctx.rollSeedList,",").." -> after "..table.concat(seeds,",")
+    end)
+    plan.check("a new-seed pedestal gets its own Oath choice"..(grants>1 and "s" or "").." again: "..label,function(_,ctx)
+        local granted={}
+        for _,p in ipairs(pedestals()) do
+            local items=oathGrants(p)
+            local shown=#items==grants
+            for _,cid in ipairs(items) do shown=shown and circleHas(p,cid) end
+            if not shown then
+                return false,string.format("seed=%s item=%s granted=[%s] want %d; cycle=[%s]",p.InitSeed,p.SubType,
+                    table.concat(items,","),grants,table.concat(p:GetCollectibleCycle(),","))
+            end
+            granted[#granted+1]=p.SubType.."+"..table.concat(items,"+")
+        end
+        return Game():GetLevel():GetCurrentRoomDesc().ListIndex==ctx.rollRoom,
+            "granted in the same room: "..table.concat(granted," ")
+    end)
+end
+
 S.add("SEVERED_OATH","dice_copy_split",{conditions=true},function(plan,id)
     poolCapability(plan)
     plan.act(function(player,ctx) H.suppressRandomGoldenPedestals(ctx); player:AddCollectible(id,0,false) end)
@@ -197,24 +259,68 @@ S.add("SEVERED_OATH","dice_copy_split",{conditions=true},function(plan,id)
     cycleCapability(plan)
     cycleCount(plan,"new stock gains one alternate",1)
     for roll=1,3 do
-        plan.act(function(player) player:UseActiveItem(roll==3 and CollectibleType.COLLECTIBLE_D100 or CollectibleType.COLLECTIBLE_D6,UseFlag.USE_NOANIM,-1) end)
+        plan.act(function(player,ctx)
+            markRoll(ctx)
+            player:UseActiveItem(roll==3 and CollectibleType.COLLECTIBLE_D100 or CollectibleType.COLLECTIBLE_D6,UseFlag.USE_NOANIM,-1)
+        end)
         plan.wait(4)
         plan.require("dice preserve the held active",function(player) return player:GetActiveItem(ActiveSlot.SLOT_PRIMARY)==id,"Severed Oath still held after reroll "..roll end)
+        rerollRegrant(plan,(roll==3 and "D100 " or "D6 ")..roll)
         cycleCount(plan,"repeated D6/D100 keeps exactly one alternate: "..roll,1)
     end
     plan.act(function(player,ctx)
         ctx.beforeCopy=#pedestals()
+        ctx.copySources={}
+        for _,p in ipairs(pedestals()) do
+            ctx.copySources[GetPtrHash(p)]={tail=#p:GetCollectibleCycle(),seed=p.InitSeed}
+        end
         player:UseActiveItem(CollectibleType.COLLECTIBLE_DIPLOPIA,UseFlag.USE_NOANIM,-1)
     end)
     plan.wait(4)
     plan.check("Diplopia copies each pedestal exactly once",function(_,ctx) return H.expect(#pedestals(),2*ctx.beforeCopy) end)
-    cycleCount(plan,"copied stock does not accumulate extra cycles",1)
+    -- Native Diplopia copies the shown item, not the source's queue, and a copy
+    -- is not a reroll: it gets no Oath choice of its own (cycle_ownership agrees).
+    plan.check("Diplopia copies only the shown item while each source keeps its choice",function(_,ctx)
+        local sources,copies,seeds=0,0,{}
+        for _,p in ipairs(pedestals()) do
+            local source=ctx.copySources[GetPtrHash(p)]
+            local tail=#p:GetCollectibleCycle()
+            if source then
+                sources=sources+1
+                if tail~=source.tail then return false,string.format("source item=%s cycle=%d was %d",p.SubType,tail,source.tail) end
+            else
+                copies=copies+1
+                seeds[#seeds+1]=tostring(p.InitSeed)
+                if tail~=0 then return false,string.format("copy item=%s gained %d choice(s)",p.SubType,tail) end
+            end
+        end
+        return sources==ctx.beforeCopy and copies==ctx.beforeCopy,
+            string.format("%d sources kept their choice; %d copies show one item (seeds %s)",sources,copies,table.concat(seeds,","))
+    end)
     plan.act(function(_,ctx)
         ctx.morphed=pedestals()[1]
+        ctx.morphSeed=ctx.morphed.InitSeed
+        ctx.morphGrants=table.concat(oathGrants(ctx.morphed),",")
+        ctx.morphTail=#ctx.morphed:GetCollectibleCycle()
         ctx.morphed:Morph(EntityType.ENTITY_PICKUP,PickupVariant.PICKUP_COLLECTIBLE,CollectibleType.COLLECTIBLE_SAD_ONION,true,true,true)
     end)
     plan.wait(4)
-    cycleCount(plan,"explicit pedestal morph stays bounded to one alternate",1)
+    plan.check("a seed-keeping Morph is not a reroll: no new Oath choice",function(_,ctx)
+        local p=ctx.morphed
+        if not p:Exists() then return false,"morphed pedestal disappeared" end
+        local grants,tail=table.concat(oathGrants(p),","),#p:GetCollectibleCycle()
+        return p.InitSeed==ctx.morphSeed and grants==ctx.morphGrants and tail<=ctx.morphTail,
+            string.format("seed kept=%s; Oath grants [%s]->[%s]; alternates %d->%d",tostring(p.InitSeed==ctx.morphSeed),
+                ctx.morphGrants,grants,ctx.morphTail,tail)
+    end)
+    -- Reroll every pedestal so each has its own choice again before the split.
+    plan.act(function(player,ctx)
+        markRoll(ctx)
+        player:UseActiveItem(CollectibleType.COLLECTIBLE_D6,UseFlag.USE_NOANIM,-1)
+    end)
+    plan.wait(4)
+    rerollRegrant(plan,"D6 on copies and the morphed pedestal")
+    cycleCount(plan,"every rerolled pedestal has one alternate before the split",1)
     revisit(plan)
     plan.act(function(player,ctx)
         ctx.expectedSplit={}; ctx.expectedSplitCount=0
@@ -261,11 +367,13 @@ S.add("SEVERED_OATH","dice_copy_split",{conditions=true},function(plan,id)
     end)
     plan.wait(3)
     cycleCount(plan,"new unowned pedestal receives no extra choice",0)
-    plan.act(function(player)
+    plan.act(function(player,ctx)
         player:AddCollectible(id,0,false)
+        markRoll(ctx)
         player:UseActiveItem(CollectibleType.COLLECTIBLE_D6,UseFlag.USE_NOANIM,-1)
     end)
     plan.wait(4)
+    rerollRegrant(plan,"D6 after reacquisition")
     cycleCount(plan,"reacquisition followed by D6 creates one new alternate",1)
 end)
 
@@ -288,6 +396,18 @@ local function addedChoices(ctx, extra)
         if (after.counts[id] or 0)<n then return false,"lost pre-existing cycle member "..id end
     end
     return true,string.format("existing=%d; added=%d; all existing members retained",ctx.beforeCycle.total,extra)
+end
+
+-- A rotating pedestal turns through a native Morph, which expires its
+-- EntityPtr (measured in game 2026-10-17) while it keeps its pointer hash and
+-- seed. A same-seed copy has its own hash, so the two never mix.
+local function fixtureRef(p) return {ptr=EntityPtr(p),hash=GetPtrHash(p),seed=p.InitSeed} end
+local function liveFixture(ref)
+    local p=ref.ptr.Ref
+    if p then return p:ToPickup() end
+    for _,q in ipairs(pedestals()) do
+        if GetPtrHash(q)==ref.hash and q.InitSeed==ref.seed then return q end
+    end
 end
 
 S.add("SEVERED_OATH","cycle_ownership",{conditions=true},function(plan,id)
@@ -353,11 +473,11 @@ S.add("SEVERED_OATH","cycle_ownership",{conditions=true},function(plan,id)
         end
         -- Native Diplopia copies the displayed item, not the source's cycle tail.
         if b.total~=1 or b.counts[ctx.copyHead]~=1 then return false,"copy differs from native displayed choice" end
-        ctx.changed=EntityPtr(source); ctx.untouched=EntityPtr(copy); ctx.untouchedCycle=b
+        ctx.changed=fixtureRef(source); ctx.untouched=fixtureRef(copy); ctx.untouchedCycle=b
         return true,"source choices="..a.total.."; independent copy choices=1"
     end)
     plan.act(function(_,ctx)
-        local p=assert(ctx.changed.Ref,"source disappeared"):ToPickup()
+        local p=assert(liveFixture(ctx.changed),"source disappeared")
         local tail=p:GetCollectibleCycle()
         local replacement=CollectibleType.COLLECTIBLE_SAD_ONION
         if replacement==ctx.ownedChoice then replacement=CollectibleType.COLLECTIBLE_INNER_EYE end
@@ -371,13 +491,13 @@ S.add("SEVERED_OATH","cycle_ownership",{conditions=true},function(plan,id)
         assert(p.InitSeed==seed,"keep-seed Morph changed seed")
         p:RemoveCollectibleCycle()
         for _,item in ipairs(tail) do assert(p:AddCollectibleCycle(item)) end
-        ctx.changed=EntityPtr(p)
+        ctx.changed=fixtureRef(p)
         observe(ctx)
     end)
     plan.wait(10)
     plan.check("foreign same-seed rewrite neither revives old choice nor changes sibling",function(_,ctx)
         for _,case in ipairs({{ctx.changed,ctx.expectedChanged},{ctx.untouched,ctx.untouchedCycle}}) do
-            local p=case[1].Ref and case[1].Ref:ToPickup()
+            local p=liveFixture(case[1])
             if not p then return false,"fixture disappeared" end
             local actual,expected=cycleSnapshot(p),case[2]
             if actual.total~=expected.total then return false,"unexpected extra choice" end
@@ -442,8 +562,9 @@ S.add("SEVERED_OATH","cycle_stacking",{conditions=true,synergies=true},function(
         reenterTreasure(plan)
         plan.check(case.name.." existing room gains exactly +1 on entry",function(_,ctx) return addedChoices(ctx,1) end)
         revisit(plan)
-        plan.act(function(player) player:UseActiveItem(CollectibleType.COLLECTIBLE_D6,UseFlag.USE_NOANIM,-1) end)
+        plan.act(function(player,ctx) markRoll(ctx); player:UseActiveItem(CollectibleType.COLLECTIBLE_D6,UseFlag.USE_NOANIM,-1) end)
         plan.wait(4)
+        rerollRegrant(plan,case.name.." D6")
         plan.check(case.name.." D6 preserves total cycle size",function(_,ctx)
             return H.expect(#pedestals()[1]:GetCollectibleCycle()+1,ctx.beforeCycle.total+1)
         end)
@@ -498,8 +619,9 @@ S.add("SEVERED_OATH","golden_cycle",{conditions=true,synergies=true},function(pl
         end)
         plan.check("golden held active increases committed bonus to +2 once",function(_,ctx) return addedChoices(ctx,2) end)
         revisit(plan)
-        plan.act(function(player) player:UseActiveItem(CollectibleType.COLLECTIBLE_D6,UseFlag.USE_NOANIM,-1) end)
+        plan.act(function(player,ctx) markRoll(ctx); player:UseActiveItem(CollectibleType.COLLECTIBLE_D6,UseFlag.USE_NOANIM,-1) end)
         plan.wait(4)
+        rerollRegrant(plan,"golden D6"..(native and " + Glitched Crown" or ""),2)
         plan.check("D6 keeps +2 from held-active golden state",function()
             return H.expect(#pedestals()[1]:GetCollectibleCycle()+1,(native and 5 or 1)+2)
         end)

@@ -410,6 +410,10 @@ class BenchTests(unittest.TestCase):
             local previous=selected
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','severed_oath compare extra')
             assert(selected==previous,'trailing parameter started a broader suite')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','severed_oath cycles')
+            assert(label=='conch_test severed_oath cycles' and #selected==4)
+            assert(table.concat(selected,'|')=='conch_test severed_oath cycle_ownership|conch_test severed_oath dice_copy_split'
+                ..'|conch_test severed_oath cycle_stacking|conch_test severed_oath golden_cycle')
         """)
 
     def test_aliases_detailed_helpers_and_shared_probes_use_the_single_command(self):
