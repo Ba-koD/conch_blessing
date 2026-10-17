@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 local TimerClock = require("scripts.lib.timer_clock")
 ConchBlessing.timeteartrinket = {}
 

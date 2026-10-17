@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 ConchBlessing.icebreath = {}
 
 local WeaponAttackTracker = require("scripts.lib.weapon_attack_tracker")

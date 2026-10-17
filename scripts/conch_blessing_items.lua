@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- ItemData table
 -- available attributes:
 --   type: "passive" | "active" | "familiar" | "null" - item type

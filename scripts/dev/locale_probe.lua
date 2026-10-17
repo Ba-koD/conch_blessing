@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Locale test bench: `conch_test locale` restarts the run, checks that every item's
 -- text came from scripts/locale (all three languages loaded, no icon token left,
 -- every icon a real item), that EID holds and renders the selected mod locale

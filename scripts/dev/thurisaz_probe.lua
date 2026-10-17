@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- conch_test thurisaz [CASE | list | give [N] | spawn | familiars | ledger]
 -- The Kronos rune, used for real through EntityPlayer:UseCard (and Clear Rune,
 -- and a real pocket drop). Each use devours one of the user's familiars for

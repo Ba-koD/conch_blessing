@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 local NativeReturnDoor = require("scripts.rooms.native_return_door")
 local isc = require("scripts.lib.isaacscript-common")
 local NativeGalleryRooms = require("scripts.rooms.death_certificate_gallery_rooms")

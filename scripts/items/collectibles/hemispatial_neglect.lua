@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 local M = {}
 ConchBlessing.hemispatialneglect = M
 local ID = Isaac.GetItemIdByName("Hemispatial Neglect")

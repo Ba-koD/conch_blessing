@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Live Eye test bench: `conch_test live_eye detail` restarts the run, checks that a missed
 -- tear can be forgiven (50% + 5% per luck), that only unforgiven misses lower
 -- the damage multiplier, that a non-tear attack fixes it at x1.5 and Rock Bottom

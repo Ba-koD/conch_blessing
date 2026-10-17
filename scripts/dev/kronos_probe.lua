@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Kronos test bench: sets up one in-game scenario per absorbed-familiar feature
 -- so each can be checked by hand. Run `restart` between scenarios to keep them
 -- apart; they stack otherwise.

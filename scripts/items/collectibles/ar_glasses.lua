@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 local M = {}
 ConchBlessing.arglasses = M
 local View = require("scripts.lib.conch_answer_view")

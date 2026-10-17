@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- A read-only view of the provider's next unconsumed answer. Never persist a
 -- prediction: the room, usage ledger, language or forced answer may change.
 local M = {}

@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Stat rounding probe: checks in the live engine that Ceil/Round/Floor round
 -- the multiplied stat, and that a multiplier never scales an already rounded
 -- value (5.1 x2 = 10.2 -> Ceil 11, never 6 x2 = 12).

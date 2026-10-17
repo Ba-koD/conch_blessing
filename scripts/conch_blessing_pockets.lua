@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Pocket items: cards and runes.
 --
 -- They are kept apart from ConchBlessing.ItemData (collectibles, familiars and

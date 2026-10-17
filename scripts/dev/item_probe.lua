@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- conch_test [all|synergies|conditions|damage|list|status|stop|ITEM_KEY [CASE]]
 -- One public console command; item and scenario names are parameters.
 local TestBench = require("scripts.dev.test_bench")

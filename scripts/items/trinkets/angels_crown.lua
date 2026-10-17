@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Angel's Crown - the positive Magic Conch upgrade of vanilla Devil's Crown (t146).
 --
 -- Devil's Crown turns every unvisited Treasure Room into a Red Treasure Room whose

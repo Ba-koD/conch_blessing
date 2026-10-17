@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- 진 (Dragon), God of Weather.
 --
 -- While any player holds it, it always rains (and the rain is heard, a quiet

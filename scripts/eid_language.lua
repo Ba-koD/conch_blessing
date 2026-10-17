@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- EID Language Support for Conch's Blessing
 -- Handles multilingual item descriptions and names for EID mod
 

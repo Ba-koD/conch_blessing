@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Isolated behavior scenarios appended to conch_test's lifecycle matrix.
 local Bench = require("scripts.dev.test_bench")
 local H = require("scripts.dev.item_test_support")

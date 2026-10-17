@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 ConchBlessing.utilitybelt = {}
 
 local UTILITY_BELT_ID = Isaac.GetItemIdByName("Utility Belt")

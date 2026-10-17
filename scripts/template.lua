@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Template for upgrade animations
 -- Usage: require this file and call the functions with appropriate parameters
 -- Supports positive, neutral, and negative upgrade types

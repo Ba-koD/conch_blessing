@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 local hiddenItemManager = require("scripts.lib.hidden_item_manager")
 local DamageProvenance = require("scripts.lib.damage_provenance")
 DamageProvenance.registerCallbacks(ConchBlessing)

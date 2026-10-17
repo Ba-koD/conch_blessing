@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 ConchBlessing.aminus = {}
 
 -- Centralized data container for A- (config + per-player state)

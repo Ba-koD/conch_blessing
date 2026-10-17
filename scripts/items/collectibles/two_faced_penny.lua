@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 local game = Game()
 local DamageUtils = ConchBlessing.DamageUtils or require("scripts.lib.damage_utils")
 

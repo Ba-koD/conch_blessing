@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 local ConchBlessing_Config = {}
 
 local Version = "1.0.0"

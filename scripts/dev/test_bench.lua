@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Shared runner for in-game test benches (AGENTS.md, Verification).
 --
 -- Each feature registers a `conch_test <feature> [case]` plan. item_probe.lua

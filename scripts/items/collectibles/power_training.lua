@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 ConchBlessing.powertraining = {}
 
 local POWER_TRAINING_ID = Isaac.GetItemIdByName("Power Training")

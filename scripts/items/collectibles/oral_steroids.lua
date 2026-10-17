@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 ConchBlessing.oralsteroids = {}
 
 local ORAL_STEROIDS_ID = Isaac.GetItemIdByName("Oral Steroids")

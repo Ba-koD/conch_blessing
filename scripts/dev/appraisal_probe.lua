@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Run conch_test appraisal detail: actual engine uses, native entry, pickup and return.
 -- TestBench restarts before and after; ordinary gameplay does not run this.
 local TestBench = require("scripts.dev.test_bench")

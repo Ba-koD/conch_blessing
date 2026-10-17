@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Ceil / Round / Floor: round the player's final stats to integers.
 --
 -- The three items share one module and one MC_EVALUATE_CACHE callback, so

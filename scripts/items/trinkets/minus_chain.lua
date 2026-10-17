@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Evolution chain for Minus trinkets: F- -> C- -> B- -> A-
 -- Evolves on new floor if the player took no damage in the previous floor
 

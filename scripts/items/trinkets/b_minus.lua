@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 local minus = require("scripts.items.trinkets._minus_common")
 
 -- B - : luck +3, tears +3.0, damage +3.0; specials = { normal = {3, 3.0} }

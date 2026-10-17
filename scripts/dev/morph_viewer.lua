@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Real pickup review: only the viewer-owned pedestal is spawned/converted.
 -- Presentation and morph timing come exclusively from the production queue.
 local Visuals = require("scripts.lib.upgrade_visuals")

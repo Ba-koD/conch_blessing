@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- New visits use native Death Certificate rooms. Existing version-9 StageAPI
 -- saves keep their exact journals and graph until that floor has been settled.
 -- Each backend owns its callbacks, but only the selected backend may act.

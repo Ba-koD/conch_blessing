@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- conch_test morph: runs every applied upgrade presentation, plus one default
 -- flag animation per flag and a rotating pedestal, through the real upgrade
 -- transaction on a bench-owned pedestal, and checks what the engine actually did.

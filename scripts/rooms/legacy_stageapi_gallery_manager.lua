@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 local isc = require("scripts.lib.isaacscript-common")
 local StageAPIGalleryRooms = require("scripts.rooms.stageapi_gallery_rooms")
 local GalleryExitDoor = require("scripts.rooms.gallery_exit_door")

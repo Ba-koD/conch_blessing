@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- 청룡 (Azure Dragon): a long azure dragon familiar per copy. Console only: it
 -- is hidden and in no pool, like Inf D6 (진, the Dragon item, is the weather).
 --

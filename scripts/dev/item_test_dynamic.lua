@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Change real vanilla inventory while the tested item stays owned. Calibrate
 -- vanilla-only inputs first; never calculate expected output with an item handler.
 local H = require("scripts.dev.item_test_support")

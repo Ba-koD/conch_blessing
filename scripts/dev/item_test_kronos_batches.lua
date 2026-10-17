@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Independent catalog expectations; batch only common contracts. Auras, real
 -- attack procs, room/floor rewards and temporary sources retain dedicated cases.
 local S = require("scripts.dev.item_scenarios")

@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Opt-in baseline verification for reversible stat cases and familiar batches.
 -- Floor changes, consumed pools and permanent rewards still require fresh runs.
 local H = require("scripts.dev.item_test_support")

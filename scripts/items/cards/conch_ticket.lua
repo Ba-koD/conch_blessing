@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Conch Ticket (소라 예약권): reserve the Magic Conch's next answers.
 --
 -- Using the card spends it and opens a picker over the user's head: the

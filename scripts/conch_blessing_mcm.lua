@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 local ConchBlessing_MCM = {}
 
 ---@diagnostic disable-next-line: undefined-global

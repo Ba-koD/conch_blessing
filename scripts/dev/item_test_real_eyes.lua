@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Real uses of the installed provider establish the prediction/answer contract.
 -- This is separate from the fast, reversible inventory matrix.
 local S = require("scripts.dev.item_scenarios")

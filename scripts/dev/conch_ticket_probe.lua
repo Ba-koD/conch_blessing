@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- conch_test conch_ticket [CASE | list | give [N] | spawn | queue | clear]
 -- The Conch Ticket used for real through EntityPlayer:UseCard. Its picker reads
 -- the shooting and card keys with Input.IsActionPressed, which MC_INPUT_ACTION

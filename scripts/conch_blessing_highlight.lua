@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Conch's Blessing - upgradeable pickup and Magic Conch HUD highlights
 
 local UpgradeHighlight = ConchBlessing.UpgradeHighlight or {}
@@ -595,6 +596,16 @@ if not UpgradeHighlight._callbacksRegistered then
     ConchBlessing:AddCallback(ModCallbacks.MC_POST_PICKUP_INIT, onPickupInit, PickupVariant.PICKUP_TRINKET)
     ConchBlessing:AddCallback(ModCallbacks.MC_POST_PICKUP_UPDATE, onPickupUpdate, PickupVariant.PICKUP_COLLECTIBLE)
     ConchBlessing:AddCallback(ModCallbacks.MC_POST_PICKUP_UPDATE, onPickupUpdate, PickupVariant.PICKUP_TRINKET)
+    -- A reload (luamod) must not leave a pickup in its pulse colour.
+    if ModCallbacks.MC_PRE_MOD_UNLOAD then
+        ConchBlessing:AddCallback(ModCallbacks.MC_PRE_MOD_UNLOAD, function(_, unloaded)
+            if unloaded ~= ConchBlessing and unloaded ~= ConchBlessing.originalMod then return end
+            for _, pulse in pairs(UpgradeHighlight._activePickups or {}) do
+                if pulse and pulse.pickup then resetPickupColor(pulse.pickup, pulse.baseColor) end
+            end
+            UpgradeHighlight._activePickups = {}
+        end)
+    end
     UpgradeHighlight._callbacksRegistered = true
 end
 

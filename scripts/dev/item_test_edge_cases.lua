@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Description clauses that run inside their item's existing lifecycle bench.
 -- These fixtures use actual pickups/NPCs; no item handler is invoked directly.
 local H=require("scripts.dev.item_test_support")

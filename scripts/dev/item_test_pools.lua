@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Real engine rerolls/copies/morphs. Read-only pool observations are independent
 -- of each item's implementation; no production callback is called by a test.
 local S = require("scripts.dev.item_scenarios")

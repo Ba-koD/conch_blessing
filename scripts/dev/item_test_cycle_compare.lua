@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Paired, isolated engine experiments. Native arm uses the same public card
 -- operation as AstroItems; the Oath arm only acquires the real active and enters
 -- rooms. Expected preservation comes from the item contract, not its ledger.

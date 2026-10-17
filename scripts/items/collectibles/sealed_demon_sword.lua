@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 ConchBlessing.sealeddemonsword = {}
 
 local SEALED_DEMON_SWORD_ID = Isaac.GetItemIdByName("Sealed Demon Sword")

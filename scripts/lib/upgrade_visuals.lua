@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Pure presentation shared by real upgrades and conch_morph. Never spawn an
 -- entity: vanilla fire, explosions and Holy Light have native combat behaviour.
 local Visuals = { catalog = require("scripts.upgrade_visual_catalog") }

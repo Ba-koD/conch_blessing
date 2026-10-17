@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Test fixtures only. No inventory, input or gameplay mutation outside a bench.
 local H = {}
 local TimerClock = require("scripts.lib.timer_clock")

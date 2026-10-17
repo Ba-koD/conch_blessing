@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Real engine event paths for absorbed abilities; no item callback calls.
 local S = require("scripts.dev.item_scenarios")
 local H = require("scripts.dev.item_test_support")

@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Conch's Blessing - Upgrade System
 -- Item conversion system using Magic Conch API
 
@@ -1442,6 +1443,17 @@ ConchBlessing:AddCallback(
 )
 ConchBlessing:AddCallback(ModCallbacks.MC_POST_NEW_ROOM, clearUpgradeJobs)
 ConchBlessing:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, clearUpgradeJobs)
+-- A reload (luamod) drops this module's state: restore every pedestal it was
+-- converting and let the next load register with Magic Conch afresh.
+if ModCallbacks.MC_PRE_MOD_UNLOAD then
+    ConchBlessing:AddCallback(ModCallbacks.MC_PRE_MOD_UNLOAD, function(_, unloaded)
+        if unloaded ~= ConchBlessing and unloaded ~= ConchBlessing.originalMod then return end
+        clearUpgradeJobs()
+        local template = ConchBlessing.template
+        if template and type(template.clearAnimations) == "function" then template.clearAnimations() end
+        unregisterMagicConchAPI()
+    end)
+end
 -- REPENTOGON only. Without it a native Morph still ends the job (fail closed).
 -- PRE observes last, after any other mod had the chance to cancel the Morph.
 if ModCallbacks.MC_PRE_PICKUP_MORPH and ModCallbacks.MC_POST_PICKUP_MORPH then

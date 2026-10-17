@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 local mod = RegisterMod("Conch's Blessing", 1)
 
 local function hasStatsAPIDependency()

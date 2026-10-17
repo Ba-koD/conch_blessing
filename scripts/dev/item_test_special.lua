@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 local H = require("scripts.dev.item_test_support")
 local C = {}
 local used = {}

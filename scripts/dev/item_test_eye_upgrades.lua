@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 local S = require("scripts.dev.item_scenarios")
 local H = require("scripts.dev.item_test_support")
 local sample
