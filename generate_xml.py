@@ -1067,6 +1067,11 @@ def create_itempools_xml(items, output_path):
         if str(item_info.get('type', '')).lower() == 'trinket':
             debug_skipped_trinkets += 1
             continue
+        # A hidden item (console only, or reached only through another item) is
+        # never drawn from a pool, whatever its pool field says. Without a pool
+        # field an item would otherwise default to the treasure pool.
+        if item_info.get('hidden'):
+            continue
         pools = item_info.get('pools', ['ROOM_TREASURE'])
         
         for pool_entry in pools:
