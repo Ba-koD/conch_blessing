@@ -3,7 +3,7 @@ local TimerClock = require("scripts.lib.timer_clock")
 ConchBlessing.timemoney = {}
 
 local SaveManager = ConchBlessing.SaveManager or require("scripts.lib.save_manager")
-local DamageUtils = ConchBlessing.DamageUtils or require("scripts.lib.damage_utils")
+local Hits = require("scripts.lib.player_hits")
 
 local CS = CoinSubType or {
 	NULL = 0,
@@ -390,13 +390,15 @@ function ConchBlessing.timemoney.onEntityTakeDamage(_, entity, amount, flags, so
     if not player then return end
     local id = getItemId()
     if not id or player:GetCollectibleNum(id) <= 0 then return end
-    if DamageUtils and DamageUtils.isSelfInflictedDamage and DamageUtils.isSelfInflictedDamage(flags, source) then
+    if not Hits.counts(flags) then
         return
     end
     local ps = getPlayerState(player)
     ps.pendingPenalty = (ps.pendingPenalty or 0) + 1
     saveToSave(player)
+    return true
 end
+Hits.register("TIME_MONEY", ConchBlessing.timemoney.onEntityTakeDamage)
 
 function ConchBlessing.timemoney.onEvaluateCache(_, player, cacheFlag)
 	if cacheFlag ~= CacheFlag.CACHE_FAMILIARS then return end

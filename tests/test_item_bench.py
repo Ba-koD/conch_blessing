@@ -398,7 +398,7 @@ class BenchTests(unittest.TestCase):
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','kronos detail')
             assert(started=='conch_test kronos detail')
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','all')
-            assert(label=='conch_test' and #selected==162,'update the documented suite count when it changes')
+            assert(label=='conch_test' and #selected==187,'update the documented suite count when it changes')
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','severed_oath compare')
             assert(label=='conch_test severed_oath compare' and #selected==50)
             assert(selected[1]=='conch_test severed_oath compare_capacity0_native')
@@ -952,7 +952,7 @@ class BenchTests(unittest.TestCase):
             local sm={GetRunSave=function() return saved end,Save=function() end}
             package.loaded['scripts.lib.save_manager']=sm
             package.loaded['scripts.lib.enemy_utils']={isMonsterKind=function(npc) return npc.monster end}
-            ConchBlessing.DamageUtils={isSelfInflictedDamage=function(flags) return flags==1 end}
+            DamageFlag={DAMAGE_NO_PENALTIES=1<<28}
             ConchBlessing.printDebug=function() end
             ConchBlessing.stats={damage={applyAddition=function(_,value) applied=value end}}
             CacheFlag={CACHE_DAMAGE=1}
@@ -973,7 +973,7 @@ class BenchTests(unittest.TestCase):
                 equal(saved.tyrfing.accumulatedDamage,earned)
                 item.onEntityTakeDamage(nil,player,1,0,nil,0)
                 equal(saved.tyrfing.accumulatedDamage,earned*0.5)
-                item.onEntityTakeDamage(nil,player,1,1,nil,0) -- self-inflicted: ignored
+                item.onEntityTakeDamage(nil,player,1,DamageFlag.DAMAGE_NO_PENALTIES,nil,0) -- self-inflicted: ignored
                 item.onNPCDeath(nil,{monster=false}) -- furniture: ignored
                 equal(saved.tyrfing.accumulatedDamage,earned*0.5)
                 item.onEntityTakeDamage(nil,player,1,0,nil,0)

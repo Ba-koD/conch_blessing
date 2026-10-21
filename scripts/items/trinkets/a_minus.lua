@@ -23,7 +23,7 @@ end
 
 local TID = getTrinketIdByName("A -")
 local TID_B = getTrinketIdByName("B -")
-local DamageUtils = ConchBlessing.DamageUtils or require("scripts.lib.damage_utils")
+local Hits = require("scripts.lib.player_hits")
 
 -- Get trinket total effective count (includes golden and Mom's Box)
 local function getCount(player, baseId)
@@ -192,12 +192,15 @@ function ConchBlessing.aminus.onEvaluateCache(_, player, cacheFlag)
 	end
 end
 
-ConchBlessing.originalMod:AddCallback(ModCallbacks.MC_ENTITY_TAKE_DMG, function(_, ent, amount, flags, src, countdown)
+-- A real hit demotes A- to B- (self-damage and Sacrifice Room spikes are not
+-- hits, scripts/lib/player_hits.lua).
+Hits.register("A_MINUS", function(_, ent, amount, flags, src, countdown)
 	local player = ent and ent:ToPlayer() or nil
 	if not player then return end
-	if DamageUtils and DamageUtils.isSelfInflictedDamage and DamageUtils.isSelfInflictedDamage(flags, src) then
+	if not Hits.counts(flags) then
 		return
 	end
+	local demoted = false
 	if not TID or TID <= 0 then return end
 	if not TID_B or TID_B <= 0 then return end
 
@@ -215,9 +218,11 @@ ConchBlessing.originalMod:AddCallback(ModCallbacks.MC_ENTITY_TAKE_DMG, function(
 				local newId = TID_B + (isGolden and 32768 or 0)
 				local offset = (slot == 0) and Vector(-20, 0) or Vector(20, 0)
 				Isaac.Spawn(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_TRINKET, newId, player.Position + offset, Vector.Zero, player)
+				demoted = true
 			end
 		end
 	end
+	return demoted
 end)
 
 -- Test hooks for scripts/dev/rng_probe.lua. Pure helpers, no gameplay use.

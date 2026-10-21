@@ -3,7 +3,7 @@ local TimerClock = require("scripts.lib.timer_clock")
 ConchBlessing.timeteartrinket = {}
 
 local SaveManager = ConchBlessing.SaveManager or require("scripts.lib.save_manager")
-local DamageUtils = ConchBlessing.DamageUtils or require("scripts.lib.damage_utils")
+local Hits = require("scripts.lib.player_hits")
 local TrinketUtils = ConchBlessing.TrinketUtils or require("scripts.lib.trinket_utils")
 
 -- Data container (persistable gameplay constants)
@@ -231,7 +231,7 @@ function ConchBlessing.timeteartrinket.onEntityTakeDamage(_, entity, amount, fla
 	local id = getTrinketId()
 	if not id then return end
 	if not player:HasTrinket(id) then return end
-	if DamageUtils.isSelfInflictedDamage(flags, source) then
+	if not Hits.counts(flags) then
 		ConchBlessing.printDebug(string.format("[Time=Tear] ignore pause by flags=%d", flags or -1))
 		return
 	end
@@ -239,8 +239,9 @@ function ConchBlessing.timeteartrinket.onEntityTakeDamage(_, entity, amount, fla
 	local frame = TimerClock.now()
 	ps.pausedUntilFrame = math.max(ps.pausedUntilFrame or 0, frame + getPauseDurationFrames())
 	saveToSave(player)
-	return nil
+	return true
 end
+Hits.register("TIME_TEAR", ConchBlessing.timeteartrinket.onEntityTakeDamage)
 
 -- Load state at game start
 function ConchBlessing.timeteartrinket.onGameStarted(_, isContinued)

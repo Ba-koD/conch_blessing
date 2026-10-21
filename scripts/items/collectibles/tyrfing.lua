@@ -4,7 +4,7 @@ ConchBlessing.tyrfing = {}
 local TYRFING_ID = Isaac.GetItemIdByName("Tyrfing")
 
 local SaveManager = require("scripts.lib.save_manager")
-local DamageUtils = ConchBlessing.DamageUtils or require("scripts.lib.damage_utils")
+local Hits = require("scripts.lib.player_hits")
 local EnemyUtils = require("scripts.lib.enemy_utils")
 
 -- Constants
@@ -76,8 +76,8 @@ ConchBlessing.tyrfing.onEntityTakeDamage = function(_, entity, amount, flags, so
     
     if not player:HasCollectible(TYRFING_ID) then return end
     
-    -- Ignore self-inflicted damage (same as time_power)
-    if DamageUtils.isSelfInflictedDamage(flags, source) then
+    -- Self-damage and Sacrifice Room spikes are not hits (scripts/lib/player_hits.lua).
+    if not Hits.counts(flags) then
         ConchBlessing.printDebug(string.format("[Tyrfing] Ignored self-inflicted damage (flags=%d)", flags or -1))
         return
     end
@@ -100,7 +100,9 @@ ConchBlessing.tyrfing.onEntityTakeDamage = function(_, entity, amount, flags, so
     else
         ConchBlessing.printDebug("[Tyrfing] Player took damage but no accumulated damage to lose")
     end
+    return true
 end
+Hits.register("TYRFING", ConchBlessing.tyrfing.onEntityTakeDamage)
 
 -- NPC death callback - add damage
 ConchBlessing.tyrfing.onNPCDeath = function(_, npc)

@@ -8,7 +8,7 @@ if ConchBlessing and ConchBlessing._minusChainRegistered then
 	return true
 end
 
-local DamageUtils = ConchBlessing.DamageUtils or require("scripts.lib.damage_utils")
+local Hits = require("scripts.lib.player_hits")
 
 local function idByName(name)
 	local ok, id = pcall(function()
@@ -29,13 +29,15 @@ if TID_B and TID_B > 0 and TID_A and TID_A > 0 then CHAIN_NEXT[TID_B] = TID_A en
 
 ConchBlessing._minusNoHit = ConchBlessing._minusNoHit or {}
 
--- Mark damage taken (exclude self-inflicted damage like Time = Power)
-ConchBlessing.originalMod:AddCallback(ModCallbacks.MC_ENTITY_TAKE_DMG, function(_, ent, amount, flags, src, countdown)
+local HELD_KEYS = { { TID_F, "F_MINUS" }, { TID_C, "C_MINUS" }, { TID_B, "B_MINUS" } }
+
+-- Mark damage taken; self-damage and Sacrifice Room spikes are not hits
+-- (scripts/lib/player_hits.lua). Shows the icon of each minus trinket it affects.
+Hits.register("MINUS_CHAIN", function(_, ent, amount, flags, src, countdown)
 	local player = ent and ent:ToPlayer() or nil
 	if not player then return end
 	
-	-- Exclude self-inflicted damage (same logic as Time = Power)
-	if DamageUtils.isSelfInflictedDamage(flags, src) then
+	if not Hits.counts(flags) then
 		ConchBlessing.printDebug(string.format("[MinusChain] Ignored self-inflicted damage (flags=%d)", flags or -1))
 		return
 	end
@@ -43,6 +45,11 @@ ConchBlessing.originalMod:AddCallback(ModCallbacks.MC_ENTITY_TAKE_DMG, function(
 	local idx = player.ControllerIndex or 0
 	ConchBlessing._minusNoHit[idx] = false
 	ConchBlessing.printDebug(string.format("[MinusChain] Player took damage, noHit[%d] = false", idx))
+	local held = {}
+	for _, pair in ipairs(HELD_KEYS) do
+		if pair[1] and pair[1] > 0 and player:HasTrinket(pair[1]) then held[#held + 1] = pair[2] end
+	end
+	return #held > 0 and held or nil
 end)
 
 -- Initialize flag at game start

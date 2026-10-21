@@ -98,7 +98,7 @@ S.add("TWO_FACED_PENNY","clean_and_hit_floors",{conditions=true},function(plan,i
     plan.act(function(player) player:AddCollectible(CollectibleType.COLLECTIBLE_D6,0,true) end)
     plan.wait(4)
     plan.check("active acquisition does not consume or duplicate the reserved reward",function(player)
-        local saved=player:GetData().__twofacedpenny
+        local saved=ConchBlessing.twofacedpenny._test.state(player)
         return player:GetActiveItem(ActiveSlot.SLOT_PRIMARY)==CollectibleType.COLLECTIBLE_D6
             and player:GetCollectibleNum(CollectibleType.COLLECTIBLE_D6,true)==1
             and saved and saved.slots[1] and saved.slots[1].itemId==nil,

@@ -653,7 +653,6 @@ ConchBlessing.ItemData = {
         callbacks = {
             pickup = "tyrfing.onPickup",
             evaluateCache = "tyrfing.onEvaluateCache",
-            entityTakeDmg = "tyrfing.onEntityTakeDamage",
             postNPCDeath = "tyrfing.onNPCDeath",
             gameStarted = "tyrfing.onGameStarted",
         },
@@ -751,11 +750,12 @@ ConchBlessing.ItemData = {
         shopprice = 15,
         script = "scripts/items/collectibles/two_faced_penny",
         callbacks = {
+            -- MC_POST_ADD_COLLECTIBLE is registered by the module at EARLY priority,
+            -- and hits come through scripts/lib/player_hits.lua.
             postPlayerUpdate = "twofacedpenny.onPlayerUpdate",
-            postAddCollectible = "twofacedpenny.onPostAddCollectible",
-            entityTakeDmg = "twofacedpenny.onDamage",
             postNewLevel = "twofacedpenny.onNewFloor",
-            gameStarted = "twofacedpenny.onGameStarted"
+            gameStarted = "twofacedpenny.onGameStarted",
+            preGameExit = "twofacedpenny.onPreGameExit"
         }
     },
     INF_D6 = {
@@ -953,8 +953,7 @@ ConchBlessing.ItemData = {
             postFamiliarRender = "timemoney.onFamiliarRender",
             evaluateCache = "timemoney.onEvaluateCache",
             gameStarted = "timemoney.onGameStarted",
-            postPlayerUpdate = "timemoney.onPlayerUpdate",
-            entityTakeDmg = "timemoney.onEntityTakeDamage"
+            postPlayerUpdate = "timemoney.onPlayerUpdate"
         }
     },
     AZURE_DRAGON = {
@@ -1000,8 +999,7 @@ ConchBlessing.ItemData = {
         callbacks = {
             evaluateCache = "timepowertrinket.onEvaluateCache",
             gameStarted = "timepowertrinket.onGameStarted",
-            update = "timepowertrinket.onUpdate",
-            entityTakeDmg = "timepowertrinket.onEntityTakeDamage"
+            update = "timepowertrinket.onUpdate"
         },
         synergies = {}
     },
@@ -1020,8 +1018,7 @@ ConchBlessing.ItemData = {
         callbacks = {
             evaluateCache = "timeteartrinket.onEvaluateCache",
             gameStarted = "timeteartrinket.onGameStarted",
-            update = "timeteartrinket.onUpdate",
-            entityTakeDmg = "timeteartrinket.onEntityTakeDamage"
+            update = "timeteartrinket.onUpdate"
         },
         synergies = {}
     },
@@ -1040,8 +1037,7 @@ ConchBlessing.ItemData = {
         callbacks = {
             evaluateCache = "timelucktrinket.onEvaluateCache",
             gameStarted = "timelucktrinket.onGameStarted",
-            update = "timelucktrinket.onUpdate",
-            entityTakeDmg = "timelucktrinket.onEntityTakeDamage"
+            update = "timelucktrinket.onUpdate"
         },
         synergies = {}
     },

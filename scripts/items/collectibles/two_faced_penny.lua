@@ -1,12 +1,19 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 local game = Game()
-local DamageUtils = ConchBlessing.DamageUtils or require("scripts.lib.damage_utils")
+local Hits = require("scripts.lib.player_hits")
+local Sound = require("scripts.lib.sound_volume")
 
 ConchBlessing.twofacedpenny = {}
 
 local M = ConchBlessing.twofacedpenny
 local TWO_FACED_PENNY_ID = Isaac.GetItemIdByName("Two Faced Penny")
 local HAS_POST_ADD_COLLECTIBLE = ModCallbacks and ModCallbacks.MC_POST_ADD_COLLECTIBLE ~= nil
+local SAVE_KEY = "twoFacedPenny"
+
+-- The first MC_POST_NEW_LEVEL of a run fires before MC_POST_GAME_STARTED, while
+-- SaveManager can still expose the previous run's table. A luamod reload in the
+-- middle of a run never sees game start, so it opens at once.
+M._runReady = type(Isaac.IsInGame) == "function" and Isaac.IsInGame() == true
 
 local collectibleScanIds = nil
 
@@ -17,19 +24,36 @@ local function getFloorKey()
     return tostring(stage) .. ":" .. tostring(stageType)
 end
 
-local function getPlayerData(player)
-    local data = player:GetData()
-    if not data.__twofacedpenny then
-        data.__twofacedpenny = {
-            tookDamageThisFloor = false,
-            currentFloorKey = nil,
-            lastPennyCount = nil,
-            lastCollectibleCounts = nil,
-            suppress = {},
-            slots = {},
-        }
+-- Each coin's slot (its reserved item, and whether the player was hit on this
+-- floor since the item was reserved) and the floor those flags belong to live
+-- in the run save, so Continue and Glowing Hourglass bring them back together
+-- with the inventory. Before, they lived in GetData: Continue reopened every
+-- slot, and the next item then took the coin and its floor payouts.
+local function getState(player, create)
+    local SaveManager = ConchBlessing.SaveManager
+    if not SaveManager then return nil end
+    local save = create and SaveManager.GetRunSave(player) or SaveManager.TryGetRunSave(player)
+    if type(save) ~= "table" then return nil end
+    local state = save[SAVE_KEY]
+    if type(state) ~= "table" then
+        if not create then return nil end
+        state = {}
+        save[SAVE_KEY] = state
     end
-    return data.__twofacedpenny
+    if type(state.slots) ~= "table" then state.slots = {} end
+    return state
+end
+
+-- Pickup bookkeeping the engine rebuilds every session stays runtime-only.
+local function getRuntime(player)
+    local data = player:GetData()
+    local runtime = data.__twofacedpenny
+    if type(runtime) ~= "table" then
+        runtime = {}
+        data.__twofacedpenny = runtime
+    end
+    runtime.granting = tonumber(runtime.granting) or 0
+    return runtime
 end
 
 local function isValidCollectibleId(itemId)
@@ -100,32 +124,31 @@ local function buildCollectibleCounts(player)
     return counts
 end
 
-local function refreshCounts(player, pData)
-    pData.lastCollectibleCounts = buildCollectibleCounts(player)
+local function refreshCounts(player, runtime)
+    runtime.lastCollectibleCounts = buildCollectibleCounts(player)
 end
 
-local function recordCollectibleCount(player, pData, itemId)
-    if not isValidCollectibleId(itemId) then
+local function recordCollectibleCount(player, runtime, itemId)
+    if not isValidCollectibleId(itemId) or not runtime.lastCollectibleCounts then
         return
     end
 
-    pData.lastCollectibleCounts = pData.lastCollectibleCounts or {}
     local ok, count = pcall(function()
         return player:GetCollectibleNum(itemId, true)
     end)
     if ok and type(count) == "number" then
-        pData.lastCollectibleCounts[itemId] = count
+        runtime.lastCollectibleCounts[itemId] = count
     end
 end
 
-local function detectNewCollectibles(player, pData)
-    if not pData.lastCollectibleCounts then
-        refreshCounts(player, pData)
+local function detectNewCollectibles(player, runtime)
+    if not runtime.lastCollectibleCounts then
+        refreshCounts(player, runtime)
         return {}
     end
 
     local changes = {}
-    local counts = pData.lastCollectibleCounts
+    local counts = runtime.lastCollectibleCounts
     for _, itemId in ipairs(getCollectibleScanIds()) do
         local ok, current = pcall(function()
             return player:GetCollectibleNum(itemId, true)
@@ -145,219 +168,208 @@ local function detectNewCollectibles(player, pData)
     return changes
 end
 
-local function syncPennySlots(player, pData)
+-- One slot per coin owned. A lost coin takes the newest slot with it; a coin
+-- gained opens a slot for the next item.
+local function syncPennySlots(player, state)
     local pennyCount = getPennyCount(player)
-    pData.slots = pData.slots or {}
     -- Reopen reservations made for an active by older code. Never remove an
     -- already granted item, and never pay that invalid reservation on a new floor.
-    for _, slot in ipairs(pData.slots) do
+    for _, slot in ipairs(state.slots) do
         if slot.itemId and not isRewardCollectible(slot.itemId) then
-            slot.itemId, slot.doubled = nil, false
+            slot.itemId, slot.hit = nil, false
         end
     end
-
-    if pData.lastPennyCount == nil then
-        pData.lastPennyCount = pennyCount
-        return pennyCount
+    while #state.slots < pennyCount do
+        table.insert(state.slots, { itemId = nil, hit = false })
     end
-
-    local previous = tonumber(pData.lastPennyCount) or 0
-    if pennyCount > previous then
-        for _ = 1, pennyCount - previous do
-            table.insert(pData.slots, { itemId = nil, doubled = false })
-        end
-    elseif pennyCount < previous then
-        while #pData.slots > pennyCount do
-            table.remove(pData.slots)
-        end
+    while #state.slots > pennyCount do
+        table.remove(state.slots)
     end
-
-    pData.lastPennyCount = pennyCount
     return pennyCount
 end
 
-local function consumeSuppressedAdd(pData, itemId, count)
-    local suppress = pData.suppress
-    if not suppress or not suppress[itemId] or suppress[itemId] <= 0 then
-        return 0
+-- The coin's own copies are not acquisitions: while one is being added, every
+-- add it causes is ignored, including another mod's answer to it.
+local function grantItem(player, itemId, runtime)
+    runtime.granting = (runtime.granting or 0) + 1
+    local ok, err = pcall(function() player:AddCollectible(itemId, 0, true) end)
+    runtime.granting = runtime.granting - 1
+    recordCollectibleCount(player, runtime, itemId)
+    if not ok then
+        ConchBlessing.printError("[Two Faced Penny] Could not grant collectible " .. tostring(itemId) .. ": " .. tostring(err))
     end
-
-    local skipped = math.min(suppress[itemId], count or 1)
-    suppress[itemId] = suppress[itemId] - skipped
-    if suppress[itemId] <= 0 then
-        suppress[itemId] = nil
-    end
-    return skipped
+    return ok
 end
 
-local function grantItem(player, itemId, count, pData)
-    count = tonumber(count) or 0
-    if count <= 0 or not isRewardCollectible(itemId) then
-        return
-    end
-
-    pData.suppress = pData.suppress or {}
-    pData.suppress[itemId] = (pData.suppress[itemId] or 0) + count
-    for _ = 1, count do
-        player:AddCollectible(itemId, 0, true)
-    end
-end
-
-local function claimNextCollectible(player, pData, itemId)
-    if not isRewardCollectible(itemId) then
-        return false
-    end
-
-    local slots = pData.slots or {}
+local function claimNextCollectible(player, state, runtime, itemId)
     local claimed = 0
-    for _, slot in ipairs(slots) do
+    for _, slot in ipairs(state.slots) do
         if not slot.itemId then
-            slot.itemId = itemId
-            slot.doubled = false
+            -- A coin's clean floor counts from the moment it has an item.
+            slot.itemId, slot.hit = itemId, false
             claimed = claimed + 1
         end
     end
-
     if claimed <= 0 then
         return false
     end
 
-    local granted = 0
-    for _, slot in ipairs(slots) do
-        if slot.itemId == itemId and not slot.doubled then
-            grantItem(player, itemId, 1, pData)
-            slot.doubled = true
-            granted = granted + 1
-        end
+    for _ = 1, claimed do
+        grantItem(player, itemId, runtime)
     end
-
-    pData.tookDamageThisFloor = false
     ConchBlessing.printDebug(string.format(
-        "[Two Faced Penny] Claimed next collectible %d for %d slot(s), granted=%d.",
-        itemId,
-        claimed,
-        granted
-    ))
-    return granted > 0
+        "[Two Faced Penny] Claimed collectible %d for %d slot(s).", itemId, claimed))
+    return true
 end
 
-local function processObservedCollectible(player, pData, itemId, count)
+local function processObservedCollectible(player, runtime, itemId)
     if not isRewardCollectible(itemId) then
         return false
     end
 
-    local remaining = tonumber(count) or 1
-    remaining = remaining - consumeSuppressedAdd(pData, itemId, remaining)
-    if remaining <= 0 then
+    local state = getState(player, true)
+    if not state or syncPennySlots(player, state) <= 0 then
         return false
     end
-
-    if syncPennySlots(player, pData) <= 0 then
-        return false
-    end
-    return claimNextCollectible(player, pData, itemId)
+    return claimNextCollectible(player, state, runtime, itemId)
 end
 
+-- Registered below at EARLY priority, so the coin takes the item the player
+-- picked up before default-priority callbacks of other mods can answer that
+-- pickup with a grant of their own.
 function M.onPostAddCollectible(_, itemId, _charge, firstTime, _slot, _varData, player)
-    if not player or not isValidCollectibleId(itemId) then
-        return
-    end
-    if not isValidCollectibleId(TWO_FACED_PENNY_ID) then
+    if not player or not isValidCollectibleId(itemId) or not isValidCollectibleId(TWO_FACED_PENNY_ID) then
         return
     end
 
-    local pData = getPlayerData(player)
+    local runtime = getRuntime(player)
+    if runtime.granting > 0 or not M._runReady then
+        recordCollectibleCount(player, runtime, itemId)
+        return
+    end
+
     if itemId == TWO_FACED_PENNY_ID then
-        if pData.lastPennyCount == nil then
-            pData.lastPennyCount = math.max(0, getPennyCount(player) - 1)
+        local state = getState(player, true)
+        if state then
+            syncPennySlots(player, state)
+            if state.floorKey == nil then state.floorKey = getFloorKey() end
         end
-        syncPennySlots(player, pData)
-        recordCollectibleCount(player, pData, itemId)
+        recordCollectibleCount(player, runtime, itemId)
         return
     end
 
-    if firstTime ~= true then
-        recordCollectibleCount(player, pData, itemId)
-        return
+    if firstTime == true then
+        processObservedCollectible(player, runtime, itemId)
     end
-
-    processObservedCollectible(player, pData, itemId, 1)
-    recordCollectibleCount(player, pData, itemId)
+    recordCollectibleCount(player, runtime, itemId)
 end
 
 function M.onPlayerUpdate(_, player)
-    if not player or not isValidCollectibleId(TWO_FACED_PENNY_ID) then
+    if not player or not isValidCollectibleId(TWO_FACED_PENNY_ID) or not M._runReady then
         return
     end
 
-    local pData = getPlayerData(player)
-    local pennyCount = syncPennySlots(player, pData)
-
-    if not HAS_POST_ADD_COLLECTIBLE and pennyCount > 0 then
-        for _, change in ipairs(detectNewCollectibles(player, pData)) do
-            processObservedCollectible(player, pData, change.itemId, change.delta)
-        end
+    local owned = player:HasCollectible(TWO_FACED_PENNY_ID)
+    local state = getState(player, owned)
+    if not state then
+        return
+    end
+    local pennyCount = syncPennySlots(player, state)
+    if state.floorKey == nil then
+        state.floorKey = getFloorKey()
     end
 
-    if pData.currentFloorKey == nil then
-        pData.currentFloorKey = getFloorKey()
+    if not HAS_POST_ADD_COLLECTIBLE and pennyCount > 0 then
+        local runtime = getRuntime(player)
+        for _, change in ipairs(detectNewCollectibles(player, runtime)) do
+            processObservedCollectible(player, runtime, change.itemId)
+        end
     end
 end
 
 function M.onDamage(_, entity, amount, flags, source, countdown)
     local player = entity:ToPlayer()
-    if not player or not player:HasCollectible(TWO_FACED_PENNY_ID) then
+    if not player or not M._runReady or not player:HasCollectible(TWO_FACED_PENNY_ID) then
         return
     end
-    if DamageUtils.isSelfInflictedDamage(flags, source) then
+    if not Hits.counts(flags) then
         return
     end
-    getPlayerData(player).tookDamageThisFloor = true
+    local state = getState(player, true)
+    if not state then return end
+    for _, slot in ipairs(state.slots) do
+        slot.hit = true
+    end
+    return true
 end
+Hits.register("TWO_FACED_PENNY", M.onDamage)
 
 function M.onNewFloor(_)
+    if not M._runReady then return end
     local floorKey = getFloorKey()
     for i = 0, game:GetNumPlayers() - 1 do
         local player = Isaac.GetPlayer(i)
-        if player and player:HasCollectible(TWO_FACED_PENNY_ID) then
-            local pData = getPlayerData(player)
-            if pData.currentFloorKey and pData.currentFloorKey ~= floorKey then
-                if not pData.tookDamageThisFloor then
-                    local granted = false
-                    for _, slot in ipairs(pData.slots or {}) do
-                        if isRewardCollectible(slot.itemId) then
-                            grantItem(player, slot.itemId, 1, pData)
-                            granted = true
-                        end
-                    end
-                    if granted then
-                        SFXManager():Play(SoundEffect.SOUND_POWERUP1, require("scripts.lib.sound_volume").volume(1.0))
-                        refreshCounts(player, pData)
+        local state = player and getState(player, false)
+        if state then
+            local paid = false
+            if state.floorKey and state.floorKey ~= floorKey and player:HasCollectible(TWO_FACED_PENNY_ID) then
+                syncPennySlots(player, state)
+                local runtime = getRuntime(player)
+                for _, slot in ipairs(state.slots) do
+                    if not slot.hit and isRewardCollectible(slot.itemId) then
+                        paid = grantItem(player, slot.itemId, runtime) or paid
                     end
                 end
             end
-            pData.tookDamageThisFloor = false
-            pData.currentFloorKey = floorKey
-            pData.lastPennyCount = getPennyCount(player)
+            for _, slot in ipairs(state.slots) do
+                slot.hit = false
+            end
+            state.floorKey = floorKey
+            if paid then
+                SFXManager():Play(SoundEffect.SOUND_POWERUP1, Sound.volume(1.0))
+            end
         end
     end
 end
 
 function M.onGameStarted(_, isContinued)
+    M._runReady = true
     for i = 0, game:GetNumPlayers() - 1 do
         local player = Isaac.GetPlayer(i)
         if player then
+            player:GetData().__twofacedpenny = nil
             if not isContinued then
-                player:GetData().__twofacedpenny = nil
+                local save = ConchBlessing.SaveManager and ConchBlessing.SaveManager.TryGetRunSave(player)
+                if type(save) == "table" then save[SAVE_KEY] = nil end
             end
-            local pData = getPlayerData(player)
-            pData.currentFloorKey = getFloorKey()
-            pData.slots = pData.slots or {}
-            pData.lastPennyCount = math.min(#pData.slots, getPennyCount(player))
-            syncPennySlots(player, pData)
-            refreshCounts(player, pData)
+            -- A run saved before the slots moved into the run save has none, so
+            -- its coins open fresh slots as they used to on every Continue.
+            local state = getState(player, player:HasCollectible(TWO_FACED_PENNY_ID))
+            if state then
+                syncPennySlots(player, state)
+                if state.floorKey == nil then state.floorKey = getFloorKey() end
+            end
+            refreshCounts(player, getRuntime(player))
         end
     end
 end
+
+function M.onPreGameExit()
+    M._runReady = false
+end
+
+if HAS_POST_ADD_COLLECTIBLE then
+    local priority = rawget(_G, "CallbackPriority")
+    if type(ConchBlessing.AddPriorityCallback) == "function" then
+        ConchBlessing:AddPriorityCallback(ModCallbacks.MC_POST_ADD_COLLECTIBLE,
+            priority and priority.EARLY or -100, M.onPostAddCollectible)
+    else
+        ConchBlessing:AddCallback(ModCallbacks.MC_POST_ADD_COLLECTIBLE, M.onPostAddCollectible)
+    end
+end
+
+M._test = {
+    state = function(player) return getState(player, false) end,
+}
 
 return M
