@@ -82,19 +82,23 @@ jobs:
 
           run_steamcmd_with_retry() {
             local status=0
+            local attempt=1
+            local max_attempts=4
 
-            set +e
-            timeout 300s "${steamcmd_path}" "$@"
-            status=$?
-            set -e
-
-            if [ "${status}" -eq 42 ]; then
-              echo "::warning::steamcmd exited with 42 after a self-update; retrying once."
+            # SteamCMD exits 42 after updating itself, before running any
+            # command, so a retry never repeats work. A platform switch can
+            # take more than one update in a row (2026-10-23: linux, then steamrt64).
+            while :; do
               set +e
               timeout 300s "${steamcmd_path}" "$@"
               status=$?
               set -e
-            fi
+              if [ "${status}" -ne 42 ] || [ "${attempt}" -ge "${max_attempts}" ]; then
+                break
+              fi
+              echo "::warning::steamcmd exited with 42 after a self-update (attempt ${attempt}/${max_attempts}); retrying."
+              attempt=$((attempt + 1))
+            done
 
             if [ "${status}" -ne 0 ]; then
               echo "::group::SteamCMD diagnostics"
@@ -184,19 +188,23 @@ jobs:
 
           run_steamcmd_with_retry() {
             local status=0
+            local attempt=1
+            local max_attempts=4
 
-            set +e
-            timeout 300s "${steamcmd_path}" "$@"
-            status=$?
-            set -e
-
-            if [ "${status}" -eq 42 ]; then
-              echo "::warning::steamcmd exited with 42 after a self-update; retrying once."
+            # SteamCMD exits 42 after updating itself, before running any
+            # command, so a retry never repeats work. A platform switch can
+            # take more than one update in a row (2026-10-23: linux, then steamrt64).
+            while :; do
               set +e
               timeout 300s "${steamcmd_path}" "$@"
               status=$?
               set -e
-            fi
+              if [ "${status}" -ne 42 ] || [ "${attempt}" -ge "${max_attempts}" ]; then
+                break
+              fi
+              echo "::warning::steamcmd exited with 42 after a self-update (attempt ${attempt}/${max_attempts}); retrying."
+              attempt=$((attempt + 1))
+            done
 
             if [ "${status}" -ne 0 ]; then
               echo "::group::SteamCMD diagnostics"
