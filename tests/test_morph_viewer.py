@@ -1519,12 +1519,38 @@ class MorphVisualTests(unittest.TestCase):
                 for dx in range(-radius, radius+1) for dy in range(-radius, radius+1)
                 if dx*dx+dy*dy <= radius*radius), 16)
 
-    def test_eligibility_tint_yields_until_the_whole_morph_finishes(self):
-        self.viewer()
+    def eligibility(self):
+        """The evolution preview's engine surface: level/room state and a
+        settable item layer, as REPENTOGON's LayerState provides."""
         self.lua.execute('''
             ModCallbacks.MC_POST_PICKUP_INIT=14; ModCallbacks.MC_POST_PICKUP_UPDATE=15
-            local frame=0; function game:GetFrameCount() return frame end
-            local H=require('scripts.conch_blessing_highlight')
+            RoomType={ROOM_TREASURE=4}; StageType={STAGETYPE_REPENTANCE=4,STAGETYPE_REPENTANCE_B=5}
+            LevelCurse={CURSE_OF_BLIND=64}
+            function room:GetType() return 1 end
+            function game:GetLevel() return {GetCurses=function() return 0 end,GetStageType=function() return 0 end} end
+            function game:GetHUD() return {IsVisible=function() return true end} end
+            local makeSprite=getmetatable(Sprite).__call
+            Sprite=setmetatable({}, {__call=function(...)
+                local s=makeSprite(...)
+                local getLayer=s.GetLayer
+                function s:GetLayer(id)
+                    local l=getLayer(self,id)
+                    function l:SetPos(v) self.pos=Vector(v.X,v.Y) end
+                    function l:SetSize(v) self.size=Vector(v.X,v.Y) end
+                    return l
+                end
+                return s
+            end})
+            frame=0; function game:GetFrameCount() return frame end
+            H=require('scripts.conch_blessing_highlight')
+            function layerOf(p) return p.sprite:GetLayer(p.Variant==100 and 'head' or 'body') end
+            function same(a,b) return a.X==b.X and a.Y==b.Y end
+        ''')
+
+    def test_eligibility_preview_yields_until_the_whole_morph_finishes(self):
+        self.viewer()
+        self.eligibility()
+        self.lua.execute('''
             event(4)
             for _,key in ipairs({'LIVE_EYE','ANGELS_CROWN','TIME_LUCK','DRAGON','KRONOS'}) do
                 local item=ConchBlessing.ItemData[key]
@@ -1534,28 +1560,37 @@ class MorphVisualTests(unittest.TestCase):
                 p.sprite.Color=Color(0.8,0.7,0.6,0.9,0.01,0.02,0.03)
                 p.sprite.Color.colorize=0.25
                 local original=Color.Lerp(p.sprite.Color,p.sprite.Color,0)
-                H.ScanRoom(frame); frame=frame+6; event(1)
-                assert(p.sprite.Color~=original, 'fixture must start with a real eligibility pulse')
+                local layer=layerOf(p); layer.pos=Vector(0.5,-1); layer.size=Vector(1.1,0.9)
+                H.ScanRoom(frame)
+                assert(H.previewFor(p), 'an eligible pickup is tracked')
+                -- Nobody is near: the item hops on the shared clock.
+                local hopped=false
+                for tick=1,120 do frame=frame+1; event(1); if not same(layer.pos,Vector(0.5,-1)) then hopped=true; break end end
+                assert(hopped, 'fixture must start with a real out-of-range hop')
+                assert(p.sprite.Color==original, 'the preview never tints the pickup')
                 local job=assert(ConchBlessing.upgrade.queuePickup(p,key))
-                assert(p.sprite.Color==original, 'queue must restore exact tint before snapshot')
+                assert(not H.previewFor(p), 'queue ends the preview')
+                assert(same(layer.pos,Vector(0.5,-1)) and same(layer.size,Vector(1.1,0.9)),
+                    'queue restores the exact item layer before the snapshot')
                 -- Keep the result eligible too, as in chained upgrades. Native
-                -- Morph must not restart a pulse when it replaces GetData.
+                -- Morph must not restart a preview when it replaces GetData.
                 local prefix=variant==350 and 'T:' or 'C:'
-                ConchBlessing.ItemMaps[prefix..item.id]={positive={}}
+                ConchBlessing.ItemMaps[prefix..item.id]={positive={upgradeId=item.id}}
                 local morph=p.Morph
                 function p:Morph(...)
                     morph(self,...); event(14,self); H.ScanRoom(frame)
-                    assert(not H._activePickups[tostring(GetPtrHash(self))])
+                    assert(not H.previewFor(self))
                 end
                 local before,after=false,false
                 for tick=1,220 do
                     frame=frame+1; event(1)
                     if ConchBlessing.upgrade.isAnimatingPickup(p) then
                         event(15,p); H.ScanRoom(frame)
-                        assert(not H._activePickups[tostring(GetPtrHash(p))], key)
+                        assert(not H.previewFor(p), key)
+                        assert(same(layerOf(p).pos,Vector(0.5,-1)), 'no hop during the upgrade')
                         for _,anim in ipairs(T._activeAnimations) do
                             if GetPtrHash(anim.pickup)==GetPtrHash(p) then
-                                assert(anim.originalColor==original, 'must not capture eligibility tint')
+                                assert(anim.originalColor==original, 'must capture the own colour')
                                 before=before or anim.phase=='before'
                                 after=after or anim.phase=='after'
                             end
@@ -1567,19 +1602,18 @@ class MorphVisualTests(unittest.TestCase):
                 assert(job.status=='complete' and before and after)
                 assert(not ConchBlessing.upgrade.isAnimatingPickup(p))
                 H.ScanRoom(frame)
-                assert(H._activePickups[tostring(GetPtrHash(p))], 'ordinary eligibility resumes after completion')
-                H.StopForPickup(p); assert(p.sprite.Color==original)
+                assert(H.previewFor(p), 'ordinary eligibility resumes after completion')
+                H.StopForPickup(p); assert(p.sprite.Color==original and same(layerOf(p).pos,Vector(0.5,-1)))
                 p:Remove()
             end
-            assert(#errors==0)
+            assert(#errors==0, table.concat(errors,'; '))
         ''')
 
     def test_cancelled_morph_releases_only_its_eligibility_suppression(self):
         self.viewer()
+        self.eligibility()
         self.lua.execute('''
-            ModCallbacks.MC_POST_PICKUP_INIT=14; ModCallbacks.MC_POST_PICKUP_UPDATE=15
-            local frame=0; function game:GetFrameCount() return frame end
-            local H=require('scripts.conch_blessing_highlight'); event(4)
+            event(4)
             local item=ConchBlessing.ItemData.TIME_LUCK
             local variant,origin=V.origin(item)
             for _,ticks in ipairs({0,12,60}) do
@@ -1589,15 +1623,15 @@ class MorphVisualTests(unittest.TestCase):
                 H.ScanRoom(frame)
                 local job=assert(ConchBlessing.upgrade.queuePickup(p,'TIME_LUCK'))
                 for tick=1,ticks do frame=frame+1; event(1); event(2) end
-                assert(not H._activePickups[tostring(GetPtrHash(p))])
-                assert(H._activePickups[tostring(GetPtrHash(peer))], 'unrelated eligibility stays active')
+                assert(not H.previewFor(p))
+                assert(H.previewFor(peer), 'unrelated eligibility stays active')
                 ConchBlessing.upgrade.cancel(job)
                 assert(not ConchBlessing.upgrade.isAnimatingPickup(p) and p.sprite.Color==original)
                 H.ScanRoom(frame)
-                if ticks<48 then assert(H._activePickups[tostring(GetPtrHash(p))]) end
+                if ticks<48 then assert(H.previewFor(p)) end
                 H.StopForPickup(p); H.StopForPickup(peer); p:Remove(); peer:Remove()
             end
-            assert(#errors==0)
+            assert(#errors==0, table.concat(errors,'; '))
         ''')
 
     def test_time_luck_keeps_the_clock_without_extra_green_shapes(self):

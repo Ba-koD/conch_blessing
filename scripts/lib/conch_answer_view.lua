@@ -48,11 +48,12 @@ function V.text(key, ...)
     return ConchBlessing.Locale.textIn("en", key, ...)
 end
 local function width(s) return font and font:GetStringWidthUTF8(s) or Isaac.GetTextWidth(s) end
-local function draw(s, x, y, scale, rgb)
+local function draw(s, x, y, scale, rgb, alpha)
+    alpha = alpha or 1
     for _, offset in ipairs({1, 0}) do
         local c = offset == 1 and {0, 0, 0} or rgb
-        if font then font:DrawStringScaledUTF8(s, x+offset, y+offset, scale, scale, KColor(c[1],c[2],c[3],1),0,false)
-        else Isaac.RenderText(s, x+offset, y+offset,c[1],c[2],c[3],1) end
+        if font then font:DrawStringScaledUTF8(s, x+offset, y+offset, scale, scale, KColor(c[1],c[2],c[3],alpha),0,false)
+        else Isaac.RenderText(s, x+offset, y+offset,c[1],c[2],c[3],alpha) end
     end
 end
 -- Free placement for overlays that follow a player instead of the HUD anchor.
@@ -60,9 +61,16 @@ function V.width(s, scale)
     getFont()
     return width(s) * (font and scale or 1)
 end
-function V.drawAt(s, x, y, scale, rgb)
+function V.drawAt(s, x, y, scale, rgb, alpha)
     getFont()
-    draw(s, x, y, font and scale or 1, rgb)
+    draw(s, x, y, font and scale or 1, rgb, alpha)
+end
+-- Small world-space labels need the scalable font; the fallback cannot shrink.
+function V.hasFont() return getFont() ~= nil end
+function V.lineHeight(scale)
+    getFont()
+    if font and type(font.GetLineHeight) == "function" then return font:GetLineHeight() * scale end
+    return 10 * scale
 end
 
 local function icon(path)

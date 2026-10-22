@@ -1,31 +1,33 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
--- Conch's Blessing - upgradeable pickup and Magic Conch HUD highlights
+-- Conch's Blessing - upgradeable pickup previews and the Magic Conch HUD pulse
+--
+-- An upgradeable pickup shows what each Magic Conch answer would turn it into
+-- (scripts/lib/upgrade_branch_preview.lua) while a player stands near it, and
+-- hops every few seconds while nobody is. Both are cosmetic: the tree is drawn
+-- with standalone sprites, and the hop only borrows the item layer's position
+-- and size, restored before an upgrade, on every boundary and on unload.
 
 local UpgradeHighlight = ConchBlessing.UpgradeHighlight or {}
 ConchBlessing.UpgradeHighlight = UpgradeHighlight
-local PickupVisual = require("scripts.lib.upgrade_pickup_visual")
+local Preview = require("scripts.lib.upgrade_branch_preview")
 
 local FLAG_ORDER = { "positive", "neutral", "negative" }
 local ROOM_SCAN_INTERVAL = 15
-local ITEM_PULSE_PERIOD = 34
-local ITEM_PULSE_ATTACK_FRAMES = 6
-local ITEM_PULSE_DECAY_FRAMES = 30
-local ITEM_PULSE_CYCLES = 5
-local ITEM_PULSE_FRAMES = ITEM_PULSE_PERIOD * ITEM_PULSE_CYCLES
-local HUD_PULSE_PERIOD = ITEM_PULSE_PERIOD
-local HUD_PULSE_DECAY_FRAMES = ITEM_PULSE_DECAY_FRAMES
-
-local BASE_COLOR = { r = 1, g = 1, b = 1, a = 1, ro = 0, go = 0, bo = 0 }
-local ITEM_TARGET_COLORS = {
-    positive = { r = 0.86, g = 1.32, b = 0.9, ro = 0.02, go = 0.38, bo = 0.04 },
-    neutral = { r = 1.3, g = 1.18, b = 0.78, ro = 0.3, go = 0.2, bo = 0.02 },
-    negative = { r = 1.28, g = 0.78, b = 0.74, ro = 0.36, go = 0.02, bo = 0.02 },
-    multiple = { r = 0.42, g = 0.42, b = 0.42, ro = 0, go = 0, bo = 0 },
-}
+local HUD_PULSE_PERIOD = 34
+local HUD_PULSE_DECAY_FRAMES = 30
 local HUD_PULSE_BASE_BRIGHTNESS = 1.0
 local HUD_PULSE_PEAK_BRIGHTNESS = 2.15
 local HUD_PULSE_BASE_ALPHA = 0.0
 local HUD_PULSE_PEAK_ALPHA = 0.72
+-- A tree opens when a player comes this close and closes past the second
+-- distance, so standing at the edge does not flicker.
+local OPEN_RANGE, CLOSE_RANGE = 64, 80
+local CLOSE_RATE = 1.5
+local EVENT_LIMIT = 40
+
+UpgradeHighlight._previews = UpgradeHighlight._previews or {}
+UpgradeHighlight._previewClock = UpgradeHighlight._previewClock or 0
+UpgradeHighlight._previewEvents = UpgradeHighlight._previewEvents or {}
 
 local function tableHasEntries(t)
     return type(t) == "table" and next(t) ~= nil
@@ -62,69 +64,8 @@ local function normalizePickup(entity)
     return entity:ToPickup()
 end
 
-local function cloneColor(color)
-    if not color then
-        return {
-            r = BASE_COLOR.r,
-            g = BASE_COLOR.g,
-            b = BASE_COLOR.b,
-            a = BASE_COLOR.a,
-            ro = BASE_COLOR.ro,
-            go = BASE_COLOR.go,
-            bo = BASE_COLOR.bo,
-        }
-    end
-
-    return {
-        r = color.Red or color.R or BASE_COLOR.r,
-        g = color.Green or color.G or BASE_COLOR.g,
-        b = color.Blue or color.B or BASE_COLOR.b,
-        a = color.Alpha or color.A or BASE_COLOR.a,
-        ro = color.ROffset or color.RO or color.RedOffset or BASE_COLOR.ro,
-        go = color.GOffset or color.GO or color.GreenOffset or BASE_COLOR.go,
-        bo = color.BOffset or color.BO or color.BlueOffset or BASE_COLOR.bo,
-    }
-end
-
-local function toColor(color)
-    color = color or BASE_COLOR
-    return Color(
-        color.r or BASE_COLOR.r,
-        color.g or BASE_COLOR.g,
-        color.b or BASE_COLOR.b,
-        color.a or BASE_COLOR.a,
-        color.ro or BASE_COLOR.ro,
-        color.go or BASE_COLOR.go,
-        color.bo or BASE_COLOR.bo
-    )
-end
-
-local function resetPickupColor(pickup, baseColor)
-    if not pickup or not pickup.Exists or not pickup:Exists() then
-        return
-    end
-    local sprite = pickup:GetSprite()
-    if sprite then
-        sprite.Color = baseColor
-    end
-end
-
 local function lerp(a, b, t)
     return (a or 0) + (((b or 0) - (a or 0)) * t)
-end
-
-local function lerpColorTable(base, target, t)
-    base = base or BASE_COLOR
-    target = target or BASE_COLOR
-    return {
-        r = lerp(base.r or 1, target.r or 1, t),
-        g = lerp(base.g or 1, target.g or 1, t),
-        b = lerp(base.b or 1, target.b or 1, t),
-        a = lerp(base.a or 1, target.a or base.a or 1, t),
-        ro = lerp(base.ro or 0, target.ro or 0, t),
-        go = lerp(base.go or 0, target.go or 0, t),
-        bo = lerp(base.bo or 0, target.bo or 0, t),
-    }
 end
 
 local function getDecayPulse(frame, period, decayFrames)
@@ -137,33 +78,9 @@ local function getDecayPulse(frame, period, decayFrames)
     return 0.5 + 0.5 * math.cos(decayProgress * math.pi)
 end
 
-local function getItemPulseIntensity(elapsed)
-    local cycleFrame = elapsed % ITEM_PULSE_PERIOD
-    if cycleFrame >= ITEM_PULSE_DECAY_FRAMES then
-        return 0
-    end
-
-    if cycleFrame < ITEM_PULSE_ATTACK_FRAMES then
-        local attackProgress = cycleFrame / ITEM_PULSE_ATTACK_FRAMES
-        return 0.5 - (0.5 * math.cos(attackProgress * math.pi))
-    end
-
-    local decayFrames = ITEM_PULSE_DECAY_FRAMES - ITEM_PULSE_ATTACK_FRAMES
-    if decayFrames <= 0 then
-        return 0
-    end
-
-    local decayProgress = (cycleFrame - ITEM_PULSE_ATTACK_FRAMES) / decayFrames
-    return 0.5 + (0.5 * math.cos(decayProgress * math.pi))
-end
-
-local function getModeTargetColor(mode, targets)
-    return (targets or ITEM_TARGET_COLORS)[mode]
-        or (targets or ITEM_TARGET_COLORS).multiple
-        or BASE_COLOR
-end
-
-local function getCanonicalCycleSignature(itemIds)
+-- The rotation that starts at the smallest sequence, so a rotating pedestal
+-- keeps one identity (and one tree layout) whichever choice it shows.
+local function getCanonicalCycle(itemIds)
     local bestOffset = 1
     for candidateOffset = 2, #itemIds do
         for step = 0, #itemIds - 1 do
@@ -178,11 +95,12 @@ local function getCanonicalCycleSignature(itemIds)
         end
     end
 
-    local parts = {}
+    local ordered, parts = {}, {}
     for step = 0, #itemIds - 1 do
-        parts[#parts + 1] = tostring(itemIds[((bestOffset + step - 1) % #itemIds) + 1])
+        ordered[#ordered + 1] = itemIds[((bestOffset + step - 1) % #itemIds) + 1]
+        parts[#parts + 1] = tostring(ordered[#ordered])
     end
-    return "CYCLE:" .. table.concat(parts, ",")
+    return "CYCLE:" .. table.concat(parts, ","), ordered
 end
 
 local function getPickupOriginInfo(pickup)
@@ -195,6 +113,8 @@ local function getPickupOriginInfo(pickup)
         return nil
     end
 
+    -- The logical circle is the shown SubType followed by REPENTOGON's queued
+    -- tail. Without that API a turning pedestal is read as its shown choice.
     if pickup.Variant == PickupVariant.PICKUP_COLLECTIBLE
         and type(pickup.GetCollectibleCycle) == "function" then
         local ok, queue = pcall(function()
@@ -210,14 +130,12 @@ local function getPickupOriginInfo(pickup)
                 itemIds[#itemIds + 1] = itemId
             end
             if itemIds then
+                local identity, ordered = getCanonicalCycle(itemIds)
                 local originKeys = {}
-                for _, itemId in ipairs(itemIds) do
+                for _, itemId in ipairs(ordered) do
                     originKeys[#originKeys + 1] = "C:" .. tostring(itemId)
                 end
-                return {
-                    identity = getCanonicalCycleSignature(itemIds),
-                    originKeys = originKeys,
-                }
+                return { identity = identity, originKeys = originKeys, cycle = true }
             end
         end
     end
@@ -229,6 +147,7 @@ local function getPickupOriginInfo(pickup)
     return {
         identity = originKey,
         originKeys = { originKey },
+        cycle = false,
     }
 end
 
@@ -268,48 +187,14 @@ local function getPickupUpgradeInfo(pickup)
         return nil
     end
 
-    local mode = (#flags >= 2) and "multiple" or flags[1]
     return {
         originKey = originInfo.identity,
-        mode = mode,
+        originKeys = originInfo.originKeys,
+        cycle = originInfo.cycle,
         flags = flags,
     }
 end
-
-local function getPickupState(pickup)
-    local data = pickup:GetData()
-    data.__conchBlessingUpgradeHighlight = data.__conchBlessingUpgradeHighlight or {}
-    return data.__conchBlessingUpgradeHighlight
-end
-
-local function hasFinishedPulse(state, originKey)
-    if not state or not originKey then
-        return false
-    end
-    if state.doneOriginKey == originKey then
-        return true
-    end
-    return state.doneOriginKeys and state.doneOriginKeys[originKey] == true
-end
-
-local function markPulseFinished(pickup, originKey)
-    if not pickup or not originKey then
-        return
-    end
-
-    local state = getPickupState(pickup)
-    state.doneOriginKeys = state.doneOriginKeys or {}
-    state.doneOriginKeys[originKey] = true
-    state.doneOriginKey = originKey
-    if state.activeOriginKey == originKey then
-        state.activeOriginKey = nil
-    end
-end
-
-local function hasActivePulseForPickup(pickup)
-    local key = getPickupHash(pickup)
-    return UpgradeHighlight._activePickups and UpgradeHighlight._activePickups[key] ~= nil
-end
+UpgradeHighlight.getPickupUpgradeInfo = getPickupUpgradeInfo
 
 local function isMorphing(pickup)
     local upgrade = ConchBlessing.upgrade
@@ -318,107 +203,281 @@ local function isMorphing(pickup)
     return template and template.isAnimatingPickup and template.isAnimatingPickup(pickup) or false
 end
 
-local function startPickupPulse(pickup, info, frame)
-    if not pickup or not info or isMorphing(pickup) or hasActivePulseForPickup(pickup) then
-        return
-    end
-
-    local state = getPickupState(pickup)
-    if hasFinishedPulse(state, info.originKey) then
-        return
-    end
-
-    local sprite = pickup:GetSprite()
-    local baseColor = PickupVisual.copyColor(sprite and sprite.Color or toColor(BASE_COLOR))
-    local key = getPickupHash(pickup)
-
-    UpgradeHighlight._activePickups = UpgradeHighlight._activePickups or {}
-    UpgradeHighlight._activePickups[key] = {
-        pickup = pickup,
-        originKey = info.originKey,
-        mode = info.mode,
-        startFrame = frame,
-        baseColor = baseColor,
-    }
-
-    state.activeOriginKey = info.originKey
+local function isViewerPickup(pickup)
+    local viewer = ConchBlessing.morphViewer
+    return viewer ~= nil and type(viewer.ownsPickup) == "function" and viewer.ownsPickup(pickup) == true
 end
 
-local function maybeStartPickupPulse(pickup, frame)
-    local info = getPickupUpgradeInfo(pickup)
-    if not info then
+-- A question-mark pedestal must not reveal its item through its results.
+-- REPENTOGON's IsBlind covers the alternate-path choice but not the curse.
+-- Without it that alternate-path choice cannot be told apart, so treasure
+-- rooms on those floors show nothing rather than risk revealing it.
+local function isHiddenPickup(pickup)
+    if pickup.Variant ~= PickupVariant.PICKUP_COLLECTIBLE then
         return false
     end
-
-    startPickupPulse(pickup, info, frame)
-    return true
-end
-
-local function applyPickupPulse(pulse, frame)
-    local pickup = pulse.pickup
-    if not pickup or not pickup.Exists or not pickup:Exists() then
+    local canTellBlind = type(pickup.IsBlind) == "function"
+    if canTellBlind then
+        local ok, blind = pcall(pickup.IsBlind, pickup)
+        if not ok or blind then return true end
+    end
+    local game = Game()
+    local level = game:GetLevel()
+    if LevelCurse and LevelCurse.CURSE_OF_BLIND
+        and (level:GetCurses() & LevelCurse.CURSE_OF_BLIND) ~= 0 and not pickup.Touched then
         return true
     end
-    -- A queued morph stops its pulse before capturing the original color.
-    -- Never write an old pulse over the animation's own color after that.
-    if isMorphing(pickup) then return true end
-    local liveInfo = getPickupUpgradeInfo(pickup)
-    if not liveInfo or liveInfo.originKey ~= pulse.originKey then
-        resetPickupColor(pickup, pulse.baseColor)
-        markPulseFinished(pickup, pulse.originKey)
-        return true
+    if not canTellBlind then
+        local stageType = level:GetStageType()
+        return game:GetRoom():GetType() == RoomType.ROOM_TREASURE
+            and (stageType == StageType.STAGETYPE_REPENTANCE or stageType == StageType.STAGETYPE_REPENTANCE_B)
     end
-
-    local elapsed = frame - pulse.startFrame
-    if elapsed >= ITEM_PULSE_FRAMES then
-        resetPickupColor(pickup, pulse.baseColor)
-        markPulseFinished(pickup, pulse.originKey)
-        return true
-    end
-
-    local intensity = getItemPulseIntensity(elapsed)
-    local base = cloneColor(pulse.baseColor)
-    local target = getModeTargetColor(pulse.mode, ITEM_TARGET_COLORS)
-    local color = lerpColorTable(base, target, intensity)
-
-    local sprite = pickup:GetSprite()
-    if sprite then
-        sprite.Color = toColor(color)
-    end
-
     return false
 end
 
-local function updateActivePickupPulses(frame)
-    local active = UpgradeHighlight._activePickups
-    if not tableHasEntries(active) then
-        return
-    end
+local function debugOn()
+    return ConchBlessing.Config and ConchBlessing.Config.debugMode and type(ConchBlessing.printDebug) == "function"
+end
 
-    for key, pulse in pairs(active) do
-        if applyPickupPulse(pulse, frame) then
-            active[key] = nil
-        end
+-- Runtime evidence only (never saved): conch_test evolution reads it, and
+-- debug mode mirrors it to the log.
+local function record(event, rec, detail)
+    local events = UpgradeHighlight._previewEvents
+    events[#events + 1] = { event = event, hash = rec.hash, identity = rec.identity, detail = detail,
+        frame = getFrame() }
+    if #events > EVENT_LIMIT then table.remove(events, 1) end
+    if debugOn() then
+        ConchBlessing.printDebug(string.format("[EvolutionPreview] %s %s%s", event, tostring(rec.identity),
+            detail and (" " .. tostring(detail)) or ""))
     end
 end
 
+-- One group per evolvable origin, its results in answer order. A rotating
+-- pedestal lists each evolvable choice once, in its canonical circle order.
+local function previewGroups(info)
+    local maps = ConchBlessing.ItemMaps
+    local function results(originKey)
+        local list = {}
+        for _, flag in ipairs(FLAG_ORDER) do
+            local mapping = maps[originKey] and maps[originKey][flag]
+            if mapping then
+                list[#list + 1] = { flag = flag, id = mapping.upgradeId,
+                    trinket = mapping.itemData ~= nil and mapping.itemData.type == "trinket" }
+            end
+        end
+        return list
+    end
+
+    if not info.cycle then
+        return { { results = results(info.originKeys[1]) } }, false
+    end
+    local groups, seen = {}, {}
+    for _, originKey in ipairs(info.originKeys) do
+        if not seen[originKey] then
+            seen[originKey] = true
+            local list = results(originKey)
+            if #list > 0 then
+                groups[#groups + 1] = { source = { id = tonumber(originKey:sub(3)) }, results = list }
+            end
+        end
+    end
+    return groups, true
+end
+
+local function livePreviewPickup(rec)
+    local entity = rec.ptr and rec.ptr.Ref
+    if entity and entity:Exists() and getPickupHash(entity) == rec.hash then
+        return entity:ToPickup()
+    end
+end
+
+-- The hop borrows only the item layer (a pedestal's "head", a trinket's
+-- "body"), so the pedestal, shadow and price stay where they are.
+local function hopLayer(pickup)
+    local sprite = pickup and pickup:GetSprite()
+    if not sprite or type(sprite.GetLayer) ~= "function" then return nil end
+    local name = pickup.Variant == PickupVariant.PICKUP_COLLECTIBLE and "head" or "body"
+    local ok, layer = pcall(sprite.GetLayer, sprite, name)
+    if ok and layer and type(layer.GetPos) == "function" and type(layer.SetPos) == "function"
+        and type(layer.GetSize) == "function" and type(layer.SetSize) == "function" then
+        return layer
+    end
+end
+
+local function restoreHop(rec, pickup)
+    local saved = rec.hop
+    if not saved then return end
+    rec.hop = nil
+    local layer = pickup and hopLayer(pickup)
+    if layer then
+        layer:SetPos(Vector(saved.pos.X, saved.pos.Y))
+        layer:SetSize(Vector(saved.size.X, saved.size.Y))
+    end
+end
+
+local function applyHop(rec, pickup, pose)
+    local layer = hopLayer(pickup)
+    if not layer then
+        rec.hopUnavailable = true
+        return
+    end
+    if not rec.hop then
+        -- Copy by value: a getter may lend the layer's own storage.
+        local pos, size = layer:GetPos(), layer:GetSize()
+        rec.hop = { pos = Vector(pos.X, pos.Y), size = Vector(size.X, size.Y) }
+        rec.hops = rec.hops + 1
+    end
+    local saved = rec.hop
+    layer:SetPos(Vector(saved.pos.X, saved.pos.Y + pose.dy))
+    layer:SetSize(Vector(saved.size.X * pose.sx, saved.size.Y * pose.sy))
+end
+
+local function endPreview(hash, rec, reason, pickup)
+    restoreHop(rec, pickup or livePreviewPickup(rec))
+    UpgradeHighlight._previews[hash] = nil
+    record("END", rec, reason)
+end
+
+local function trackPreview(pickup, info)
+    if not pickup or not info then return end
+    local hash = getPickupHash(pickup)
+    local previews = UpgradeHighlight._previews
+    local rec = previews[hash]
+    if rec and rec.identity == info.originKey then
+        if not livePreviewPickup(rec) then
+            -- A native Morph (a rotating pedestal turning) renews the entity
+            -- under the same address. Follow it and put back a borrowed hop.
+            rec.ptr = EntityPtr(pickup)
+            restoreHop(rec, pickup)
+        end
+        return
+    end
+    if isMorphing(pickup) or isViewerPickup(pickup) or isHiddenPickup(pickup) then return end
+    if rec then endPreview(hash, rec, "changed") end
+
+    local groups, tree = previewGroups(info)
+    if #groups == 0 then return end
+    local ok, layout = pcall(Preview.layout, groups, tree)
+    if not ok then
+        ConchBlessing.printError("[EvolutionPreview] layout failed for " .. tostring(info.originKey) .. ": " .. tostring(layout))
+        return
+    end
+    -- Each pickup keeps its own hop beat (a cosmetic offset from its seed),
+    -- so a room of eligible items does not jump in lockstep.
+    rec = { ptr = EntityPtr(pickup), hash = hash, identity = info.originKey, groups = groups,
+        layout = layout, t = 0, open = false, opens = 0, hops = 0, draws = 0, sparks = 0, pops = 0,
+        phase = math.floor(tonumber(pickup.InitSeed) or 0) % Preview.HOP_PERIOD }
+    previews[hash] = rec
+    record("TRACK", rec, tostring(#groups) .. (tree and " choices" or " group"))
+end
+
+local function nearestPlayerDistance(position)
+    local best = math.huge
+    local game = Game()
+    for i = 0, game:GetNumPlayers() - 1 do
+        local player = Isaac.GetPlayer(i)
+        local pos = player and player.Position
+        if pos then
+            local dx, dy = pos.X - position.X, pos.Y - position.Y
+            best = math.min(best, math.sqrt(dx * dx + dy * dy))
+        end
+    end
+    return best
+end
+
+local function stepPreview(rec, pickup, clock)
+    local distance = nearestPlayerDistance(pickup.Position)
+    if rec.open and distance > CLOSE_RANGE then
+        rec.open = false
+        record("CLOSE", rec)
+    elseif not rec.open and distance <= OPEN_RANGE then
+        rec.open = true
+        rec.opens = rec.opens + 1
+        record("OPEN", rec)
+    end
+    if rec.open then
+        rec.t = math.min(rec.layout.openEnd, rec.t + 1)
+    else
+        rec.t = math.max(0, rec.t - CLOSE_RATE)
+    end
+
+    -- Out of range the item keeps hopping in place, with no limit, until a
+    -- player comes near. A hop starts only while the tree is fully closed; one
+    -- already in the air lands before the tree's first lines have grown.
+    local phase = (clock + rec.phase) % Preview.HOP_PERIOD
+    if phase == 0 then rec.hopping = not rec.open and rec.t == 0 and not rec.hopUnavailable end
+    local pose = rec.hopping and Preview.hop(phase)
+    if pose then
+        applyHop(rec, pickup, pose)
+    else
+        rec.hopping = false
+        restoreHop(rec, pickup)
+    end
+end
+
+local function updatePreviews()
+    local previews = UpgradeHighlight._previews
+    if not tableHasEntries(previews) then return end
+    UpgradeHighlight._previewClock = UpgradeHighlight._previewClock + 1
+    local clock = UpgradeHighlight._previewClock
+    local replaced = {}
+    -- Only here, after every entity has updated, is a pickup judged changed: a
+    -- rotating pedestal's native turn passes through inconsistent cycle states
+    -- inside its own init callback (measured 2026-10-23).
+    for hash, rec in pairs(previews) do
+        local pickup = livePreviewPickup(rec)
+        -- An expired reference waits for its pickup to be seen again; it
+        -- neither draws nor writes until then.
+        if pickup then
+            local reason, info
+            if isMorphing(pickup) then
+                reason = "upgrade"
+            else
+                info = getPickupUpgradeInfo(pickup)
+                if not info or info.originKey ~= rec.identity then
+                    reason = "changed"
+                elseif isHiddenPickup(pickup) then
+                    reason = "hidden"
+                end
+            end
+            if reason then
+                endPreview(hash, rec, reason, pickup)
+                if reason == "changed" and info then replaced[#replaced + 1] = { pickup, info } end
+            else
+                stepPreview(rec, pickup, clock)
+            end
+        end
+    end
+    for _, entry in ipairs(replaced) do trackPreview(entry[1], entry[2]) end
+end
+
+local function clearPreviews(reason)
+    for hash, rec in pairs(UpgradeHighlight._previews) do
+        endPreview(hash, rec, reason)
+    end
+    UpgradeHighlight._previews = {}
+    UpgradeHighlight._previewClock = 0
+end
+
+--- Ends this pickup's preview and puts back its item layer before an upgrade
+--- (or a bench) reads the pickup's own presentation.
 function UpgradeHighlight.StopForPickup(pickup)
     if not pickup then
         return
     end
-
-    local active = UpgradeHighlight._activePickups
-    if not tableHasEntries(active) then
-        return
-    end
-
-    local key = getPickupHash(pickup)
-    local pulse = active[key]
-    if pulse then
-        resetPickupColor(pickup, pulse.baseColor)
-        active[key] = nil
-    end
+    local hash = getPickupHash(pickup)
+    local rec = UpgradeHighlight._previews[hash]
+    if rec then endPreview(hash, rec, "stopped", pickup) end
 end
+
+--- Read-only evidence for conch_test evolution.
+function UpgradeHighlight.previewFor(pickup)
+    return pickup and UpgradeHighlight._previews[getPickupHash(pickup)] or nil
+end
+function UpgradeHighlight.previewEvents()
+    return UpgradeHighlight._previewEvents
+end
+UpgradeHighlight.OPEN_RANGE, UpgradeHighlight.CLOSE_RANGE = OPEN_RANGE, CLOSE_RANGE
 
 function UpgradeHighlight.ScanRoom(frame)
     frame = frame or getFrame()
@@ -426,33 +485,22 @@ function UpgradeHighlight.ScanRoom(frame)
     if not tableHasEntries(ConchBlessing.ItemMaps) then
         UpgradeHighlight._roomUpgradeableCount = 0
         UpgradeHighlight._roomHasUpgradeable = false
-        UpgradeHighlight._roomPulseMode = nil
         UpgradeHighlight._lastScanFrame = frame
         return 0
     end
 
     local count = 0
-    local roomMode = nil
     for _, entity in ipairs(Isaac.GetRoomEntities()) do
         local pickup = normalizePickup(entity)
         local info = pickup and getPickupUpgradeInfo(pickup) or nil
         if pickup and info then
             count = count + 1
-            if not roomMode then
-                roomMode = info.mode
-            elseif roomMode ~= info.mode then
-                roomMode = "multiple"
-            end
-            if info.mode == "multiple" then
-                roomMode = "multiple"
-            end
-            startPickupPulse(pickup, info, frame)
+            trackPreview(pickup, info)
         end
     end
 
     UpgradeHighlight._roomUpgradeableCount = count
     UpgradeHighlight._roomHasUpgradeable = count > 0
-    UpgradeHighlight._roomPulseMode = roomMode
     UpgradeHighlight._lastScanFrame = frame
     return count
 end
@@ -532,78 +580,103 @@ local function renderHudPulse()
     sprite:Render(pos)
 end
 
+local function renderPreviews()
+    local previews = UpgradeHighlight._previews
+    if not tableHasEntries(previews) then
+        return
+    end
+    local hud = Game():GetHUD()
+    if hud and type(hud.IsVisible) == "function" and not hud:IsVisible() then
+        return
+    end
+    for _, rec in pairs(previews) do
+        if rec.t > 0 and not rec.failed then
+            local pickup = livePreviewPickup(rec)
+            if pickup then
+                local ok, drawn = pcall(function()
+                    local x, y = Preview.anchor(pickup)
+                    return Preview.render(rec.layout, x, y, rec.t, UpgradeHighlight._previewClock + rec.phase)
+                end)
+                if ok then
+                    rec.draws = rec.draws + 1
+                    rec.sparks = rec.sparks + drawn.sparks
+                    rec.pops = rec.pops + drawn.pops
+                    rec.lastDrawn = drawn
+                else
+                    rec.failed = true
+                    ConchBlessing.printError("[EvolutionPreview] render failed for " .. tostring(rec.identity) .. ": " .. tostring(drawn))
+                end
+            end
+        end
+    end
+end
+
+local function onRender()
+    renderPreviews()
+    renderHudPulse()
+end
+
 local function onUpdate()
     local frame = getFrame()
-    local active = UpgradeHighlight._activePickups
     local shouldScan = not UpgradeHighlight._lastScanFrame
         or frame - UpgradeHighlight._lastScanFrame >= ROOM_SCAN_INTERVAL
 
     if shouldScan then
         UpgradeHighlight.ScanRoom(frame)
-    elseif not tableHasEntries(active) and not UpgradeHighlight._roomHasUpgradeable then
-        return
     end
-
-    updateActivePickupPulses(frame)
+    updatePreviews()
 end
 
-local function onPickupInit(_, pickup)
-    if not pickup or not isUpgradeablePickupVariant(pickup.Variant) then
-        return
-    end
-    maybeStartPickupPulse(pickup, getFrame())
-end
-
+-- Pickup callbacks only start a tree for a new pickup or follow a renewed
+-- reference; whether a tracked pickup changed is judged in MC_POST_UPDATE.
 local function onPickupUpdate(_, pickup)
     if not pickup or not isUpgradeablePickupVariant(pickup.Variant) then
         return
     end
-    if hasActivePulseForPickup(pickup) then
+    local hash = getPickupHash(pickup)
+    local rec = UpgradeHighlight._previews[hash]
+    if rec then
+        if not livePreviewPickup(rec) then
+            -- A native Morph (a reroll, a rotating pedestal turning) renews
+            -- the entity under the same address. Follow it and put back a
+            -- borrowed hop; the next update decides whether it still fits.
+            rec.ptr = EntityPtr(pickup)
+            restoreHop(rec, pickup)
+        end
         return
     end
-    maybeStartPickupPulse(pickup, getFrame())
+    local info = getPickupUpgradeInfo(pickup)
+    if info then trackPreview(pickup, info) end
 end
 
 local function onRoomChanged()
-    local active = UpgradeHighlight._activePickups
-    if tableHasEntries(active) then
-        for _, pulse in pairs(active) do
-            if pulse and pulse.pickup then
-                resetPickupColor(pulse.pickup, pulse.baseColor)
-            end
-        end
-    end
-
-    UpgradeHighlight._activePickups = {}
+    clearPreviews("room")
     UpgradeHighlight._lastScanFrame = nil
     UpgradeHighlight._roomUpgradeableCount = 0
     UpgradeHighlight._roomHasUpgradeable = false
-    UpgradeHighlight._roomPulseMode = nil
     UpgradeHighlight.ScanRoom(getFrame())
 end
 
 if not UpgradeHighlight._callbacksRegistered then
     ConchBlessing:AddCallback(ModCallbacks.MC_POST_UPDATE, onUpdate)
     if ConchBlessing.AddPriorityCallback then
-        ConchBlessing:AddPriorityCallback(ModCallbacks.MC_POST_RENDER, 100, renderHudPulse)
+        ConchBlessing:AddPriorityCallback(ModCallbacks.MC_POST_RENDER, 100, onRender)
     else
-        ConchBlessing:AddCallback(ModCallbacks.MC_POST_RENDER, renderHudPulse)
+        ConchBlessing:AddCallback(ModCallbacks.MC_POST_RENDER, onRender)
     end
     ConchBlessing:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, onRoomChanged)
     ConchBlessing:AddCallback(ModCallbacks.MC_POST_NEW_ROOM, onRoomChanged)
     ConchBlessing:AddCallback(ModCallbacks.MC_POST_NEW_LEVEL, onRoomChanged)
-    ConchBlessing:AddCallback(ModCallbacks.MC_POST_PICKUP_INIT, onPickupInit, PickupVariant.PICKUP_COLLECTIBLE)
-    ConchBlessing:AddCallback(ModCallbacks.MC_POST_PICKUP_INIT, onPickupInit, PickupVariant.PICKUP_TRINKET)
+    ConchBlessing:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, function() clearPreviews("exit") end)
+    ConchBlessing:AddCallback(ModCallbacks.MC_POST_PICKUP_INIT, onPickupUpdate, PickupVariant.PICKUP_COLLECTIBLE)
+    ConchBlessing:AddCallback(ModCallbacks.MC_POST_PICKUP_INIT, onPickupUpdate, PickupVariant.PICKUP_TRINKET)
     ConchBlessing:AddCallback(ModCallbacks.MC_POST_PICKUP_UPDATE, onPickupUpdate, PickupVariant.PICKUP_COLLECTIBLE)
     ConchBlessing:AddCallback(ModCallbacks.MC_POST_PICKUP_UPDATE, onPickupUpdate, PickupVariant.PICKUP_TRINKET)
-    -- A reload (luamod) must not leave a pickup in its pulse colour.
+    -- A reload (luamod) must not leave an item layer mid-hop.
     if ModCallbacks.MC_PRE_MOD_UNLOAD then
         ConchBlessing:AddCallback(ModCallbacks.MC_PRE_MOD_UNLOAD, function(_, unloaded)
             if unloaded ~= ConchBlessing and unloaded ~= ConchBlessing.originalMod then return end
-            for _, pulse in pairs(UpgradeHighlight._activePickups or {}) do
-                if pulse and pulse.pickup then resetPickupColor(pulse.pickup, pulse.baseColor) end
-            end
-            UpgradeHighlight._activePickups = {}
+            clearPreviews("unload")
         end)
     end
     UpgradeHighlight._callbacksRegistered = true

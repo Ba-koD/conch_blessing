@@ -1953,6 +1953,14 @@ do
     end
 end
 
+-- Dev tooling: registers the conch_test evolution preview bench. Safe to remove.
+do
+    local ok, err = pcall(require, "scripts.dev.evolution_probe")
+    if not ok then
+        ConchBlessing.printError("[EvolutionProbe] load failed: " .. tostring(err))
+    end
+end
+
 -- Dev tooling: registers the conch_test appraisal detail test bench. Safe to remove.
 do
     local ok, err = pcall(require, "scripts.dev.appraisal_probe")
