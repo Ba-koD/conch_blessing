@@ -17,6 +17,15 @@ ConchBlessing.eternalflame.data = {
 
 local ETERNAL_FLAME_ID = Isaac.GetItemIdByName("Eternal Flame")
 
+-- A dead holder (in its death animation) or a co-op ghost neither burns curses
+-- away nor earns from a removal.
+local function isActingPlayer(player)
+    if not player then return false end
+    if type(player.IsDead) == "function" and player:IsDead() then return false end
+    if type(player.IsCoopGhost) == "function" and player:IsCoopGhost() then return false end
+    return true
+end
+
 local function getRewards(player)
     local save = SaveManager.GetRunSave(player)
     if not save then return nil end
@@ -77,11 +86,11 @@ local function executeCurseRemoval(player)
         data.curseRemoved = true
         data.curseCount = data.curseCount + removedCount
         
-        -- Each holder earns exactly the copies owned at this removal, even in
-        -- co-op. A later pickup, loss or cache evaluation cannot rescale it.
+        -- Each living holder earns exactly the copies owned at this removal, even
+        -- in co-op. A later pickup, loss or cache evaluation cannot rescale it.
         for i = 0, Game():GetNumPlayers() - 1 do
             local owner = Isaac.GetPlayer(i)
-            local copies = owner:GetCollectibleNum(ETERNAL_FLAME_ID, true)
+            local copies = isActingPlayer(owner) and owner:GetCollectibleNum(ETERNAL_FLAME_ID, true) or 0
             if copies > 0 then
                 local rewards = assert(getRewards(owner), "Eternal Flame run save unavailable")
                 rewards.earnedUnits = rewards.earnedUnits + removedCount * copies
@@ -164,11 +173,8 @@ local function monitorCurseChanges(player)
     end
 end
 
--- Pickup callbacks only reset detection; rewards live in the player's run save.
-function ConchBlessing.eternalflame.onPickup()
-    ConchBlessing.eternalflame.data.curseRemoved = false
-end
-
+-- Rewards live in the player's run save. A new holder needs no reset of its
+-- own: while nobody living holds the flame, every update resets detection.
 function ConchBlessing.eternalflame.onEvaluateCache(_, player, cacheFlag)
     local rewards = getRewards(player)
     if not rewards then return end
@@ -197,20 +203,15 @@ local function resetCurseDetectionState()
     end
 end
 
--- Handle new level entry
+-- A new floor or room restarts curse detection whoever holds the flame: a
+-- pending removal belongs to the room it was seen in. (Without a holder the
+-- update loop resets it anyway, so the reset is safe for everyone.)
 function ConchBlessing.eternalflame.onNewLevel()
-    local player = Isaac.GetPlayer(0)
-    if not player or not player:HasCollectible(ETERNAL_FLAME_ID) then return end
-    
     resetCurseDetectionState()
     ConchBlessing.printDebug("Eternal Flame: New level entered, curse detection reset (Total curses removed: " .. ConchBlessing.eternalflame.data.curseCount .. ")")
 end
 
--- Handle new room entry
 function ConchBlessing.eternalflame.onNewRoom()
-    local player = Isaac.GetPlayer(0)
-    if not player or not player:HasCollectible(ETERNAL_FLAME_ID) then return end
-    
     resetCurseDetectionState()
     ConchBlessing.printDebug("Eternal Flame: New room entered, curse detection reset")
 end
@@ -236,10 +237,12 @@ end
 -- Main update loop for curse management and effects
 function ConchBlessing.eternalflame.onUpdate(_)
     updateFlameEffects()
+    -- Curses belong to the floor, so one living holder runs the removal (and
+    -- shows the flame); the payout itself goes to every living holder.
     local player
     for i = 0, Game():GetNumPlayers() - 1 do
         local candidate = Isaac.GetPlayer(i)
-        if candidate:HasCollectible(ETERNAL_FLAME_ID) then player = candidate; break end
+        if isActingPlayer(candidate) and candidate:HasCollectible(ETERNAL_FLAME_ID) then player = candidate; break end
     end
     if not player then resetCurseDetectionState(); return end
 

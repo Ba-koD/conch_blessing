@@ -12,6 +12,7 @@ class NeglectVisualTests(unittest.TestCase):
         self.lua.globals().root = ROOT.as_posix()
         self.lua.execute(r'''
             package.path=root..'/?.lua;'..package.path
+            hostLoaded,hostRequire=package.loaded,require
             package=nil
             errors,images,draws,captures,native,shaderLoads={},{},{},{},{},{}
             width,height=640,360
@@ -210,6 +211,35 @@ class NeglectVisualTests(unittest.TestCase):
             M.onPrePlayerRender(nil,p,offset); assert(#images==2)
             M.reset(); M.onPrePlayerRender(nil,p,offset); assert(#images==3)
             assert(images[1].name~=images[2].name and images[2].name~=images[3].name)
+        ''')
+
+    def test_removed_player_releases_its_image_at_once(self):
+        self.lua.execute('''
+            EntityType={ENTITY_PLAYER=1}; p.Type=1; q.Type=1
+            M.onPrePlayerRender(nil,p,offset); M.onPrePlayerRender(nil,q,offset)
+            assert(#images==2)
+            M.onPlayerRemoved(nil,{Type=5,key=1}); M.onPrePlayerRender(nil,p,offset)
+            assert(#images==2,'another entity type sharing the key releases nothing')
+            M.onPlayerRemoved(nil,p)
+            M.onPrePlayerRender(nil,q,offset); assert(#images==2,'the remaining player keeps its image')
+            M.onPrePlayerRender(nil,p,offset)
+            assert(#images==3 and draws[#draws].image==images[3],
+                'a player at the released address starts with a fresh image')
+            failNative=true; M.onPrePlayerRender(nil,q,offset); failNative=false
+            assert(M.onPrePlayerRender(nil,q,offset)==nil,'a failed player stays native')
+            M.onPlayerRemoved(nil,q)
+            assert(M.onPrePlayerRender(nil,q,offset)==false,'removal clears that address\\'s failure too')
+        ''')
+
+    def test_player_removal_callback_is_registered_player_filtered(self):
+        self.lua.execute('''
+            registered={}
+            EntityType={ENTITY_PLAYER=1}; ModCallbacks.MC_POST_ENTITY_REMOVE=67
+            function ConchBlessing:AddCallback(id,fn,filter) registered[#registered+1]={id=id,fn=fn,filter=filter} end
+            hostLoaded['scripts.items.collectibles.hemispatial_neglect_visual']=nil
+            local fresh=hostRequire('scripts.items.collectibles.hemispatial_neglect_visual')
+            assert(#registered==1 and registered[1].id==67 and registered[1].filter==1)
+            assert(registered[1].fn==fresh.onPlayerRemoved)
         ''')
 
     def test_native_wardrobe_toggle_only_changes_appearance_and_never_readds(self):

@@ -50,11 +50,20 @@ local function hasRepentogon()
     return type(repentogon) == "table" and repentogon.Real == true
 end
 
+-- A dead holder (in its death animation) or a co-op ghost neither splits
+-- enemies nor counts kills.
+local function isActingPlayer(player)
+    if not player then return false end
+    if type(player.IsDead) == "function" and player:IsDead() then return false end
+    if type(player.IsCoopGhost) == "function" and player:IsCoopGhost() then return false end
+    return true
+end
+
 local function anyPlayerHasSword()
     local game = Game()
     for i = 0, game:GetNumPlayers() - 1 do
         local player = game:GetPlayer(i)
-        if player and player:HasCollectible(SEALED_DEMON_SWORD_ID) then
+        if isActingPlayer(player) and player:HasCollectible(SEALED_DEMON_SWORD_ID) then
             return player
         end
     end
@@ -226,30 +235,17 @@ ConchBlessing.sealeddemonsword.onNewRoom = function(_)
         UseFlag.USE_NOANIM | UseFlag.USE_NOCOSTUME)
 end
 
--- On pickup callback
-ConchBlessing.sealeddemonsword.onPickup = function(player)
-    ConchBlessing.printDebug("[SealedDemonSword] Item picked up")
-    
-    local data = getSaveData(player)
-    -- Initialize if needed
-    if not data.killCount then data.killCount = 0 end
-    
-    -- Force cache update
-    player:AddCacheFlags(CacheFlag.CACHE_SPEED)
-    player:EvaluateItems()
-    
-    SaveManager.Save()
-end
-
--- Cache evaluation callback
+-- Cache evaluation callback. The XML cache="speed" makes the engine evaluate
+-- speed on acquisition and loss, so no pickup hook is needed.
 ConchBlessing.sealeddemonsword.onEvaluateCache = function(_, player, cacheFlag)
     if not player:HasCollectible(SEALED_DEMON_SWORD_ID) then
         return
     end
-    
+
     if cacheFlag == CacheFlag.CACHE_SPEED then
-        -- Apply speed penalty
-        player.MoveSpeed = player.MoveSpeed - SPEED_PENALTY
+        -- One flat penalty however many swords are held, through StatsAPI's
+        -- speed helper like the other speed penalties.
+        ConchBlessing.stats.speed.applyAddition(player, -SPEED_PENALTY, nil)
         ConchBlessing.printDebug("[SealedDemonSword] Applied speed penalty: -" .. tostring(SPEED_PENALTY) .. " -> " .. tostring(player.MoveSpeed))
     end
 end
@@ -258,10 +254,10 @@ end
 ConchBlessing.sealeddemonsword.onNPCDeath = function(_, npc)
     local game = Game()
     
-    -- Check all players
+    -- Check all living holders
     for i = 0, game:GetNumPlayers() - 1 do
         local player = game:GetPlayer(i)
-        if player and player:HasCollectible(SEALED_DEMON_SWORD_ID) then
+        if isActingPlayer(player) and player:HasCollectible(SEALED_DEMON_SWORD_ID) then
             -- Furniture is not a kill: a stomped fire or a broken shopkeeper used to
             -- count towards the evolution.
             if EnemyUtils.isMonsterKind(npc) then
@@ -308,11 +304,14 @@ ConchBlessing.sealeddemonsword.onGameStarted = function(_)
     ConchBlessing.printDebug("[SealedDemonSword] Game started, restoring data...")
     splitState, splitProvider = nil, nil
     if hasRepentogon() then bindSplitState() end
-    
-    local player = Isaac.GetPlayer(0)
-    if player and player:HasCollectible(SEALED_DEMON_SWORD_ID) then
-        player:AddCacheFlags(CacheFlag.CACHE_SPEED)
-        player:EvaluateItems()
+
+    local game = Game()
+    for i = 0, game:GetNumPlayers() - 1 do
+        local player = game:GetPlayer(i)
+        if player and player:HasCollectible(SEALED_DEMON_SWORD_ID) then
+            player:AddCacheFlags(CacheFlag.CACHE_SPEED)
+            player:EvaluateItems()
+        end
     end
 end
 
@@ -336,11 +335,17 @@ if EID then
            and descObj.ObjVariant == PickupVariant.PICKUP_COLLECTIBLE 
            and descObj.ObjSubType == SEALED_DEMON_SWORD_ID then
             
-            local player = Isaac.GetPlayer(0)
+            -- EID's own reader of this description: the Item Reminder's player,
+            -- else the one nearest the pedestal. Never a guess at player 0.
+            local player = nil
+            if type(EID.ClosestPlayerTo) == "function" then
+                local ok, found = pcall(EID.ClosestPlayerTo, EID, descObj.Entity)
+                player = ok and found or nil
+            end
             local remaining = KILLS_TO_EVOLVE
             
-            if player then
-                local playerSave = SaveManager.GetRunSave(player)
+            local playerSave = player and SaveManager.TryGetRunSave(player)
+            if type(playerSave) == "table" then
                 local data = playerSave.sealedDemonSword or {}
                 local killCount = data.killCount or 0
                 remaining = KILLS_TO_EVOLVE - killCount

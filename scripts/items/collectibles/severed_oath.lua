@@ -1733,8 +1733,11 @@ function M.onUseItem(_, collectibleId, rng, player, useFlags, activeSlot, varDat
         return
     end
 
+    -- Reject a use that names no player instead of borrowing player 0, whose
+    -- position and ownership belong to someone else in co-op.
     if not player or not player.Position then
-        player = Isaac.GetPlayer(0)
+        ConchBlessing.printError("[Severed Oath] Use rejected: the callback named no player.")
+        return { Discharge = false, Remove = false, ShowAnim = false }
     end
 
     local splitCount, spawnedCount = splitRoomCycles(player)

@@ -10,7 +10,13 @@ class UtilityBeltTests(unittest.TestCase):
     def setUp(self):
         self.lua = LuaRuntime(unpack_returned_tuples=True)
         self.lua.execute('''
-            ConchBlessing={printDebug=function() end}; Isaac={GetItemIdByName=function() return 900 end}
+            -- The run save stands in for the disk and is keyed by the player's seed,
+            -- which outlives GetData and the session's pointer hashes.
+            runs={}
+            ConchBlessing={printDebug=function() end,SaveManager={
+                GetRunSave=function(p) runs[p.seed]=runs[p.seed] or {}; return runs[p.seed] end,
+                TryGetRunSave=function(p) return runs[p.seed] end}}
+            Isaac={GetItemIdByName=function() return 900 end}
             ActiveSlot={SLOT_PRIMARY=0,SLOT_POCKET=2}; SoundEffect={SOUND_POWERUP_SPEWER=1}
             CollectibleType={COLLECTIBLE_BOOK_OF_BELIAL_PASSIVE=59,COLLECTIBLE_BOOK_OF_VIRTUES=60,
                 COLLECTIBLE_D_INFINITY=61,COLLECTIBLE_BLANK_CARD=62,COLLECTIBLE_PLACEBO=63,
@@ -21,7 +27,7 @@ class UtilityBeltTests(unittest.TestCase):
                 p.slots[slot]=id; p.charges[slot]=charge; p.battery[slot]=0; p.moves=p.moves+1
             end}
             function makePlayer(hash)
-                local p={hash=hash,data={},slots={},charges={},battery={},belt=0,moves=0}
+                local p={hash=hash,seed=hash,data={},slots={},charges={},battery={},belt=0,moves=0}
                 function p:GetData() return self.data end
                 function p:HasCollectible(id) return id==900 and self.belt>0 end
                 function p:GetActiveItem(slot) return self.slots[slot] or 0 end
@@ -31,8 +37,11 @@ class UtilityBeltTests(unittest.TestCase):
             end
             p=makePlayer(1)
         ''')
-        self.lua.execute((ROOT/'scripts/items/collectibles/utility_belt.lua').read_text(encoding='utf-8'))
-        self.lua.execute('M=ConchBlessing.utilitybelt; function update(p) M.onPlayerUpdate(nil,p) end')
+        self.lua.globals().beltSource = (ROOT/'scripts/items/collectibles/utility_belt.lua').read_text(encoding='utf-8')
+        self.lua.execute('''
+            function dofile_belt() load(beltSource,'utility_belt')(); M=ConchBlessing.utilitybelt end
+            dofile_belt(); function update(p) M.onPlayerUpdate(nil,p) end
+        ''')
 
     def test_transfer_preserves_charge_and_existing_pocket(self):
         self.lua.execute('''
@@ -53,6 +62,34 @@ class UtilityBeltTests(unittest.TestCase):
             q.slots[0]=13; update(q); assert(q:GetActiveItem(2)==13 and not M._pendingPlayers[2])
             p.belt=1; update(p); assert(p:GetActiveItem(2)==12)
             M.onPlayerUpdate(nil,nil) -- absent player is a supported non-event
+        ''')
+
+    def test_continue_keeps_the_belt_marks_and_moves_nothing_already_settled(self):
+        # Continue: a new process, empty entity data and new pointer hashes, the saved run save.
+        self.lua.execute('''
+            function continue(...)
+                for _,q in ipairs({...}) do q.data={}; q.hash=q.hash+100 end
+                dofile_belt(); M.onGameStarted(nil,true)
+            end
+            p.slots[0]=12; p.belt=1; update(p); assert(p:GetActiveItem(2)==12 and p.moves==2) -- one transfer: two slot writes
+            p.slots[2]=nil; p.slots[0]=13; update(p)
+            assert(p:GetActiveItem(0)==13 and p:GetActiveItem(2)==0,'a settled belt moved a later active')
+            q=makePlayer(2); q.belt=1; update(q); assert(M._pendingPlayers[2])
+            continue(p,q)
+            update(p); update(p)
+            assert(p:GetActiveItem(0)==13 and p:GetActiveItem(2)==0 and p.moves==2,'Continue read the belt as just picked up')
+            update(q); assert(M._pendingPlayers[q.hash],'Continue lost the owed transfer')
+            q.slots[0]=14; update(q); assert(q:GetActiveItem(2)==14 and not M._pendingPlayers[q.hash])
+            p.belt=0; update(p); continue(p); p.slots[0]=15; p.belt=1; update(p)
+            assert(p:GetActiveItem(2)==15,'reacquisition after a loss is a new pickup')
+        ''')
+
+    def test_missing_run_save_never_guesses_a_first_pickup(self):
+        self.lua.execute('''
+            local get=ConchBlessing.SaveManager.GetRunSave
+            ConchBlessing.SaveManager.GetRunSave=function() return nil end
+            p.slots[0]=12; p.belt=1; update(p); update(p); assert(p.moves==0)
+            ConchBlessing.SaveManager.GetRunSave=get; update(p); assert(p.moves==2 and p:GetActiveItem(2)==12)
         ''')
 
     def test_every_excluded_active_in_both_orders_then_valid_active(self):

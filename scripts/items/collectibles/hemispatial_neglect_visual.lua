@@ -170,8 +170,26 @@ function M.reset()
     outlineShader, outlineUnavailable = nil, nil
 end
 
+-- A player who leaves the run (a co-op drop-out, a removed extra player) never
+-- renders again, so release that player's full-screen image at once instead of
+-- holding it until the next room or game reset. Another player that later
+-- reuses the address starts clean.
+function M.onPlayerRemoved(_, entity)
+    if not entity or entity.Type ~= EntityType.ENTITY_PLAYER then return end
+    local key = GetPtrHash(entity)
+    surfaces[key], capturing[key], failures[key] = nil, nil, nil
+end
+
 function M.onUnload(_, mod)
     if mod == ConchBlessing or mod == ConchBlessing.originalMod then M.reset() end
+end
+
+-- Player-filtered, so no other entity's removal reaches this module.
+if type(ConchBlessing.AddCallback) == "function" and type(ModCallbacks) == "table"
+    and type(ModCallbacks.MC_POST_ENTITY_REMOVE) == "number"
+    and type(EntityType) == "table" and type(EntityType.ENTITY_PLAYER) == "number"
+then
+    ConchBlessing:AddCallback(ModCallbacks.MC_POST_ENTITY_REMOVE, M.onPlayerRemoved, EntityType.ENTITY_PLAYER)
 end
 
 return M

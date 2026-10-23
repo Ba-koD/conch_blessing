@@ -4,6 +4,7 @@ ConchBlessing.timemoney = {}
 
 local SaveManager = ConchBlessing.SaveManager or require("scripts.lib.save_manager")
 local Hits = require("scripts.lib.player_hits")
+local TrinketUtils = ConchBlessing.TrinketUtils or require("scripts.lib.trinket_utils")
 
 local CS = CoinSubType or {
 	NULL = 0,
@@ -41,8 +42,12 @@ ConchBlessing.timemoney.data = {
 	renderOffsetY = -35,
 }
 
+-- Runtime state belongs to the exact player entity and is rebuilt every
+-- session; the saved copy count and timer live in that player's own run save,
+-- which SaveManager keys by the player's collectible RNG seed. Two players of
+-- one character, Esau or a character change keep their own counts.
 local function getKey(player)
-	return tostring(player:GetPlayerType())
+	return GetPtrHash(player)
 end
 
 local function ensureState()
@@ -56,16 +61,30 @@ TimerClock.onRebase("timemoney", function(delta)
     end
 end)
 
-local function getPlayerState(player)
-	local s = ensureState()
-	local key = getKey(player)
-	s.perPlayer[key] = s.perPlayer[key] or {
+local loadFromSave
+
+local function newPlayerState()
+	return {
 		lastDropFrame = 0,
 		lastItemCount = 0,
         pendingPenalty = 0,
 	}
-	return s.perPlayer[key]
 end
+
+-- A player first seen this session (Continue, a reload, a player added
+-- mid-run) starts from its own saved record.
+local function getPlayerState(player)
+	local s = ensureState()
+	local key = getKey(player)
+	local ps = s.perPlayer[key]
+	if not ps then
+		ps = newPlayerState()
+		s.perPlayer[key] = ps
+		loadFromSave(player, ps)
+	end
+	return ps
+end
+ConchBlessing.timemoney.getPlayerState = getPlayerState
 
 local function getDropIntervalFrames()
 	local fps = tonumber(ConchBlessing.timemoney.data.framesPerSecond) or 30
@@ -101,14 +120,40 @@ local function getFamiliarVariant()
 	return data and data.entity and data.entity.variant or nil
 end
 
-local function loadFromSave(player)
+-- The player's own record in its run save. Older saves nested it under the
+-- PlayerType; the record of the current type (else the one that had seen the
+-- most copies, so no initial payout repeats) is adopted once.
+local function getRecord(player)
 	local save = SaveManager.GetRunSave(player)
-	if not save then return end
-	save.timeMoney = save.timeMoney or {}
-	local key = getKey(player)
-	local ps = getPlayerState(player)
-	local rec = save.timeMoney[key]
-	if rec then
+	if type(save) ~= "table" then return nil end
+	if type(save.timeMoney) ~= "table" then save.timeMoney = {} end
+	local rec = save.timeMoney
+	local legacy = TrinketUtils.popPlayerTypeRecords(rec)
+	if #legacy > 0 and rec.lastItemCount == nil then
+		local chosen
+		for _, entry in ipairs(legacy) do
+			if entry.type == tostring(player:GetPlayerType()) then chosen = entry.rec end
+		end
+		if not chosen then
+			for _, entry in ipairs(legacy) do
+				if not chosen or (tonumber(entry.rec.lastItemCount) or 0) > (tonumber(chosen.lastItemCount) or 0) then
+					chosen = entry.rec
+				end
+			end
+		end
+		rec.lastItemCount = chosen.lastItemCount
+		rec.dropFramesRemaining = chosen.dropFramesRemaining
+		rec.data = chosen.data
+	end
+	return rec
+end
+
+loadFromSave = function(player, ps)
+	local rec = getRecord(player)
+	if rec and rec.lastItemCount == nil and rec.dropFramesRemaining == nil then
+		-- Nothing saved for this player yet: a full interval starts now.
+		rebaseDropTimer(ps, getDropIntervalFrames(), TimerClock.now())
+	elseif rec then
 		local d = rec.data
 		if d then
 			if type(d.framesPerSecond) == 'number' then ConchBlessing.timemoney.data.framesPerSecond = d.framesPerSecond end
@@ -118,6 +163,7 @@ local function loadFromSave(player)
 			if type(d.probNickel) == 'number' then ConchBlessing.timemoney.data.probNickel = d.probNickel end
 			if type(d.probGolden) == 'number' then ConchBlessing.timemoney.data.probGolden = d.probGolden end
 			if type(d.probDime) == 'number' then ConchBlessing.timemoney.data.probDime = d.probDime end
+			if type(d.probLucky) == 'number' then ConchBlessing.timemoney.data.probLucky = d.probLucky end
 			if type(d.luckMultiplierPerPoint) == 'number' then ConchBlessing.timemoney.data.luckMultiplierPerPoint = d.luckMultiplierPerPoint end
 			if type(d.luckMultiplierCap) == 'number' then ConchBlessing.timemoney.data.luckMultiplierCap = d.luckMultiplierCap end
 		end
@@ -135,13 +181,9 @@ local function loadFromSave(player)
 end
 
 local function saveToSave(player)
-	local save = SaveManager.GetRunSave(player)
-	if not save then return end
-	save.timeMoney = save.timeMoney or {}
-	local key = getKey(player)
 	local ps = getPlayerState(player)
-	save.timeMoney[key] = save.timeMoney[key] or {}
-	local rec = save.timeMoney[key]
+	local rec = getRecord(player)
+	if not rec then return end
 	writeDropTimerRecord(rec, ps, TimerClock.now())
 	rec.lastItemCount = ps.lastItemCount
 	rec.data = {
@@ -165,14 +207,18 @@ do
 		local callbackKey = SaveManager.SaveCallbacks.PRE_DATA_SAVE
 		mod:AddCallback(callbackKey, function(_, saveData)
 			local runData = saveData and saveData.game and saveData.game.run
+			local getSaveIndex = SaveManager.Utility and SaveManager.Utility.GetSaveIndex
+			if type(runData) ~= "table" or type(getSaveIndex) ~= "function" then return end
 			local perPlayer = ensureState().perPlayer
 			local currentFrame = TimerClock.now()
-			for _, playerRun in pairs(runData or {}) do
-				for key, rec in pairs((playerRun and playerRun.timeMoney) or {}) do
-					local ps = perPlayer[key]
-					if ps and type(rec) == "table" then
-						writeDropTimerRecord(rec, ps, currentFrame)
-					end
+			local game = Game()
+			for i = 0, game:GetNumPlayers() - 1 do
+				local p = game:GetPlayer(i)
+				local ps = p and perPlayer[getKey(p)]
+				local playerRun = ps and runData[getSaveIndex(p)]
+				local rec = type(playerRun) == "table" and playerRun.timeMoney
+				if type(rec) == "table" then
+					writeDropTimerRecord(rec, ps, currentFrame)
 				end
 			end
 		end)
@@ -233,20 +279,21 @@ local function spawnCoinNear(anchor, player, rng)
 	return pickup
 end
 
--- Play time_money familiar Spawn animation (first instance)
+-- Play the Spawn animation on this player's first Time = Money familiar
 local function playFamiliarSpawnAnim(player)
     local variant = getFamiliarVariant()
     if not variant then return end
-    local list = Isaac.FindByType(EntityType.ENTITY_FAMILIAR, variant)
-    if list and #list > 0 then
-        local fam = list[1]:ToFamiliar()
-        if fam then
+    local owner = GetPtrHash(player)
+    for _, entity in ipairs(Isaac.FindByType(EntityType.ENTITY_FAMILIAR, variant) or {}) do
+        local fam = entity:ToFamiliar()
+        if fam and fam.Player and GetPtrHash(fam.Player) == owner then
             local spr = fam:GetSprite()
             if spr then
                 pcall(function()
                     spr:Play("Spawn", true)
                 end)
             end
+            return
         end
     end
 end
@@ -414,12 +461,15 @@ end
 function ConchBlessing.timemoney.onGameStarted(_, isContinued)
 	local game = Game()
 	local num = game:GetNumPlayers()
+	-- Entity hashes from an earlier session mean nothing now.
+	ensureState().perPlayer = {}
 	for i = 0, num - 1 do
 		local p = game:GetPlayer(i)
 		if isContinued then
-			loadFromSave(p)
+			getPlayerState(p)
 		else
-			local ps = getPlayerState(p)
+			local ps = newPlayerState()
+			ensureState().perPlayer[getKey(p)] = ps
 			ps.lastDropFrame = TimerClock.now()
 			ps.lastItemCount = p:GetCollectibleNum(getItemId() or 0)
 			saveToSave(p)
@@ -427,25 +477,23 @@ function ConchBlessing.timemoney.onGameStarted(_, isContinued)
 	end
 end
 
-function ConchBlessing.timemoney.onPlayerUpdate(_)
-	local game = Game()
-	local num = game:GetNumPlayers()
+-- MC_POST_PLAYER_UPDATE: runs once for each player, so only that player's
+-- copies, timer and coins are handled here.
+function ConchBlessing.timemoney.onPlayerUpdate(_, player)
+	if not player then return end
 	local id = getItemId()
 	if not id then return end
-	for i = 0, num - 1 do
-		local p = game:GetPlayer(i)
-		local ps = getPlayerState(p)
-		local curCount = p:GetCollectibleNum(id)
-		if curCount > (ps.lastItemCount or 0) then
-			tryInitialDrop(p, curCount - (ps.lastItemCount or 0))
-		end
-		if curCount ~= (ps.lastItemCount or 0) then
-			ps.lastItemCount = curCount
-			saveToSave(p)
-		end
-		if curCount > 0 then
-			tryPeriodicDrop(p)
-		end
+	local ps = getPlayerState(player)
+	local curCount = player:GetCollectibleNum(id)
+	if curCount > (ps.lastItemCount or 0) then
+		tryInitialDrop(player, curCount - (ps.lastItemCount or 0))
+	end
+	if curCount ~= (ps.lastItemCount or 0) then
+		ps.lastItemCount = curCount
+		saveToSave(player)
+	end
+	if curCount > 0 then
+		tryPeriodicDrop(player)
 	end
 end
 

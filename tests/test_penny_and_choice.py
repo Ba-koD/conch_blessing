@@ -105,6 +105,26 @@ class PennyTests(unittest.TestCase):
             assert(p:GetCollectibleNum(3)==2 and p:GetCollectibleNum(2)==1)
         ''')
 
+    def test_fallback_coin_claims_only_items_picked_up_after_it(self):
+        self.lua.execute('ModCallbacks={}')
+        self.load()
+        self.lua.execute('''
+            q=makePlayer(); M.onPlayerUpdate(nil,p); M.onPlayerUpdate(nil,q)
+            p:AddCollectible(1,0,true); M.onPlayerUpdate(nil,p)   -- before any coin
+            p:AddCollectible(999,0,true); M.onPlayerUpdate(nil,p)
+            assert(p:GetCollectibleNum(1)==1 and slots(p)[1].itemId==nil,'the coin claimed an item from before it')
+            p:AddCollectible(3,0,true); M.onPlayerUpdate(nil,p)
+            assert(p:GetCollectibleNum(3)==2 and slots(p)[1].itemId==3)
+            -- Lost and regained: an item from the coinless stretch stays unclaimed too.
+            p:RemoveCollectible(999); M.onPlayerUpdate(nil,p)
+            p:AddCollectible(4,0,true); M.onPlayerUpdate(nil,p)
+            p:AddCollectible(999,0,true); M.onPlayerUpdate(nil,p)
+            assert(p:GetCollectibleNum(4)==1 and slots(p)[1].itemId==nil)
+            -- Another player's coin never starts from this player's items.
+            q:AddCollectible(1,0,true); M.onPlayerUpdate(nil,q); q:AddCollectible(999,0,true); M.onPlayerUpdate(nil,q)
+            assert(q:GetCollectibleNum(1)==1 and slots(q)[1].itemId==nil)
+        ''')
+
     def test_fallback_floor_payout_is_not_claimed_by_a_newer_open_coin(self):
         self.lua.execute('ModCallbacks={}')
         self.load()

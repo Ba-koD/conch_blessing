@@ -101,6 +101,15 @@ local function isInteractableGridType(gridType)
         or gridType == GRID_TYPE_POOP
 end
 
+-- The player who breathed this flame, while that player still exists. A
+-- flame entity is never the owner.
+local function breathOwner(breathData)
+    local source = breathData and breathData.source
+    local player = source and type(source.ToPlayer) == "function" and source:ToPlayer() or nil
+    if player and (type(player.Exists) ~= "function" or player:Exists()) then return player end
+    return nil
+end
+
 local function destroyGridAt(room, gridIndex, sourceEntity)
     local grid = room and room:GetGridEntity(gridIndex)
     if not grid then
@@ -121,11 +130,13 @@ local function destroyGridAt(room, gridIndex, sourceEntity)
         if after and after.GetType then
             stillTnt = (after:GetType() == GRID_TYPE_TNT)
         end
-        if stillTnt then
+        -- The forced blast is the breath owner's; with no owner left it is
+        -- not set off at all (never credited to a guessed player).
+        if stillTnt and sourceEntity then
             local pos = room:GetGridPosition(gridIndex)
             if pos then
                 pcall(function()
-                    Isaac.Explode(pos, sourceEntity or Isaac.GetPlayer(0), 40)
+                    Isaac.Explode(pos, sourceEntity, 40)
                 end)
             end
             pcall(function()
@@ -167,7 +178,7 @@ local function interactProjectileWithGrids(projectile, breathData)
     breathData.gridTouchedAt = breathData.gridTouchedAt or {}
     local touchedAt = breathData.gridTouchedAt
     local now = Game():GetFrameCount()
-    local sourceEntity = breathData.source or projectile
+    local sourceEntity = breathOwner(breathData)
 
     local gridWidth = room:GetGridWidth() or 0
     local gridSize = room:GetGridSize() or 0

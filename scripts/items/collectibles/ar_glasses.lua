@@ -32,9 +32,35 @@ local function api()
     return a
 end
 
+-- C is a keyboard key, and the keyboard is controller index 0. While a player
+-- plays on the keyboard, C counts only if that player owns AR Glasses, so a
+-- keyboard player without them cannot change the party's choice. When nobody
+-- plays on the keyboard (a solo or all-gamepad run), the key is free and counts
+-- for any owner, as it always did. No pad button is bound, because every free
+-- one is shooting, drop or active-switch input that must stay the game's.
+local KEYBOARD = 0
+
 local function pressed()
     return Input and type(Input.IsButtonPressed) == "function"
-        and Input.IsButtonPressed(Keyboard.KEY_C, 0) == true
+        and Input.IsButtonPressed(Keyboard.KEY_C, KEYBOARD) == true
+end
+
+local function keyboardOwner()
+    if ID <= 0 then return false end
+    local keyboardPlayer, anyOwner = false, false
+    for i = 0, Game():GetNumPlayers()-1 do
+        local p = Isaac.GetPlayer(i)
+        if p then
+            local owns = p:HasCollectible(ID)
+            if p.ControllerIndex == KEYBOARD then
+                if owns then return true end
+                keyboardPlayer = true
+            elseif owns then
+                anyOwner = true
+            end
+        end
+    end
+    return anyOwner and not keyboardPlayer
 end
 
 function M.cancel()
@@ -108,7 +134,7 @@ function M.onUpdate()
     local p = rawget(_G, "MagicConch")
     if not p or not p.Config or not p.Config.enabled then M.reset(); return end
     if Game():IsPaused() then return end
-    if rising then M.cycle() end
+    if rising and keyboardOwner() then M.cycle() end
 end
 
 function M.onRender()

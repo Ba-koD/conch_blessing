@@ -29,27 +29,16 @@ local function getSaveData(player)
     return playerSave.tyrfing
 end
 
--- On pickup callback
-ConchBlessing.tyrfing.onPickup = function(player)
-    ConchBlessing.printDebug("[Tyrfing] Item picked up")
-    
-    local data = getSaveData(player)
-    
-    -- Initialize if needed
-    if data.accumulatedDamage == nil then
-        data.accumulatedDamage = 0
-    end
-    
-    ConchBlessing.printDebug("[Tyrfing] Accumulated damage: " .. tostring(data.accumulatedDamage))
-    
-    -- Force cache update
-    player:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
-    player:EvaluateItems()
-    
-    SaveManager.Save()
+-- A dead holder (in its death animation) or a co-op ghost earns nothing from kills.
+local function isActingPlayer(player)
+    if not player then return false end
+    if type(player.IsDead) == "function" and player:IsDead() then return false end
+    if type(player.IsCoopGhost) == "function" and player:IsCoopGhost() then return false end
+    return true
 end
 
--- Cache evaluation callback
+-- Cache evaluation callback. The XML cache="damage" makes the engine evaluate
+-- damage on acquisition and loss, so no pickup hook is needed.
 ConchBlessing.tyrfing.onEvaluateCache = function(_, player, cacheFlag)
     if not player:HasCollectible(TYRFING_ID) then
         return
@@ -108,10 +97,10 @@ Hits.register("TYRFING", ConchBlessing.tyrfing.onEntityTakeDamage)
 ConchBlessing.tyrfing.onNPCDeath = function(_, npc)
     local game = Game()
     
-    -- Check all players
+    -- Check all living holders
     for i = 0, game:GetNumPlayers() - 1 do
         local player = game:GetPlayer(i)
-        if player and player:HasCollectible(TYRFING_ID) then
+        if isActingPlayer(player) and player:HasCollectible(TYRFING_ID) then
             -- Furniture is not a kill: fires and shopkeepers used to pay damage too.
             if EnemyUtils.isMonsterKind(npc) then
                 local data = getSaveData(player)
@@ -140,14 +129,17 @@ end
 -- Game started callback
 ConchBlessing.tyrfing.onGameStarted = function(_)
     ConchBlessing.printDebug("[Tyrfing] Game started, restoring data...")
-    
-    local player = Isaac.GetPlayer(0)
-    if player and player:HasCollectible(TYRFING_ID) then
-        local data = getSaveData(player)
-        ConchBlessing.printDebug("[Tyrfing] Restored - Accumulated damage: " .. tostring(data.accumulatedDamage))
-        
-        player:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
-        player:EvaluateItems()
+
+    local game = Game()
+    for i = 0, game:GetNumPlayers() - 1 do
+        local player = game:GetPlayer(i)
+        if player and player:HasCollectible(TYRFING_ID) then
+            local data = getSaveData(player)
+            ConchBlessing.printDebug("[Tyrfing] Restored - Accumulated damage: " .. tostring(data.accumulatedDamage))
+
+            player:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
+            player:EvaluateItems()
+        end
     end
 end
 
@@ -158,11 +150,17 @@ if EID then
            and descObj.ObjVariant == PickupVariant.PICKUP_COLLECTIBLE 
            and descObj.ObjSubType == TYRFING_ID then
             
-            local player = Isaac.GetPlayer(0)
+            -- EID's own reader of this description: the Item Reminder's player,
+            -- else the one nearest the pedestal. Never a guess at player 0.
+            local player = nil
+            if type(EID.ClosestPlayerTo) == "function" then
+                local ok, found = pcall(EID.ClosestPlayerTo, EID, descObj.Entity)
+                player = ok and found or nil
+            end
             local accDmg = 0
-            
-            if player then
-                local playerSave = SaveManager.GetRunSave(player)
+
+            local playerSave = player and SaveManager.TryGetRunSave(player)
+            if type(playerSave) == "table" then
                 local data = playerSave.tyrfing or {}
                 accDmg = data.accumulatedDamage or 0
             end

@@ -194,11 +194,17 @@ if EID then
            and descObj.ObjVariant == PickupVariant.PICKUP_COLLECTIBLE 
            and descObj.ObjSubType == VOID_DAGGER_ID then
             
-            local player = Isaac.GetPlayer(0)
+            -- EID's own reader of this description: the Item Reminder's player,
+            -- else the one nearest the pedestal. Never a guess at player 0.
+            local player = nil
+            if type(EID.ClosestPlayerTo) == "function" then
+                local ok, found = pcall(EID.ClosestPlayerTo, EID, descObj.Entity)
+                player = ok and found or nil
+            end
             if not player then
                 return descObj
             end
-            
+
             -- Calculate current proc chance based on player stats
             local maxDelay = player.MaxFireDelay or 0
             local shotsPerSecond = math.max(1.0, 30.0 / (maxDelay + 1.0))

@@ -463,6 +463,8 @@ local function descriptorMatchesSnapshot(snapshot, descriptor, dimension)
         and numbersMatch(data.Subtype or data.SubType, snapshot.roomSubType)
 end
 
+-- With no player (an observed direct/custom entry has no triggering player)
+-- the snapshot records no owner; with a player, its index must resolve.
 local function snapshotCurrentDescriptor(player)
     local level = Game():GetLevel()
     local descriptor = level and level:GetCurrentRoomDesc() or nil
@@ -473,7 +475,7 @@ local function snapshotCurrentDescriptor(player)
         or not descriptor
         or not data
         or dimension == nil
-        or playerIndex == nil
+        or (player ~= nil and playerIndex == nil)
         or tonumber(descriptor.SafeGridIndex) == nil
         or tonumber(descriptor.SafeGridIndex) < 0
     then
@@ -708,12 +710,40 @@ local function rememberNativeOrigin()
     state.observedNativeOrigin = nil
     if getCurrentDimension() == DC_DIMENSION or isAppraisalGalleryRoom()
         or isStageAPIExtraOrigin() then return end
-    local game = Game()
-    local player = game:GetNumPlayers() > 0 and game:GetPlayer(0) or nil
-    local origin = player and snapshotCurrentDescriptor(player) or nil
+    -- Room entry names no triggering player, so record none rather than
+    -- guessing player 0; the return door is then led by a live player.
+    local origin = snapshotCurrentDescriptor(nil)
     if origin then
-        state.observedNativeOrigin = { origin = origin, playerIndex = origin.playerIndex }
+        state.observedNativeOrigin = { origin = origin, playerIndex = nil }
     end
+end
+
+-- A room transition moves every player; its player argument only leads it.
+-- The session's owner leads while present. With no owner, or once the owner
+-- has left the run (a co-op drop-out or a removed extra player), any remaining
+-- live player leads instead so the door never goes inert.
+local function isLivePlayer(player)
+    if player == nil then return false end
+    if type(player.Exists) ~= "function" then return true end
+    local ok, exists = pcall(function() return player:Exists() end)
+    return ok and exists == true
+end
+
+local function getReturnPlayer(nativeSave)
+    local ownerIndex = nativeSave and nativeSave.ownerPlayerIndex or nil
+    local owner = ownerIndex ~= nil and isc.getPlayerFromIndex(nil, ownerIndex) or nil
+    if isLivePlayer(owner) then return owner end
+    local game = Game()
+    local fallback
+    for playerIndex = 0, game:GetNumPlayers() - 1 do
+        local player = game:GetPlayer(playerIndex)
+        if isLivePlayer(player) then
+            local dead = type(player.IsDead) == "function" and player:IsDead() == true
+            if not dead then return player end
+            fallback = fallback or player
+        end
+    end
+    return fallback
 end
 
 local function enableSessionReturnDoor(nativeSave)
@@ -850,7 +880,7 @@ local function tryReturnThroughDoor(doorGridData)
         return
     end
 
-    local player = isc.getPlayerFromIndex(nil, nativeSave.ownerPlayerIndex)
+    local player = getReturnPlayer(nativeSave)
     local game = Game()
     if not player or getRoomTransitionMode() ~= 0 then return end
 
@@ -1392,7 +1422,7 @@ local function resumeAppraisalReturnIfNeeded()
     then
         return false
     end
-    local player = isc.getPlayerFromIndex(nil, nativeSave.ownerPlayerIndex)
+    local player = getReturnPlayer(nativeSave)
     local manager = getGalleryManager()
     if not player or not manager
         or type(manager.returnDeathCertificateDetour) ~= "function"

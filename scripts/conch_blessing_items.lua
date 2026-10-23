@@ -145,7 +145,6 @@ ConchBlessing.ItemData = {
         flag = "positive", -- match Magic Conch result type
         script = "scripts/items/collectibles/live_eye",
         callbacks = {
-            pickup = "liveeye.onPickup",
             evaluateCache = "liveeye.onEvaluateCache",
             postPlayerUpdate = "liveeye.onPlayerUpdate",
             fireTear = "liveeye.onFireTear",
@@ -196,7 +195,6 @@ ConchBlessing.ItemData = {
         flag = "positive",
         script = "scripts/items/collectibles/eternal_flame",
         callbacks = {
-            pickup = "eternalflame.onPickup",
             postPlayerUpdate = "eternalflame.onPlayerUpdate",
             evaluateCache = "eternalflame.onEvaluateCache",
             postNewLevel = "eternalflame.onNewLevel",
@@ -254,6 +252,7 @@ ConchBlessing.ItemData = {
             evaluateCache = "oralsteroids.onEvaluateCache",
             postPlayerUpdate = "oralsteroids.onPlayerUpdate",
             gameStarted = "oralsteroids.onGameStarted",
+            preGameExit = "oralsteroids.onPreGameExit",
         },
     },
     INJECTABLE_STEROIDS = {
@@ -280,6 +279,7 @@ ConchBlessing.ItemData = {
             use = "injectablsteroids.onUseItem",
             evaluateCache = "injectablsteroids.onEvaluateCache",
             gameStarted = "injectablsteroids.onGameStarted",
+            preGameExit = "injectablsteroids.onPreGameExit",
             newLevel = "injectablsteroids.onNewLevel",
             update = "injectablsteroids.onUpdate",
             postRoomClear = "injectablsteroids.onRoomClear"
@@ -386,7 +386,6 @@ ConchBlessing.ItemData = {
         origin = { id = CollectibleType.COLLECTIBLE_BFFS, type = "collectible" },
 		script = "scripts/items/collectibles/kronos",
 		callbacks = {
-			pickup = "kronos.onPickup",
 			postPlayerUpdate = "kronos.onPlayerUpdate",
 			evaluateCache = "kronos.onEvaluateCache",
 			gameStarted = "kronos.onGameStarted",
@@ -570,7 +569,7 @@ ConchBlessing.ItemData = {
         },
         gfx = "money_tear.png",
         tags = "offensive",
-        cache = "tears",
+        cache = "firedelay",
         quality = 4,
 		origin = { id = CollectibleType.COLLECTIBLE_MONEY_EQUALS_POWER, type = "collectible" },
         flag = "positive",
@@ -627,7 +626,6 @@ ConchBlessing.ItemData = {
         devilprice = 1,
         script = "scripts/items/collectibles/sealed_demon_sword",
         callbacks = {
-            pickup = "sealeddemonsword.onPickup",
             evaluateCache = "sealeddemonsword.onEvaluateCache",
             postNPCDeath = "sealeddemonsword.onNPCDeath",
             update = "sealeddemonsword.onUpdate",
@@ -651,7 +649,6 @@ ConchBlessing.ItemData = {
         devilprice = 2,
         script = "scripts/items/collectibles/tyrfing",
         callbacks = {
-            pickup = "tyrfing.onPickup",
             evaluateCache = "tyrfing.onEvaluateCache",
             postNPCDeath = "tyrfing.onNPCDeath",
             gameStarted = "tyrfing.onGameStarted",
@@ -1008,7 +1005,7 @@ ConchBlessing.ItemData = {
         id = Isaac.GetTrinketIdByName("Time = Tear"),
         gfx = "time_tear.png",
         tags = "offensive",
-        cache = "fireDelay",
+        cache = "firedelay",
         hidden = false,
         origin = { id = TrinketType.TRINKET_CANCER, type = "trinket" },
         flag = "positive",
@@ -1062,7 +1059,7 @@ ConchBlessing.ItemData = {
         id = Isaac.GetTrinketIdByName("C -"),
         gfx = "c_minus.png",
         tags = "offensive",
-        cache = "tears",
+        cache = "firedelay",
         origin = { type = "trinket", name = "F -" },
         flag = "positive",
         hidden = true,
@@ -1092,7 +1089,7 @@ ConchBlessing.ItemData = {
         id = Isaac.GetTrinketIdByName("A -"),
         gfx = "a_minus.png",
         tags = "offensive",
-        cache = "luck damage tears",
+        cache = "luck damage firedelay",
         origin = { type = "trinket", name = "B -" },
         flag = "positive",
         hidden = true,
@@ -1102,6 +1099,7 @@ ConchBlessing.ItemData = {
         callbacks = {
             postPEffectUpdate = "aminus.onPostPEffectUpdate",
             evaluateCache = "aminus.onEvaluateCache",
+            gameStarted = "aminus.onGameStarted",
         },
         synergies = {}
     },

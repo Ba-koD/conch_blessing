@@ -1969,7 +1969,10 @@ function MINIMAP_TELEPORT_HANDLER:CanTeleport(room, _)
     return ok and allowed == true
 end
 
-function MINIMAP_TELEPORT_HANDLER:Teleport(room)
+-- MiniMAPI (and GoodTrip [Fixed]) call Teleport(room) without a player. A
+-- caller that names its acting player passes it second; otherwise the manager
+-- picks the visit owner, else a remaining live player, never player 0 blindly.
+function MINIMAP_TELEPORT_HANDLER:Teleport(room, player)
     local manager = ConchBlessing and ConchBlessing.GalleryManager or nil
     if type(manager) ~= "table"
         or type(manager.teleportToGalleryRoom) ~= "function"
@@ -1982,7 +1985,7 @@ function MINIMAP_TELEPORT_HANDLER:Teleport(room)
         manager.teleportToGalleryRoom,
         seed,
         mapID,
-        Isaac.GetPlayer(0)
+        player
     )
     return ok and teleported == true
 end

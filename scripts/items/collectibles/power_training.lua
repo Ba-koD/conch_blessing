@@ -36,7 +36,10 @@ ConchBlessing.powertraining.data = {
     speedDecrease = 0
 }
 
-local function rebuildPowerTrainingUnified(player, playerID)
+-- Every roll lives in the user's own run save, which SaveManager keys by the
+-- player's collectible RNG seed: two players of one character, Esau or a
+-- character change keep their own rolls.
+local function rebuildPowerTrainingUnified(player)
     local um = ConchBlessing.stats.unifiedMultipliers
     um:RemoveItemAddition(player, POWER_TRAINING_ID, "Tears")
     um:RemoveItemAddition(player, POWER_TRAINING_ID, "Damage")
@@ -111,15 +114,7 @@ ConchBlessing.powertraining.removeLastUse = function(player, removeCount, applyC
     end
     playerSave.powerTraining = arr
     SaveManager.Save()
-    if ConchBlessing.powertraining.storedMultipliers then
-        local playerID = player:GetPlayerType()
-        ConchBlessing.powertraining.storedMultipliers[playerID] = arr
-    end
-    rebuildPowerTrainingUnified(player, player:GetPlayerType())
-    if not ConchBlessing.powertraining._lastUseCount then
-        ConchBlessing.powertraining._lastUseCount = {}
-    end
-    ConchBlessing.powertraining._lastUseCount[player:GetPlayerType()] = -1
+    rebuildPowerTrainingUnified(player)
     if applyCacheUpdate ~= false then
         player:AddCacheFlags(CacheFlag.CACHE_ALL)
         player:EvaluateItems()
@@ -129,48 +124,38 @@ ConchBlessing.powertraining.removeLastUse = function(player, removeCount, applyC
     end
 end
 
-ConchBlessing.powertraining.onUseItem = function(player, collectibleID, useFlags, activeSlot, customVarData)
+-- MC_USE_ITEM: (mod, collectible, rng, player, useFlags, activeSlot, customVarData)
+ConchBlessing.powertraining.onUseItem = function(_, collectibleID, _rng, player, useFlags, activeSlot, customVarData)
     ConchBlessing.printDebug("=== Power Training onUseItem START ===")
     ConchBlessing.printDebug("collectibleID: " .. tostring(collectibleID))
     ConchBlessing.printDebug("POWER_TRAINING_ID: " .. tostring(POWER_TRAINING_ID))
-    
+
     if collectibleID ~= POWER_TRAINING_ID then
         ConchBlessing.printDebug("collectibleID mismatch, returning")
         return
     end
-    
+
     if not player or not player.Position or not player.GetPlayerType then
-        ConchBlessing.printDebug("Invalid player, getting player 0")
-        player = Isaac.GetPlayer(0)
-        if not player then
-            ConchBlessing.printDebug("Failed to get player 0")
-            return
-        end
+        ConchBlessing.printError("Power Training: MC_USE_ITEM received an invalid player")
+        return
     end
-    
+
+    local playerSave = SaveManager.GetRunSave(player)
+    if type(playerSave) ~= "table" then
+        ConchBlessing.printError("Power Training: the user's run save is unavailable")
+        return
+    end
+
     ConchBlessing.printDebug("Player found, animating collectible")
     player:AnimateCollectible(POWER_TRAINING_ID, "Pickup", "PlayerPickupSparkle")
-    
-    local playerID = player:GetPlayerType()
-    ConchBlessing.printDebug("Player ID: " .. tostring(playerID))
-    
-    local playerSave = SaveManager.GetRunSave(player)
+
     if not playerSave.powerTraining then
         playerSave.powerTraining = {}
     end
-    
+
     local newIndex = #playerSave.powerTraining + 1
     ConchBlessing.printDebug("New index: " .. tostring(newIndex))
-    
-    if not ConchBlessing.powertraining.storedMultipliers then
-        ConchBlessing.printDebug("Initializing storedMultipliers")
-        ConchBlessing.powertraining.storedMultipliers = {}
-    end
-    if not ConchBlessing.powertraining.storedMultipliers[playerID] then
-        ConchBlessing.printDebug("Initializing storedMultipliers for player " .. tostring(playerID))
-        ConchBlessing.powertraining.storedMultipliers[playerID] = {}
-    end
-    
+
     -- One stat roll. Lives on the module so the probe measures this exact
     -- expression instead of a copy of it.
     local rollStat = ConchBlessing.powertraining.rollStat
@@ -200,7 +185,6 @@ ConchBlessing.powertraining.onUseItem = function(player, collectibleID, useFlags
         newIndex, ConchBlessing.powertraining.data.speedDecrease, newMultipliers.tears, newMultipliers.damage, newMultipliers.range, newMultipliers.luck))
     
     -- Calculate total accumulated multipliers for display
-    local playerSave = SaveManager.GetRunSave(player)
     local totalSpeed = 1.0
     local totalTears = 1.0
     local totalDamage = 1.0
@@ -222,8 +206,8 @@ ConchBlessing.powertraining.onUseItem = function(player, collectibleID, useFlags
     -- Update unified multipliers (current = last rolled, total = unified product)
     local uniqueKey = POWER_TRAINING_ID .. "_" .. newIndex
     -- Always treat as additive multiplier stacking
-    rebuildPowerTrainingUnified(player, playerID)
-    
+    rebuildPowerTrainingUnified(player)
+
     SFXManager():Play(SoundEffect.SOUND_BATTERYCHARGE, require("scripts.lib.sound_volume").volume(1.0), 0, false, 1.0, 0)
     
     player:AnimateCollectible(POWER_TRAINING_ID, "Drop", "PlayerPickupSparkle")
@@ -235,19 +219,9 @@ ConchBlessing.powertraining.onUseItem = function(player, collectibleID, useFlags
 end
 
 ConchBlessing.powertraining.onEvaluateCache = function(_, player, cacheFlag)
-    local playerID = player:GetPlayerType()
-
-    if not ConchBlessing.powertraining._lastUseCount then
-        ConchBlessing.powertraining._lastUseCount = {}
-    end
-    if ConchBlessing.powertraining._lastUseCount[playerID] == nil then
-        ConchBlessing.powertraining._lastUseCount[playerID] = 0
-    end
-
+    if not player then return end
     local playerSave = SaveManager.GetRunSave(player)
-    local currentUseCount = playerSave and playerSave.powerTraining and #playerSave.powerTraining or 0
-    local useCountChanged = ConchBlessing.powertraining._lastUseCount[playerID] ~= currentUseCount
-    
+
     if cacheFlag == CacheFlag.CACHE_DAMAGE then
         ConchBlessing.printDebug("=== Power Training onEvaluateCache START ===")
         ConchBlessing.printDebug("cacheFlag: CACHE_DAMAGE")
@@ -274,21 +248,15 @@ ConchBlessing.powertraining.onEvaluateCache = function(_, player, cacheFlag)
         if cacheFlag == CacheFlag.CACHE_DAMAGE then
             ConchBlessing.printDebug("No powerTraining data in playerSave, returning")
         end
-        if useCountChanged then
-            ConchBlessing.powertraining._lastUseCount[playerID] = currentUseCount
-        end
         return
     end
-    
+
     local useCount = #playerSave.powerTraining
-    if useCount <= 0 then 
+    if useCount <= 0 then
         if cacheFlag == CacheFlag.CACHE_DAMAGE then
             ConchBlessing.printDebug("useCount is 0, returning")
         end
-        if useCountChanged then
-            ConchBlessing.powertraining._lastUseCount[playerID] = currentUseCount
-        end
-        return 
+        return
     end
     
     if cacheFlag == CacheFlag.CACHE_DAMAGE and useCount ~= (ConchBlessing.powertraining._lastDebugUseCount or 0) then
@@ -348,10 +316,6 @@ ConchBlessing.powertraining.onEvaluateCache = function(_, player, cacheFlag)
     end
     
     -- Display handled by unified system
-    
-    if useCountChanged then
-        ConchBlessing.powertraining._lastUseCount[playerID] = currentUseCount
-    end
 end
 
 -- initialize data when game started
@@ -364,27 +328,20 @@ ConchBlessing.powertraining.onGameStarted = function(_)
     ConchBlessing.printDebug("SaveManager.VERSION: " .. tostring(SaveManager.VERSION))
     ConchBlessing.printDebug("SaveManager.Debug: " .. tostring(SaveManager.Debug))
     
-    local player = Isaac.GetPlayer(0)
-    if player then
-        ConchBlessing.printDebug("Player found, attempting to restore stats from SaveManager...")
-        local playerSave = SaveManager.GetRunSave(player)
-        local haveArrays = playerSave and playerSave.powerTraining
-        local haveUnified = playerSave and playerSave.unifiedMultipliers
-        if haveUnified then
-            ConchBlessing.stats.unifiedMultipliers:LoadFromSaveManager(player)
-            ConchBlessing.printDebug("Power Training: Unified multipliers loaded from SaveManager")
-        elseif haveArrays and #haveArrays > 0 then
-            for i = 1, #haveArrays do
-                local m = haveArrays[i]
-                rebuildPowerTrainingUnified(player, player:GetPlayerType())
+    for i = 0, Game():GetNumPlayers() - 1 do
+        local player = Isaac.GetPlayer(i)
+        if player then
+            local playerSave = SaveManager.GetRunSave(player)
+            local haveArrays = playerSave and playerSave.powerTraining
+            local haveUnified = playerSave and playerSave.unifiedMultipliers
+            if haveUnified then
+                ConchBlessing.stats.unifiedMultipliers:LoadFromSaveManager(player)
+                ConchBlessing.printDebug("Power Training: Unified multipliers loaded from SaveManager (player " .. i .. ")")
+            elseif haveArrays and #haveArrays > 0 then
+                rebuildPowerTrainingUnified(player)
+                ConchBlessing.printDebug("Power Training: Unified multipliers reconstructed from arrays (player " .. i .. ")")
             end
-            ConchBlessing.stats.unifiedMultipliers:SaveToSaveManager(player)
-            ConchBlessing.printDebug("Power Training: Unified multipliers reconstructed from arrays and saved")
-        else
-            ConchBlessing.printDebug("No SaveManager data found")
         end
-    else
-        ConchBlessing.printDebug("No player found on game start")
     end
     
     ConchBlessing.printDebug("Power Training: Data initialization completed")

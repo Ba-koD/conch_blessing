@@ -78,7 +78,7 @@ class ThurisazTests(unittest.TestCase):
             near(damageBonus(),6)
             player:EvaluateItems()
             near(player.Tears,30/11+2); near(player.MoveSpeed,1.3)
-            assert(run.kronos.totalAbsorbed==0,'Kronos ledger untouched')
+            assert((per.kronos and per.kronos.totalAbsorbed or 0)==0,'Kronos ledger untouched')
             assert(#spawned==3,'one poof per devoured familiar')
         """)
 
@@ -164,9 +164,9 @@ class ThurisazTests(unittest.TestCase):
         self.lua.execute("""
             dropKronos(); owned('PASCHAL_CANDLE'); K.devourWithRune(player,3,first)
             K.onRoomClear(nil,nil,Vector.Zero)
-            assert(run.kronos.paschalHundredths==3)
+            assert(per.kronos.paschalHundredths==3)
             K._revertAll(player)
-            assert(run.kronos.paschalHundredths==3,'the rune still owns Paschal Candle')
+            assert(per.kronos.paschalHundredths==3,'the rune still owns Paschal Candle')
             player:EvaluateItems(); near(player.Tears,30/11+0.03)
         """)
 

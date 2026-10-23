@@ -51,6 +51,7 @@ class SwordEdges(ItemFixture):
             SFXManager=function() return {Play=function() end} end
             GetPtrHash=function(n) return n.serial end; EntityRef=function(p) return {Entity=p} end
             ConchBlessing={printDebug=function(x) debug[#debug+1]=x end,printError=function(x) errors[#errors+1]=x end,
+                stats={speed={applyAddition=function(p,x) p.MoveSpeed=p.MoveSpeed+x end}},
                 originalMod={__SAVEMANAGER_UNIQUE_KEY='edge',AddCallback=function(_,key,fn) callbacks[key]=fn end}}
             callbacks={}
             package.loaded['scripts.lib.save_manager']={
@@ -144,7 +145,7 @@ class SwordEdges(ItemFixture):
             M.onNPCDeath(nil,npc({Type=33,dead=true})); M.onNPCDeath(nil,npc({friendly=true,dead=true}))
             assert(saves[p].sealedDemonSword.killCount==299)
             p.swords=0; M.onNPCDeath(nil,npc({dead=true})); assert(saves[p].sealedDemonSword.killCount==299)
-            p.swords=3; M.onPickup(p); M.onNPCDeath(nil,npc({dead=true,active=false,vulnerable=false}))
+            p.swords=3; M.onNPCDeath(nil,npc({dead=true,active=false,vulnerable=false}))
             assert(p.swords==0 and p.tyrfing==3 and saves[p].tyrfing.accumulatedDamage==17)
             assert(saves[p].sealedDemonSword==nil)
         ''')
@@ -239,6 +240,9 @@ class SteroidEdges(ItemFixture):
                 getUnifiedStatTotal=function(p,stat) return total(p,stat) end,
                 stats={unifiedMultipliers=UM,multiplierDisplay={ForceDisplay=function() end},
                 speed={applyAddition=function(p,v) p.MoveSpeed=p.MoveSpeed+v end}}}
+            ModCallbacks={MC_PRE_GAME_EXIT=17}; steroidCallbacks={}
+            function ConchBlessing:AddCallback(id,fn) steroidCallbacks[id]=fn end
+            GetPtrHash=function(e) return e end
             p=newPlayer()
         ''')
         self.load('injectable_steroids')
@@ -277,6 +281,7 @@ class SteroidEdges(ItemFixture):
 
     def test_room_clear_quarters_floor_reset_and_absence(self):
         self.lua.execute('''
+            M.onGameStarted(nil,false)
             use(); M.onRoomClear(); assert(M.data.currentInstantDeathPercent==3.75)
             p.copies=0; M.onRoomClear(); assert(M.data.currentInstantDeathPercent==3.75)
             p.copies=1; for i=1,40 do M.onRoomClear() end
@@ -407,9 +412,9 @@ class FlameEdges(ItemFixture):
 
     def test_pickup_cache_reentry_and_continue_cannot_duplicate_eternal_heart(self):
         self.lua.execute('''
-            M.onPickup(p); p:EvaluateItems(); assert(p.hearts==1)
+            p:EvaluateItems(); assert(p.hearts==1)
             for i=1,10 do M.onEvaluateCache(nil,p,4); p:EvaluateItems(); M.onNewRoom() end
-            p.copies=0; p:EvaluateItems(); p.copies=5; M.onPickup(p); p:EvaluateItems()
+            p.copies=0; p:EvaluateItems(); p.copies=5; p:EvaluateItems()
             M.onGameStarted(nil,true); assert(p.hearts==1 and p.Damage==3.5 and p.Tears==3)
         ''')
 
@@ -436,7 +441,7 @@ class FlameEdges(ItemFixture):
         self.lua.execute('''
             M.onGameStarted(); curses=1; ticks(1); p.copies=0; ticks(40)
             assert(curses==1 and saves[p].eternalFlame.earnedUnits==0)
-            p.copies=2; M.onPickup(p); ticks(31)
+            p.copies=2; ticks(31)
             assert(curses==0 and saves[p].eternalFlame.earnedUnits==2)
         ''')
 

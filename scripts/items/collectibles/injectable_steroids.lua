@@ -19,6 +19,16 @@ ConchBlessing.injectablsteroids.data = {
 
 local SaveManager = require("scripts.lib.save_manager")
 
+-- The first MC_POST_NEW_LEVEL of a Continue fires before MC_POST_GAME_STARTED;
+-- resetting the risk there would overwrite the floor's saved risk before game
+-- start restores it. A luamod reload in the middle of a run never sees game
+-- start, so it opens at once.
+ConchBlessing.injectablsteroids._runReady = type(Isaac.IsInGame) == "function" and Isaac.IsInGame() == true
+
+-- Yellow tint strength per player entity (GetPtrHash), rebuilt every session:
+-- each successful use turns that player a little more yellow.
+ConchBlessing.injectablsteroids._yellowIntensity = {}
+
 -- Risk is intentionally shared by all holders, but belongs to this floor's
 -- SaveManager state so Continue/Hourglass cannot silently reset it.
 local function saveFloorRisk()
@@ -78,7 +88,10 @@ local function rollInstantDeath(chance, rng)
 end
 ConchBlessing.injectablsteroids._test = { rollInstantDeath = rollInstantDeath }
 
-local function rebuildInjectableUnified(player, playerID)
+-- Every roll lives in the user's own run save, which SaveManager keys by the
+-- player's collectible RNG seed: two players of one character, Esau or a
+-- character change keep their own rolls.
+local function rebuildInjectableUnified(player)
     local um = ConchBlessing.stats.unifiedMultipliers
     um:RemoveItemAddition(player, INJECTABLE_STEROIDS_ID, "Tears")
     um:RemoveItemAddition(player, INJECTABLE_STEROIDS_ID, "Damage")
@@ -153,11 +166,7 @@ ConchBlessing.injectablsteroids.removeLastUse = function(player, removeCount, ap
     end
     playerSave.injectableSteroids = arr
     SaveManager.Save()
-    rebuildInjectableUnified(player, player:GetPlayerType())
-    if not ConchBlessing.injectablsteroids._lastUseCount then
-        ConchBlessing.injectablsteroids._lastUseCount = {}
-    end
-    ConchBlessing.injectablsteroids._lastUseCount[player:GetPlayerType()] = -1
+    rebuildInjectableUnified(player)
     if applyCacheUpdate ~= false then
         player:AddCacheFlags(CacheFlag.CACHE_ALL)
         player:EvaluateItems()
@@ -209,25 +218,13 @@ ConchBlessing.injectablsteroids.onUseItem = function(_, collectibleID, _rng, pla
         end
     end
     
-    local playerID = player:GetPlayerType()
-    ConchBlessing.printDebug("Player ID: " .. tostring(playerID))
-    
     local playerSave = SaveManager.GetRunSave(player)
     if not playerSave.injectableSteroids then
         playerSave.injectableSteroids = {}
     end
-    
+
     local newIndex = #playerSave.injectableSteroids + 1
     ConchBlessing.printDebug("New index: " .. tostring(newIndex))
-    
-    if not ConchBlessing.injectablsteroids.storedMultipliers then
-        ConchBlessing.printDebug("Initializing storedMultipliers")
-        ConchBlessing.injectablsteroids.storedMultipliers = {}
-    end
-    if not ConchBlessing.injectablsteroids.storedMultipliers[playerID] then
-        ConchBlessing.printDebug("Initializing storedMultipliers for player " .. tostring(playerID))
-        ConchBlessing.injectablsteroids.storedMultipliers[playerID] = {}
-    end
     
     local rng = RNG()
     local gameSeed = Game():GetSeeds():GetStartSeedString()
@@ -260,7 +257,6 @@ ConchBlessing.injectablsteroids.onUseItem = function(_, collectibleID, _rng, pla
     ConchBlessing.printDebug("Generated multipliers: " .. json.encode(newMultipliers))
     
     ConchBlessing.printDebug("Attempting to save to SaveManager...")
-    local playerSave = SaveManager.GetRunSave(player)
     ConchBlessing.printDebug("SaveManager.GetRunSave result type: " .. type(playerSave))
     
     if not playerSave.injectableSteroids then
@@ -283,19 +279,16 @@ ConchBlessing.injectablsteroids.onUseItem = function(_, collectibleID, _rng, pla
     -- Update unified multiplier system with the new multipliers
     local uniqueKey = INJECTABLE_STEROIDS_ID .. "_" .. newIndex
     -- Always treat as additive multiplier stacking
-    rebuildInjectableUnified(player, playerID)
+    rebuildInjectableUnified(player)
     
     -- Save unified multipliers to SaveManager
     ConchBlessing.stats.unifiedMultipliers:SaveToSaveManager(player)
     
     SFXManager():Play(SoundEffect.SOUND_ISAAC_HURT_GRUNT, require("scripts.lib.sound_volume").volume(1.0), 0, false, 1.0, 0)
     
-    if not ConchBlessing.injectablsteroids._yellowIntensity then
-        ConchBlessing.printDebug("Initializing _yellowIntensity")
-        ConchBlessing.injectablsteroids._yellowIntensity = 0
-    end
-    
-    ConchBlessing.injectablsteroids._yellowIntensity = ConchBlessing.injectablsteroids._yellowIntensity + 0.2
+    local tint = ConchBlessing.injectablsteroids._yellowIntensity
+    local tintKey = GetPtrHash(player)
+    tint[tintKey] = (tint[tintKey] or 0) + 0.2
     
     player:AnimateCollectible(INJECTABLE_STEROIDS_ID, "Drop", "PlayerPickupSparkle")
     
@@ -314,18 +307,8 @@ end
 
 
 ConchBlessing.injectablsteroids.onEvaluateCache = function(_, player, cacheFlag)
-    local playerID = player:GetPlayerType()
-
-    if not ConchBlessing.injectablsteroids._lastUseCount then
-        ConchBlessing.injectablsteroids._lastUseCount = {}
-    end
-    if ConchBlessing.injectablsteroids._lastUseCount[playerID] == nil then
-        ConchBlessing.injectablsteroids._lastUseCount[playerID] = 0
-    end
-
+    if not player then return end
     local playerSave = SaveManager.GetRunSave(player)
-    local currentUseCount = playerSave and playerSave.injectableSteroids and #playerSave.injectableSteroids or 0
-    local useCountChanged = ConchBlessing.injectablsteroids._lastUseCount[playerID] ~= currentUseCount
     
     if cacheFlag == CacheFlag.CACHE_DAMAGE then
         ConchBlessing.printDebug("=== Injectable Steroids onEvaluateCache START ===")
@@ -353,21 +336,15 @@ ConchBlessing.injectablsteroids.onEvaluateCache = function(_, player, cacheFlag)
         if cacheFlag == CacheFlag.CACHE_DAMAGE then
             ConchBlessing.printDebug("No injectableSteroids data in playerSave, returning")
         end
-        if useCountChanged then
-            ConchBlessing.injectablsteroids._lastUseCount[playerID] = currentUseCount
-        end
         return
     end
-    
+
     local useCount = #playerSave.injectableSteroids
-    if useCount <= 0 then 
+    if useCount <= 0 then
         if cacheFlag == CacheFlag.CACHE_DAMAGE then
             ConchBlessing.printDebug("useCount is 0, returning")
         end
-        if useCountChanged then
-            ConchBlessing.injectablsteroids._lastUseCount[playerID] = currentUseCount
-        end
-        return 
+        return
     end
     
     if cacheFlag == CacheFlag.CACHE_DAMAGE and useCount ~= (ConchBlessing.injectablsteroids._lastDebugUseCount or 0) then
@@ -425,10 +402,6 @@ ConchBlessing.injectablsteroids.onEvaluateCache = function(_, player, cacheFlag)
     if cacheFlag == CacheFlag.CACHE_LUCK then
         -- unified system will apply via central handler
     end
-    
-    if useCountChanged then
-        ConchBlessing.injectablsteroids._lastUseCount[playerID] = currentUseCount
-    end
 end
 
 -- initialize data when game started
@@ -437,35 +410,28 @@ ConchBlessing.injectablsteroids.onGameStarted = function(_)
     ConchBlessing.printDebug("Injectable Steroids: Game started, attempting to restore previous stats...")
     
     -- SaveManager automatically loads data, no manual loading needed
-    ConchBlessing.injectablsteroids._yellowIntensity = 0
+    ConchBlessing.injectablsteroids._yellowIntensity = {}
     restoreFloorRisk()
-    
+    ConchBlessing.injectablsteroids._runReady = true
+
     ConchBlessing.printDebug("SaveManager.VERSION: " .. tostring(SaveManager.VERSION))
     ConchBlessing.printDebug("SaveManager.Debug: " .. tostring(SaveManager.Debug))
-    
-    local player = Isaac.GetPlayer(0)
-    if player then
-        ConchBlessing.printDebug("Player found, attempting to restore stats from SaveManager...")
-        
-        local playerSave = SaveManager.GetRunSave(player)
-        local haveArrays = playerSave and playerSave.injectableSteroids
-        local haveUnified = playerSave and playerSave.unifiedMultipliers
-        if haveUnified then
-            ConchBlessing.stats.unifiedMultipliers:LoadFromSaveManager(player)
-            ConchBlessing.printDebug("Injectable Steroids: Unified multipliers loaded from SaveManager")
-        elseif haveArrays and #haveArrays > 0 then
-            -- Reconstruct unified from arrays (first-time migration) with additive-mult stacking
-            for i = 1, #haveArrays do
-                local m = haveArrays[i]
-                rebuildInjectableUnified(player, player:GetPlayerType())
+
+    for i = 0, Game():GetNumPlayers() - 1 do
+        local player = Isaac.GetPlayer(i)
+        if player then
+            local playerSave = SaveManager.GetRunSave(player)
+            local haveArrays = playerSave and playerSave.injectableSteroids
+            local haveUnified = playerSave and playerSave.unifiedMultipliers
+            if haveUnified then
+                ConchBlessing.stats.unifiedMultipliers:LoadFromSaveManager(player)
+                ConchBlessing.printDebug("Injectable Steroids: Unified multipliers loaded from SaveManager (player " .. i .. ")")
+            elseif haveArrays and #haveArrays > 0 then
+                -- Reconstruct unified from arrays with additive-mult stacking
+                rebuildInjectableUnified(player)
+                ConchBlessing.printDebug("Injectable Steroids: Unified multipliers reconstructed from arrays (player " .. i .. ")")
             end
-            ConchBlessing.stats.unifiedMultipliers:SaveToSaveManager(player)
-            ConchBlessing.printDebug("Injectable Steroids: Unified multipliers reconstructed from arrays and saved")
-        else
-            ConchBlessing.printDebug("No SaveManager data found")
         end
-    else
-        ConchBlessing.printDebug("No player found on game start")
     end
     
     ConchBlessing.printDebug("Injectable Steroids: Data initialization completed")
@@ -501,8 +467,13 @@ ConchBlessing.injectablsteroids.onRoomClear = function()
     end
 end
 
+ConchBlessing.injectablsteroids.onPreGameExit = function()
+    ConchBlessing.injectablsteroids._runReady = false
+end
+
 -- Reset death chance on new level (no charge restore)
 ConchBlessing.injectablsteroids.onNewLevel = function(_)
+    if not ConchBlessing.injectablsteroids._runReady then return end
     -- Reset instant death chance and use count on new floor
     ConchBlessing.injectablsteroids.data.currentInstantDeathPercent = ConchBlessing.injectablsteroids.data.baseInstantDeathPercent
     ConchBlessing.injectablsteroids.data.currentFloorUseCount = 0
@@ -510,12 +481,16 @@ ConchBlessing.injectablsteroids.onNewLevel = function(_)
     ConchBlessing.printDebug("Injectable Steroids: New floor! Death chance reset to " .. tostring(ConchBlessing.injectablsteroids.data.currentInstantDeathPercent) .. "%")
 end
 
+-- Keeps each user's accumulated yellow tint on that player alone.
 ConchBlessing.injectablsteroids.onUpdate = function(_)
-    if ConchBlessing.injectablsteroids._yellowIntensity and ConchBlessing.injectablsteroids._yellowIntensity > 0 then
-        local player = Isaac.GetPlayer(0)
-        if player then
-            local yellowIntensity = math.min(ConchBlessing.injectablsteroids._yellowIntensity or 0, 1.0)
-            
+    local tint = ConchBlessing.injectablsteroids._yellowIntensity
+    if next(tint) == nil then return end
+    for i = 0, Game():GetNumPlayers() - 1 do
+        local player = Isaac.GetPlayer(i)
+        local intensity = player and tint[GetPtrHash(player)]
+        if intensity and intensity > 0 then
+            local yellowIntensity = math.min(intensity, 1.0)
+
             local baseColor = Color(
                 1 + (0.15 * yellowIntensity),
                 1 + (0.1 * yellowIntensity),
@@ -538,6 +513,14 @@ do
     if sm and mod and mod.__SAVEMANAGER_UNIQUE_KEY and sm.SaveCallbacks then
         if sm.SaveCallbacks.POST_GLOWING_HOURGLASS_RESET then
             mod:AddCallback(sm.SaveCallbacks.POST_GLOWING_HOURGLASS_RESET, restoreFloorRisk)
+        end
+        if sm.SaveCallbacks.POST_DATA_LOAD then
+            -- A luamod reload in the middle of a run never sees game start, and
+            -- SaveManager reloads its data only a little later; this floor's
+            -- risk comes back then.
+            mod:AddCallback(sm.SaveCallbacks.POST_DATA_LOAD, function(_, _, isLuamod)
+                if isLuamod and ConchBlessing.injectablsteroids._runReady then restoreFloorRisk() end
+            end)
         end
         local callbackKey = sm.SaveCallbacks.PRE_DATA_SAVE
         mod:AddCallback(callbackKey, function(_, saveData)

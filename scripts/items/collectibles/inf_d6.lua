@@ -2,16 +2,15 @@ ConchBlessing.infd6 = {}
 
 local INF_D6_ID = Isaac.GetItemIdByName("Inf D6")
 
-ConchBlessing.infd6.onUse = function(player, collectibleID, useFlags, activeSlot, customVarData)
+-- MC_USE_ITEM: (mod, collectible, rng, player, useFlags, activeSlot, customVarData)
+ConchBlessing.infd6.onUse = function(_, collectibleID, _rng, player, useFlags, activeSlot, customVarData)
     if collectibleID ~= INF_D6_ID then
         return
     end
 
     if not player or not player.Position or not player.GetPlayerType then
-        player = Isaac.GetPlayer(0)
-        if not player then
-            return
-        end
+        ConchBlessing.printError("Inf D6: MC_USE_ITEM received an invalid player")
+        return
     end
 
     local flags = UseFlag.USE_NOANIM

@@ -52,7 +52,7 @@ class BulkReturnTests(unittest.TestCase):
             local bobby=absorb('BROTHER_BOBBY',1000)
             local robo=absorb('ROBO_BABY',1000)
             local tech=CollectibleType.COLLECTIBLE_TECHNOLOGY
-            local rs=run.kronos
+            local rs=per.kronos
             rs.itemGrants['fam_'..robo]=1000
             rs.itemGrantTotals['fam_'..robo]=1000
             rs.itemGrantBaselines['item_'..tech]=3
@@ -62,13 +62,13 @@ class BulkReturnTests(unittest.TestCase):
             rs.prettyFlies=3
             function player:AddPrettyFly() self.flies=(self.flies or 0)+1 end
             local writes=0
-            ConchBlessing.SaveManager.Save=function() writes=writes+1; savedRun=copy(run) end
+            ConchBlessing.SaveManager.Save=function() writes=writes+1; savedPer=copy(per) end
             player:RemoveCollectible(9999)
             assert(K._revertAll(player))
             assert(player.inventory[bobby]==1000 and player.inventory[robo]==1000)
             assert(player.inventory[tech]==3 and effects[bobby]==300 and effects[robo]==400 and player.flies==3)
             assert(damageBonus()==0 and writes==1)
-            assert(next(savedRun.kronos.absorbed)==nil and next(savedRun.kronos.itemGrants)==nil)
+            assert(next(savedPer.kronos.absorbed)==nil and next(savedPer.kronos.itemGrants)==nil)
             local g=K._test.transferGroups()[1]
             assert(#K._test.transferGroups()==1 and g.copies==2703 and g.icons==3)
             assert(spriteLoads==4,'a returned copy loaded its own sprite')

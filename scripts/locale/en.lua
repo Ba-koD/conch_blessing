@@ -668,6 +668,7 @@ return {
                 "#4x multipliers are distributed to Damage, Luck, and SPS. (No stacking)",
                 "#Multipliers are at least 0.8x.",
                 "#On hit, downgrades to {own:B_MINUS} B -.",
+                "#{{Warning}} REPENTOGON recommended",
             },
         },
         ATROPOS = {

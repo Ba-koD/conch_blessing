@@ -360,6 +360,27 @@ class BreathContracts(unittest.TestCase):
             end
         """)
 
+    def test_forced_tnt_blast_belongs_to_the_breath_owner_and_needs_one(self):
+        self.lua.execute(r"""
+            local explode=Isaac.Explode
+            for _,s in ipairs(specs) do
+                reset(s);roomEnabled=true;gridSize=9;frame=0;gridMap={};gridCalls={};destroyThrows=false
+                local sources={};Isaac.Explode=function(_,source) sources[#sources+1]=source end
+                trigger(s,q);local flame=spawned[1]
+                gridMap[4]={GetType=function() return 12 end};removedGrid=nil
+                s.module.onEffectUpdate(nil,flame)
+                assert(#sources==1 and sources[1]==q and removedGrid==4,'the blast is the second player\'s own')
+                -- Its owner gone: no blast credited to anyone, and the TNT is left alone.
+                reset(s);trigger(s,q);flame=spawned[1];q.removed=true;sources={}
+                gridMap[4]={GetType=function() return 12 end};removedGrid=nil;frame=frame+10;gridCalls={}
+                s.module.onEffectUpdate(nil,flame)
+                assert(#gridCalls==1 and gridCalls[1].tnt==true,'the flame still reached the TNT')
+                assert(#sources==0 and removedGrid==nil and gridMap[4],'a guessed player was blamed for the blast')
+                roomEnabled=false;gridSize=0
+            end
+            Isaac.Explode=explode
+        """)
+
     def test_tracker_bad_states_fractional_thresholds_custom_keys_and_reset(self):
         self.lua.execute(r"""
             for _,bad in ipairs({false,0,'bad'}) do local hit,n=W.advance(bad,2);assert(not hit and n==0);W.reset(bad) end

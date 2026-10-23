@@ -33,6 +33,8 @@ local armed = nil          -- the provider reservation held: { token, kind, usag
 local pickers = {}         -- [GetPtrHash(player)] = unconfirmed tickets, mirrored for the input hook
 local latches = {}         -- [GetPtrHash(player)] = { left, right, confirm } as last read
 local releaseLock = {}     -- [GetPtrHash(player)] = true until the confirming card key is let go
+local controllers = {}     -- [GetPtrHash(player)] = ControllerIndex while that player picks or holds releaseLock
+local pickRefs = {}        -- [GetPtrHash(player)] = that player's saved picker, to settle it if they leave
 local reading = false      -- our own reads pass the input hook untouched
 -- Test-only key source for conch_test: Lua's Input reads cannot be faked through
 -- MC_INPUT_ACTION (measured in game), so the bench holds keys here instead. It
@@ -78,13 +80,29 @@ function M.picking(player)
     return player ~= nil and pickers[GetPtrHash(player)] ~= nil
 end
 
+-- Remember whose controller a picker or release lock belongs to, or forget it
+-- once neither is left.
+local function track(player, key, pick)
+    if pickers[key] or releaseLock[key] then
+        controllers[key] = player.ControllerIndex
+        if pick then pickRefs[key] = pick end
+    else
+        controllers[key], pickRefs[key] = nil, nil
+    end
+end
+
 local function refreshPickers()
     for key in pairs(pickers) do pickers[key] = nil end
+    controllers, pickRefs = {}, {}
     local game = Game()
     for i = 0, game:GetNumPlayers() - 1 do
         local player = game:GetPlayer(i)
         local pick = player and pickSave(player, false)
-        if pick and pick.open > 0 then pickers[GetPtrHash(player)] = pick.open end
+        if pick and pick.open > 0 then
+            local key = GetPtrHash(player)
+            pickers[key] = pick.open
+            track(player, key, pick)
+        end
     end
 end
 
@@ -182,20 +200,23 @@ end
 -- and a held key never repeats.
 local function step(player)
     local key = GetPtrHash(player)
-    if not pickers[key] and not releaseLock[key] then latches[key] = nil; return end
+    if not pickers[key] and not releaseLock[key] then latches[key] = nil; track(player, key); return end
     local now = readInputs(player)
     local last = latches[key] or now
     latches[key] = now
     if releaseLock[key] and not now.confirm then releaseLock[key] = nil end
+    track(player, key)
     if not pickers[key] or Game():IsPaused() then return end
     local pick = pickSave(player, false)
-    if not pick or pick.open <= 0 then pickers[key] = nil; return end
+    if not pick or pick.open <= 0 then pickers[key] = nil; track(player, key); return end
+    track(player, key, pick)
     if now.confirm and not last.confirm then
         local ticket = runTicket(true)
         ticket.queue[#ticket.queue + 1] = KINDS[pick.index]
         pick.open = pick.open - 1
         pickers[key] = pick.open > 0 and pick.open or nil
         releaseLock[key] = true
+        track(player, key)
         save()
         sfx(SoundEffect.SOUND_PAPER_IN, 0.9)
         M.sync()
@@ -212,19 +233,31 @@ end
 
 -- While a player is choosing, their shooting keys and card key belong to the
 -- picker; the card key stays theirs until let go, so the confirming press
--- cannot also use the next pocket item.
+-- cannot also use the next pocket item. The same keys drive every player on
+-- that controller (a second player added on the picker's controller), so the
+-- game is denied them for all of those players for the same window.
 local BLOCKED = {
     [ButtonAction.ACTION_SHOOTLEFT] = true, [ButtonAction.ACTION_SHOOTRIGHT] = true,
     [ButtonAction.ACTION_SHOOTUP] = true, [ButtonAction.ACTION_SHOOTDOWN] = true,
     [ButtonAction.ACTION_PILLCARD] = true,
 }
 
+local function withheld(key, controller, action)
+    if pickers[key] or (action == ButtonAction.ACTION_PILLCARD and releaseLock[key]) then return true end
+    for other, owner in pairs(controllers) do
+        if owner == controller
+            and (pickers[other] or (action == ButtonAction.ACTION_PILLCARD and releaseLock[other])) then
+            return true
+        end
+    end
+    return false
+end
+
 function M.onInputAction(_, entity, hook, action)
-    if reading or not ready or not BLOCKED[action] then return end
+    if reading or not ready or not BLOCKED[action] or next(controllers) == nil then return end
     local player = entity and entity:ToPlayer()
     if not player then return end
-    local key = GetPtrHash(player)
-    if not (pickers[key] or (action == ButtonAction.ACTION_PILLCARD and releaseLock[key])) then return end
+    if not withheld(GetPtrHash(player), player.ControllerIndex, action) then return end
     if hook == InputHook.GET_ACTION_VALUE then return 0.0 end
     if hook == InputHook.IS_ACTION_PRESSED or hook == InputHook.IS_ACTION_TRIGGERED then return false end
 end
@@ -278,16 +311,57 @@ function M.onUseCard(_, card, player)
     save()
     local key = GetPtrHash(player)
     pickers[key] = pick.open
+    track(player, key, pick)
     latches[key] = readInputs(player) -- the key that used the card is still down
+end
+
+local function live(player)
+    return player ~= nil and (type(player.Exists) ~= "function" or player:Exists())
+end
+
+-- A picking player can leave the run before confirming (a co-op drop-out, a
+-- removed extra player). Their saved picker leaves with them, so each open
+-- ticket goes back to a remaining live player, one on the same controller
+-- first, and that player's saved picker is closed so it cannot reopen and
+-- count twice if they return. Their locks go too, freeing that controller.
+local function settleDeparted(present, players)
+    for key, controller in pairs(controllers) do
+        if not present[key] then
+            local count, pick = pickers[key], pickRefs[key]
+            pickers[key], latches[key], releaseLock[key] = nil, nil, nil
+            controllers[key], pickRefs[key] = nil, nil
+            if count and count > 0 then
+                local heir
+                for _, player in ipairs(players) do
+                    if player.ControllerIndex == controller then heir = player; break end
+                end
+                heir = heir or players[1]
+                if pick then pick.open = 0 end
+                if heir then
+                    for _ = 1, count do heir:AddCard(CARD) end
+                    ConchBlessing.printDebug(string.format(
+                        "[ConchTicket] %d unconfirmed ticket(s) of a player who left went back to controller %s",
+                        count, tostring(heir.ControllerIndex)))
+                end
+                save()
+            end
+        end
+    end
 end
 
 function M.onUpdate()
     if not ready then return end
     local game = Game()
+    local present, players = {}, {}
     for i = 0, game:GetNumPlayers() - 1 do
         local player = game:GetPlayer(i)
-        if player then step(player) end
+        if live(player) then
+            present[GetPtrHash(player)] = true
+            players[#players + 1] = player
+            step(player)
+        end
     end
+    settleDeparted(present, players)
     M.sync()
 end
 
@@ -331,6 +405,7 @@ function M.onPreGameExit()
     ready = false
     armed = nil
     pickers, latches, releaseLock = {}, {}, {}
+    controllers, pickRefs = {}, {}
 end
 
 function M.onUnload(_, mod)

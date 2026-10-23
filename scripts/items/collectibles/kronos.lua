@@ -4,6 +4,9 @@ local DamageProvenance = require("scripts.lib.damage_provenance")
 DamageProvenance.registerCallbacks(ConchBlessing)
 
 ConchBlessing.kronos = ConchBlessing.kronos or {}
+-- Opened by MC_POST_GAME_STARTED and closed on exit. A luamod reload in the
+-- middle of a run never sees game start, so it opens at once.
+ConchBlessing.kronos._runReady = type(Isaac.IsInGame) == "function" and Isaac.IsInGame() == true
 
 -- STATS: Item stat modifiers (Dark Rock style)
 ConchBlessing.kronos.STATS = {
@@ -373,56 +376,151 @@ local function adoptLegacy(save, key, oldKeys)
     end
 end
 
-local function getRunSave(player)
-    local sm = ConchBlessing.SaveManager
-    if not sm then return nil end
-    local globalSave = sm.GetRunSave(nil)
-    if not globalSave then return nil end
-    adoptLegacy(globalSave, "kronos", LEGACY.RUN)
-    globalSave.kronos = globalSave.kronos or {
-        absorbed = {},
-        totalAbsorbed = 0,
-        itemGrants = {},  -- Track how many items granted per familiar: ["fam_95"] = 3
-        itemGrantTotals = {}, -- Lifetime grants for maxGrants limits
-        itemGrantBaselines = {}, -- Preserve non-Kronos copies of converted items
-    }
+-- The main chunk sits at Lua's 200-local limit, so the helpers added for
+-- Thurisaz and for the per-player ledgers share this one table.
+local Rune = {}
 
-    if player then
-        -- The oldest saves kept the ledger per player, always under the first name.
-        local per = sm.GetRunSave(player)
-        local legacy = per and per[LEGACY.PER_PLAYER]
-        if legacy and (legacy.absorbed or legacy.totalAbsorbed) then
-            dbg("Migrating per-player kronos data to global store")
-            local g = globalSave.kronos
-            g.absorbed = g.absorbed or {}
-            g.itemGrants = g.itemGrants or {}
-            g.itemGrantTotals = g.itemGrantTotals or {}
-            g.itemGrantBaselines = g.itemGrantBaselines or {}
-            for cid, entry in pairs(legacy.absorbed or {}) do
-                local prev = (g.absorbed[cid] and g.absorbed[cid].count) or 0
-                local add = (entry and entry.count) or 0
+-- The lowest-index player for which test(player) holds.
+function Rune.firstPlayer(test)
+    local game = Game()
+    for i = 0, game:GetNumPlayers() - 1 do
+        local player = game:GetPlayer(i)
+        if player and test(player) then return player end
+    end
+    return nil
+end
+
+-- True once this run's save is the one SaveManager holds: after game start (or
+-- a luamod reload in a run) and once SaveManager has loaded its data. Before
+-- that, a player update can still see the previous run or an unmigrated ledger.
+function Rune.ready()
+    if not ConchBlessing.kronos._runReady then return false end
+    local sm = ConchBlessing.SaveManager
+    return not (sm and type(sm.IsLoaded) == "function") or sm.IsLoaded() == true
+end
+
+-- The Soul is a sub-player of The Forgotten: its own entity with the same
+-- inventory, so it reads and writes its parent's ledger.
+function Rune.parentOf(player)
+    if not player then return player end
+    if type(player.IsSubPlayer) == "function" then
+        local ok, isSub = pcall(player.IsSubPlayer, player)
+        if ok and not isSub then return player end
+    end
+    local hash = GetPtrHash(player)
+    local game = Game()
+    for i = 0, game:GetNumPlayers() - 1 do
+        local p = game:GetPlayer(i)
+        if p and GetPtrHash(p) == hash then return player end
+        local sub = p and type(p.GetSubPlayer) == "function" and p:GetSubPlayer()
+        if sub and GetPtrHash(sub) == hash then return p end
+    end
+    return player
+end
+
+-- Dead players and co-op ghosts never count as holders when one player has to
+-- be chosen among several; they keep their own ledger all the same.
+function Rune.isLive(player)
+    if not player then return false end
+    if type(player.IsDead) == "function" and player:IsDead() then return false end
+    if type(player.IsCoopGhost) == "function" and player:IsCoopGhost() then return false end
+    return true
+end
+
+function Rune.isLiveHolder(player)
+    return Rune.isLive(player) and player:HasCollectible(KRONOS_ID)
+end
+
+-- Ledger fields that add up when two ledgers of the same player are merged.
+-- Every other field keeps the value already there, or takes the old one.
+Rune.MERGE_SUM = { totalAbsorbed = true, itemGrants = true, itemGrantTotals = true, spared = true,
+    tempPermanent = true, prettyFlies = true, paschalHundredths = true, lostSoulRewardPending = true }
+
+function Rune.mergeLedger(target, old)
+    for key, value in pairs(old) do
+        local mine = target[key]
+        if mine == nil then
+            target[key] = value
+        elseif key == "absorbed" and type(mine) == "table" and type(value) == "table" then
+            for famKey, entry in pairs(value) do
+                local add = type(entry) == "table" and math.max(0, math.floor(tonumber(entry.count) or 0)) or 0
                 if add > 0 then
-                    g.absorbed[cid] = { count = prev + add }
+                    local have = type(mine[famKey]) == "table" and mine[famKey] or {}
+                    mine[famKey] = { count = (tonumber(have.count) or 0) + add, id = have.id or entry.id }
                 end
             end
-            for key, count in pairs(legacy.itemGrants or {}) do
-                g.itemGrants[key] = math.max(tonumber(g.itemGrants[key]) or 0, tonumber(count) or 0)
+        elseif key == "itemGrantBaselines" and type(mine) == "table" and type(value) == "table" then
+            -- The older ledger counted only its own grants, so its baseline is
+            -- the player's own; the newer one took those grants for the player's.
+            for itemKey, count in pairs(value) do
+                local older, have = tonumber(count), tonumber(mine[itemKey])
+                if older and (have == nil or older < have) then mine[itemKey] = older end
             end
-            for key, count in pairs(legacy.itemGrantTotals or legacy.itemGrants or {}) do
-                g.itemGrantTotals[key] = math.max(tonumber(g.itemGrantTotals[key]) or 0, tonumber(count) or 0)
-            end
-            for key, count in pairs(legacy.itemGrantBaselines or {}) do
-                if g.itemGrantBaselines[key] == nil then
-                    g.itemGrantBaselines[key] = math.max(0, tonumber(count) or 0)
-                end
-            end
-            g.totalAbsorbed = (g.totalAbsorbed or 0) + (legacy.totalAbsorbed or 0)
-            per[LEGACY.PER_PLAYER] = nil
-            sm.Save()
+        elseif Rune.MERGE_SUM[key] and type(mine) == "number" and type(value) == "number" then
+            target[key] = mine + value
+        elseif Rune.MERGE_SUM[key] and type(mine) == "table" and type(value) == "table" then
+            for k, v in pairs(value) do mine[k] = (tonumber(mine[k]) or 0) + (tonumber(v) or 0) end
         end
     end
+end
 
-    return globalSave.kronos
+-- Runs saved before every player kept its own ledger hold one shared ledger in
+-- the global run save (under `kronos` or an older name). It moves once, whole,
+-- to the player who used it: the first live Kronos holder, else the first
+-- player Thurisaz fed, else player 0, whose ledger without Kronos behind it is
+-- handed back on Continue (onGameStarted).
+function Rune.adoptGlobal()
+    local sm = ConchBlessing.SaveManager
+    local globalSave = sm and sm.GetRunSave(nil)
+    if type(globalSave) ~= "table" then return end
+    adoptLegacy(globalSave, "kronos", LEGACY.RUN)
+    local old = globalSave.kronos
+    if old == nil then return end
+    local target = Rune.firstPlayer(Rune.isLiveHolder)
+        or Rune.firstPlayer(function(player) return Rune.total(player) > 0 end)
+        or Isaac.GetPlayer(0)
+    local save = target and sm.GetRunSave(target)
+    if type(save) ~= "table" then return end
+    globalSave.kronos = nil
+    if type(old) == "table" then
+        if type(save.kronos) == "table" then Rune.mergeLedger(save.kronos, old) else save.kronos = old end
+    end
+    dbg("Moved the run's shared ledger to its player's own run save")
+    sm.Save()
+end
+
+-- Every player keeps its own ledger in its own run save. `peek` reads it
+-- without creating one for a player who never had any.
+local function getRunSave(player, peek)
+    local sm = ConchBlessing.SaveManager
+    if not (player and sm) then return nil end
+    -- The shared ledger of an older save moves only once the run is loaded:
+    -- before MC_POST_GAME_STARTED SaveManager can still hold the previous run.
+    if Rune.ready() then Rune.adoptGlobal() end
+    local save = sm.GetRunSave(Rune.parentOf(player))
+    if type(save) ~= "table" then return nil end
+    -- The oldest saves kept the ledger per player, always under the first name.
+    local legacy = save[LEGACY.PER_PLAYER]
+    if type(legacy) == "table" and (legacy.absorbed or legacy.totalAbsorbed) then
+        save[LEGACY.PER_PLAYER] = nil
+        if type(save.kronos) == "table" then Rune.mergeLedger(save.kronos, legacy) else save.kronos = legacy end
+        dbg("Adopted the oldest per-player ledger")
+        sm.Save()
+    end
+    if save.kronos == nil then
+        if peek then return nil end
+        save.kronos = {
+            absorbed = {},
+            totalAbsorbed = 0,
+            itemGrants = {},  -- Track how many items granted per familiar: ["fam_95"] = 3
+            itemGrantTotals = {}, -- Lifetime grants for maxGrants limits
+            itemGrantBaselines = {}, -- Preserve non-Kronos copies of converted items
+        }
+    end
+    local rs = save.kronos
+    if type(rs) ~= "table" then return nil end
+    if type(rs.absorbed) ~= "table" then rs.absorbed = {} end
+    return rs
 end
 
 local function ownsAnyBlacklisted(player)
@@ -435,21 +533,6 @@ local function ownsAnyBlacklisted(player)
     end
     return false
 end
-
-local function findKronosOwner()
-    local game = Game()
-    for i = 0, game:GetNumPlayers() - 1 do
-        local player = game:GetPlayer(i)
-        if player and player:HasCollectible(KRONOS_ID) then
-            return player
-        end
-    end
-    return nil
-end
-
--- The main chunk sits at Lua's 200-local limit, so the helpers added for
--- Thurisaz share this one table.
-local Rune = {}
 
 -- Thurisaz (the rune) devours familiars for good, with or without Kronos. Its
 -- ledger is the player's own run save, so losing Kronos never hands them back:
@@ -505,17 +588,19 @@ function Rune.hasEffects(player)
     return player ~= nil and (player:HasCollectible(KRONOS_ID) or Rune.total(player) > 0)
 end
 
--- Shared absorbed-ability state (floor serial, room-clear counters, Paschal
--- earnings) has one owner: the Kronos holder first, else a player Thurisaz fed.
-function Rune.effectOwner()
-    local owner = findKronosOwner()
-    if owner then return owner end
-    local game = Game()
-    for i = 0, game:GetNumPlayers() - 1 do
-        local player = game:GetPlayer(i)
-        if player and Rune.total(player) > 0 then return player end
-    end
-    return nil
+-- Absorbed-ability state (floor serial, room-clear counters, Paschal earnings,
+-- the Lost Soul reward) lives in each player's own ledger, like the rest of it:
+-- a player with effects owns, pays and keeps their own.
+function Rune.isLiveWithEffects(player)
+    return Rune.isLive(player) and Rune.hasEffects(player)
+end
+
+-- Payouts skip only co-op ghosts: a player in the death animation may still be
+-- revived, and a clear in that moment pays as it always did.
+function Rune.isPaid(player)
+    if not player then return false end
+    if type(player.IsCoopGhost) == "function" and player:IsCoopGhost() then return false end
+    return Rune.hasEffects(player)
 end
 
 local function clearKronosRuntime(player)
@@ -613,38 +698,56 @@ local function getFloorPickCount(rs, famId)
     return count
 end
 
--- Temporary familiars absorbed for the current room only: Box of Friends uses
--- (`double`, one extra base effect per use), The Twins (`twins`, one absorbed
+-- Temporary familiars a player absorbed for the current room only: Box of Friends
+-- uses (`double`, one extra base effect per use), The Twins (`twins`, one absorbed
 -- familiar's copies counted again) and room-scoped absorbed familiars (`counts`).
--- Runtime only; it ends with the room. The table is cleared in place, never replaced.
-local roomTemp = { counts = {}, double = 0, twins = {}, mongoCopies = {} }
+-- Each player has their own, keyed by the player entity. Runtime only; it ends
+-- with the room. A player's table is cleared in place, never replaced.
+Rune.rooms = {}
+function Rune.room(player)
+    local key = GetPtrHash(player)
+    local room = Rune.rooms[key]
+    if not room then
+        room = { counts = {}, double = 0, twins = {}, mongoCopies = {} }
+        Rune.rooms[key] = room
+    end
+    return room
+end
+
 local pendingTempScans = {}
 local refreshEffectCaches
 
-local function clearRoomTemporaryState()
-    local had = roomTemp.double > 0 or next(roomTemp.counts) ~= nil
-        or next(roomTemp.twins) ~= nil or #roomTemp.mongoCopies > 0
-    roomTemp.double = 0
-    for key in pairs(roomTemp.counts) do roomTemp.counts[key] = nil end
-    for key in pairs(roomTemp.twins) do roomTemp.twins[key] = nil end
-    -- Only the extra Mongo copies produced by this room's multiplier belong to
-    -- this cleanup. Ordinary Minisaacs, including other items' ones, stay intact.
-    for i = #roomTemp.mongoCopies, 1, -1 do
-        local familiar = roomTemp.mongoCopies[i]
-        if familiar and familiar:Exists() then familiar:Remove() end
-        roomTemp.mongoCopies[i] = nil
+-- One player's room state with `player`, every player's without.
+local function clearRoomTemporaryState(player)
+    local only = player and GetPtrHash(player)
+    local had = false
+    for key, room in pairs(Rune.rooms) do
+        if only == nil or key == only then
+            had = had or room.double > 0 or next(room.counts) ~= nil
+                or next(room.twins) ~= nil or #room.mongoCopies > 0
+            room.double = 0
+            for famKey in pairs(room.counts) do room.counts[famKey] = nil end
+            for famKey in pairs(room.twins) do room.twins[famKey] = nil end
+            -- Only the extra Mongo copies produced by this room's multiplier belong to
+            -- this cleanup. Ordinary Minisaacs, including other items' ones, stay intact.
+            for i = #room.mongoCopies, 1, -1 do
+                local familiar = room.mongoCopies[i]
+                if familiar and familiar:Exists() then familiar:Remove() end
+                room.mongoCopies[i] = nil
+            end
+        end
     end
     for key, pending in pairs(pendingTempScans) do
-        if pending.roomScoped then pendingTempScans[key] = nil end
+        if pending.roomScoped and (only == nil or key == only) then pendingTempScans[key] = nil end
     end
     return had
 end
 
 -- Absorbed familiars that did not come from an owned collectible: Monster Manual
 -- (`tempFloor`, this floor) and Soul of Lilith (`tempPermanent`), plus the room ones.
-local function getTemporaryCount(rs, famId)
+local function getTemporaryCount(player, rs, famId)
     local key = "fam_" .. tostring(famId)
-    local count = tonumber(roomTemp.counts[key]) or 0
+    local count = tonumber(Rune.room(player).counts[key]) or 0
     local floor = rs and rs.tempFloor
     if type(floor) == "table" and floor.serial == (tonumber(rs.floorSerial) or 0) and type(floor.counts) == "table" then
         count = count + (tonumber(floor.counts[key]) or 0)
@@ -655,8 +758,9 @@ local function getTemporaryCount(rs, famId)
     return count
 end
 
--- Kronos's ledger, floor picks and temporary sources count only while Kronos is
--- held; Thurisaz's familiars count for their own player with or without it.
+-- A player's own Kronos ledger, floor picks and temporary sources count only
+-- while that player holds Kronos; their Thurisaz familiars count with or without
+-- it. Nothing here reads another player's ledger.
 local function getEffectCountBeforeBox(player, famId)
     if not player then return 0 end
     local holds = player:HasCollectible(KRONOS_ID)
@@ -666,24 +770,31 @@ local function getEffectCountBeforeBox(player, famId)
     if not rs then return count end
     count = count + getFloorPickCount(rs, famId)
     if holds then
-        local absorbed = ConchBlessing.kronos._getAbsorbedCount(player, famId)
-        count = count + absorbed + getTemporaryCount(rs, famId)
-            + absorbed * (roomTemp.twins[famId] or 0)
+        local entry = rs.absorbed["fam_" .. tostring(famId)]
+        local absorbed = (entry and entry.count) or 0
+        count = count + absorbed + getTemporaryCount(player, rs, famId)
+            + absorbed * (Rune.room(player).twins[famId] or 0)
     end
     return count
 end
 
--- Box of Friends doubles absorbed abilities only for a Kronos holder.
+-- Box of Friends doubles the absorbed abilities of the Kronos holder who used it.
 function Rune.boxDouble(player)
-    return player and player:HasCollectible(KRONOS_ID) and roomTemp.double or 0
+    return player and player:HasCollectible(KRONOS_ID) and Rune.room(player).double or 0
 end
 
 function ConchBlessing.kronos._getEffectCount(player, famId)
     return getEffectCountBeforeBox(player, famId) * (1 + Rune.boxDouble(player))
 end
 
-function ConchBlessing.kronos._getRoomTemporary()
-    return roomTemp
+-- A player's room-temporary state (player 0's without an argument).
+function ConchBlessing.kronos._getRoomTemporary(player)
+    return Rune.room(player or Isaac.GetPlayer(0))
+end
+
+-- A player's own Kronos ledger, for the dev benches; nil if they never had one.
+function ConchBlessing.kronos._getLedger(player)
+    return getRunSave(player or Isaac.GetPlayer(0), true)
 end
 
 -- Several familiars can convert into the same collectible (both Chubbies grant
@@ -1071,7 +1182,7 @@ function ConchBlessing.kronos._trackConvertedItemRemoval(player)
     if saveChanged then
         ConchBlessing.kronos._syncAbsorbedDamage(player)
         clearKronosRuntime(player)
-        refreshEffectCaches()
+        refreshEffectCaches(player)
         ConchBlessing.SaveManager.Save()
     end
 end
@@ -1415,12 +1526,14 @@ function ConchBlessing.kronos._ensureAngelicPrismStack(player)
     local pdata = player:GetData()
     pdata.__kronosAngelicPrisms = pdata.__kronosAngelicPrisms or {}
     
-    -- Remove original Angelic Prism familiars in the room (not managed by Kronos)
+    -- Remove this player's original Angelic Prism familiars (not managed by
+    -- Kronos); another player's prisms are theirs to keep.
     if absorbed > 0 then
-        local room = Game():GetRoom()
+        local owner = GetPtrHash(player)
         for _, entity in ipairs(Isaac.GetRoomEntities()) do
             local fam = entity:ToFamiliar()
-            if fam and fam.Variant == FamiliarVariant.ANGELIC_PRISM then
+            if fam and fam.Variant == FamiliarVariant.ANGELIC_PRISM
+                and fam.Player and GetPtrHash(fam.Player) == owner then
                 local fd = fam:GetData()
                 -- Remove if NOT managed by Kronos
                 if not (fd and fd.__kronosAngelicPrism) then
@@ -1743,14 +1856,6 @@ function ConchBlessing.kronos._updateBloodshotEyeAnchors(player)
     end
 end
 
-ConchBlessing.kronos.onPickup = function(_, player, collectibleType)
-    if collectibleType ~= KRONOS_ID then return end
-    player:GetData().__kronosHadCollectible = true
-    dbg("Picked up - initial sweep")
-    local changed = ConchBlessing.kronos._detectAndAbsorb(player)
-    if changed then ConchBlessing.kronos._finalizeAbsorb(player) end
-end
-
 -- Pinned stand-ins and other per-update upkeep for every absorbed ability.
 function Rune.runAbsorbActions(player)
     local absorbActions = ConchBlessing.kronos.data.absorbActions
@@ -1764,7 +1869,11 @@ function Rune.runAbsorbActions(player)
 end
 
 ConchBlessing.kronos.onPlayerUpdate = function(_, player)
-    if not player then return end
+    -- MC_POST_PLAYER_UPDATE can run before game start; scanning then would absorb
+    -- against an empty or unmigrated ledger.
+    if not player or not Rune.ready() then return end
+    -- The Soul shares The Forgotten's inventory and ledger; one body scans.
+    if Rune.parentOf(player) ~= player then return end
 
     local frame = Game():GetFrameCount()
     local pdata = player:GetData()
@@ -1787,6 +1896,8 @@ ConchBlessing.kronos.onPlayerUpdate = function(_, player)
         -- Auto-execute absorbActions for all absorbed familiars
         Rune.runAbsorbActions(player)
     elseif pdata.__kronosHadCollectible then
+        -- This player's last copy is gone: their own ledger goes back to them,
+        -- whoever else still holds Kronos.
         pdata.__kronosHadCollectible = false
         clearKronosRuntime(player)
         local um = ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers
@@ -1796,9 +1907,7 @@ ConchBlessing.kronos.onPlayerUpdate = function(_, player)
         end
         player:AddCacheFlags(CacheFlag.CACHE_DAMAGE | CacheFlag.CACHE_FLYING | CacheFlag.CACHE_FIREDELAY | CacheFlag.CACHE_SPEED)
         player:EvaluateItems()
-        if not findKronosOwner() then
-            ConchBlessing.kronos._revertAll(player)
-        end
+        ConchBlessing.kronos._revertAll(player)
     end
     -- Thurisaz's familiars keep working without Kronos.
     if not player:HasCollectible(KRONOS_ID) and Rune.total(player) > 0 then
@@ -1895,15 +2004,23 @@ ConchBlessing.kronos.onGameStarted = function(_)
     -- expose the previous run's table.
     ConchBlessing.kronos._runReady = true
     for key in pairs(Rune.totals) do Rune.totals[key] = nil end
-    local player = findKronosOwner()
-    if not player then
-        -- _revertAll also settles Thurisaz's familiars, which outlive Kronos.
-        local firstPlayer = Isaac.GetPlayer(0)
-        if firstPlayer then
-            ConchBlessing.kronos._revertAll(firstPlayer)
+    Rune.adoptGlobal()
+    local game = Game()
+    for i = 0, game:GetNumPlayers() - 1 do
+        local player = game:GetPlayer(i)
+        if player and player:HasCollectible(KRONOS_ID) then
+            Rune.restoreHolder(player)
+        elseif player and (getRunSave(player, true) or Rune.total(player) > 0) then
+            -- A ledger with no Kronos behind it goes back to its own player.
+            -- _revertAll also settles Thurisaz's familiars, which outlive Kronos.
+            ConchBlessing.kronos._revertAll(player)
         end
-        return
     end
+end
+
+-- Game start for one Kronos holder: their own ledger against the provider and
+-- their own inventory.
+function Rune.restoreHolder(player)
     player:GetData().__kronosHadCollectible = true
     local rs = getRunSave(player)
     if rs then
@@ -2019,28 +2136,24 @@ Rune.KEPT_STATE = {
     lostSoulRewardPending = CollectibleType.COLLECTIBLE_LOST_SOUL,
 }
 
-function Rune.keeps(famId)
-    local game = Game()
-    for i = 0, game:GetNumPlayers() - 1 do
-        local player = game:GetPlayer(i)
-        if player and Rune.count(player, famId) > 0 then return true end
-    end
-    return false
+-- Only the player's own Thurisaz familiars keep their state; the state is theirs.
+function Rune.keeps(player, famId)
+    return Rune.count(player, famId) > 0
 end
 
-local function clearEffectState(rs)
+local function clearEffectState(player, rs)
     local cleared = false
     for _, key in ipairs(EFFECT_STATE_KEYS) do
         if key == "clearCounters" and type(rs.clearCounters) == "table" then
             for counterKey in pairs(rs.clearCounters) do
                 local famId = tonumber(tostring(counterKey):match("^fam_(%d+)$"))
-                if not (famId and Rune.keeps(famId)) then
+                if not (famId and Rune.keeps(player, famId)) then
                     rs.clearCounters[counterKey] = nil
                     cleared = true
                 end
             end
             if next(rs.clearCounters) == nil then rs.clearCounters = nil end
-        elseif rs[key] ~= nil and not (Rune.KEPT_STATE[key] and Rune.keeps(Rune.KEPT_STATE[key])) then
+        elseif rs[key] ~= nil and not (Rune.KEPT_STATE[key] and Rune.keeps(player, Rune.KEPT_STATE[key])) then
             rs[key] = nil
             cleared = true
         end
@@ -2057,7 +2170,7 @@ function Rune.revertKronos(player)
     -- not load hundreds of sprites or leave a minute-long animation backlog.
     ConchBlessing.kronos._beginReleaseVisuals(player)
     ConchBlessing.kronos._restoreNonItemFamiliars(player, rs)
-    local effectStateCleared = clearEffectState(rs)
+    local effectStateCleared = clearEffectState(player, rs)
     local hadAny = next(rs.itemGrants or {}) ~= nil
     local familiarToItemMap = ConchBlessing.kronos.data.familiarToItemMap or {}
     
@@ -2143,15 +2256,14 @@ function Rune.revertKronos(player)
     return false
 end
 
---- Kronos is gone: hand back what it held. Thurisaz's familiars were never
---- Kronos's, so their damage (withdrawn with the shared contribution) and floor
---- picks are settled again for whoever still has them.
+--- This player's Kronos is gone: hand back what their own ledger held, to them.
+--- Other players' ledgers are never touched. Their Thurisaz familiars were never
+--- Kronos's, so their damage (withdrawn with the whole contribution) and floor
+--- picks are settled again.
 function ConchBlessing.kronos._revertAll(player)
     local reverted = Rune.revertKronos(player)
-    local owner = Rune.effectOwner()
-    if owner then
-        ConchBlessing.kronos._ensureFloorPicks(owner)
-        refreshEffectCaches()
+    if not ConchBlessing.kronos._ensureFloorPicks(player) then
+        refreshEffectCaches(player)
     end
     return reverted
 end
@@ -2915,16 +3027,22 @@ local function spawnClearReward(familiarId, position, rng)
     end
 end
 
--- MC_PRE_SPAWN_CLEAN_AWARD. The absorbed pool is shared by every Kronos holder,
--- so a room clear pays out once. The engine's award RNG is left untouched.
+-- MC_PRE_SPAWN_CLEAN_AWARD. Every player with absorbed abilities pays out of
+-- their own pool, once per clear. The engine's award RNG is left untouched.
 ConchBlessing.kronos.onRoomClear = function(_, _rng, spawnPosition)
-    local player = Rune.effectOwner()
-    if not player then return end
+    local position = spawnPosition or Game():GetRoom():GetCenterPos()
+    bump("roomClears")
+    local game = Game()
+    for i = 0, game:GetNumPlayers() - 1 do
+        local player = game:GetPlayer(i)
+        if Rune.isPaid(player) then Rune.payRoomClear(player, position) end
+    end
+end
+
+function Rune.payRoomClear(player, position)
     local rs = getRunSave(player)
     if not rs then return end
     local effectCount = ConchBlessing.kronos._getEffectCount
-    local position = spawnPosition or Game():GetRoom():GetCenterPos()
-    bump("roomClears")
 
     local bumFriend = player:GetCollectibleRNG(CollectibleType.COLLECTIBLE_BUM_FRIEND)
     if bumFriend:RandomFloat() < getProcChance(player, CollectibleType.COLLECTIBLE_BUM_FRIEND) then
@@ -2959,14 +3077,8 @@ ConchBlessing.kronos.onRoomClear = function(_, _rng, spawnPosition)
         local perClear = math.floor(ConchBlessing.kronos.STATS.PASCHAL_TEARS_PER_CLEAR * 100 + 0.5)
         rs.paschalHundredths = (tonumber(rs.paschalHundredths) or 0) + perClear * paschal
         saveChanged = true
-        local game = Game()
-        for i = 0, game:GetNumPlayers() - 1 do
-            local holder = game:GetPlayer(i)
-            if holder and Rune.hasEffects(holder) then
-                holder:AddCacheFlags(CacheFlag.CACHE_FIREDELAY)
-                holder:EvaluateItems()
-            end
-        end
+        player:AddCacheFlags(CacheFlag.CACHE_FIREDELAY)
+        player:EvaluateItems()
     end
 
     if saveChanged then
@@ -2975,11 +3087,13 @@ ConchBlessing.kronos.onRoomClear = function(_, _rng, spawnPosition)
 end
 
 -- ------------------------------------------------------------ floor state
-refreshEffectCaches = function()
+-- Every player with absorbed abilities, or only `only`.
+refreshEffectCaches = function(only)
     local game = Game()
+    local onlyKey = only and GetPtrHash(only)
     for i = 0, game:GetNumPlayers() - 1 do
         local holder = game:GetPlayer(i)
-        if holder and Rune.hasEffects(holder) then
+        if holder and (onlyKey == nil or GetPtrHash(holder) == onlyKey) and Rune.hasEffects(holder) then
             ConchBlessing.kronos._syncAbsorbedDamage(holder)
             holder:AddCacheFlags(CacheFlag.CACHE_DAMAGE | CacheFlag.CACHE_FIREDELAY | CacheFlag.CACHE_SPEED | CacheFlag.CACHE_FLYING)
             holder:EvaluateItems()
@@ -3016,15 +3130,23 @@ function ConchBlessing.kronos._ensureFloorPicks(player)
         dbg(string.format("Floor picks (serial %d): %s", serial, table.concat(ids, ", ")))
     end
     ConchBlessing.SaveManager.Save()
-    refreshEffectCaches()
+    refreshEffectCaches(player)
     return true
 end
 
+-- Every player with absorbed abilities moves their own floor state on, dead
+-- ones included: a Monster Manual familiar still lasts one floor.
 ConchBlessing.kronos.onNewLevel = function()
     if not ConchBlessing.kronos._runReady then return end
     ConchBlessing.kronos._resetRoomTemporary()
-    local player = Rune.effectOwner()
-    if not player then return end
+    local game = Game()
+    for i = 0, game:GetNumPlayers() - 1 do
+        local player = game:GetPlayer(i)
+        if player and Rune.hasEffects(player) then Rune.advanceFloor(player) end
+    end
+end
+
+function Rune.advanceFloor(player)
     local rs = getRunSave(player)
     if not rs then return end
     local previous = tonumber(rs.floorSerial) or 0
@@ -3045,22 +3167,26 @@ ConchBlessing.kronos.onNewLevel = function()
         clearKronosRuntime(player)
     end
     if not ConchBlessing.kronos._ensureFloorPicks(player) then
-        refreshEffectCaches()
+        refreshEffectCaches(player)
     end
 end
 
+-- Each live player collects their own reward; a dead one waits until revived.
 function ConchBlessing.kronos._payLostSoulReward()
     if not ConchBlessing.kronos._runReady then return end
-    local player = Rune.effectOwner()
-    if not player then return end
-    local rs = getRunSave(player)
-    local pending = rs and math.floor(tonumber(rs.lostSoulRewardPending) or 0) or 0
-    if pending <= 0 then return end
-    rs.lostSoulRewardPending = nil
-    ConchBlessing.SaveManager.Save()
-    local rng = player:GetCollectibleRNG(CollectibleType.COLLECTIBLE_LOST_SOUL)
-    for _ = 1, pending do
-        spawnPickup(PickupVariant.PICKUP_HEART, HeartSubType.HEART_ETERNAL, player.Position, rng)
+    local game = Game()
+    for i = 0, game:GetNumPlayers() - 1 do
+        local player = game:GetPlayer(i)
+        local rs = Rune.isPaid(player) and getRunSave(player, true) or nil
+        local pending = rs and math.floor(tonumber(rs.lostSoulRewardPending) or 0) or 0
+        if pending > 0 then
+            rs.lostSoulRewardPending = nil
+            ConchBlessing.SaveManager.Save()
+            local rng = player:GetCollectibleRNG(CollectibleType.COLLECTIBLE_LOST_SOUL)
+            for _ = 1, pending do
+                spawnPickup(PickupVariant.PICKUP_HEART, HeartSubType.HEART_ETERNAL, player.Position, rng)
+            end
+        end
     end
 end
 
@@ -3078,12 +3204,13 @@ function ConchBlessing.kronos._topUpMongoMinisaacs(player)
         end
     end
     local baseTarget = getEffectCountBeforeBox(player, CollectibleType.COLLECTIBLE_MONGO_BABY)
+    local room = Rune.room(player)
     for index = live + 1, target do
         local ok, minisaac = pcall(player.AddMinisaac, player, player.Position, true)
         if ok and minisaac then
             minisaac:GetData().__kronosMongoMinisaac = true
-            if index > baseTarget and roomTemp.double > 0 then
-                roomTemp.mongoCopies[#roomTemp.mongoCopies + 1] = minisaac
+            if index > baseTarget and room.double > 0 then
+                room.mongoCopies[#room.mongoCopies + 1] = minisaac
             end
         end
     end
@@ -3216,17 +3343,20 @@ local ALTAR_MAX_SACRIFICES = 2
 local pendingManualScans = {}
 local altarSnapshots = {}
 
+-- Pretty Flies are a Kronos-only source: they block only while their player holds it.
 function ConchBlessing.kronos._getPrettyFlyCount(player)
-    local rs = getRunSave(player)
-    return math.max(0, tonumber(rs and rs.prettyFlies) or 0) * (1 + roomTemp.double)
+    if not (player and player:HasCollectible(KRONOS_ID)) then return 0 end
+    local rs = getRunSave(player, true)
+    return math.max(0, tonumber(rs and rs.prettyFlies) or 0) * (1 + Rune.boxDouble(player))
 end
 
 --- Damage copies on top of the real absorbed ones, which StatsAPI already counts.
 function ConchBlessing.kronos._getTemporaryDamageCopies(player)
     local rs = getRunSave(player)
     if not rs then return 0 end
+    local room = Rune.room(player)
     local copies = 0
-    for _, count in pairs(roomTemp.counts) do copies = copies + (tonumber(count) or 0) end
+    for _, count in pairs(room.counts) do copies = copies + (tonumber(count) or 0) end
     local floor = rs.tempFloor
     if type(floor) == "table" and floor.serial == (tonumber(rs.floorSerial) or 0) and type(floor.counts) == "table" then
         for _, count in pairs(floor.counts) do copies = copies + (tonumber(count) or 0) end
@@ -3234,11 +3364,11 @@ function ConchBlessing.kronos._getTemporaryDamageCopies(player)
     for _, count in pairs(type(rs.tempPermanent) == "table" and rs.tempPermanent or {}) do
         copies = copies + (tonumber(count) or 0)
     end
-    for famId, times in pairs(roomTemp.twins) do
+    for famId, times in pairs(room.twins) do
         copies = copies + ConchBlessing.kronos._getAbsorbedCount(player, famId) * times
     end
     copies = copies + math.max(0, tonumber(rs.prettyFlies) or 0)
-    return copies + (math.max(0, tonumber(rs.totalAbsorbed) or 0) + copies) * roomTemp.double
+    return copies + (math.max(0, tonumber(rs.totalAbsorbed) or 0) + copies) * room.double
 end
 
 -- SetItemAddition is a delta API. Read the provider's actual contribution instead
@@ -3421,13 +3551,14 @@ local function applyTwinsDouble(player, standInId)
         if ConchBlessing.kronos._getAbsorbedCount(player, id) > 0 then candidates[#candidates + 1] = id end
     end
     table.sort(candidates)
+    local room = Rune.room(player)
     if #candidates == 0 then
         local key = "fam_" .. tostring(standInId)
-        roomTemp.counts[key] = (roomTemp.counts[key] or 0) + 1
+        room.counts[key] = (room.counts[key] or 0) + 1
         return standInId
     end
     local pick = candidates[player:GetTrinketRNG(TrinketType.TRINKET_THE_TWINS):RandomInt(#candidates) + 1]
-    roomTemp.twins[pick] = (roomTemp.twins[pick] or 0) + 1
+    room.twins[pick] = (room.twins[pick] or 0) + 1
     return pick
 end
 
@@ -3477,7 +3608,7 @@ function ConchBlessing.kronos._absorbTemporary(player, source, captured)
         bump("tempAbsorbed", total)
         ConchBlessing.SaveManager.Save()
         clearKronosRuntime(player)
-        refreshEffectCaches()
+        refreshEffectCaches(player)
     end
     return total
 end
@@ -3554,7 +3685,7 @@ function ConchBlessing.kronos._restoreNonItemFamiliars(player, rs)
     end
     local source = getManualSource(player)
     if source then source.absorbed = {} end
-    clearRoomTemporaryState()
+    clearRoomTemporaryState(player)
     if restored then
         player:AddCacheFlags(CacheFlag.CACHE_FAMILIARS)
     end
@@ -3562,14 +3693,15 @@ end
 
 local function onUseBoxOfFriends(_, _item, _rng, player)
     if not (player and player:HasCollectible(KRONOS_ID)) then return end
-    roomTemp.double = roomTemp.double + 1
+    local room = Rune.room(player)
+    room.double = room.double + 1
     bump("boxUses")
     ConchBlessing.kronos._queueTransferEffect(player, CollectibleType.COLLECTIBLE_BOX_OF_FRIENDS, false)
     scanNowAndNextUpdate(player, SOURCE_BOX)
     -- Pinned stand-ins are rebuilt at the doubled count on the next update.
     clearKronosRuntime(player)
     ConchBlessing.kronos._topUpMongoMinisaacs(player)
-    refreshEffectCaches()
+    refreshEffectCaches(player)
 end
 
 local function onPreUseMonsterManual(_, _item, _rng, player)
@@ -4392,6 +4524,22 @@ ConchBlessing.kronos.onPreGameExit = function()
     transferEffects = {}
     stompVisuals = {}
     for key in pairs(Rune.totals) do Rune.totals[key] = nil end
+    for key in pairs(Rune.rooms) do Rune.rooms[key] = nil end
+end
+
+-- A player entity that goes away (a co-op player leaving, a Strawman, an added
+-- second player taken away) leaves no Kronos runtime behind: its pinned
+-- stand-ins, room state, queued scans and effects go with it. SaveManager drops
+-- that player's run save, ledger included, and no other player's state is touched.
+ConchBlessing.kronos.onPlayerRemoved = function(_, entity)
+    local player = entity and entity:ToPlayer()
+    if not player then return end
+    local key = GetPtrHash(player)
+    clearKronosRuntime(player)
+    clearRoomTemporaryState(player)
+    ConchBlessing.kronos._beginReleaseVisuals(player)
+    Rune.rooms[key], Rune.totals[key], pendingHurts[key] = nil, nil, nil
+    pendingTempScans[key], pendingManualScans[key], altarSnapshots[key] = nil, nil, nil
 end
 
 -- Test/diagnostic hooks for the RNG and Kronos probes.
@@ -4448,13 +4596,14 @@ ConchBlessing.kronos._test = {
         end
         local floor = type(rs.tempFloor) == "table" and rs.tempFloor.serial == (tonumber(rs.floorSerial) or 0)
             and rs.tempFloor.counts or nil
+        local room = Rune.room(player)
         local twins = 0
-        for famId, times in pairs(roomTemp.twins) do
+        for famId, times in pairs(room.twins) do
             twins = twins + ConchBlessing.kronos._getAbsorbedCount(player, famId) * times
         end
         return string.format("permanent=%s room=%d floor=%d lilith=%d twins=%d prettyFlies=%s double=%s",
-            tostring(rs.totalAbsorbed or 0), sum(roomTemp.counts), sum(floor), sum(rs.tempPermanent), twins,
-            tostring(rs.prettyFlies or 0), tostring(roomTemp.double))
+            tostring(rs.totalAbsorbed or 0), sum(room.counts), sum(floor), sum(rs.tempPermanent), twins,
+            tostring(rs.prettyFlies or 0), tostring(room.double))
     end,
     -- Every queued effect for the probe: direction, icon count and grid rows.
     transferGroups = function()
@@ -4632,7 +4781,7 @@ function ConchBlessing.kronos.devourWithRune(player, count, randomInt)
     end
     player:AddCacheFlags(CacheFlag.CACHE_ALL)
     ConchBlessing.kronos._finalizeAbsorb(player)
-    ConchBlessing.kronos._ensureFloorPicks(Rune.effectOwner() or player)
+    ConchBlessing.kronos._ensureFloorPicks(player)
     ConchBlessing.kronos._topUpMongoMinisaacs(player)
     dbg(string.format("Thurisaz devoured %d familiar(s); rune total %d", taken, Rune.total(player)))
     return taken
@@ -4647,14 +4796,21 @@ function ConchBlessing.kronos.getRuneCount(player, famId)
     return Rune.count(player, famId)
 end
 
--- Live totals of the stacking chances. EID fills synergy lines with them (no
--- player argument: the Kronos owner), and an absorption shows the new value for
--- the absorbing player. Each reads the same getter its roll uses.
+-- Live totals of the stacking chances, each from one player's own ledger. An
+-- absorption shows the new value for the absorbing player. EID passes no player:
+-- its item reminder's player while Tab is held, else the first live player with
+-- absorbed abilities, else player 0 (display only). Each reads the same getter
+-- its roll uses.
 ConchBlessing.EIDDynamicTokens = ConchBlessing.EIDDynamicTokens or {}
 do
+local function describedPlayer()
+    local tab = type(EID) == "table" and EID.holdTabPlayer or nil
+    local player = tab and type(tab.ToPlayer) == "function" and tab:ToPlayer() or nil
+    return player or Rune.firstPlayer(Rune.isLiveWithEffects) or Isaac.GetPlayer(0)
+end
 local function chanceToken(chance)
     return function(player)
-        player = player or Rune.effectOwner() or Isaac.GetPlayer(0)
+        player = player or describedPlayer()
         if not player then return nil end
         return ConchBlessing.Locale.formatPercent(string.format("%g", math.floor(chance(player) * 1000 + 0.5) / 10))
     end
@@ -4709,6 +4865,7 @@ ConchBlessing:AddCallback(ModCallbacks.MC_PRE_USE_ITEM, onPreUseMonsterManual, C
 ConchBlessing:AddCallback(ModCallbacks.MC_PRE_USE_ITEM, onPreUseSacrificialAltar, CollectibleType.COLLECTIBLE_SACRIFICIAL_ALTAR)
 ConchBlessing:AddCallback(ModCallbacks.MC_USE_ITEM, onUseSacrificialAltar, CollectibleType.COLLECTIBLE_SACRIFICIAL_ALTAR)
 ConchBlessing:AddCallback(ModCallbacks.MC_USE_CARD, onUseSoulOfLilith, Card.CARD_SOUL_LILITH)
+ConchBlessing:AddCallback(ModCallbacks.MC_POST_ENTITY_REMOVE, ConchBlessing.kronos.onPlayerRemoved, EntityType.ENTITY_PLAYER)
 if type(ModCallbacks.MC_PRE_USE_PILL) == "number" then
     ConchBlessing:AddCallback(ModCallbacks.MC_PRE_USE_PILL, onPreUsePrettyFly, PillEffect.PILLEFFECT_PRETTY_FLY)
 end

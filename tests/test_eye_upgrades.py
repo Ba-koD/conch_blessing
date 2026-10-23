@@ -95,6 +95,27 @@ class EyeUpgradesTests(unittest.TestCase):
             assert(AR.getSelection().type=='positive' and usage==0)
         """)
 
+    def test_c_counts_only_while_an_owner_plays_on_the_keyboard(self):
+        self.install_provider()
+        self.lua.execute("""
+            local keys={}
+            Input.IsButtonPressed=function(key, controller) return controller==0 and keys[key] or false end
+            local function tapC() keys[67]=nil; AR.onUpdate(); keys[67]=true; AR.onUpdate() end
+            -- The owner plays on a gamepad and a keyboard player owns none.
+            players[1].ControllerIndex=1; players[2].ControllerIndex=0
+            tapC(); assert(not AR.isOpen(), "a keyboard player without the glasses cannot choose for the party")
+            tapC(); assert(not AR.isOpen(), 'still no choice; there is no gamepad C')
+            -- The keyboard player picks the glasses up as well.
+            players[2].inventory[901]=1
+            tapC(); assert(AR.getSelection().type=='positive', 'a keyboard owner cycles')
+            players[2].inventory[901]=0
+            tapC(); assert(AR.getSelection().type=='positive', 'without a keyboard owner C is ignored again')
+            -- The keyboard owner is player one.
+            players[1].ControllerIndex=0; players[2].ControllerIndex=1
+            tapC(); assert(AR.getSelection().type=='negative')
+            assert(usage==0, 'C never activates the Conch')
+        """)
+
     def test_c_order_ignores_zero_probability_usage_and_unequal_provider_reply_pools(self):
         self.install_provider()
         self.lua.execute('''

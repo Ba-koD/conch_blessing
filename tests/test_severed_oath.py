@@ -561,6 +561,17 @@ class SeveredOathTests(unittest.TestCase):
             assert(#p.tail==3 and p.tail[2]==0 and q.tail[3]==3)
         ''')
 
+    def test_use_without_a_player_is_rejected_instead_of_borrowing_player_zero(self):
+        self.lua.execute('''
+            Isaac.GetPlayer=function() error('must not fall back to player 0') end
+            local p=pedestal(71,1,{2})
+            for _,missing in ipairs({false,true}) do
+                local result=M.onUseItem(nil,999,nil,missing and {} or nil)
+                assert(result.Discharge==false and result.ShowAnim==false and result.Remove==false)
+            end
+            assert(#errors==2 and draws==0 and #stock==1 and #p.tail==1,'nothing split, nothing drawn')
+        ''')
+
     def test_room_entry_diagnostics_stay_silent_when_debug_is_off(self):
         self.lua.execute('''
             Isaac.DebugString=function() error('unconditional diagnostic') end

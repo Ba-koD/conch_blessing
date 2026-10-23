@@ -304,6 +304,63 @@ class ConchTicketTests(unittest.TestCase):
             assert(T.queue()[1] == 'negative', 'the shared queue takes player two\\'s answer')
         """)
 
+    def test_a_second_player_on_the_pickers_controller_is_withheld_for_the_same_window(self):
+        self.run_lua("""
+            players[2] = { hash = 2, ControllerIndex = 0, Position = Vector(0, 0), cards = {}, ToPlayer = function(s) return s end }
+            players[3] = { hash = 3, ControllerIndex = 1, Position = Vector(0, 0), cards = {}, ToPlayer = function(s) return s end }
+            P2, P3 = players[2], players[3]
+            local function blocked(player, action, hook)
+                return fire(ModCallbacks.MC_INPUT_ACTION, player, hook or InputHook.IS_ACTION_TRIGGERED, action)
+            end
+            start(); useTicket(P1)
+            for _, action in ipairs({ButtonAction.ACTION_SHOOTLEFT, ButtonAction.ACTION_SHOOTRIGHT,
+                ButtonAction.ACTION_SHOOTUP, ButtonAction.ACTION_SHOOTDOWN, ButtonAction.ACTION_PILLCARD}) do
+                assert(blocked(P2, action) == false and blocked(P2, action, InputHook.GET_ACTION_VALUE) == 0,
+                    'a same-controller player cannot shoot or use a card while the picker is open')
+                assert(blocked(P3, action) == nil, 'another controller is untouched')
+            end
+            assert(blocked(P2, ButtonAction.ACTION_LEFT) == nil, 'walking stays free')
+            press(P1, ButtonAction.ACTION_PILLCARD, false); fire(ModCallbacks.MC_POST_UPDATE)
+            press(P1, ButtonAction.ACTION_PILLCARD, true); fire(ModCallbacks.MC_POST_UPDATE)
+            assert(not T.picking(P1) and not T.picking(P2) and #T.queue() == 1, 'only the picker confirms')
+            assert(blocked(P2, ButtonAction.ACTION_PILLCARD) == false,
+                "the confirming press cannot use the second player's pocket item")
+            assert(blocked(P2, ButtonAction.ACTION_SHOOTRIGHT) == nil, 'their shooting is back with the picker')
+            press(P1, ButtonAction.ACTION_PILLCARD, false); fire(ModCallbacks.MC_POST_UPDATE)
+            assert(blocked(P2, ButtonAction.ACTION_PILLCARD) == nil and blocked(P1, ButtonAction.ACTION_PILLCARD) == nil,
+                'released, the card key is free for both')
+        """)
+
+    def test_a_picker_whose_player_leaves_is_handed_back_and_never_counts_twice(self):
+        self.run_lua("""
+            players[2] = { hash = 2, ControllerIndex = 1, Position = Vector(0, 0), cards = {}, ToPlayer = function(s) return s end }
+            players[3] = { hash = 3, ControllerIndex = 0, Position = Vector(0, 0), cards = {}, ToPlayer = function(s) return s end }
+            P2, P3 = players[2], players[3]
+            start(); useTicket(P3); useTicket(P3)
+            assert(T.picking(P3) and playerSaves[3].conchTicketPick.open == 2)
+            table.remove(players, 3)                              -- the extra player leaves the run
+            local before = saves
+            fire(ModCallbacks.MC_POST_UPDATE)
+            assert(not T.picking(P3) and next(T._test.pickers()) == nil, 'the departed picker is closed')
+            assert(#P1.cards == 2 and P1.cards[1] == 88 and #P2.cards == 0,
+                'both open tickets go back to the remaining player on the same controller')
+            assert(playerSaves[3].conchTicketPick.open == 0 and saves > before, 'their saved picker cannot reopen')
+            assert(fire(ModCallbacks.MC_INPUT_ACTION, P1, InputHook.IS_ACTION_TRIGGERED, ButtonAction.ACTION_SHOOTRIGHT) == nil,
+                'the departed picker no longer withholds that controller')
+            fire(ModCallbacks.MC_POST_UPDATE); assert(#P1.cards == 2, 'handed back once')
+            players[3] = P3; fire(ModCallbacks.MC_PRE_GAME_EXIT); start()
+            assert(not T.picking(P3), 'a returning player does not reopen the handed-back tickets')
+        """)
+
+    def test_a_departed_picker_with_no_same_controller_player_goes_to_anyone_left(self):
+        self.run_lua("""
+            players[2] = { hash = 2, ControllerIndex = 1, Position = Vector(0, 0), cards = {}, ToPlayer = function(s) return s end }
+            P2 = players[2]
+            start(); useTicket(P2)
+            table.remove(players, 2); fire(ModCallbacks.MC_POST_UPDATE)
+            assert(#P1.cards == 1 and P1.cards[1] == 88 and not T.picking(P2))
+        """)
+
     def test_the_bench_key_source_drives_the_same_picker_and_never_outlives_a_run(self):
         self.run_lua("""
             start(); useTicket(P1); press(P1, ButtonAction.ACTION_PILLCARD, false); fire(ModCallbacks.MC_POST_UPDATE)

@@ -192,6 +192,49 @@ class AtroposReturnTests(unittest.TestCase):
             assert(saved.active and saved.sequence==2 and not saved.returnDoorEnabled and spawnCount==1)
         ''')
 
+    def test_a_remaining_player_leads_the_door_when_the_owner_left(self):
+        self.enter()
+        self.lua.execute('''
+            assert(saved.ownerPlayerIndex==1)
+            local other={HasTrinket=function() return false end,Exists=function() return true end}
+            game.GetPlayer=function() return other end
+            local isc=package.loaded['scripts.lib.isaacscript-common']
+            isc.getPlayerFromIndex=function() return nil end       -- the owner left the run
+            local led
+            game.StartRoomTransition=function(_,idx,dir,anim,p,dim)
+                led=p; transitionCalls=(transitionCalls or 0)+1; assert(idx==84 and dim==0); transitionMode=1
+            end
+            M.test.sync(); assert(open,'the door stays open without its owner')
+            M.test.use(savedDoor.PersistData)
+            assert(transitionCalls==1 and led==other,'a remaining live player leads the return')
+            assert(saved.returnIntent and saved.origin.roomIndex==84,'origin and intent are unchanged')
+        ''')
+
+    def test_owner_present_still_leads_and_a_removed_entity_never_leads(self):
+        self.enter()
+        self.lua.execute('''
+            local gone={Exists=function() return false end}
+            local other={HasTrinket=function() return false end}
+            local list={gone,other}
+            game.GetNumPlayers=function() return #list end
+            game.GetPlayer=function(_,i) return list[i+1] end
+            local led
+            game.StartRoomTransition=function(_,idx,dir,anim,p) led=p; transitionCalls=1; transitionMode=1 end
+            M.test.use(savedDoor.PersistData); assert(led==player,'the owner leads while present')
+            transitionMode=0; M._state.returnTransitionIssued=nil; saved.returnIntent=nil
+            local isc=package.loaded['scripts.lib.isaacscript-common']
+            isc.getPlayerFromIndex=function() return gone end
+            M.test.use(savedDoor.PersistData); assert(led==other,'a removed entity is skipped')
+        ''')
+
+    def test_observed_entry_records_no_guessed_player(self):
+        self.enter(canonical=False)
+        self.lua.execute('''
+            assert(saved.origin.roomIndex==84 and saved.origin.playerIndex==nil and saved.ownerPlayerIndex==nil,
+                'room entry names no triggering player, so none is recorded')
+            M.test.use(savedDoor.PersistData); assert(transitionCalls==1,'any live player can still use the door')
+        ''')
+
     def test_stale_owned_door_is_replaced_and_bad_callback_identity_never_teleports(self):
         self.enter()
         self.lua.execute('''

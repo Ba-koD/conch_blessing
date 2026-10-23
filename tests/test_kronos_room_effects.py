@@ -38,52 +38,81 @@ class KronosRoomEffectsTests(unittest.TestCase):
             run, per, floor, callbacks, familiars, exitCallbacks = {}, {}, {}, {}, {}, {}
             CallbackPriority.EARLY=-100
             state={itemAdditions={}}
-            player={inventory={[9999]=1}, data={}, Damage=3.5, MoveSpeed=1, MaxFireDelay=10, Position=Vector.Zero}
-            function player:HasCollectible(id) return (self.inventory[id] or 0)>0 end
-            function player:GetCollectibleNum(id) return self.inventory[id] or 0 end
-            function player:AddCollectible(id) self.inventory[id]=(self.inventory[id] or 0)+1 end
-            function player:RemoveCollectible(id) self.inventory[id]=math.max(0,(self.inventory[id] or 0)-1) end
-            function player:GetData() return self.data end
-            function player:AddCacheFlags() end
-            function player:HasTrinket() return false end
-            function player:GetCollectibleRNG() return {RandomFloat=function() return 0.999 end} end
+            -- SaveManager keys a player's run/floor save and StatsAPI its state by
+            -- player; `per`, `floor` and `state` belong to `player` (hash 1).
+            runSaves, floorSaves, states = {[1]=per}, {[1]=floor}, {[1]=state}
+            local function saveOf(saves, p)
+                local key=GetPtrHash(p); saves[key]=saves[key] or {}; return saves[key]
+            end
+            function stateOf(p) local s=saveOf(states,p); s.itemAdditions=s.itemAdditions or {}; return s end
             effects={GetEffectsList=function() return {Size=0} end, GetCollectibleEffectNum=function() return 0 end}
             function effects:AddCollectibleEffect(id,_,count) self[id]=(self[id] or 0)+count end
-            function player:GetEffects() return effects end
-            function player:AddMinisaac()
-                local f={Player=self,data={},hash=#familiars+10,alive=true}
-                function f:GetData() return self.data end
-                function f:ToFamiliar() return self end
-                function f:Exists() return self.alive end
-                function f:Remove() self.alive=false end
-                familiars[#familiars+1]=f
-                return f
+            function damageBonus(p)
+                local row=stateOf(p or player).itemAdditions[9999]
+                return row and row.Damage and row.Damage.cumulative or 0
             end
+            -- A player double; `p.effects` defaults to the shared `effects` of player one.
+            function makePlayer(p)
+                p.inventory=p.inventory or {}; p.data=p.data or {}
+                p.Damage=p.Damage or 3.5; p.MoveSpeed=p.MoveSpeed or 1; p.MaxFireDelay=p.MaxFireDelay or 10
+                p.Position=p.Position or Vector.Zero
+                function p:HasCollectible(id) return (self.inventory[id] or 0)>0 end
+                function p:GetCollectibleNum(id) return self.inventory[id] or 0 end
+                function p:AddCollectible(id) self.inventory[id]=(self.inventory[id] or 0)+1 end
+                function p:RemoveCollectible(id) self.inventory[id]=math.max(0,(self.inventory[id] or 0)-1) end
+                function p:GetData() return self.data end
+                function p:AddCacheFlags() end
+                function p:HasTrinket() return false end
+                function p:GetCollectibleRNG() return {RandomFloat=function() return 0.999 end} end
+                function p:GetEffects() return self.effects or effects end
+                function p:AddMinisaac()
+                    local f={Player=self,data={},hash=#familiars+10,alive=true}
+                    function f:GetData() return self.data end
+                    function f:ToFamiliar() return self end
+                    function f:Exists() return self.alive end
+                    function f:Remove() self.alive=false end
+                    familiars[#familiars+1]=f
+                    return f
+                end
+                function p:EvaluateItems()
+                    self.Damage=3.5+damageBonus(self); self.Tears=30/11; self.MoveSpeed=1
+                    if K then
+                        for _,flag in ipairs({CacheFlag.CACHE_DAMAGE,CacheFlag.CACHE_FIREDELAY,CacheFlag.CACHE_SPEED}) do
+                            K.onEvaluateCache(nil,self,flag)
+                        end
+                    end
+                end
+                return p
+            end
+            player=makePlayer({inventory={[9999]=1}})
+            players={player}
             local room={GetCenterPos=function() return Vector.Zero end}
-            local game={GetNumPlayers=function() return 1 end, GetPlayer=function() return player end,
-                GetRoom=function() return room end}
+            local game={GetNumPlayers=function() return #players end,
+                GetPlayer=function(_,i) return players[(i or 0)+1] end,
+                GetRoom=function() return room end, GetFrameCount=function() return frameCount or 0 end}
             function Game() return game end
-            Isaac={GetItemIdByName=function() return 9999 end, GetPlayer=function() return player end,
+            Isaac={GetItemIdByName=function() return 9999 end, GetPlayer=function(i) return players[(i or 0)+1] end,
                 FindByType=function()
                     local live={}; for _,f in ipairs(familiars) do if f:Exists() then live[#live+1]=f end end
                     return live
                 end}
             local um={}
-            function um:SetItemAddition(_,id,stat,delta)
-                state.itemAdditions[id]=state.itemAdditions[id] or {}
-                local row=state.itemAdditions[id]
+            function um:SetItemAddition(p,id,stat,delta)
+                local s=stateOf(p)
+                s.itemAdditions[id]=s.itemAdditions[id] or {}
+                local row=s.itemAdditions[id]
                 row[stat]=row[stat] or {cumulative=0}
                 row[stat].cumulative=row[stat].cumulative+delta
             end
-            function um:RemoveItemAddition(_,id) state.itemAdditions[id]=nil end
+            function um:RemoveItemAddition(p,id) stateOf(p).itemAdditions[id]=nil end
             function um:QueueCacheUpdate() end
-            function um:SaveToSaveManager() savedStats=copy(state) end
+            function um:SaveToSaveManager(p) if GetPtrHash(p)==1 then savedStats=copy(state) end end
             ConchBlessing={SaveManager={
-                GetRunSave=function(p) return p and per or run end,
-                GetFloorSave=function() return floor end,
-                Save=function() savedRun=copy(run) end},
+                GetRunSave=function(p) if p then return saveOf(runSaves,p) end return run end,
+                GetFloorSave=function(p) if p then return saveOf(floorSaves,p) end return floor end,
+                Save=function() savedRun=copy(run); savedPer=copy(per) end},
                 stats={unifiedMultipliers=um},
-                getUnifiedMultiplierState=function() return state end,
+                getUnifiedMultiplierState=function(p) return stateOf(p) end,
                 printDebug=function() end, printError=function(message) error(message) end}
             function ConchBlessing:AddCallback(id,fn,filter)
                 callbacks[id]=callbacks[id] or {}; callbacks[id][filter or 'unfiltered']=fn
@@ -97,18 +126,6 @@ class KronosRoomEffectsTests(unittest.TestCase):
                 local stat=row[2]
                 ConchBlessing.stats[row[1]]={applyAddition=function(p,amount) p[stat]=p[stat]+amount end}
             end
-            function damageBonus()
-                local row=state.itemAdditions[9999]
-                return row and row.Damage and row.Damage.cumulative or 0
-            end
-            function player:EvaluateItems()
-                self.Damage=3.5+damageBonus(); self.Tears=30/11; self.MoveSpeed=1
-                if K then
-                    for _,flag in ipairs({CacheFlag.CACHE_DAMAGE,CacheFlag.CACHE_FIREDELAY,CacheFlag.CACHE_SPEED}) do
-                        K.onEvaluateCache(nil,self,flag)
-                    end
-                end
-            end
             -- Provider is loaded first, as in the mod's dependency contract.
             -- Model its default-priority disk snapshot separately from its
             -- mutable in-memory SaveToSaveManager state.
@@ -121,17 +138,20 @@ class KronosRoomEffectsTests(unittest.TestCase):
             -- reconciliation and Mongo entity ownership remain production code.
             originalTransferQueue=K._queueTransferEffect
             K._queueTransferEffect=function() end
-            function absorb(name,count)
+            -- Writes straight into `who`'s own Kronos ledger (player one by default).
+            function absorb(name,count,who)
+                who=who or player
                 local id=CollectibleType['COLLECTIBLE_'..name]
-                K._getAbsorbedCount(player,id) -- initialize the production save schema
-                run.kronos.absorbed['fam_'..id]={id=id,count=count}
-                run.kronos.totalAbsorbed=run.kronos.totalAbsorbed+count
-                K._syncAbsorbedDamage(player)
-                player:EvaluateItems()
+                K._getAbsorbedCount(who,id) -- initialize the production save schema
+                local rs=ConchBlessing.SaveManager.GetRunSave(who).kronos
+                rs.absorbed['fam_'..id]={id=id,count=count}
+                rs.totalAbsorbed=rs.totalAbsorbed+count
+                K._syncAbsorbedDamage(who)
+                who:EvaluateItems()
                 return id
             end
-            function useBox()
-                callbacks[ModCallbacks.MC_USE_ITEM][CollectibleType.COLLECTIBLE_BOX_OF_FRIENDS](nil,nil,nil,player)
+            function useBox(who)
+                callbacks[ModCallbacks.MC_USE_ITEM][CollectibleType.COLLECTIBLE_BOX_OF_FRIENDS](nil,nil,nil,who or player)
             end
             function near(actual,expected) assert(math.abs(actual-expected)<0.00001,actual..' expected '..expected) end
         """)
@@ -152,12 +172,12 @@ class KronosRoomEffectsTests(unittest.TestCase):
         self.lua.execute("""
             local id=absorb('SACK_OF_PENNIES',1)
             local key='fam_'..id
-            run.kronos.itemGrants[key]=1; run.kronos.itemGrantTotals[key]=1
+            per.kronos.itemGrants[key]=1; per.kronos.itemGrantTotals[key]=1
             player.inventory[CollectibleType.COLLECTIBLE_DOLLAR]=1
             useBox(); useBox()
-            near(damageBonus(),6); assert(run.kronos.totalAbsorbed==1)
-            assert(run.kronos.absorbed[key].count==1 and run.kronos.itemGrants[key]==1)
-            assert(run.kronos.itemGrantTotals[key]==1 and player:GetCollectibleNum(CollectibleType.COLLECTIBLE_DOLLAR)==1)
+            near(damageBonus(),6); assert(per.kronos.totalAbsorbed==1)
+            assert(per.kronos.absorbed[key].count==1 and per.kronos.itemGrants[key]==1)
+            assert(per.kronos.itemGrantTotals[key]==1 and player:GetCollectibleNum(CollectibleType.COLLECTIBLE_DOLLAR)==1)
             K.onNewRoom(); near(damageBonus(),2)
         """)
 
@@ -168,7 +188,7 @@ class KronosRoomEffectsTests(unittest.TestCase):
             near(player.Tears,30/11+0.03)
             useBox(); near(player.Tears,30/11+0.06)
             K.onRoomClear(nil,nil,Vector.Zero)
-            assert(run.kronos.paschalHundredths==6)
+            assert(per.kronos.paschalHundredths==6)
             near(player.Tears,30/11+0.12)
             K.onNewRoom(); near(player.Tears,30/11+0.06)
             K.onGameStarted(); near(player.Tears,30/11+0.06)
@@ -203,7 +223,7 @@ class KronosRoomEffectsTests(unittest.TestCase):
         self.lua.execute("""
             absorb('LOST_SOUL',1); K.onGameStarted(); useBox()
             K.onNewLevel()
-            assert(run.kronos.lostSoulRewardPending==1)
+            assert(per.kronos.lostSoulRewardPending==1)
             near(damageBonus(),2); assert(K._getRoomTemporary().double==0)
         """)
 
@@ -212,9 +232,9 @@ class KronosRoomEffectsTests(unittest.TestCase):
             absorb('BROTHER_BOBBY',1)
             local guardian=CollectibleType.COLLECTIBLE_GUARDIAN_ANGEL
             local guillotine=CollectibleType.COLLECTIBLE_GUILLOTINE
-            run.kronos.tempFloor={serial=0,counts={['fam_'..guardian]=1}}
-            run.kronos.tempPermanent={['fam_'..guillotine]=1}
-            run.kronos.prettyFlies=1
+            per.kronos.tempFloor={serial=0,counts={['fam_'..guardian]=1}}
+            per.kronos.tempPermanent={['fam_'..guillotine]=1}
+            per.kronos.prettyFlies=1
             K._syncAbsorbedDamage(player); near(damageBonus(),8)
             useBox(); near(damageBonus(),16)
             assert(K._getEffectCount(player,guardian)==2 and K._getPrettyFlyCount(player)==2)

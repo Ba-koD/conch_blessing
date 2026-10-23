@@ -2,6 +2,7 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 ConchBlessing.utilitybelt = {}
 
 local UTILITY_BELT_ID = Isaac.GetItemIdByName("Utility Belt")
+local SAVE_KEY = "utilityBelt"
 
 -- Load isaacscript-common for setActiveItem function
 local isc = require("scripts.lib.isaacscript-common")
@@ -82,6 +83,26 @@ local function moveActiveToPocket(player)
     return true
 end
 
+-- Whether this player held the belt, and whether its next new active is still
+-- owed to the pocket, live in the player's run save: Continue empties GetData,
+-- and a held belt then read as just picked up and moved the current primary
+-- active into an empty pocket. _pendingPlayers mirrors the saved mark by
+-- pointer hash for this session's readers. nil when the run save is missing.
+local function getRecord(player, create)
+    local SaveManager = ConchBlessing.SaveManager
+    if not SaveManager then return nil end
+    local save
+    if create then save = SaveManager.GetRunSave(player) else save = SaveManager.TryGetRunSave(player) end
+    if type(save) ~= "table" then return nil end
+    local record = save[SAVE_KEY]
+    if type(record) ~= "table" then
+        if not create then return nil end
+        record = { had = false, pending = false }
+        save[SAVE_KEY] = record
+    end
+    return record
+end
+
 -- Track when player acquires Utility Belt and new active items
 ConchBlessing.utilitybelt.onPlayerUpdate = function(_, player)
     if not player then return end
@@ -90,23 +111,29 @@ ConchBlessing.utilitybelt.onPlayerUpdate = function(_, player)
     if not UTILITY_BELT_ID or UTILITY_BELT_ID <= 0 then return end
     
     local playerHash = GetPtrHash(player)
+    local pendingPlayers = ConchBlessing.utilitybelt._pendingPlayers
     local playerData = player:GetData()
     
-    -- Initialize player data
+    -- Runtime only: the primary active seen last update.
     if not playerData._panicButton then
-        playerData._panicButton = {
-            hadItem = false,
-            lastPrimaryItem = player:GetActiveItem(ActiveSlot.SLOT_PRIMARY),
-            initialized = true
-        }
+        playerData._panicButton = { lastPrimaryItem = player:GetActiveItem(ActiveSlot.SLOT_PRIMARY) }
+    end
+    local runtime = playerData._panicButton
+    
+    local hasBelt = player:HasCollectible(UTILITY_BELT_ID)
+    local record = getRecord(player, hasBelt)
+    if not record then
+        -- Never held, or the run save is not loaded yet: never guess a first pickup.
+        if not hasBelt then
+            pendingPlayers[playerHash] = nil
+            runtime.lastPrimaryItem = player:GetActiveItem(ActiveSlot.SLOT_PRIMARY)
+        end
+        return
     end
     
-    local hasPanicButton = player:HasCollectible(UTILITY_BELT_ID)
-    local hadPanicButton = playerData._panicButton.hadItem or false
-    
     -- Detect when player just picked up Utility Belt
-    if hasPanicButton and not hadPanicButton then
-        playerData._panicButton.hadItem = true
+    if hasBelt and not record.had then
+        record.had = true
         ConchBlessing.printDebug("Utility Belt: Item just picked up!")
         
         local primaryItem = player:GetActiveItem(ActiveSlot.SLOT_PRIMARY)
@@ -114,55 +141,54 @@ ConchBlessing.utilitybelt.onPlayerUpdate = function(_, player)
         if primaryItem > 0 then
             -- Has active item - move it to pocket immediately
             if moveActiveToPocket(player) then
-                playerData._panicButton.lastPrimaryItem = player:GetActiveItem(ActiveSlot.SLOT_PRIMARY)
+                runtime.lastPrimaryItem = player:GetActiveItem(ActiveSlot.SLOT_PRIMARY)
             end
         else
             -- No active item - mark this player as pending (will move next active)
-            ConchBlessing.utilitybelt._pendingPlayers[playerHash] = true
+            record.pending = true
             ConchBlessing.printDebug("Utility Belt: No active item, will move next acquired active to pocket")
         end
+        pendingPlayers[playerHash] = record.pending or nil
         return
     end
     
-    -- Update hadItem status
-    playerData._panicButton.hadItem = hasPanicButton
-    
     -- If player doesn't have Utility Belt, don't process further
-    if not hasPanicButton then
-        ConchBlessing.utilitybelt._pendingPlayers[playerHash] = nil
-        playerData._panicButton.lastPrimaryItem = player:GetActiveItem(ActiveSlot.SLOT_PRIMARY)
+    if not hasBelt then
+        record.had, record.pending = false, false
+        pendingPlayers[playerHash] = nil
+        runtime.lastPrimaryItem = player:GetActiveItem(ActiveSlot.SLOT_PRIMARY)
         return
     end
     
     local currentPrimary = player:GetActiveItem(ActiveSlot.SLOT_PRIMARY)
-    local lastPrimary = playerData._panicButton.lastPrimaryItem or 0
+    local lastPrimary = runtime.lastPrimaryItem or 0
     
     -- Check if a new active was acquired in primary slot
     if currentPrimary > 0 and currentPrimary ~= lastPrimary then
         local pocketItem = player:GetActiveItem(ActiveSlot.SLOT_POCKET)
         
         -- If pending (had no active when Utility Belt was picked up) and pocket is empty
-        if ConchBlessing.utilitybelt._pendingPlayers[playerHash] and pocketItem <= 0 then
+        if record.pending and pocketItem <= 0 then
             ConchBlessing.printDebug("Utility Belt: New active detected in primary slot: " .. tostring(currentPrimary))
             
             if moveActiveToPocket(player) then
-                ConchBlessing.utilitybelt._pendingPlayers[playerHash] = nil
+                record.pending = false
+                pendingPlayers[playerHash] = nil
                 -- Update last primary since we moved it
-                playerData._panicButton.lastPrimaryItem = player:GetActiveItem(ActiveSlot.SLOT_PRIMARY)
+                runtime.lastPrimaryItem = player:GetActiveItem(ActiveSlot.SLOT_PRIMARY)
                 return
             end
         end
     end
     
-    playerData._panicButton.lastPrimaryItem = currentPrimary
+    pendingPlayers[playerHash] = record.pending or nil
+    runtime.lastPrimaryItem = currentPrimary
 end
 
--- Reset tracking on new run
+-- A new run starts with an empty run save; Continue restores each player's
+-- saved marks, and the mirror is rebuilt from them on the next update.
 ConchBlessing.utilitybelt.onGameStarted = function(_, isContinued)
-    if not isContinued then
-        ConchBlessing.utilitybelt._processedPlayers = {}
-        ConchBlessing.utilitybelt._pendingPlayers = {}
-    end
+    ConchBlessing.utilitybelt._pendingPlayers = {}
     ConchBlessing.printDebug("Utility Belt: Game started, tracking reset")
 end
 
@@ -179,7 +205,13 @@ if EID and UTILITY_BELT_ID and UTILITY_BELT_ID > 0 then
            and descObj.ObjVariant == PickupVariant.PICKUP_COLLECTIBLE 
            and descObj.ObjSubType == UTILITY_BELT_ID then
             
-            local player = Isaac.GetPlayer(0)
+            -- EID's own reader of this description: the Item Reminder's player,
+            -- else the one nearest the pedestal. Never a guess at player 0.
+            local player = nil
+            if type(EID.ClosestPlayerTo) == "function" then
+                local ok, found = pcall(EID.ClosestPlayerTo, EID, descObj.Entity)
+                player = ok and found or nil
+            end
             if not player then
                 return descObj
             end

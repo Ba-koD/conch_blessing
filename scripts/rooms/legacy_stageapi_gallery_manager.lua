@@ -243,6 +243,36 @@ local function getPlayerFromIndex(index)
     return nil
 end
 
+local function isLivePlayer(player)
+    if player == nil or type(player.ToPlayer) ~= "function" or player:ToPlayer() == nil then
+        return false
+    end
+    if type(player.Exists) ~= "function" then return true end
+    local ok, exists = pcall(function() return player:Exists() end)
+    return ok and exists == true
+end
+
+-- A room transition moves every player; its player argument only leads it.
+-- The saved player leads while present. When that player has left the run (a
+-- co-op drop-out or a removed extra player), any remaining live player leads
+-- instead so nobody is trapped. Payment, reward journals and origin
+-- validation never read this player.
+local function getTransitionPlayer(playerIndex)
+    local owner = getPlayerFromIndex(playerIndex)
+    if isLivePlayer(owner) then return owner, true end
+    local game = Game()
+    local fallback
+    for index = 0, game:GetNumPlayers() - 1 do
+        local player = game:GetPlayer(index)
+        if isLivePlayer(player) then
+            local dead = type(player.IsDead) == "function" and player:IsDead() == true
+            if not dead then return player, false end
+            fallback = fallback or player
+        end
+    end
+    return fallback, false
+end
+
 local function anyoneHasAtropos()
     local itemData = ConchBlessing.ItemData
     local id = itemData and itemData.ATROPOS and itemData.ATROPOS.id or nil
@@ -1485,6 +1515,12 @@ function M.teleportToGalleryRoom(seed, mapID, player)
     if M._runLifecycleReady ~= true then return false, "lifecycle_not_ready" end
     local resolved, reason = resolveGalleryTeleport(seed, mapID)
     if not resolved then return false, reason end
+    -- MiniMAPI's map click names no player. Use the caller's player when it
+    -- supplies one, else the visit owner, else any remaining live player.
+    if not isLivePlayer(player) then
+        player = getTransitionPlayer(resolved.session.ownerPlayerIndex)
+        if not player then return false, "no_live_player" end
+    end
     -- The transition mutates StageAPI state within this same frame; the memo
     -- must not keep serving the pre-teleport context.
     M._galleryTeleportEval = nil
@@ -2099,7 +2135,7 @@ local function transitionToOrigin(session)
             "Appraisal refused an invalid native return descriptor: " .. tostring(reason)
         )
     end
-    local player = getPlayerFromIndex(session.ownerPlayerIndex)
+    local player = getTransitionPlayer(session.ownerPlayerIndex)
     if not player then return false end
     local context = getCurrentGalleryContext(session)
     local directNativeRecovery = context == nil
@@ -2650,9 +2686,20 @@ end
 
 function M.returnDeathCertificateDetour(identity, dcSessionId, player)
     local session = getSession()
-    if not savedDeathCertificateDetourMatches(session, identity, dcSessionId)
-        or getPlayerIndex(player) ~= tonumber(identity.playerIndex)
-    then
+    if not savedDeathCertificateDetourMatches(session, identity, dcSessionId) then
+        return false, "detour_identity_mismatch"
+    end
+    -- The detour's own player must lead while still in the run. Once that
+    -- player has left it, any remaining live player may lead the return so
+    -- nobody is trapped in Death Certificate; the room identity is unchanged.
+    local detourPlayer = getPlayerFromIndex(tonumber(identity.playerIndex))
+    local leaderValid
+    if isLivePlayer(detourPlayer) then
+        leaderValid = getPlayerIndex(player) == tonumber(identity.playerIndex)
+    else
+        leaderValid = isLivePlayer(player)
+    end
+    if not leaderValid then
         return false, "detour_identity_mismatch"
     end
     local detour = session.deathCertificateDetour

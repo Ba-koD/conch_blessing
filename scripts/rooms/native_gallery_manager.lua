@@ -265,6 +265,34 @@ local function getPlayerFromIndex(index)
     return nil
 end
 
+local function isLivePlayer(player)
+    if player == nil then return false end
+    if type(player.Exists) ~= "function" then return true end
+    local ok, exists = pcall(function() return player:Exists() end)
+    return ok and exists == true
+end
+
+-- A room transition moves every player; its player argument only leads it.
+-- The visit owner leads while present. When the owner has left the run (a
+-- co-op drop-out or a removed extra player), any remaining live player leads
+-- instead so nobody is trapped in the Death Certificate rooms. Payment,
+-- reward journals and origin validation never read this player.
+local function getTransitionPlayer(session)
+    local owner = getPlayerFromIndex(session and session.ownerPlayerIndex)
+    if isLivePlayer(owner) then return owner, true end
+    local game = Game()
+    local fallback
+    for playerIndex = 0, game:GetNumPlayers() - 1 do
+        local player = game:GetPlayer(playerIndex)
+        if isLivePlayer(player) then
+            local dead = type(player.IsDead) == "function" and player:IsDead() == true
+            if not dead then return player, false end
+            fallback = fallback or player
+        end
+    end
+    return fallback, false
+end
+
 local function anyoneHasAtropos()
     local itemData = ConchBlessing.ItemData
     local id = itemData and itemData.ATROPOS and itemData.ATROPOS.id or nil
@@ -1669,8 +1697,11 @@ local function transitionToOrigin(session)
             "Appraisal refused an invalid native return descriptor: " .. tostring(reason)
         )
     end
-    local player = getPlayerFromIndex(session.ownerPlayerIndex)
+    local player, isOwner = getTransitionPlayer(session)
     if not player then return false end
+    if not isOwner then
+        debugPrint("the visit owner left the run; a remaining player leads the return")
+    end
     local level = Game():GetLevel()
     local current = level and level:GetCurrentRoomDesc() or nil
     session.returnIssuedFrom = {

@@ -1,7 +1,12 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 ConchBlessing.liveeye = {}
 
+local SaveManager = ConchBlessing.SaveManager or require("scripts.lib.save_manager")
+
 ConchBlessing.liveeye.data = {
-    damageMultiplier = 1.0,
+    -- Where every holder's multiplier starts. The live value is that holder's
+    -- own (getMultiplier), kept in the player's run save.
+    startDamageMultiplier = 1.0,
     maxDamageMultiplier = 3.0,
     minDamageMultiplier = 0.75,
     hitMultiplierIncrease = 0.1,
@@ -16,9 +21,50 @@ ConchBlessing.liveeye.data = {
 }
 
 local LIVE_EYE_ID = Isaac.GetItemIdByName("Live Eye")
+local SAVE_KEY = "liveEye"
 
 -- Runtime tallies read only by the dev test bench (scripts/dev/liveeye_probe.lua).
 ConchBlessing.liveeye._counters = { misses = 0, forgiven = 0 }
+
+-- Each holder's multiplier lives in that player's own run save, so co-op
+-- holders, Esau or a second player of the same character move only their own,
+-- and Continue brings it back. nil when the run save is not available.
+local function getRecord(player, create)
+    if not player then return nil end
+    local save
+    if create then save = SaveManager.GetRunSave(player) else save = SaveManager.TryGetRunSave(player) end
+    if type(save) ~= "table" then return nil end
+    local record = save[SAVE_KEY]
+    if type(record) ~= "table" then
+        if not create then return nil end
+        record = {}
+        save[SAVE_KEY] = record
+    end
+    if type(record.multiplier) ~= "number" then
+        record.multiplier = ConchBlessing.liveeye.data.startDamageMultiplier
+    end
+    return record
+end
+
+local function clampMultiplier(value)
+    local data = ConchBlessing.liveeye.data
+    return math.max(data.minDamageMultiplier, math.min(value, data.maxDamageMultiplier))
+end
+
+--- This player's hit/miss multiplier (before Rock Bottom or a non-tear weapon fixes it).
+function ConchBlessing.liveeye.getMultiplier(player)
+    local record = getRecord(player, false)
+    return record and record.multiplier or ConchBlessing.liveeye.data.startDamageMultiplier
+end
+
+--- Sets this player's multiplier, clamped to its range. Returns the stored
+--- value, or nil when the run save is not available.
+function ConchBlessing.liveeye.setMultiplier(player, value)
+    local record = getRecord(player, true)
+    if not record or type(value) ~= "number" then return nil end
+    record.multiplier = clampMultiplier(value)
+    return record.multiplier
+end
 
 ---@param player table anything with a numeric Luck field
 ---@return number chance in [0, 1] that a miss does not lower the multiplier
@@ -67,8 +113,7 @@ end
 function ConchBlessing.liveeye.getEffectiveMultiplier(player)
     local fixed = getFixedMultiplier(player)
     if fixed then return fixed end
-    local data = ConchBlessing.liveeye.data
-    return math.max(data.minDamageMultiplier, math.min(data.damageMultiplier, data.maxDamageMultiplier))
+    return clampMultiplier(ConchBlessing.liveeye.getMultiplier(player))
 end
 
 local function getAboveOneGlowRatio(curM)
@@ -102,12 +147,6 @@ local function getBelowOneGlowRatio(curM)
     return t
 end
 
-ConchBlessing.liveeye.onPickup = function(_, player, collectibleType, rng)
-    ConchBlessing.printDebug("Live Eye item picked up!")
-    player:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
-    player:EvaluateItems()
-end
-
 ConchBlessing.liveeye.onEvaluateCache = function(_, player, cacheFlag)
     if cacheFlag == CacheFlag.CACHE_DAMAGE then
         if player:HasCollectible(LIVE_EYE_ID) then
@@ -128,50 +167,42 @@ ConchBlessing.liveeye.onEvaluateCache = function(_, player, cacheFlag)
     end
 end
 
--- player: the owner of the tear that hit.
-ConchBlessing.liveeye.handleHit = function(player)
-    player = player or Isaac.GetPlayer(0)
-    local oldMultiplier = ConchBlessing.liveeye.data.damageMultiplier
-    ConchBlessing.liveeye.data.damageMultiplier = math.min(
-        ConchBlessing.liveeye.data.damageMultiplier + ConchBlessing.liveeye.data.hitMultiplierIncrease,
-        ConchBlessing.liveeye.data.maxDamageMultiplier
-    )
-
-    if player then
+-- Moves only this player's multiplier and refreshes only this player's damage.
+local function shiftMultiplier(player, delta, label)
+    local record = getRecord(player, true)
+    if not record then
+        ConchBlessing.printError("[Live Eye] run save unavailable; " .. label .. " not recorded")
+        return
+    end
+    local old = record.multiplier
+    record.multiplier = clampMultiplier(old + delta)
+    if record.multiplier ~= old then
         player:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
         player:EvaluateItems()
     end
-    
-    ConchBlessing.printDebug(string.format("Live Eye: hit! multiplier %.2f -> %.2f", 
-        oldMultiplier, ConchBlessing.liveeye.data.damageMultiplier))
+    ConchBlessing.printDebug(string.format("Live Eye: %s! multiplier %.2f -> %.2f", label, old, record.multiplier))
+end
+
+-- player: the owner of the tear that hit. A missing owner is rejected.
+ConchBlessing.liveeye.handleHit = function(player)
+    if not player then return end
+    shiftMultiplier(player, ConchBlessing.liveeye.data.hitMultiplierIncrease, "hit")
 end
 
 -- player: the owner of the tear that missed; its luck sets the forgive chance.
+-- A missing owner is rejected.
 ConchBlessing.liveeye.handleMiss = function(player)
-    player = player or Isaac.GetPlayer(0)
+    if not player then return end
     local counters = ConchBlessing.liveeye._counters
     counters.misses = counters.misses + 1
     local chance = getMissForgiveChance(player)
-    if player and player:GetCollectibleRNG(LIVE_EYE_ID):RandomFloat() < chance then
+    if player:GetCollectibleRNG(LIVE_EYE_ID):RandomFloat() < chance then
         counters.forgiven = counters.forgiven + 1
         ConchBlessing.printDebug(string.format("Live Eye: miss forgiven (chance %.0f%%), multiplier stays %.2f",
-            chance * 100, ConchBlessing.liveeye.data.damageMultiplier))
+            chance * 100, ConchBlessing.liveeye.getMultiplier(player)))
         return
     end
-
-    local oldMultiplier = ConchBlessing.liveeye.data.damageMultiplier
-    ConchBlessing.liveeye.data.damageMultiplier = math.max(
-        ConchBlessing.liveeye.data.damageMultiplier - ConchBlessing.liveeye.data.missMultiplierDecrease,
-        ConchBlessing.liveeye.data.minDamageMultiplier
-    )
-
-    if player then
-        player:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
-        player:EvaluateItems()
-    end
-
-    ConchBlessing.printDebug(string.format("Live Eye: miss! multiplier %.2f -> %.2f",
-        oldMultiplier, ConchBlessing.liveeye.data.damageMultiplier))
+    shiftMultiplier(player, -ConchBlessing.liveeye.data.missMultiplierDecrease, "miss")
 end
 
 ConchBlessing.liveeye.onFireTear = function(_, tear)
@@ -315,14 +346,17 @@ ConchBlessing.liveeye.onPlayerUpdate = function(_, player)
     end
 end
 
+-- A new run starts every holder at the start multiplier (its run save is new);
+-- Continue keeps each holder's saved one. Either way every holder's damage is
+-- evaluated again from that player's own record.
 ConchBlessing.liveeye.onGameStarted = function(_)
-    ConchBlessing.liveeye.data.damageMultiplier = 1.0
-    ConchBlessing.printDebug("Live Eye data initialized!")
-    
-    local player = Isaac.GetPlayer(0)
-    if player and player:HasCollectible(LIVE_EYE_ID) then
-        player:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
-        player:EvaluateItems()
+    local game = Game()
+    for i = 0, game:GetNumPlayers() - 1 do
+        local player = Isaac.GetPlayer(i)
+        if player and player:HasCollectible(LIVE_EYE_ID) then
+            player:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
+            player:EvaluateItems()
+        end
     end
 end
 

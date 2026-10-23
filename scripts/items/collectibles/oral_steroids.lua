@@ -19,13 +19,36 @@ ConchBlessing.oralsteroids.data = {
     speedDecrease = 0
 }
 
-local function rebuildOralUnified(player, playerID)
+-- Copy count each player was last reconciled at. Keyed by the player entity
+-- (GetPtrHash) and rebuilt every session; the rolls themselves live in that
+-- player's own run save, which SaveManager keys by the collectible RNG seed, so
+-- two players of one character, Esau or a character change keep their own rolls.
+ConchBlessing.oralsteroids._lastItemCount = {}
+
+-- Before game start a callback can still see the previous run's save table, so
+-- nothing is rolled or trimmed until onGameStarted has reconciled every player.
+-- A luamod reload in the middle of a run never sees game start, so it opens at once.
+ConchBlessing.oralsteroids._runReady = type(Isaac.IsInGame) == "function" and Isaac.IsInGame() == true
+
+-- One roll per copy, in pickup order. Without `create`, a player that never
+-- had a roll gets no empty list in its save.
+local function getRolls(player, create)
+    local save = SaveManager.GetRunSave(player)
+    if type(save) ~= "table" then return nil end
+    if type(save.oralSteroids) ~= "table" then
+        if create == false then return nil end
+        save.oralSteroids = {}
+    end
+    return save.oralSteroids
+end
+
+local function rebuildOralUnified(player, stored)
     local um = ConchBlessing.stats.unifiedMultipliers
     um:RemoveItemAddition(player, ORAL_STEROIDS_ID, "Tears")
     um:RemoveItemAddition(player, ORAL_STEROIDS_ID, "Damage")
     um:RemoveItemAddition(player, ORAL_STEROIDS_ID, "Range")
     um:RemoveItemAddition(player, ORAL_STEROIDS_ID, "Luck")
-    local stored = ConchBlessing.oralsteroids.storedMultipliers and ConchBlessing.oralsteroids.storedMultipliers[playerID] or {}
+    stored = stored or {}
     for i = 1, #stored do
         local m = stored[i]
         um:SetItemAdditiveMultiplier(player, ORAL_STEROIDS_ID, "Tears", m.tears or 1.0, "Oral Steroids #" .. i)
@@ -77,14 +100,8 @@ end
 
 ConchBlessing.oralsteroids.removeLastStack = function(player, removeCount, applyCacheUpdate)
     if not player then return end
-    local playerID = player:GetPlayerType()
-    if not ConchBlessing.oralsteroids.storedMultipliers then
-        ConchBlessing.oralsteroids.storedMultipliers = {}
-    end
-    if not ConchBlessing.oralsteroids.storedMultipliers[playerID] then
-        ConchBlessing.oralsteroids.storedMultipliers[playerID] = {}
-    end
-    local stored = ConchBlessing.oralsteroids.storedMultipliers[playerID]
+    local stored = getRolls(player)
+    if not stored then return end
     local current = #stored
     local remove = tonumber(removeCount) or 1
     if remove <= 0 or current <= 0 then return end
@@ -93,257 +110,124 @@ ConchBlessing.oralsteroids.removeLastStack = function(player, removeCount, apply
     for i = current, target + 1, -1 do
         stored[i] = nil
     end
-    ConchBlessing.oralsteroids.storedMultipliers[playerID] = stored
-    local playerSave = SaveManager.GetRunSave(player)
-    if playerSave then
-        playerSave.oralSteroids = stored
-        SaveManager.Save()
-    end
-    rebuildOralUnified(player, playerID)
-    if not ConchBlessing.oralsteroids._lastItemCount then
-        ConchBlessing.oralsteroids._lastItemCount = {}
-    end
-    ConchBlessing.oralsteroids._lastItemCount[playerID] = target
+    SaveManager.Save()
+    rebuildOralUnified(player, stored)
+    ConchBlessing.oralsteroids._lastItemCount[GetPtrHash(player)] = target
     if applyCacheUpdate ~= false then
         player:AddCacheFlags(CacheFlag.CACHE_ALL)
         player:EvaluateItems()
-        showOralRemovalDisplay(player, removedEntry)
-    else
-        showOralRemovalDisplay(player, removedEntry)
     end
+    showOralRemovalDisplay(player, removedEntry)
 end
 
-ConchBlessing.oralsteroids.onPlayerUpdate = function(_, player)
-    if not player then return end
-    local playerID = player:GetPlayerType()
-    if not ConchBlessing.oralsteroids.storedMultipliers then
-        ConchBlessing.oralsteroids.storedMultipliers = {}
+-- Rolls the copies that have none yet; earlier rolls never change.
+local function rollMissing(player, stored, itemNum)
+    local storedCount = #stored
+    if itemNum <= storedCount then return false end
+    -- One stat roll. Lives on the module so the probe measures this exact
+    -- expression instead of a copy of it.
+    local rollStat = ConchBlessing.oralsteroids.rollStat
+    for i = storedCount + 1, itemNum do
+        local newMultipliers = {
+            tears = rollStat(),
+            damage = rollStat(),
+            range = rollStat(),
+            luck = rollStat()
+        }
+        stored[i] = newMultipliers
+        ConchBlessing.printDebug(string.format("Oral Steroids #%d: Tears=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx",
+            i, newMultipliers.tears, newMultipliers.damage, newMultipliers.range, newMultipliers.luck))
     end
-    if not ConchBlessing.oralsteroids.storedMultipliers[playerID] then
-        ConchBlessing.oralsteroids.storedMultipliers[playerID] = {}
-    end
+    SaveManager.Save()
+    rebuildOralUnified(player, stored)
+    ConchBlessing.printDebug("Oral Steroids: Added " .. (itemNum - storedCount) .. " new multipliers")
+    return true
+end
+
+-- Brings one player's saved rolls in line with the copies it holds and
+-- re-registers them. A Glowing Hourglass rewind restores the run save but not
+-- StatsAPI, so with `clearStale` a player left with no rolls also has any
+-- registration cleared. Returns true when a roll was added or removed or the
+-- registration was rebuilt.
+local function reconcile(player, clearStale)
     local itemNum = player:GetCollectibleNum(ORAL_STEROIDS_ID)
-    local storedCount = #ConchBlessing.oralsteroids.storedMultipliers[playerID]
-    if storedCount > itemNum then
-        ConchBlessing.oralsteroids.removeLastStack(player, storedCount - itemNum, true)
+    local stored = getRolls(player, itemNum > 0)
+    if not stored then
+        ConchBlessing.oralsteroids._lastItemCount[GetPtrHash(player)] = itemNum
+        if clearStale then
+            rebuildOralUnified(player, nil)
+            return true
+        end
+        return false
+    end
+    local changed = false
+    if #stored > itemNum then
+        ConchBlessing.oralsteroids.removeLastStack(player, #stored - itemNum, false)
+        changed = true
+    elseif #stored < itemNum then
+        changed = rollMissing(player, stored, itemNum)
+    elseif #stored > 0 or clearStale then
+        rebuildOralUnified(player, stored)
+        changed = clearStale == true
+    end
+    ConchBlessing.oralsteroids._lastItemCount[GetPtrHash(player)] = itemNum
+    return changed
+end
+
+-- Every change in the copy count re-registers the saved rolls, so a rewind that
+-- brings back or takes away a copy and its roll keeps StatsAPI in step.
+ConchBlessing.oralsteroids.onPlayerUpdate = function(_, player)
+    if not player or not ConchBlessing.oralsteroids._runReady then return end
+    local itemNum = player:GetCollectibleNum(ORAL_STEROIDS_ID)
+    if ConchBlessing.oralsteroids._lastItemCount[GetPtrHash(player)] == itemNum then return end
+    if reconcile(player, true) then
+        player:AddCacheFlags(CacheFlag.CACHE_ALL)
+        player:EvaluateItems()
     end
 end
 
 ConchBlessing.oralsteroids.onEvaluateCache = function(_, player, cacheFlag)
+    if not player or not ConchBlessing.oralsteroids._runReady then return end
     if not player:HasCollectible(ORAL_STEROIDS_ID) then return end
-    
-    local playerID = player:GetPlayerType()
     local itemNum = player:GetCollectibleNum(ORAL_STEROIDS_ID)
-    
     if itemNum <= 0 then return end
-    
-    -- Track item count for comparison
-    if not ConchBlessing.oralsteroids._lastItemCount then
-        ConchBlessing.oralsteroids._lastItemCount = {}
+    local stored = getRolls(player)
+    if not stored then return end
+
+    if #stored > itemNum then
+        ConchBlessing.oralsteroids.removeLastStack(player, #stored - itemNum, false)
+    elseif itemNum > #stored then
+        rollMissing(player, stored, itemNum)
     end
-    if not ConchBlessing.oralsteroids._lastItemCount[playerID] then
-        ConchBlessing.oralsteroids._lastItemCount[playerID] = 0
-    end
-    
-    local itemCountChanged = ConchBlessing.oralsteroids._lastItemCount[playerID] ~= itemNum
-    if not itemCountChanged then
-        ConchBlessing.printDebug("Oral Steroids: Item count unchanged (" .. itemNum .. "), checking if multipliers need initialization")
-    end
-    
-    if not ConchBlessing.oralsteroids.storedMultipliers then
-        ConchBlessing.oralsteroids.storedMultipliers = {}
-    end
-    
-    if not ConchBlessing.oralsteroids.storedMultipliers[playerID] then
-        ConchBlessing.oralsteroids.storedMultipliers[playerID] = {}
-    end
-    
-    local storedCount = #ConchBlessing.oralsteroids.storedMultipliers[playerID]
-    if storedCount > itemNum then
-        ConchBlessing.oralsteroids.removeLastStack(player, storedCount - itemNum, false)
-        storedCount = #ConchBlessing.oralsteroids.storedMultipliers[playerID]
-    end
-    
-    -- If storedMultipliers is empty but we have saved data, load it first
-    if storedCount == 0 and itemNum > 0 then
-        local playerSave = SaveManager.GetRunSave(player)
-        if playerSave and playerSave.oralSteroids and #playerSave.oralSteroids > 0 then
-            ConchBlessing.oralsteroids.storedMultipliers[playerID] = playerSave.oralSteroids
-            storedCount = #ConchBlessing.oralsteroids.storedMultipliers[playerID]
-            ConchBlessing.printDebug(string.format("Oral Steroids: Loaded %d multipliers from SaveManager in onEvaluateCache", storedCount))
-            
-            -- Check if unified system already has the data loaded
-            local unifiedData = ConchBlessing.getUnifiedMultiplierState(player, ConchBlessing.stats.unifiedMultipliers)
-            local alreadyLoaded = false
-            if unifiedData and unifiedData.itemAdditiveMultipliers and unifiedData.itemAdditiveMultipliers[ORAL_STEROIDS_ID] then
-                local unifiedDamage = unifiedData.itemAdditiveMultipliers[ORAL_STEROIDS_ID]["Damage"]
-                if unifiedDamage and unifiedDamage.cumulative then
-                    alreadyLoaded = true
-                    ConchBlessing.printDebug("Oral Steroids: Unified system already has multipliers loaded, skipping registration")
-                end
-            end
-            
-            -- Register loaded multipliers to unified system ONLY if not already loaded
-            if not alreadyLoaded then
-                ConchBlessing.printDebug("Oral Steroids: Registering multipliers to unified system")
-                for i = 1, storedCount do
-                    local m = ConchBlessing.oralsteroids.storedMultipliers[playerID][i]
-                    rebuildOralUnified(player, playerID)
-                    ConchBlessing.printDebug(string.format("  #%d registered: Tears=%.2f Damage=%.2f Range=%.2f Luck=%.2f", 
-                        i, m.tears or 0, m.damage or 0, m.range or 0, m.luck or 0))
-                end
-                ConchBlessing.stats.unifiedMultipliers:SaveToSaveManager(player)
-            end
-            
-            -- Update _lastItemCount to mark as already processed
-            if not ConchBlessing.oralsteroids._lastItemCount then
-                ConchBlessing.oralsteroids._lastItemCount = {}
-            end
-            ConchBlessing.oralsteroids._lastItemCount[playerID] = storedCount
-            
-            -- Recalculate itemCountChanged after loading
-            itemCountChanged = ConchBlessing.oralsteroids._lastItemCount[playerID] ~= itemNum
-            ConchBlessing.printDebug(string.format("Oral Steroids: After loading, _lastItemCount=%d, itemNum=%d, itemCountChanged=%s", 
-                ConchBlessing.oralsteroids._lastItemCount[playerID], itemNum, tostring(itemCountChanged)))
-        end
-    end
-    
-    -- Generate new multipliers if needed (item count increased or storedMultipliers doesn't have enough)
-    if itemNum > storedCount then
-        for i = storedCount + 1, itemNum do
-            -- One stat roll. Lives on the module so the probe measures this exact
-            -- expression instead of a copy of it.
-            local rollStat = ConchBlessing.oralsteroids.rollStat
-            local newMultipliers = {
-                tears = rollStat(),
-                damage = rollStat(),
-                range = rollStat(),
-                luck = rollStat()
-            }
-            
-            table.insert(ConchBlessing.oralsteroids.storedMultipliers[playerID], newMultipliers)
-            
-            ConchBlessing.printDebug(string.format("Oral Steroids #%d: Tears=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx", 
-                i, newMultipliers.tears, newMultipliers.damage, newMultipliers.range, newMultipliers.luck))
-        end
-        
-        ConchBlessing.printDebug("Oral Steroids: Added " .. (itemNum - storedCount) .. " new multipliers")
-        
-        local playerSave = SaveManager.GetRunSave(player)
-        if playerSave then
-            if not playerSave.oralSteroids then
-                playerSave.oralSteroids = {}
-            end
-            playerSave.oralSteroids = ConchBlessing.oralsteroids.storedMultipliers[playerID]
-            SaveManager.Save()
-            ConchBlessing.printDebug("Oral Steroids: Data saved to SaveManager!")
-        end
-        rebuildOralUnified(player, playerID)
-    elseif storedCount > 0 and storedCount < itemNum then
-        ConchBlessing.printDebug(string.format("Oral Steroids: Warning - storedCount (%d) < itemNum (%d), this shouldn't happen", storedCount, itemNum))
-    end
-    
+
     if cacheFlag == CacheFlag.CACHE_DAMAGE and itemNum ~= ConchBlessing.oralsteroids._lastDebugItemNum then
-        ConchBlessing.printDebug("Oral Steroids: storedMultipliers count: " .. #ConchBlessing.oralsteroids.storedMultipliers[playerID])
+        ConchBlessing.printDebug("Oral Steroids: stored rolls: " .. #stored .. " for " .. itemNum .. " copies")
         ConchBlessing.oralsteroids._lastDebugItemNum = itemNum
     end
-    
-    local totalTears = 1.0
-    local totalDamage = 1.0
-    local totalRange = 1.0
-    local totalLuck = 1.0
-    
-    local storedMultipliers = ConchBlessing.oralsteroids.storedMultipliers[playerID]
-    for i = 1, math.min(itemNum, #storedMultipliers) do
-        local multipliers = storedMultipliers[i]
-        totalTears = totalTears * multipliers.tears
-        totalDamage = totalDamage * multipliers.damage
-        totalRange = totalRange * multipliers.range
-        totalLuck = totalLuck * multipliers.luck
-    end
-    
-    totalTears = math.max(ConchBlessing.oralsteroids.STATS.MIN_MULTIPLIER, totalTears)
-    totalDamage = math.max(ConchBlessing.oralsteroids.STATS.MIN_MULTIPLIER, totalDamage)
-    totalRange = math.max(ConchBlessing.oralsteroids.STATS.MIN_MULTIPLIER, totalRange)
-    totalLuck = math.max(ConchBlessing.oralsteroids.STATS.MIN_MULTIPLIER, totalLuck)
-    
-    if cacheFlag == CacheFlag.CACHE_DAMAGE and itemNum ~= ConchBlessing.oralsteroids._lastFinalDebugItemNum then
-        ConchBlessing.printDebug(string.format("Oral Steroids Final (x%d): Tears=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx", 
-            itemNum, totalTears, totalDamage, totalRange, totalLuck))
-        ConchBlessing.oralsteroids._lastFinalDebugItemNum = itemNum
-    end
-    
+
     -- No direct stat application here; unified system will handle totals
-    
     if cacheFlag == CacheFlag.CACHE_SPEED then
         local speedDecrease = ConchBlessing.oralsteroids.data.speedDecrease * itemNum
         ConchBlessing.stats.speed.applyAddition(player, -speedDecrease, ConchBlessing.oralsteroids.STATS.MIN_MULTIPLIER)
     end
-    
-    -- No-op for RANGE; unified system will render/apply on its own
-    
-    -- No-op for LUCK; unified system will render/apply on its own
-    
-    if itemCountChanged then
-        ConchBlessing.oralsteroids._lastItemCount[playerID] = itemNum
-    end
 end
 
--- initialize data when game started
+-- Reconcile every player's rolls once SaveManager holds this run's table.
 ConchBlessing.oralsteroids.onGameStarted = function(_)
-    local player = Isaac.GetPlayer(0)
-    if player then
-        local playerSave = SaveManager.GetRunSave(player)
-        local haveArrays = playerSave and playerSave.oralSteroids
-        local haveUnified = playerSave and playerSave.unifiedMultipliers
-        if not ConchBlessing.oralsteroids.storedMultipliers then
-            ConchBlessing.oralsteroids.storedMultipliers = {}
+    ConchBlessing.oralsteroids._lastItemCount = {}
+    ConchBlessing.oralsteroids._runReady = true
+    for i = 0, Game():GetNumPlayers() - 1 do
+        local player = Isaac.GetPlayer(i)
+        if player and reconcile(player) then
+            player:AddCacheFlags(CacheFlag.CACHE_ALL)
+            player:EvaluateItems()
         end
-        local playerID = player:GetPlayerType()
-        ConchBlessing.oralsteroids.storedMultipliers[playerID] = haveArrays or {}
-        
-        -- Initialize _lastItemCount
-        if not ConchBlessing.oralsteroids._lastItemCount then
-            ConchBlessing.oralsteroids._lastItemCount = {}
-        end
-        
-        if haveUnified then
-            -- Unified system's POST_GAME_STARTED already loaded multipliers
-            -- Set _lastItemCount to stored array count to mark as "already processed"
-            local storedCount = #(haveArrays or {})
-            ConchBlessing.oralsteroids._lastItemCount[playerID] = storedCount
-            ConchBlessing.printDebug(string.format("Oral Steroids: Set _lastItemCount[%d] = %d (stored count, unified system loaded)", playerID, storedCount))
-            
-            -- Debug: print what was loaded
-            if haveArrays and #haveArrays > 0 then
-                ConchBlessing.printDebug(string.format("Oral Steroids: Loaded %d stored multipliers:", #haveArrays))
-                for i = 1, #haveArrays do
-                    local m = haveArrays[i]
-                    ConchBlessing.printDebug(string.format("  #%d: Tears=%.2f Damage=%.2f Range=%.2f Luck=%.2f", 
-                        i, m.tears or 0, m.damage or 0, m.range or 0, m.luck or 0))
-                end
-            end
-        elseif haveArrays and #haveArrays > 0 then
-            -- Reconstruct unified from arrays (first-time migration), using additive-mult stacking semantics
-            for i = 1, #haveArrays do
-                local m = haveArrays[i]
-                rebuildOralUnified(player, playerID)
-            end
-            ConchBlessing.stats.unifiedMultipliers:SaveToSaveManager(player)
-            ConchBlessing.oralsteroids._lastItemCount[playerID] = #haveArrays
-            ConchBlessing.printDebug(string.format("Oral Steroids: Unified multipliers reconstructed from arrays and saved, _lastItemCount[%d] = %d", playerID, #haveArrays))
-        else
-            ConchBlessing.oralsteroids._lastItemCount[playerID] = 0
-            ConchBlessing.printDebug("Oral Steroids: No saved data, initializing empty state")
-        end
-    else
-        ConchBlessing.oralsteroids.storedMultipliers = {}
-        ConchBlessing.printDebug("Oral Steroids: No player found, initializing empty table")
     end
-    
-    ConchBlessing.printDebug("Oral Steroids: onGameStarted called!")
-    ConchBlessing.printDebug("Oral Steroids data initialized!")
-    ConchBlessing.printDebug("storedMultipliers table created!")
+    ConchBlessing.printDebug("Oral Steroids: rolls reconciled for every player")
+end
+
+ConchBlessing.oralsteroids.onPreGameExit = function()
+    ConchBlessing.oralsteroids._runReady = false
 end
 
 -- Register PRE_DATA_SAVE sanitizer for this item's run data only

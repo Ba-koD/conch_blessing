@@ -271,18 +271,26 @@ function M.onPlayerUpdate(_, player)
 
     local owned = player:HasCollectible(TWO_FACED_PENNY_ID)
     local state = getState(player, owned)
-    if not state then
-        return
-    end
-    local pennyCount = syncPennySlots(player, state)
-    if state.floorKey == nil then
-        state.floorKey = getFloorKey()
+    local pennyCount = 0
+    if state then
+        pennyCount = syncPennySlots(player, state)
+        if state.floorKey == nil then
+            state.floorKey = getFloorKey()
+        end
     end
 
-    if not HAS_POST_ADD_COLLECTIBLE and pennyCount > 0 then
-        local runtime = getRuntime(player)
-        for _, change in ipairs(detectNewCollectibles(player, runtime)) do
-            processObservedCollectible(player, runtime, change.itemId)
+    if not HAS_POST_ADD_COLLECTIBLE then
+        if pennyCount > 0 then
+            local runtime = getRuntime(player)
+            for _, change in ipairs(detectNewCollectibles(player, runtime)) do
+                processObservedCollectible(player, runtime, change.itemId)
+            end
+        else
+            -- Without a coin there is nothing to claim, so drop the baseline: the
+            -- first update with a coin takes a fresh one, and an item picked up
+            -- before the coin is never claimed by it.
+            local runtime = player:GetData().__twofacedpenny
+            if type(runtime) == "table" then runtime.lastCollectibleCounts = nil end
         end
     end
 end

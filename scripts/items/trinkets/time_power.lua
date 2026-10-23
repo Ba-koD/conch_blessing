@@ -14,9 +14,13 @@ ConchBlessing.timepowertrinket.data = {
     framesPerSecond = 30       -- frame rate baseline for per-frame delta
 }
 
--- Internal state keys
+-- Runtime state belongs to the exact player entity and is rebuilt every
+-- session; what the player earned lives in that player's own run save, which
+-- SaveManager keys by the player's collectible RNG seed. So a same-type co-op
+-- player, Esau or Strawman grows and pauses on its own, and a character change
+-- (Lazarus, Clicker) keeps what was earned.
 local function getKey(player)
-    return tostring(player:GetPlayerType())
+    return GetPtrHash(player)
 end
 
 local function ensureState()
@@ -30,18 +34,32 @@ TimerClock.onRebase("timepowertrinket", function(delta)
     end
 end)
 
-local function getPlayerState(player)
-    local s = ensureState()
-    local key = getKey(player)
-    s.perPlayer[key] = s.perPlayer[key] or {
+local loadFromSave
+
+local function newPlayerState()
+    return {
         damageBonus = 0.0,
         permanentBonus = 0.0,
         pausedUntilFrame = 0,
         hadTrinketLastFrame = false,
         lastApplied = 0.0,
     }
-    return s.perPlayer[key]
 end
+
+-- A player first seen this session (Continue, a reload, a player added
+-- mid-run) starts from its own saved record.
+local function getPlayerState(player)
+    local s = ensureState()
+    local key = getKey(player)
+    local ps = s.perPlayer[key]
+    if not ps then
+        ps = newPlayerState()
+        s.perPlayer[key] = ps
+        loadFromSave(player, ps)
+    end
+    return ps
+end
+ConchBlessing.timepowertrinket.getPlayerState = getPlayerState
 
 local function getPauseFramesRemaining(ps, currentFrame)
     local pausedUntilFrame = tonumber(ps and ps.pausedUntilFrame) or currentFrame
@@ -61,16 +79,23 @@ local function getTrinketId()
     return ConchBlessing.ItemData.TIME_POWER and ConchBlessing.ItemData.TIME_POWER.id
 end
 
+-- The player's own record in its run save. Older saves nested it under the
+-- PlayerType; those records are folded in once.
+local function getRecord(player)
+    local save = SaveManager.GetRunSave(player)
+    if type(save) ~= "table" then return nil end
+    if type(save.timePower) ~= "table" then save.timePower = {} end
+    local rec = save.timePower
+    TrinketUtils.migrateTimeRecord(rec, player:GetPlayerType(), "damageBonus",
+        ConchBlessing.timepowertrinket.data.keepOnDrop)
+    return rec
+end
+
 -- Persist run data via SaveManager
-local function loadFromSave(player)
+loadFromSave = function(player, ps)
     local id = getTrinketId()
     if not id then return end
-    local save = SaveManager.GetRunSave(player)
-    if not save then return end
-    save.timePower = save.timePower or {}
-    local key = getKey(player)
-    local ps = getPlayerState(player)
-    local rec = save.timePower[key]
+    local rec = getRecord(player)
     if rec then
         ps.damageBonus = tonumber(rec.damageBonus) or 0.0
         ps.permanentBonus = tonumber(rec.permanentBonus) or 0.0
@@ -94,13 +119,9 @@ end
 local function saveToSave(player)
     local id = getTrinketId()
     if not id then return end
-    local save = SaveManager.GetRunSave(player)
-    if not save then return end
-    save.timePower = save.timePower or {}
-    local key = getKey(player)
     local ps = getPlayerState(player)
-    save.timePower[key] = save.timePower[key] or {}
-    local rec = save.timePower[key]
+    local rec = getRecord(player)
+    if not rec then return end
     rec.damageBonus = ps.damageBonus
     rec.permanentBonus = ps.permanentBonus
     writePauseTimerRecord(rec, ps, TimerClock.now())
@@ -120,14 +141,18 @@ do
         local callbackKey = SaveManager.SaveCallbacks.PRE_DATA_SAVE
         mod:AddCallback(callbackKey, function(_, saveData)
             local runData = saveData and saveData.game and saveData.game.run
+            local getSaveIndex = SaveManager.Utility and SaveManager.Utility.GetSaveIndex
+            if type(runData) ~= "table" or type(getSaveIndex) ~= "function" then return end
             local perPlayer = ensureState().perPlayer
             local currentFrame = TimerClock.now()
-            for _, playerRun in pairs(runData or {}) do
-                for key, rec in pairs((playerRun and playerRun.timePower) or {}) do
-                    local ps = perPlayer[key]
-                    if ps and type(rec) == "table" then
-                        writePauseTimerRecord(rec, ps, currentFrame)
-                    end
+            local game = Game()
+            for i = 0, game:GetNumPlayers() - 1 do
+                local p = game:GetPlayer(i)
+                local ps = p and perPlayer[getKey(p)]
+                local playerRun = ps and runData[getSaveIndex(p)]
+                local rec = type(playerRun) == "table" and playerRun.timePower
+                if type(rec) == "table" then
+                    writePauseTimerRecord(rec, ps, currentFrame)
                 end
             end
         end)
@@ -203,9 +228,9 @@ function ConchBlessing.timepowertrinket.onUpdate()
             if frame >= ps.pausedUntilFrame then
                 local fps = ConchBlessing.timepowertrinket.data.framesPerSecond or 30
                 if fps <= 0 then fps = 30 end
-				-- Compute effective stacks with golden and Mom's Box rules (via util)
-				local normalCount, goldenCount, hasMomsBox = TrinketUtils.getTrinketCounts(p, id)
-				local mult = (normalCount * (hasMomsBox and 2 or 1)) + (goldenCount * (hasMomsBox and 3 or 2))
+				-- The engine's trinket multiplier: +1 per normal copy, +2 per golden
+				-- copy, +1 once for Mom's Box.
+				local mult = TrinketUtils.getMultiplier(p, id)
                 if mult <= 0 then goto after_growth end
                 local perSecond = (ConchBlessing.timepowertrinket.data.increasePerSecond or 0) * mult
                 local delta = perSecond / fps -- per-frame with stacking
@@ -215,17 +240,14 @@ function ConchBlessing.timepowertrinket.onUpdate()
                 p:EvaluateItems()
 				-- Only report when the stack composition changes. This block used to
 				-- fire twice a second for as long as the trinket was held.
-				local logKey = string.format("%d|%s", mult, tostring(hasMomsBox))
-				if ConchBlessing.timepowertrinket.data.lastLogKey ~= logKey then
-				    ConchBlessing.timepowertrinket.data.lastLogKey = logKey
-					-- Print current per-second and per-tick increase without cumulative totals
-					ConchBlessing.printDebug(string.format("[Time=Power] perSecond=%.6f perTick=%.6f (mult=%d, momsBox=%s)", perSecond, delta, mult, tostring(hasMomsBox)))
-					-- Breakdown of contributions
-					local normalUnit = (hasMomsBox and 2 or 1)
-					local goldenUnit = (hasMomsBox and 3 or 2)
-					local contribNormal = normalCount * normalUnit
-					local contribGolden = goldenCount * goldenUnit
-					ConchBlessing.printDebug(string.format("[Time=Power] counts normal=%d unit=%d ->%d, golden=%d unit=%d ->%d", normalCount, normalUnit, contribNormal, goldenCount, goldenUnit, contribGolden))
+				local logKey = tostring(mult)
+				if ps.lastLogKey ~= logKey then
+				    ps.lastLogKey = logKey
+					if ConchBlessing.Config and ConchBlessing.Config.debugMode then
+						local normalCount, goldenCount, hasMomsBox = TrinketUtils.getTrinketCounts(p, id)
+						ConchBlessing.printDebug(string.format("[Time=Power] perSecond=%.6f perTick=%.6f (mult=%d: normal=%d golden=%d momsBox=%s)",
+							perSecond, delta, mult, normalCount, goldenCount, tostring(hasMomsBox)))
+					end
 				end
                 -- Periodically save to avoid excessive IO
                 if frame % 90 == 0 then -- every ~3 seconds
@@ -260,19 +282,16 @@ Hits.register("TIME_POWER", ConchBlessing.timepowertrinket.onEntityTakeDamage)
 function ConchBlessing.timepowertrinket.onGameStarted(_, isContinued)
     local game = Game()
     local num = game:GetNumPlayers()
+    -- Entity hashes from an earlier session mean nothing now.
+    ensureState().perPlayer = {}
     for i = 0, num - 1 do
         local p = game:GetPlayer(i)
         if isContinued then
             -- Normal continue: restore saved bonuses
-            loadFromSave(p)
+            getPlayerState(p)
         else
             -- New run (R key): reset run-scoped bonuses
-            local ps = getPlayerState(p)
-            ps.damageBonus = 0.0
-            ps.permanentBonus = 0.0
-            ps.lastApplied = 0.0
-            ps.pausedUntilFrame = 0
-            ps.hadTrinketLastFrame = false
+            ensureState().perPlayer[getKey(p)] = newPlayerState()
             saveToSave(p)
         end
         -- reflect current state to cache

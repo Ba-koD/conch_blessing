@@ -1,3 +1,6 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
+local TrinketUtils = ConchBlessing.TrinketUtils or require("scripts.lib.trinket_utils")
+
 local M = {}
 
 local function getTrinketIdByName(name)
@@ -7,12 +10,10 @@ local function getTrinketIdByName(name)
 	return ok and id or nil
 end
 
+-- The engine's trinket multiplier (+1 per normal copy held or smelted, +2 per
+-- golden copy, +1 once for Mom's Box), shared with the Time trinkets.
 local function getCount(player, baseId)
-	if not player or not baseId then return 0 end
-	local ok, n = pcall(function()
-		return player:GetTrinketMultiplier(baseId) or 0
-	end)
-	return ok and n or 0
+	return TrinketUtils.getMultiplier(player, baseId)
 end
 
  -- cfg: { name, luckAdd, tearsAdd, damageAdd, damageMult, luckMult }

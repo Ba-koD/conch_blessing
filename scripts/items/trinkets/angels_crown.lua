@@ -102,6 +102,8 @@ local function findBestHolder()
     for i = 0, game:GetNumPlayers() - 1 do
         local player = game:GetPlayer(i)
         if player then
+            -- goldenCount is the golden copies really held or smelted, never a
+            -- reading of the multiplier: two plain crowns are not a golden one.
             local normalCount, goldenCount, hasMomsBox = TrinketUtils.getTrinketCounts(player, id)
             if (normalCount + goldenCount) > 0 then
                 found = true
@@ -856,8 +858,10 @@ function ConchBlessing.angelscrown.onPostNewRoom()
     SaveManager.Save()
 end
 
--- Exposed for scripts/dev/rng_probe.lua only; see docs/rng_testing.md.
+-- Exposed for scripts/dev/rng_probe.lua (see docs/rng_testing.md) and the
+-- offline tests; no gameplay use.
 ConchBlessing.angelscrown._test = {
     getBlessedChance = getBlessedChance,
     rollBlessed = rollBlessed,
+    findBestHolder = findBestHolder,
 }

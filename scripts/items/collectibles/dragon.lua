@@ -112,6 +112,15 @@ local function copies(player)
     return player and player:GetCollectibleNum(DRAGON_ID) or 0
 end
 
+-- A dead holder (in its death animation) or a co-op ghost calls down no
+-- lightning; its rain and dark sky stay, since it still holds the item.
+local function isActingPlayer(player)
+    if not player then return false end
+    if type(player.IsDead) == "function" and player:IsDead() then return false end
+    if type(player.IsCoopGhost) == "function" and player:IsCoopGhost() then return false end
+    return true
+end
+
 -- Cosmetic hash for rain, pitch and the rumble's timing, never gameplay RNG:
 -- the same index always gives the same value.
 local function hash(i)
@@ -341,8 +350,8 @@ local function updateTwister(twister)
     if twister.age >= d.twisterTicks then return true end   -- fading out, harmless
     local player = twister.player and twister.player.Ref
     player = player and player:ToPlayer()
-    if not player then
-        twister.age = d.twisterTicks
+    if not isActingPlayer(player) then
+        twister.age = d.twisterTicks            -- its owner is gone or dead: it fades out
         return true
     end
     local damage = twisterTickDamage(player.Damage)
@@ -452,8 +461,8 @@ ConchBlessing.dragon.onUpdate = function()
         local key = GetPtrHash(player)
         if count > 0 then
             held = true
-            if #enemies == 0 then
-                charge[key] = 0                 -- no bolts are banked between fights
+            if #enemies == 0 or not isActingPlayer(player) then
+                charge[key] = 0                 -- no bolts are banked between fights, or while dead
             else
                 charge[key] = (charge[key] or 0) + boltsPerUpdate(player.MaxFireDelay, count)
                 -- A hair under 1 still counts, so float drift never swallows a bolt.

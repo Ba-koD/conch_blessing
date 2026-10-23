@@ -446,6 +446,30 @@ class DragonWeatherContracts(unittest.TestCase):
             assert(strong:Length()>=4, 'a strong pull: '..strong:Length())
         ''')
 
+    def test_a_dead_or_ghost_holder_calls_down_nothing_but_keeps_the_weather(self):
+        self.run_lua('''
+            local dead=makePlayer({delay=0}); local ghost=makePlayer({delay=0}); local alive=makePlayer({delay=0,damage=3})
+            function dead:IsDead() return true end
+            function ghost:IsDead() return false end
+            function ghost:IsCoopGhost() return true end
+            local e=enemy(320,280)
+            for i=1,30 do tick() end
+            assert(#e.hits>0, 'the living holder still strikes')
+            for _,h in ipairs(e.hits) do assert(h.source==alive, 'a bolt credited to a dead or ghost holder') end
+            assert(D._charge[GetPtrHash(dead)]==0 and D._charge[GetPtrHash(ghost)]==0, 'nothing is banked while dead')
+            alive.items=0; local hits=#e.hits
+            for i=1,30 do tick() end
+            assert(#e.hits==hits, 'dead and ghost holders strike nothing')
+            assert(playing[RAIN], 'the rain keeps falling while they hold it')
+            -- A twister whose owner dies fades out without hurting anything.
+            D._twisters={{position=Vector(320,280),age=0,player=EntityPtr(dead)}}
+            tick(); assert(#e.hits==hits and D._twisters[1].age>=D.data.twisterTicks)
+            -- Revived: it calls down lightning again.
+            function dead:IsDead() return false end
+            for i=1,30 do tick() end
+            assert(#e.hits>hits and e.hits[#e.hits].source==dead)
+        ''')
+
     def test_the_rain_is_heard_while_anyone_holds_it(self):
         self.run_lua('''
             local p=makePlayer()
