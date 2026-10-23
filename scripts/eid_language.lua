@@ -489,8 +489,36 @@ end
 -- Also used by MCM and locale probes while the simulation is paused.
 ConchBlessing.EID.refreshLanguage = function() return ensureDescriptionsRegistered(true) end
 ensureDescriptionsRegistered()
+
+-- EID fixes its highest collectible ID the first time GetMaxCollectibleID runs. Mods load,
+-- and register their items, in metadata-name order and ours sorts near the end, so a mod
+-- that ran an EID item scan while loading leaves our items out of EID's item lists
+-- (Inventory Descriptions, Bag of Crafting, D4) for the whole session. That cache cannot be
+-- reset from here, so report it once. By game start every item is registered, so calling
+-- it here never fixes the range too low itself.
+local itemRangeReported
+local function reportShortEIDItemRange()
+    if itemRangeReported or not EID or type(EID.GetMaxCollectibleID) ~= "function" then return end
+    local highest
+    for _, itemData in pairs(ConchBlessing.ItemData) do
+        local id = itemData.id
+        if itemData.type ~= "trinket" and type(id) == "number" and id > 0 and (not highest or id > highest) then
+            highest = id
+        end
+    end
+    if not highest then return end
+    local ok, eidHighest = pcall(EID.GetMaxCollectibleID, EID)
+    if not ok or type(eidHighest) ~= "number" or eidHighest >= highest then return end
+    itemRangeReported = true
+    ConchBlessing.printError(string.format(
+        "[EID] EID's item list ends at collectible %d but ours reach %d: a mod that loaded earlier"
+            .. " ran an EID item scan while loading, so EID's item lists miss our items until restart",
+        eidHighest, highest))
+end
+
 ConchBlessing:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function()
     ensureDescriptionsRegistered(true)
+    reportShortEIDItemRange()
 end)
 ConchBlessing:AddCallback(ModCallbacks.MC_POST_UPDATE, function()
     ensureDescriptionsRegistered()

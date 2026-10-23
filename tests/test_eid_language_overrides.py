@@ -113,6 +113,20 @@ class EIDLanguageTests(unittest.TestCase):
             assert(EID.writes==before and EID.goldWrites==gold)
         ''')
 
+    def test_game_start_reports_once_when_eid_item_range_misses_our_collectibles(self):
+        self.lua.execute('''
+            local function started() callbacks[1]() end
+            started();assert(#errors==0,'a provider without the method reports nothing')
+            eidHighest=900;function EID:GetMaxCollectibleID() return eidHighest end
+            started();assert(#errors==0,'trinket 901 is not a collectible')
+            function EID:GetMaxCollectibleID() error('provider failure') end
+            started();assert(#errors==0)
+            eidHighest=899;function EID:GetMaxCollectibleID() return eidHighest end
+            started();assert(#errors==1,'one report')
+            assert(errors[1]:find('collectible 899 but ours reach 900',1,true),errors[1])
+            started();assert(#errors==1,'the cache lasts the session, so later starts stay quiet')
+        ''')
+
     def test_manual_urimal_overlays_polish_then_restores_english_fallback(self):
         self.lua.execute('''
             native='pl';EID.Config.Language='pl';effective='urimal'
