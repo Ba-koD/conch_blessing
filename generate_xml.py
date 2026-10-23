@@ -468,7 +468,10 @@ def parse_lua_file(file_path):
         if is_working_now and not is_hidden:
             print(f"  WorkingNow detected - skipping XML generation for {name}")
             continue
-        
+        if is_working_now:
+            # A hidden WIP preview: registered, but numbered after the finished rows (id_order).
+            item_info['wip'] = True
+
         # extract id
         id_match = re.search(r'id\s*=\s*Isaac\.GetItemIdByName\("([^"]+)"\)', item_data)
         if id_match:
@@ -677,8 +680,25 @@ def parse_lua_file(file_path):
         if item_info:
             items[name] = item_info
             print(f"  added item: {name}")
-    
-    return items
+
+    return id_order(items)
+
+
+def id_order(items):
+    """The order generated IDs follow, shared by items.xml, costumes2.xml and the
+    death icons. Each ID space (collectibles including familiars, then trinkets)
+    lists its finished rows in registry order and then its WIP previews, so a
+    preview never shifts a released item's ID. The registry itself keeps the
+    zodiac block 자 … 해 together; only the numbering moves the previews last."""
+    ordered = {}
+    for space in ('collectible', 'trinket'):
+        for wip in (False, True):
+            for key, info in items.items():
+                in_space = (info.get('type') == 'trinket') == (space == 'trinket')
+                if in_space and bool(info.get('wip')) == wip:
+                    ordered[key] = info
+    assert len(ordered) == len(items)
+    return ordered
 
 def create_entities2_xml(items, output_path, extra_entities=None, pockets=None):
     """Generate familiar rows, each card's floor pickup row, and the separate,

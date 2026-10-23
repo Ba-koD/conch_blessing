@@ -138,6 +138,10 @@ finish = function(run)
         out(run.def, run.def.command .. ": restarting the run to clear the test state...")
         run.ops = nil
         run.endRestartPending = true
+        -- The clearing restart is also the next suite member's fresh run, so it
+        -- starts that member's character; the last one may name where to end.
+        run.endRestartCommand = nextDef and nextDef.restartCommand
+            or not nextDef and run.def.finalRestartCommand or run.def.restartCommand
     else
         completeRun(run)
     end
@@ -475,7 +479,7 @@ ConchBlessing:AddCallback(ModCallbacks.MC_POST_UPDATE, function()
     if run.endRestartPending then
         run.endRestartPending = false
         run.waitingForEnd = true
-        Isaac.ExecuteCommand(run.def.restartCommand or "restart")
+        Isaac.ExecuteCommand(run.endRestartCommand or "restart")
         return
     end
     if handleDeadPlayer(run, false) then return end
@@ -491,7 +495,7 @@ if ModCallbacks.MC_POST_RENDER then
         if run.endRestartPending then
             run.endRestartPending = false
             run.waitingForEnd = true
-            Isaac.ExecuteCommand(run.def.restartCommand or "restart")
+            Isaac.ExecuteCommand(run.endRestartCommand or "restart")
         end
     end)
 end

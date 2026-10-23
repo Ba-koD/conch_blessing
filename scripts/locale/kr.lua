@@ -75,19 +75,32 @@ return {
         },
         RAT = {
             name = "자",
-            description = "자",
+            description = "손톱 먹은 쥐",
+            eid = {
+                "나와 똑같은 캐릭터를 소환합니다.",
+                "#{{Warning}} REPENTOGON이 필요합니다!",
+            },
         },
         OX = {
-            name = "축",
-            description = "축",
+            name = "축 (WIP)",
+            description = "개발 중",
+            eid = {
+                "아직 효과가 구현되지 않았습니다.",
+            },
         },
         TIGER = {
-            name = "인",
-            description = "인",
+            name = "인 (WIP)",
+            description = "개발 중",
+            eid = {
+                "아직 효과가 구현되지 않았습니다.",
+            },
         },
         RABBIT = {
-            name = "묘",
-            description = "묘",
+            name = "묘 (WIP)",
+            description = "개발 중",
+            eid = {
+                "아직 효과가 구현되지 않았습니다.",
+            },
         },
         DRAGON = {
             name = "진",
@@ -107,31 +120,53 @@ return {
             },
         },
         SNAKE = {
-            name = "사",
-            description = "사",
+            name = "사 (WIP)",
+            description = "개발 중",
+            eid = {
+                "아직 효과가 구현되지 않았습니다.",
+            },
         },
         HORSE = {
-            name = "오",
-            description = "오",
+            name = "오 (WIP)",
+            description = "개발 중",
+            eid = {
+                "아직 효과가 구현되지 않았습니다.",
+            },
         },
         GOAT = {
-            name = "미",
-            description = "미",
+            name = "미 (WIP)",
+            description = "개발 중",
+            eid = {
+                "아직 효과가 구현되지 않았습니다.",
+            },
         },
         MONKEY = {
-            name = "신",
+            name = "신 (WIP)",
+            description = "개발 중",
+            eid = {
+                "아직 효과가 구현되지 않았습니다.",
+            },
         },
         CHICKEN = {
-            name = "유",
-            description = "유",
+            name = "유 (WIP)",
+            description = "개발 중",
+            eid = {
+                "아직 효과가 구현되지 않았습니다.",
+            },
         },
         DOG = {
-            name = "술",
-            description = "술",
+            name = "술 (WIP)",
+            description = "개발 중",
+            eid = {
+                "아직 효과가 구현되지 않았습니다.",
+            },
         },
         PIG = {
-            name = "해",
-            description = "해",
+            name = "해 (WIP)",
+            description = "개발 중",
+            eid = {
+                "아직 효과가 구현되지 않았습니다.",
+            },
         },
         KRONOS = {
             name = "크로노스",

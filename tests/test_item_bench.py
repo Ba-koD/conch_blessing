@@ -73,6 +73,22 @@ class BenchTests(unittest.TestCase):
             assert(output():find('suite END: 2 PASS, 0 FAIL, 2 SKIP',1,true))
         """)
 
+    def test_suite_restarts_into_each_members_own_character(self):
+        self.run_lua("""
+            for i, name in ipairs({'as_isaac','as_maggy','as_cain'}) do
+                bench.register({command=name, restartCommand='restart '..(i-1),
+                    finalRestartCommand=name=='as_cain' and 'restart 0' or nil,
+                    build=function(p) p.check('ran', function() return true, 'ok' end) end})
+            end
+            assert(bench.startSuite('chars', {'as_isaac','as_maggy','as_cain'}))
+            drain()
+            assert(table.concat(restarts,'|')=='restart 0|restart 1|restart 2|restart 0',table.concat(restarts,'|'))
+            restarts={}
+            bench.register({command='alone', restartCommand='restart 5', build=function(p) p.check('ran', function() return true, 'ok' end) end})
+            bench.start('alone', true); drain()
+            assert(table.concat(restarts,'|')=='restart 5|restart 5','a single bench clears with its own command')
+        """)
+
     def test_progress_renders_real_suite_index_wait_and_cancellation(self):
         self.run_lua("""
             local drawn={}
@@ -366,7 +382,7 @@ class BenchTests(unittest.TestCase):
                 assert(selected and #selected>0,group..' group is empty')
                 for _,command in ipairs(selected) do assert(bench.get(command),command..' not registered') end
             end
-            bench.start('conch_test rat lifecycle',false); drain()
+            bench.start('conch_test ox lifecycle',false); drain()
             assert(output():find('0 PASS, 0 FAIL, 1 SKIP',1,true))
         """)
 
@@ -398,7 +414,10 @@ class BenchTests(unittest.TestCase):
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','kronos detail')
             assert(started=='conch_test kronos detail')
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','all')
-            assert(label=='conch_test' and #selected==187,'update the documented suite count when it changes')
+            assert(label=='conch_test' and #selected==227,'update the documented suite count when it changes')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','rat characters')
+            assert(label=='conch_test rat characters' and #selected==34,'every selectable character once')
+            for _,name in ipairs(selected) do assert(name:match('^conch_test rat same_')) end
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','severed_oath compare')
             assert(label=='conch_test severed_oath compare' and #selected==50)
             assert(selected[1]=='conch_test severed_oath compare_capacity0_native')

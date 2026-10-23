@@ -44,7 +44,8 @@ end
 function S.commands(key, group)
     local list, seen = {}, {}
     for _, row in ipairs(S.rows) do
-        if (not key or row.key == key) and (not group or row.groups[group]) then
+        -- A manual row (a measurement, not a check) runs only when named.
+        if (not key or row.key == key) and (not group or row.groups[group]) and not row.manual then
             local command = row.bundledInto or row.command
             if not seen[command] then list[#list + 1] = command; seen[command] = true end
         end

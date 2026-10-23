@@ -70,7 +70,7 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 --     tearHit: "function name" - called when tear hits
 --     tearCollision: "function name" - called when tear collides
 --     gameStarted: "function name" - called when game starts
---   WorkingNow: true/false - item is working now
+--   WorkingNow: true means unfinished; hidden=true additionally registers a console-only preview.
 
 -- Trinkets
 -- EID golden/mombox replacement config
@@ -285,91 +285,7 @@ ConchBlessing.ItemData = {
             postRoomClear = "injectablsteroids.onRoomClear"
         },
     },
-    RAT = {
-        WorkingNow = true,
-        type = "passive",
-        id = Isaac.GetItemIdByName("Rat"),
-    },
-    OX = {
-        WorkingNow = true,
-        type = "passive",
-        id = Isaac.GetItemIdByName("Ox"),
-    },
-    TIGER = {
-        WorkingNow = true,
-        type = "passive",
-        id = Isaac.GetItemIdByName("Tiger"),
-    },
-    RABBIT = {
-        WorkingNow = true,
-        type = "passive",
-        id = Isaac.GetItemIdByName("Rabbit"),
-    },
-    DRAGON = {
-        -- God of Weather. A passive again, kept at its original registry
-        -- position so every generated collectible ID stays unchanged.
-        type = "passive",
-        id = Isaac.GetItemIdByName("Dragon"),
-        pool = {
-            RoomType.ROOM_TREASURE,
-            RoomType.ROOM_PLANETARIUM
-        },
-        quality = 4,
-        tags = "offensive",
-        hidden = false,
-        shopprice = 20,
-        devilprice = 2,
-        origin = { id = CollectibleType.COLLECTIBLE_TAURUS, type = "collectible" },
-        flag = "positive",
-        synergies = {
-            -- Two or more Dragons: a bolt may rise as a dragon twister instead.
-            [{type = "collectible", name = "Dragon" }] = "dragon",
-        },
-        script = "scripts/items/collectibles/dragon",
-        callbacks = {
-            update = "dragon.onUpdate",
-            postRender = "dragon.onRender",
-            postRoomRenderEntities = "dragon.onRoomRender",
-            postNewRoom = "dragon.onNewRoom",
-            gameStarted = "dragon.onGameStarted",
-            preGameExit = "dragon.onPreGameExit"
-        },
-    },
-    SNAKE = {
-        WorkingNow = true,
-        type = "passive",
-        id = Isaac.GetItemIdByName("Snake"),
-    },
-    HORSE = {
-        WorkingNow = true,
-        type = "passive",
-        id = Isaac.GetItemIdByName("Horse"),
-    },
-    GOAT = {
-        WorkingNow = true,
-        type = "passive",
-        id = Isaac.GetItemIdByName("Goat"),
-    },
-    MONKEY = {
-        WorkingNow = true,
-        type = "passive",
-        id = Isaac.GetItemIdByName("Monkey"),
-    },
-    CHICKEN = {
-        WorkingNow = true,
-        type = "passive",
-        id = Isaac.GetItemIdByName("Chicken"),
-    },
-    DOG = {
-        WorkingNow = true,
-        type = "passive",
-        id = Isaac.GetItemIdByName("Dog"),
-    },
-    PIG = {
-        WorkingNow = true,
-        type = "passive",
-        id = Isaac.GetItemIdByName("Pig"),
-    },
+
     KRONOS = {
 		type = "passive",
 		id = Isaac.GetItemIdByName("Kronos"),
@@ -918,6 +834,139 @@ ConchBlessing.ItemData = {
         },
     },
 
+    -- The twelve zodiac items (십이지) close the collectible group in their own
+    -- order, 자 … 해, followed by the familiars and trinkets.
+    RAT = {
+        -- 자, the rat that ate a fingernail: one fake of the holder per copy.
+        type = "passive",
+        id = Isaac.GetItemIdByName("Rat"),
+        gfx = "rat.png",
+        pool = {
+            RoomType.ROOM_TREASURE,
+            RoomType.ROOM_PLANETARIUM
+        },
+        quality = 4,
+        hidden = false,
+        shopprice = 20,
+        devilprice = 2,
+        origin = { id = CollectibleType.COLLECTIBLE_CAPRICORN, type = "collectible" },
+        flag = "positive",
+        script = "scripts/items/collectibles/rat",
+        callbacks = {
+            postUpdate = "rat.onUpdate",
+            postNewRoom = "rat.onNewRoom",
+            postNewLevel = "rat.onNewLevel",
+            gameStarted = "rat.onGameStarted",
+            preGameExit = "rat.onPreGameExit",
+            postEntityRemove = "rat.onEntityRemove",
+            postRoomRenderEntities = "rat.onRoomRender",
+            preModUnload = "rat.onUnload"
+        },
+    },
+
+    -- The rest of the twelve: unfinished previews, hidden from natural pools,
+    -- available by name. 진 sits between 묘 and 사.
+    OX = {
+        WorkingNow = true,
+        hidden = true,
+        type = "passive",
+        gfx = "ox.png",
+        id = Isaac.GetItemIdByName("Ox (WIP)"),
+    },
+    TIGER = {
+        WorkingNow = true,
+        hidden = true,
+        type = "passive",
+        gfx = "tiger.png",
+        id = Isaac.GetItemIdByName("Tiger (WIP)"),
+    },
+    RABBIT = {
+        WorkingNow = true,
+        hidden = true,
+        type = "passive",
+        gfx = "rabbit.png",
+        id = Isaac.GetItemIdByName("Rabbit (WIP)"),
+    },
+    DRAGON = {
+        -- 진, God of Weather: fifth of the zodiac block (user order, 2026-10-24).
+        type = "passive",
+        id = Isaac.GetItemIdByName("Dragon"),
+        gfx = "dragon.png",
+        pool = {
+            RoomType.ROOM_TREASURE,
+            RoomType.ROOM_PLANETARIUM
+        },
+        quality = 4,
+        tags = "offensive",
+        hidden = false,
+        shopprice = 20,
+        devilprice = 2,
+        origin = { id = CollectibleType.COLLECTIBLE_TAURUS, type = "collectible" },
+        flag = "positive",
+        synergies = {
+            -- Two or more Dragons: a bolt may rise as a dragon twister instead.
+            [{type = "collectible", name = "Dragon" }] = "dragon",
+        },
+        script = "scripts/items/collectibles/dragon",
+        callbacks = {
+            update = "dragon.onUpdate",
+            postRender = "dragon.onRender",
+            postRoomRenderEntities = "dragon.onRoomRender",
+            postNewRoom = "dragon.onNewRoom",
+            gameStarted = "dragon.onGameStarted",
+            preGameExit = "dragon.onPreGameExit"
+        },
+    },
+    SNAKE = {
+        WorkingNow = true,
+        hidden = true,
+        type = "passive",
+        gfx = "snake.png",
+        id = Isaac.GetItemIdByName("Snake (WIP)"),
+    },
+    HORSE = {
+        WorkingNow = true,
+        hidden = true,
+        type = "passive",
+        gfx = "horse.png",
+        id = Isaac.GetItemIdByName("Horse (WIP)"),
+    },
+    GOAT = {
+        WorkingNow = true,
+        hidden = true,
+        type = "passive",
+        gfx = "goat.png",
+        id = Isaac.GetItemIdByName("Goat (WIP)"),
+    },
+    MONKEY = {
+        WorkingNow = true,
+        hidden = true,
+        type = "passive",
+        gfx = "monkey.png",
+        id = Isaac.GetItemIdByName("Monkey (WIP)"),
+    },
+    CHICKEN = {
+        WorkingNow = true,
+        hidden = true,
+        type = "passive",
+        gfx = "chicken.png",
+        id = Isaac.GetItemIdByName("Chicken (WIP)"),
+    },
+    DOG = {
+        WorkingNow = true,
+        hidden = true,
+        type = "passive",
+        gfx = "dog.png",
+        id = Isaac.GetItemIdByName("Dog (WIP)"),
+    },
+    PIG = {
+        WorkingNow = true,
+        hidden = true,
+        type = "passive",
+        gfx = "pig.png",
+        id = Isaac.GetItemIdByName("Pig (WIP)"),
+    },
+
     -- Familiars
     TIME_MONEY = {
         type = "familiar",
@@ -1274,28 +1323,32 @@ local function loadAllItems()
 			end
         end
             
-            local scriptPath = itemData.script
-            if not scriptPath or scriptPath == "" then
-                -- Auto-resolve default script path when missing: infer by type and item key
-                local baseDir = "scripts/items/collectibles"
-                if itemData.type == "trinket" then
-                    baseDir = "scripts/items/trinkets"
-                elseif itemData.type == "familiar" then
-                    baseDir = "scripts/items/familiars"
+            -- Art-only WIP rows have no behavior module to load. An explicit
+            -- script still loads while its implementation is being developed.
+            if itemData.WorkingNow ~= true or itemData.script then
+                local scriptPath = itemData.script
+                if not scriptPath or scriptPath == "" then
+                    -- Auto-resolve default script path when missing: infer by type and item key
+                    local baseDir = "scripts/items/collectibles"
+                    if itemData.type == "trinket" then
+                        baseDir = "scripts/items/trinkets"
+                    elseif itemData.type == "familiar" then
+                        baseDir = "scripts/items/familiars"
+                    end
+                    local guessed = baseDir .. "/" .. string.lower(itemKey)
+                    ConchBlessing.printDebug("  No script path; auto-resolving to: " .. guessed)
+                    scriptPath = guessed
                 end
-                local guessed = baseDir .. "/" .. string.lower(itemKey)
-                ConchBlessing.printDebug("  No script path; auto-resolving to: " .. guessed)
-                scriptPath = guessed
-            end
 
-            ConchBlessing.printDebug("  Loading script: " .. scriptPath)
-            local scriptSuccess, scriptErr = pcall(function()
-                require(scriptPath)
-            end)
-            if scriptSuccess then
-                ConchBlessing.printDebug("  Script loaded successfully: " .. scriptPath)
-            else
-                ConchBlessing.printError("  Script load failed: " .. scriptPath .. " - " .. tostring(scriptErr))
+                ConchBlessing.printDebug("  Loading script: " .. scriptPath)
+                local scriptSuccess, scriptErr = pcall(function()
+                    require(scriptPath)
+                end)
+                if scriptSuccess then
+                    ConchBlessing.printDebug("  Script loaded successfully: " .. scriptPath)
+                else
+                    ConchBlessing.printError("  Script load failed: " .. scriptPath .. " - " .. tostring(scriptErr))
+                end
             end
             ConchBlessing.printDebug("  " .. itemKey .. " processed")
         end

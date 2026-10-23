@@ -90,19 +90,32 @@ return {
         },
         RAT = {
             name = "Rat",
-            description = "Rat",
+            description = "The rat that ate a fingernail",
+            eid = {
+                "Summons a character exactly like you.",
+                "#{{Warning}} Requires REPENTOGON!",
+            },
         },
         OX = {
-            name = "Ox",
-            description = "Ox",
+            name = "Ox (WIP)",
+            description = "Work in progress",
+            eid = {
+                "No gameplay effect yet.",
+            },
         },
         TIGER = {
-            name = "Tiger",
-            description = "Tiger",
+            name = "Tiger (WIP)",
+            description = "Work in progress",
+            eid = {
+                "No gameplay effect yet.",
+            },
         },
         RABBIT = {
-            name = "Rabbit",
-            description = "Rabbit",
+            name = "Rabbit (WIP)",
+            description = "Work in progress",
+            eid = {
+                "No gameplay effect yet.",
+            },
         },
         DRAGON = {
             name = "Dragon",
@@ -122,31 +135,53 @@ return {
             },
         },
         SNAKE = {
-            name = "Snake",
-            description = "Snake",
+            name = "Snake (WIP)",
+            description = "Work in progress",
+            eid = {
+                "No gameplay effect yet.",
+            },
         },
         HORSE = {
-            name = "Horse",
-            description = "Horse",
+            name = "Horse (WIP)",
+            description = "Work in progress",
+            eid = {
+                "No gameplay effect yet.",
+            },
         },
         GOAT = {
-            name = "Goat",
-            description = "Goat",
+            name = "Goat (WIP)",
+            description = "Work in progress",
+            eid = {
+                "No gameplay effect yet.",
+            },
         },
         MONKEY = {
-            name = "Monkey",
+            name = "Monkey (WIP)",
+            description = "Work in progress",
+            eid = {
+                "No gameplay effect yet.",
+            },
         },
         CHICKEN = {
-            name = "Chicken",
-            description = "Chicken",
+            name = "Chicken (WIP)",
+            description = "Work in progress",
+            eid = {
+                "No gameplay effect yet.",
+            },
         },
         DOG = {
-            name = "Dog",
-            description = "Dog",
+            name = "Dog (WIP)",
+            description = "Work in progress",
+            eid = {
+                "No gameplay effect yet.",
+            },
         },
         PIG = {
-            name = "Pig",
-            description = "Pig",
+            name = "Pig (WIP)",
+            description = "Work in progress",
+            eid = {
+                "No gameplay effect yet.",
+            },
         },
         KRONOS = {
             name = "Kronos",

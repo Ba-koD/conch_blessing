@@ -11,7 +11,7 @@ for _, module in ipairs({"synergies","conditions","damage","kronos_synergies","k
 end
 local CycleCompare = require("scripts.dev.item_test_cycle_compare")
 local contracts = {}
-for _, module in ipairs({ "stats", "combat", "special" }) do
+for _, module in ipairs({ "stats", "combat", "special", "rat" }) do
     for key, contract in pairs(require("scripts.dev.item_test_" .. module)) do
         assert(not contracts[key], "duplicate item contract: " .. key)
         contracts[key] = contract
@@ -29,6 +29,16 @@ table.sort(keys)
 local function out(line)
     Isaac.ConsoleOutput(line .. "\n")
     Isaac.DebugString("[ConchTest] " .. line)
+end
+
+-- Every bench restarts the run. 자's fakes are helper players of this run and
+-- must not join the restarted one as stray co-op players, so they go first;
+-- after that the run must be single-player.
+local function singleRun()
+    if ConchBlessing.rat and type(ConchBlessing.rat.removeAll) == "function" then
+        ConchBlessing.rat.removeAll("test start")
+    end
+    return Game():GetNumPlayers() == 1
 end
 
 local function count(player, item)
@@ -63,7 +73,7 @@ local function buildItem(plan, key, item)
     if item.WorkingNow == true then
         plan.section(key)
         plan.act(function(_,ctx) ctx.canReuse=true end) -- coverage-only; no gameplay mutation
-        plan.check("implementation coverage", function() return nil, "unfinished ItemData row; excluded from generated game content" end)
+        plan.check("implementation coverage", function() return nil, "unfinished ItemData row; no released gameplay contract" end)
         return
     end
     local contract = assert(contracts[key], "no behavior contract for released item " .. key)
@@ -178,13 +188,17 @@ local function listItem(key)
     out(prefix .. (ConchBlessing.ItemData[key].WorkingNow == true and " [unfinished: SKIP]" or " [all item tests]"))
     out("  " .. commands[key])
     if deep[key] then out("  " .. prefix .. " detail") end
+    if key == "RAT" then
+        out("  " .. prefix .. " characters [every same_<character> case: a fresh run as each character]")
+    end
     if key == "SEVERED_OATH" then
         out("  " .. prefix .. " compare [50 isolated native/Oath comparison benches]")
         out("  " .. prefix .. " cycles [ownership, dice/copy/split, stacking and golden cases in one run]")
     end
     for _, row in ipairs(Scenarios.rows) do
         if row.key == key then out("  " .. prefix .. " " .. row.name
-            .. (row.bundledInto and " [included in " .. row.bundledInto .. "]" or "")) end
+            .. (row.bundledInto and " [included in " .. row.bundledInto .. "]" or "")
+            .. (row.manual and " [measurement, run by name only]" or "")) end
     end
 end
 
@@ -229,7 +243,7 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
         if #words > 2 then out("Usage: " .. usage .. " [CASE]; use " .. usage .. " list."); return end
         local command = case and Pocket.commandFor(case)
         if case and not command then out("Unknown case: " .. case .. "; use " .. usage .. " list."); return end
-        if Game():GetNumPlayers() ~= 1 then out("Start a single-player test run first."); return end
+        if not singleRun() then out("Start a single-player test run first."); return end
         local ok, err
         if command then ok, err = pcall(TestBench.start, command, true)
         else ok, err = pcall(TestBench.startSuite, usage, Pocket.commands()) end
@@ -246,14 +260,14 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
         if #words > 2 then out("Usage: conch_test morph [ITEM | default | cycle | list]"); return end
         local command = Morph.commandFor(case)
         if not command then out("No applied presentation for " .. tostring(case) .. "; use conch_test morph list."); return end
-        if Game():GetNumPlayers() ~= 1 then out("Start a single-player test run first."); return end
+        if not singleRun() then out("Start a single-player test run first."); return end
         TestBench.start(command, true); return
     end
     if action == "evolution" then
         if case then out("Usage: conch_test evolution"); return end
         local loaded, err = pcall(require, "scripts.dev.evolution_probe")
         if not loaded then out("FAIL evolution bench unavailable: " .. tostring(err)); return end
-        if Game():GetNumPlayers() ~= 1 then out("Start a single-player test run first."); return end
+        if not singleRun() then out("Start a single-player test run first."); return end
         TestBench.start("conch_test evolution", true); return
     end
     if action == "latest" then
@@ -264,7 +278,7 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
         out("Latest unresolved failures: "..#list.." scenarios ("..source..").")
         if #list==0 then out("No failed scenarios remain; no run restarted.");return end
         if case=="list" then for i,name in ipairs(list) do out(i..". "..name) end;return end
-        if Game():GetNumPlayers()~=1 then out("Start a single-player test run first.");return end
+        if not singleRun() then out("Start a single-player test run first.");return end
         local started,err=pcall(TestBench.startSuite,"conch_test latest",list)
         if not started then out("FAIL latest setup: "..tostring(err)) end
         return
@@ -309,9 +323,15 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
     end
     local key = string.upper(action)
     if commands[key] and (case == "list" or case == "help") then listItem(key); return end
-    if Game():GetNumPlayers() ~= 1 then out("Start a single-player test run first."); return end
+    if not singleRun() then out("Start a single-player test run first."); return end
     if key == "SEVERED_OATH" and case == "compare" then
         TestBench.startSuite("conch_test severed_oath compare", CycleCompare.commands); return
+    end
+    if key == "RAT" and case == "characters" then
+        -- A fresh run as every selectable character, each fake against its original.
+        local ok, err = pcall(TestBench.startSuite, "conch_test rat characters", Scenarios.commands(key, "characters"))
+        if not ok then out("FAIL suite setup: " .. tostring(err)) end
+        return
     end
     if key == "SEVERED_OATH" and case == "cycles" then
         -- Every rotation case: native queues, dice rerolls, copies, Morphs,
