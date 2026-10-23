@@ -71,6 +71,8 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 --     tearCollision: "function name" - called when tear collides
 --     gameStarted: "function name" - called when game starts
 --   WorkingNow: true means unfinished; hidden=true additionally registers a console-only preview.
+--   console: true marks a finished console-only item (hidden, no pool); generated IDs put
+--     these after the ordinary items and before the WIP previews.
 
 -- Trinkets
 -- EID golden/mombox replacement config
@@ -672,11 +674,13 @@ ConchBlessing.ItemData = {
         }
     },
     INF_D6 = {
+        -- Console only: hidden, in no pool, numbered after the finished items.
         type = "active",
         id = Isaac.GetItemIdByName("Inf D6"),
         gfx = "inf_d6.png",
         tags = "utility",
         hidden = true,
+        console = true,
         shopprice = 999,
         maxcharges = 0,
         quality = 0,
@@ -1004,7 +1008,7 @@ ConchBlessing.ItemData = {
     },
     AZURE_DRAGON = {
         -- The long dragon familiar that 진 used to summon. Console only, like
-        -- Inf D6: hidden and in no pool.
+        -- Inf D6: hidden, in no pool, numbered after the finished items.
         type = "familiar",
         id = Isaac.GetItemIdByName("Azure Dragon"),
         gfx = "azure_dragon.png",
@@ -1015,6 +1019,7 @@ ConchBlessing.ItemData = {
         tags = "offensive summonable",
         cache = "familiars",
         hidden = true,
+        console = true,
         shopprice = 999,
         script = "scripts/items/collectibles/azure_dragon",
         callbacks = {

@@ -471,6 +471,9 @@ def parse_lua_file(file_path):
         if is_working_now:
             # A hidden WIP preview: registered, but numbered after the finished rows (id_order).
             item_info['wip'] = True
+        if re.search(r'\bconsole\s*=\s*true', item_data):
+            # A console-only item: numbered after the finished rows, before the WIP previews (id_order).
+            item_info['console'] = True
 
         # extract id
         id_match = re.search(r'id\s*=\s*Isaac\.GetItemIdByName\("([^"]+)"\)', item_data)
@@ -687,15 +690,19 @@ def parse_lua_file(file_path):
 def id_order(items):
     """The order generated IDs follow, shared by items.xml, costumes2.xml and the
     death icons. Each ID space (collectibles including familiars, then trinkets)
-    lists its finished rows in registry order and then its WIP previews, so a
-    preview never shifts a released item's ID. The registry itself keeps the
-    zodiac block 자 … 해 together; only the numbering moves the previews last."""
+    lists its finished rows in registry order, then its console-only items
+    (`console = true`), then its WIP previews, so neither a console item nor a
+    preview sits between released items. The registry itself keeps the zodiac
+    block 자 … 해 together; only the numbering moves the others last."""
+    def tier(info):
+        return 2 if info.get('wip') else 1 if info.get('console') else 0
+
     ordered = {}
     for space in ('collectible', 'trinket'):
-        for wip in (False, True):
+        for rank in (0, 1, 2):
             for key, info in items.items():
                 in_space = (info.get('type') == 'trinket') == (space == 'trinket')
-                if in_space and bool(info.get('wip')) == wip:
+                if in_space and tier(info) == rank:
                     ordered[key] = info
     assert len(ordered) == len(items)
     return ordered

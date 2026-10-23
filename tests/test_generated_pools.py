@@ -36,15 +36,26 @@ class GeneratedPoolTests(unittest.TestCase):
 
 
 class GeneratedIdOrderTests(unittest.TestCase):
-    """WIP previews are numbered last in their ID space; the registry keeps its own order."""
+    """Each ID space runs ordinary items, then console-only items, then WIP previews;
+    the registry keeps its own order."""
 
-    def test_wip_rows_follow_finished_rows_in_each_id_space(self):
+    def test_console_and_wip_rows_follow_finished_rows_in_each_id_space(self):
         ordered = id_order({
-            'A': {'type': 'passive'}, 'WIP1': {'type': 'passive', 'wip': True}, 'B': {'type': 'active'},
-            'WIP2': {'type': 'passive', 'wip': True}, 'C': {'type': 'passive'}, 'F': {'type': 'familiar'},
-            'T': {'type': 'trinket'}, 'TWIP': {'type': 'trinket', 'wip': True}, 'U': {'type': 'trinket'},
+            'A': {'type': 'passive'}, 'WIP1': {'type': 'passive', 'wip': True}, 'CON1': {'type': 'active', 'console': True},
+            'B': {'type': 'active'}, 'WIP2': {'type': 'passive', 'wip': True}, 'C': {'type': 'passive'},
+            'CON2': {'type': 'familiar', 'console': True}, 'F': {'type': 'familiar'},
+            'T': {'type': 'trinket'}, 'TWIP': {'type': 'trinket', 'wip': True},
+            'TCON': {'type': 'trinket', 'console': True}, 'U': {'type': 'trinket'},
         })
-        self.assertEqual(list(ordered), ['A', 'B', 'C', 'F', 'WIP1', 'WIP2', 'T', 'U', 'TWIP'])
+        self.assertEqual(list(ordered), ['A', 'B', 'C', 'F', 'CON1', 'CON2', 'WIP1', 'WIP2',
+                                         'T', 'U', 'TCON', 'TWIP'])
+
+    def test_console_flag_is_read_from_the_registry_row(self):
+        registry = parse_lua_file(str(ROOT / 'scripts/conch_blessing_items.lua'))
+        console = sorted(info.get('name') for info in registry.values() if info.get('console'))
+        self.assertEqual(console, ['Azure Dragon', 'Inf D6'])
+        self.assertTrue(all(info.get('hidden') for info in registry.values() if info.get('console')),
+                        'a console-only item stays hidden and out of every pool')
 
     def test_shipped_ids_put_rat_and_dragon_before_the_familiars_and_the_previews_last(self):
         registry = parse_lua_file(str(ROOT / 'scripts/conch_blessing_items.lua'))
@@ -56,13 +67,16 @@ class GeneratedIdOrderTests(unittest.TestCase):
         self.assertEqual(keys[start + 12], 'TIME_MONEY')
         rows = [(e.tag, e.get('name')) for e in ET.parse(ROOT / 'content/items.xml').getroot()]
         names = [name for _, name in rows]
+        p = names.index('Two Faced Penny')
+        self.assertEqual(names[p + 1], 'Severed Oath', 'a console item no longer sits between released items')
         i = names.index('Rat')
-        self.assertEqual(names[i:i + 4], ['Rat', 'Dragon', 'Time = Money', 'Azure Dragon'])
+        self.assertEqual(names[i:i + 3], ['Rat', 'Dragon', 'Time = Money'])
+        self.assertEqual(names[i + 3:i + 5], ['Inf D6', 'Azure Dragon'], 'console items follow the finished ones')
         wip = ['Ox (WIP)', 'Tiger (WIP)', 'Rabbit (WIP)', 'Snake (WIP)', 'Horse (WIP)', 'Goat (WIP)',
                'Monkey (WIP)', 'Chicken (WIP)', 'Dog (WIP)', 'Pig (WIP)']
-        self.assertEqual(names[i + 4:i + 14], wip)
-        self.assertEqual(rows[i + 14][0], 'trinket')
-        self.assertTrue(all(tag != 'trinket' for tag, _ in rows[:i + 14]))
+        self.assertEqual(names[i + 5:i + 15], wip)
+        self.assertEqual(rows[i + 15][0], 'trinket')
+        self.assertTrue(all(tag != 'trinket' for tag, _ in rows[:i + 15]))
         self.assertEqual([info.get('name') for info in registry.values()], names)
 
 
