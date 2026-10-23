@@ -1,0 +1,182 @@
+[
+  {
+    "key": "01-rat",
+    "name": "자 · 손톱 먹은 쥐",
+    "concept": "A small squat gray rat, two oversized rounded pink ears, a stubby snout, black dot eyes and ONE ivory fingernail chip held in its mouth. A short bent tail. No hands, no sinister grin, no fur strokes. Gray base and one shadow, pink ears, ivory chip, black outline: six colors.",
+    "prompt": "Use case: style-transfer. Edit the SOURCE collectible into a new original collectible in exactly the same very low-resolution drawing language. Source image 1 is the project's 32x32 blue/gold dragon item. Source image 2 is a read-only study board of vanilla Isaac 32x32 icons at 4x and 1x. Reference their production traits only, never copy or trace a specific vanilla icon.\nCRITICAL: The drawing itself has only 32 columns and 32 rows. Every visible logical pixel is a flat square of equal size. Use a one-logical-pixel near-black outline, approximately 5-8 total flat colors, no texture and no gradients. At most TWO flat shades per body material. The subject occupies roughly 22x24 of the 32x32 cells. Sparse, deliberately crude cartoon abstraction, like an actual small Isaac pickup, NOT a detailed pixel-art portrait or game character illustration. Tiny eyes are single black marks. Large unbroken fill areas. Transparent padding. No high resolution anatomy or rendering. If output is large, make it an exact integer nearest-neighbor enlargement of a 32x32 sprite without inventing finer detail. Single centered sprite only, genuine transparent background, no sheet, labels, UI, frame, ground, pedestal or decorative effects.\n\nNew subject: A small squat gray rat, two oversized rounded pink ears, a stubby snout, black dot eyes and ONE ivory fingernail chip held in its mouth. A short bent tail. No hands, no sinister grin, no fur strokes. Gray base and one shadow, pink ears, ivory chip, black outline: six colors.",
+    "source": "C:\\Users\\rudgh\\.codex\\generated_images\\01a1694e-df65-7221-9854-737e9bcf99ad\\exec-4c147b29-043d-427a-bab0-85346568170c.png",
+    "mode": "built-in image_gen",
+    "status": "concept preview; native grid finished separately in pixels.json",
+    "saved_draft": "drafts/01-rat.png",
+    "native_icon": "icons/01-rat.png",
+    "reference_roles": [
+      "Project dragon.png: source collectible and series identity",
+      "Vanilla study board: general production style only; no tracing"
+    ]
+  },
+  {
+    "key": "02-ox",
+    "name": "축 · 은하수를 건너는 소",
+    "concept": "A blunt dark-blue ox head, short thick ivory horns, floppy ears, enormous flat gray-blue rectangular snout and two tiny pale blue eyes. A single pale blue stripe connects the two eyes across the forehead to hint at the Milky Way. No stars outside the head, no ribbon, no halo. Flat, slightly dopey face, seven colors.",
+    "prompt": "Use case: style-transfer. Edit the SOURCE collectible into a new original collectible in exactly the same very low-resolution drawing language. Source image 1 is the project's 32x32 blue/gold dragon item. Source image 2 is a read-only study board of vanilla Isaac 32x32 icons at 4x and 1x. Reference their production traits only, never copy or trace a specific vanilla icon.\nCRITICAL: The drawing itself has only 32 columns and 32 rows. Every visible logical pixel is a flat square of equal size. Use a one-logical-pixel near-black outline, approximately 5-8 total flat colors, no texture and no gradients. At most TWO flat shades per body material. The subject occupies roughly 22x24 of the 32x32 cells. Sparse, deliberately crude cartoon abstraction, like an actual small Isaac pickup, NOT a detailed pixel-art portrait or game character illustration. Tiny eyes are single black marks. Large unbroken fill areas. Transparent padding. No high resolution anatomy or rendering. If output is large, make it an exact integer nearest-neighbor enlargement of a 32x32 sprite without inventing finer detail. Single centered sprite only, genuine transparent background, no sheet, labels, UI, frame, ground, pedestal or decorative effects.\n\nNew subject: A blunt dark-blue ox head, short thick ivory horns, floppy ears, enormous flat gray-blue rectangular snout and two tiny pale blue eyes. A single pale blue stripe connects the two eyes across the forehead to hint at the Milky Way. No stars outside the head, no ribbon, no halo. Flat, slightly dopey face, seven colors.",
+    "source": "C:\\Users\\rudgh\\.codex\\generated_images\\01a1694e-df65-7221-9854-737e9bcf99ad\\exec-7d33d565-d509-4f7b-9b0d-571c54728d82.png",
+    "mode": "built-in image_gen",
+    "status": "concept preview; native grid finished separately in pixels.json",
+    "saved_draft": "drafts/02-ox.png",
+    "native_icon": "icons/02-ox.png",
+    "reference_roles": [
+      "Project dragon.png: source collectible and series identity",
+      "Vanilla study board: general production style only; no tracing"
+    ]
+  },
+  {
+    "key": "03-tiger",
+    "name": "인 · 산군",
+    "concept": "A squat dull-orange tiger head with little round ears, exactly three short black forehead stripes, a cream muzzle and a large simple dark open mouth for its roar. Tiny dull eyes, one short white fang. No fur strokes, no floating ghost, no mane, no dramatic eyebrows. Five or six flat colors.",
+    "prompt": "Use case: style-transfer. Edit the SOURCE collectible into a new original collectible in exactly the same very low-resolution drawing language. Source image 1 is the project's 32x32 blue/gold dragon item. Source image 2 is a read-only study board of vanilla Isaac 32x32 icons at 4x and 1x. Reference their production traits only, never copy or trace a specific vanilla icon.\nCRITICAL: The drawing itself has only 32 columns and 32 rows. Every visible logical pixel is a flat square of equal size. Use a one-logical-pixel near-black outline, approximately 5-8 total flat colors, no texture and no gradients. At most TWO flat shades per body material. The subject occupies roughly 22x24 of the 32x32 cells. Sparse, deliberately crude cartoon abstraction, like an actual small Isaac pickup, NOT a detailed pixel-art portrait or game character illustration. Tiny eyes are single black marks. Large unbroken fill areas. Transparent padding. No high resolution anatomy or rendering. If output is large, make it an exact integer nearest-neighbor enlargement of a 32x32 sprite without inventing finer detail. Single centered sprite only, genuine transparent background, no sheet, labels, UI, frame, ground, pedestal or decorative effects.\n\nNew subject: A squat dull-orange tiger head with little round ears, exactly three short black forehead stripes, a cream muzzle and a large simple dark open mouth for its roar. Tiny dull eyes, one short white fang. No fur strokes, no floating ghost, no mane, no dramatic eyebrows. Five or six flat colors.",
+    "source": "C:\\Users\\rudgh\\.codex\\generated_images\\01a1694e-df65-7221-9854-737e9bcf99ad\\exec-3bce7097-25b1-4fd2-8471-3daedd43756e.png",
+    "mode": "built-in image_gen",
+    "status": "concept preview; native grid finished separately in pixels.json",
+    "saved_draft": "drafts/03-tiger.png",
+    "native_icon": "icons/03-tiger.png",
+    "reference_roles": [
+      "Project dragon.png: source collectible and series identity",
+      "Vanilla study board: general production style only; no tracing"
+    ]
+  },
+  {
+    "key": "04-rabbit",
+    "name": "묘 · 간을 두고 온 토끼",
+    "concept": "A tiny hunched ivory rabbit with two long uneven ears, black dot eyes, and a brick-red liver shaped like two joined blunt lobes pressed against its belly. Tiny front paws are just two short marks. Dusky pink ear interiors. No smile, no detailed fingers, no moon or background. Six flat colors.",
+    "prompt": "Use case: style-transfer. Edit the SOURCE collectible into a new original collectible in exactly the same very low-resolution drawing language. Source image 1 is the project's 32x32 blue/gold dragon item. Source image 2 is a read-only study board of vanilla Isaac 32x32 icons at 4x and 1x. Reference their production traits only, never copy or trace a specific vanilla icon.\nCRITICAL: The drawing itself has only 32 columns and 32 rows. Every visible logical pixel is a flat square of equal size. Use a one-logical-pixel near-black outline, approximately 5-8 total flat colors, no texture and no gradients. At most TWO flat shades per body material. The subject occupies roughly 22x24 of the 32x32 cells. Sparse, deliberately crude cartoon abstraction, like an actual small Isaac pickup, NOT a detailed pixel-art portrait or game character illustration. Tiny eyes are single black marks. Large unbroken fill areas. Transparent padding. No high resolution anatomy or rendering. If output is large, make it an exact integer nearest-neighbor enlargement of a 32x32 sprite without inventing finer detail. Single centered sprite only, genuine transparent background, no sheet, labels, UI, frame, ground, pedestal or decorative effects.\n\nNew subject: A tiny hunched ivory rabbit with two long uneven ears, black dot eyes, and a brick-red liver shaped like two joined blunt lobes pressed against its belly. Tiny front paws are just two short marks. Dusky pink ear interiors. No smile, no detailed fingers, no moon or background. Six flat colors.",
+    "source": "C:\\Users\\rudgh\\.codex\\generated_images\\01a1694e-df65-7221-9854-737e9bcf99ad\\exec-4218ecd7-13e3-4231-9bc1-9175c6fdf306.png",
+    "mode": "built-in image_gen",
+    "status": "concept preview; native grid finished separately in pixels.json",
+    "saved_draft": "drafts/04-rabbit.png",
+    "native_icon": "icons/04-rabbit.png",
+    "reference_roles": [
+      "Project dragon.png: source collectible and series identity",
+      "Vanilla study board: general production style only; no tracing"
+    ]
+  },
+  {
+    "key": "05-dragon",
+    "name": "진 · 날씨의 신",
+    "concept": "Redraw the same compact upright azure dragon collectible from source image 1 with its distinctive long blue face, two little branching yellow horns, yellow moustache curls at the lower sides, pale cyan nose and small blunt eyes. Preserve the original icon's cartoon simplicity, original proportions and blue/gold identity. No scales, cloud, storm, extra body or illustrative lighting. At most eight flat colors.",
+    "prompt": "Use case: style-transfer. Edit the SOURCE collectible into a new original collectible in exactly the same very low-resolution drawing language. Source image 1 is the project's 32x32 blue/gold dragon item. Source image 2 is a read-only study board of vanilla Isaac 32x32 icons at 4x and 1x. Reference their production traits only, never copy or trace a specific vanilla icon.\nCRITICAL: The drawing itself has only 32 columns and 32 rows. Every visible logical pixel is a flat square of equal size. Use a one-logical-pixel near-black outline, approximately 5-8 total flat colors, no texture and no gradients. At most TWO flat shades per body material. The subject occupies roughly 22x24 of the 32x32 cells. Sparse, deliberately crude cartoon abstraction, like an actual small Isaac pickup, NOT a detailed pixel-art portrait or game character illustration. Tiny eyes are single black marks. Large unbroken fill areas. Transparent padding. No high resolution anatomy or rendering. If output is large, make it an exact integer nearest-neighbor enlargement of a 32x32 sprite without inventing finer detail. Single centered sprite only, genuine transparent background, no sheet, labels, UI, frame, ground, pedestal or decorative effects.\n\nNew subject: Redraw the same compact upright azure dragon collectible from source image 1 with its distinctive long blue face, two little branching yellow horns, yellow moustache curls at the lower sides, pale cyan nose and small blunt eyes. Preserve the original icon's cartoon simplicity, original proportions and blue/gold identity. No scales, cloud, storm, extra body or illustrative lighting. At most eight flat colors.",
+    "source": "C:\\Users\\rudgh\\.codex\\generated_images\\01a1694e-df65-7221-9854-737e9bcf99ad\\exec-179b7b84-b320-4cba-85cb-2d7b32eb0d03.png",
+    "mode": "built-in image_gen",
+    "status": "concept preview; native grid finished separately in pixels.json",
+    "saved_draft": "drafts/05-dragon.png",
+    "native_icon": "icons/05-dragon.png",
+    "reference_roles": [
+      "Project dragon.png: source collectible and series identity",
+      "Vanilla study board: general production style only; no tracing"
+    ]
+  },
+  {
+    "key": "06-snake",
+    "name": "사 · 승천을 꿈꾸는 이무기",
+    "concept": "A squat dark-jade snake curled into ONE simple coil, little rounded raised head with two black dot eyes. One off-white strip of old skin peels from its lower coil. Broad green flat fill and one darker shade. No scales, horns, legs, pearl or ornament. Five flat colors.",
+    "prompt": "Use case: style-transfer. Edit the SOURCE collectible into a new original collectible in exactly the same very low-resolution drawing language. Source image 1 is the project's 32x32 blue/gold dragon item. Source image 2 is a read-only study board of vanilla Isaac 32x32 icons at 4x and 1x. Reference their production traits only, never copy or trace a specific vanilla icon.\nCRITICAL: The drawing itself has only 32 columns and 32 rows. Every visible logical pixel is a flat square of equal size. Use a one-logical-pixel near-black outline, approximately 5-8 total flat colors, no texture and no gradients. At most TWO flat shades per body material. The subject occupies roughly 22x24 of the 32x32 cells. Sparse, deliberately crude cartoon abstraction, like an actual small Isaac pickup, NOT a detailed pixel-art portrait or game character illustration. Tiny eyes are single black marks. Large unbroken fill areas. Transparent padding. No high resolution anatomy or rendering. If output is large, make it an exact integer nearest-neighbor enlargement of a 32x32 sprite without inventing finer detail. Single centered sprite only, genuine transparent background, no sheet, labels, UI, frame, ground, pedestal or decorative effects.\n\nNew subject: A squat dark-jade snake curled into ONE simple coil, little rounded raised head with two black dot eyes. One off-white strip of old skin peels from its lower coil. Broad green flat fill and one darker shade. No scales, horns, legs, pearl or ornament. Five flat colors.",
+    "source": "C:\\Users\\rudgh\\.codex\\generated_images\\01a1694e-df65-7221-9854-737e9bcf99ad\\exec-e1f9d879-e3d8-4255-a6ae-049b25203e0c.png",
+    "mode": "built-in image_gen",
+    "status": "concept preview; native grid finished separately in pixels.json",
+    "saved_draft": "drafts/06-snake.png",
+    "native_icon": "icons/06-snake.png",
+    "reference_roles": [
+      "Project dragon.png: source collectible and series identity",
+      "Vanilla study board: general production style only; no tracing"
+    ]
+  },
+  {
+    "key": "07-horse",
+    "name": "오 · 하늘을 달리는 천마",
+    "concept": "A small lopsided white horse head in side three-quarter view, elongated blunt muzzle, two short ears, simple black eye, short pale-blue mane drifting backwards in TWO broad jagged clumps. No wings, horn, stars or cloud background. White, gray, pale blue, dark blue-gray, near-black. Coarse five-color item icon.",
+    "prompt": "Use case: style-transfer. Edit the SOURCE collectible into a new original collectible in exactly the same very low-resolution drawing language. Source image 1 is the project's 32x32 blue/gold dragon item. Source image 2 is a read-only study board of vanilla Isaac 32x32 icons at 4x and 1x. Reference their production traits only, never copy or trace a specific vanilla icon.\nCRITICAL: The drawing itself has only 32 columns and 32 rows. Every visible logical pixel is a flat square of equal size. Use a one-logical-pixel near-black outline, approximately 5-8 total flat colors, no texture and no gradients. At most TWO flat shades per body material. The subject occupies roughly 22x24 of the 32x32 cells. Sparse, deliberately crude cartoon abstraction, like an actual small Isaac pickup, NOT a detailed pixel-art portrait or game character illustration. Tiny eyes are single black marks. Large unbroken fill areas. Transparent padding. No high resolution anatomy or rendering. If output is large, make it an exact integer nearest-neighbor enlargement of a 32x32 sprite without inventing finer detail. Single centered sprite only, genuine transparent background, no sheet, labels, UI, frame, ground, pedestal or decorative effects.\n\nNew subject: A small lopsided white horse head in side three-quarter view, elongated blunt muzzle, two short ears, simple black eye, short pale-blue mane drifting backwards in TWO broad jagged clumps. No wings, horn, stars or cloud background. White, gray, pale blue, dark blue-gray, near-black. Coarse five-color item icon.",
+    "source": "C:\\Users\\rudgh\\.codex\\generated_images\\01a1694e-df65-7221-9854-737e9bcf99ad\\exec-48d85646-95f8-4aa1-9355-881c8072419a.png",
+    "mode": "built-in image_gen",
+    "status": "concept preview; native grid finished separately in pixels.json",
+    "saved_draft": "drafts/07-horse.png",
+    "native_icon": "icons/07-horse.png",
+    "reference_roles": [
+      "Project dragon.png: source collectible and series identity",
+      "Vanilla study board: general production style only; no tracing"
+    ]
+  },
+  {
+    "key": "08-goat",
+    "name": "미 · 시비를 가리는 해태",
+    "concept": "A small gray sheep-like Korean haetae head with a rounded three-lump wool outline, floppy ears, ONE short central ivory horn, square snout and tiny black eyes. A tiny orange tongue-shaped flame is inside its dark mouth, not around it. Flat stone-gray fill with one dark gray shadow. Seven flat colors, no sculpture details.",
+    "prompt": "Use case: style-transfer. Edit the SOURCE collectible into a new original collectible in exactly the same very low-resolution drawing language. Source image 1 is the project's 32x32 blue/gold dragon item. Source image 2 is a read-only study board of vanilla Isaac 32x32 icons at 4x and 1x. Reference their production traits only, never copy or trace a specific vanilla icon.\nCRITICAL: The drawing itself has only 32 columns and 32 rows. Every visible logical pixel is a flat square of equal size. Use a one-logical-pixel near-black outline, approximately 5-8 total flat colors, no texture and no gradients. At most TWO flat shades per body material. The subject occupies roughly 22x24 of the 32x32 cells. Sparse, deliberately crude cartoon abstraction, like an actual small Isaac pickup, NOT a detailed pixel-art portrait or game character illustration. Tiny eyes are single black marks. Large unbroken fill areas. Transparent padding. No high resolution anatomy or rendering. If output is large, make it an exact integer nearest-neighbor enlargement of a 32x32 sprite without inventing finer detail. Single centered sprite only, genuine transparent background, no sheet, labels, UI, frame, ground, pedestal or decorative effects.\n\nNew subject: A small gray sheep-like Korean haetae head with a rounded three-lump wool outline, floppy ears, ONE short central ivory horn, square snout and tiny black eyes. A tiny orange tongue-shaped flame is inside its dark mouth, not around it. Flat stone-gray fill with one dark gray shadow. Seven flat colors, no sculpture details.",
+    "source": "C:\\Users\\rudgh\\.codex\\generated_images\\01a1694e-df65-7221-9854-737e9bcf99ad\\exec-3b90880a-0e4e-4abe-ac23-e6ee3044b31a.png",
+    "mode": "built-in image_gen",
+    "status": "concept preview; native grid finished separately in pixels.json",
+    "saved_draft": "drafts/08-goat.png",
+    "native_icon": "icons/08-goat.png",
+    "reference_roles": [
+      "Project dragon.png: source collectible and series identity",
+      "Vanilla study board: general production style only; no tracing"
+    ]
+  },
+  {
+    "key": "09-monkey",
+    "name": "신 · 재주의 신",
+    "concept": "A tiny squat brown monkey with two round ears, large pale tan muzzle/face patch and two black dot eyes. ONE short bent arm hugs a single red enemy-projectile ball beside its belly. Only a short tail nub. No fingers, grin, circlet, staff or swirling tail. Six flat colors.",
+    "prompt": "Use case: style-transfer. Edit the SOURCE collectible into a new original collectible in exactly the same very low-resolution drawing language. Source image 1 is the project's 32x32 blue/gold dragon item. Source image 2 is a read-only study board of vanilla Isaac 32x32 icons at 4x and 1x. Reference their production traits only, never copy or trace a specific vanilla icon.\nCRITICAL: The drawing itself has only 32 columns and 32 rows. Every visible logical pixel is a flat square of equal size. Use a one-logical-pixel near-black outline, approximately 5-8 total flat colors, no texture and no gradients. At most TWO flat shades per body material. The subject occupies roughly 22x24 of the 32x32 cells. Sparse, deliberately crude cartoon abstraction, like an actual small Isaac pickup, NOT a detailed pixel-art portrait or game character illustration. Tiny eyes are single black marks. Large unbroken fill areas. Transparent padding. No high resolution anatomy or rendering. If output is large, make it an exact integer nearest-neighbor enlargement of a 32x32 sprite without inventing finer detail. Single centered sprite only, genuine transparent background, no sheet, labels, UI, frame, ground, pedestal or decorative effects.\n\nNew subject: A tiny squat brown monkey with two round ears, large pale tan muzzle/face patch and two black dot eyes. ONE short bent arm hugs a single red enemy-projectile ball beside its belly. Only a short tail nub. No fingers, grin, circlet, staff or swirling tail. Six flat colors.",
+    "source": "C:\\Users\\rudgh\\.codex\\generated_images\\01a1694e-df65-7221-9854-737e9bcf99ad\\exec-73b0e21d-e68f-4979-bb0f-fb1144aac94e.png",
+    "mode": "built-in image_gen",
+    "status": "concept preview; native grid finished separately in pixels.json",
+    "saved_draft": "drafts/09-monkey.png",
+    "native_icon": "icons/09-monkey.png",
+    "reference_roles": [
+      "Project dragon.png: source collectible and series identity",
+      "Vanilla study board: general production style only; no tracing"
+    ]
+  },
+  {
+    "key": "10-chicken",
+    "name": "유 · 계림의 흰 닭",
+    "concept": "A tiny white rooster in side view, compact pear-shaped body, large red comb, small ochre beak, one black dot eye and two stubby feet. Its tail is ONE little gold squared feather, hinting at Gyerim's golden chest without depicting a separate chest. No scenery, radiating lines or tiny feather texture. Six flat colors.",
+    "prompt": "Use case: style-transfer. Edit the SOURCE collectible into a new original collectible in exactly the same very low-resolution drawing language. Source image 1 is the project's 32x32 blue/gold dragon item. Source image 2 is a read-only study board of vanilla Isaac 32x32 icons at 4x and 1x. Reference their production traits only, never copy or trace a specific vanilla icon.\nCRITICAL: The drawing itself has only 32 columns and 32 rows. Every visible logical pixel is a flat square of equal size. Use a one-logical-pixel near-black outline, approximately 5-8 total flat colors, no texture and no gradients. At most TWO flat shades per body material. The subject occupies roughly 22x24 of the 32x32 cells. Sparse, deliberately crude cartoon abstraction, like an actual small Isaac pickup, NOT a detailed pixel-art portrait or game character illustration. Tiny eyes are single black marks. Large unbroken fill areas. Transparent padding. No high resolution anatomy or rendering. If output is large, make it an exact integer nearest-neighbor enlargement of a 32x32 sprite without inventing finer detail. Single centered sprite only, genuine transparent background, no sheet, labels, UI, frame, ground, pedestal or decorative effects.\n\nNew subject: A tiny white rooster in side view, compact pear-shaped body, large red comb, small ochre beak, one black dot eye and two stubby feet. Its tail is ONE little gold squared feather, hinting at Gyerim's golden chest without depicting a separate chest. No scenery, radiating lines or tiny feather texture. Six flat colors.",
+    "source": "C:\\Users\\rudgh\\.codex\\generated_images\\01a1694e-df65-7221-9854-737e9bcf99ad\\exec-50fd3872-b65d-4efc-b5e5-0c76b03a5976.png",
+    "mode": "built-in image_gen",
+    "status": "concept preview; native grid finished separately in pixels.json",
+    "saved_draft": "drafts/10-chicken.png",
+    "native_icon": "icons/10-chicken.png",
+    "reference_roles": [
+      "Project dragon.png: source collectible and series identity",
+      "Vanilla study board: general production style only; no tracing"
+    ]
+  },
+  {
+    "key": "11-dog",
+    "name": "술 · 해를 문 불개",
+    "concept": "A small droopy-eared charcoal dog head, huge blunt snout, tiny black eyes marked by gray surround. Its mouth holds ONE small round disk half flat ochre and half pale ice-blue, representing the sun/moon bite. Flat charcoal body and one gray face highlight. No wolf fur, flames, starry background or big fangs. Six flat colors.",
+    "prompt": "Use case: style-transfer. Edit the SOURCE collectible into a new original collectible in exactly the same very low-resolution drawing language. Source image 1 is the project's 32x32 blue/gold dragon item. Source image 2 is a read-only study board of vanilla Isaac 32x32 icons at 4x and 1x. Reference their production traits only, never copy or trace a specific vanilla icon.\nCRITICAL: The drawing itself has only 32 columns and 32 rows. Every visible logical pixel is a flat square of equal size. Use a one-logical-pixel near-black outline, approximately 5-8 total flat colors, no texture and no gradients. At most TWO flat shades per body material. The subject occupies roughly 22x24 of the 32x32 cells. Sparse, deliberately crude cartoon abstraction, like an actual small Isaac pickup, NOT a detailed pixel-art portrait or game character illustration. Tiny eyes are single black marks. Large unbroken fill areas. Transparent padding. No high resolution anatomy or rendering. If output is large, make it an exact integer nearest-neighbor enlargement of a 32x32 sprite without inventing finer detail. Single centered sprite only, genuine transparent background, no sheet, labels, UI, frame, ground, pedestal or decorative effects.\n\nNew subject: A small droopy-eared charcoal dog head, huge blunt snout, tiny black eyes marked by gray surround. Its mouth holds ONE small round disk half flat ochre and half pale ice-blue, representing the sun/moon bite. Flat charcoal body and one gray face highlight. No wolf fur, flames, starry background or big fangs. Six flat colors.",
+    "source": "C:\\Users\\rudgh\\.codex\\generated_images\\01a1694e-df65-7221-9854-737e9bcf99ad\\exec-5d41a7ba-f454-41a4-b113-70a78b44afe2.png",
+    "mode": "built-in image_gen",
+    "status": "concept preview; native grid finished separately in pixels.json",
+    "saved_draft": "drafts/11-dog.png",
+    "native_icon": "icons/11-dog.png",
+    "reference_roles": [
+      "Project dragon.png: source collectible and series identity",
+      "Vanilla study board: general production style only; no tracing"
+    ]
+  },
+  {
+    "key": "12-pig",
+    "name": "해 · 복의 신",
+    "concept": "A tiny fat pink pig with a huge flat oval snout, two black nostrils, little floppy ears, dot eyes, stubby feet and one short hooked tail. A small ochre coin is tucked into one side of its mouth. Two pink tones plus black, ivory, ochre. No pile of coins or shiny rendering. Six flat colors.",
+    "prompt": "Use case: style-transfer. Edit the SOURCE collectible into a new original collectible in exactly the same very low-resolution drawing language. Source image 1 is the project's 32x32 blue/gold dragon item. Source image 2 is a read-only study board of vanilla Isaac 32x32 icons at 4x and 1x. Reference their production traits only, never copy or trace a specific vanilla icon.\nCRITICAL: The drawing itself has only 32 columns and 32 rows. Every visible logical pixel is a flat square of equal size. Use a one-logical-pixel near-black outline, approximately 5-8 total flat colors, no texture and no gradients. At most TWO flat shades per body material. The subject occupies roughly 22x24 of the 32x32 cells. Sparse, deliberately crude cartoon abstraction, like an actual small Isaac pickup, NOT a detailed pixel-art portrait or game character illustration. Tiny eyes are single black marks. Large unbroken fill areas. Transparent padding. No high resolution anatomy or rendering. If output is large, make it an exact integer nearest-neighbor enlargement of a 32x32 sprite without inventing finer detail. Single centered sprite only, genuine transparent background, no sheet, labels, UI, frame, ground, pedestal or decorative effects.\n\nNew subject: A tiny fat pink pig with a huge flat oval snout, two black nostrils, little floppy ears, dot eyes, stubby feet and one short hooked tail. A small ochre coin is tucked into one side of its mouth. Two pink tones plus black, ivory, ochre. No pile of coins or shiny rendering. Six flat colors.",
+    "source": "C:\\Users\\rudgh\\.codex\\generated_images\\01a1694e-df65-7221-9854-737e9bcf99ad\\exec-0fd89fa7-a5f0-4b46-8487-a3c4f828269e.png",
+    "mode": "built-in image_gen",
+    "status": "concept preview; native grid finished separately in pixels.json",
+    "saved_draft": "drafts/12-pig.png",
+    "native_icon": "icons/12-pig.png",
+    "reference_roles": [
+      "Project dragon.png: source collectible and series identity",
+      "Vanilla study board: general production style only; no tracing"
+    ]
+  }
+]

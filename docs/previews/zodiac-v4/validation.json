@@ -1,0 +1,266 @@
+[
+  {
+    "key": "01-rat",
+    "size": [
+      32,
+      32
+    ],
+    "colors": 6,
+    "bbox": [
+      1,
+      3,
+      30,
+      28
+    ],
+    "added_outline_pixels": 100,
+    "original_opaque_pixels_preserved": true,
+    "transparent_canvas_rim_preserved": true,
+    "cleanup": [
+      "2차 네이티브 원본에서 외곽선을 불투명한 깊은 검정으로 변경",
+      "귀의 분홍 채도를 낮추고 짧은 눈꺼풀과 밝은 눈점을 넣어 경계하는 시선 강조",
+      "바깥 실루엣에 검정 1픽셀을 보강해 주된 외곽선을 약 2픽셀로 확대; 내부 눈·입·색면과 1픽셀 투명 테두리는 보존"
+    ]
+  },
+  {
+    "key": "02-ox",
+    "size": [
+      32,
+      32
+    ],
+    "colors": 7,
+    "bbox": [
+      1,
+      3,
+      31,
+      29
+    ],
+    "added_outline_pixels": 100,
+    "original_opaque_pixels_preserved": true,
+    "transparent_canvas_rim_preserved": true,
+    "cleanup": [
+      "2차 네이티브 원본에서 외곽선을 불투명한 깊은 검정으로 변경",
+      "처진 표정의 작은 네모 눈을 낮은 눈꺼풀 아래의 긴 시선으로 바꾸고 턱 아래 그림자 강화",
+      "바깥 실루엣에 검정 1픽셀을 보강해 주된 외곽선을 약 2픽셀로 확대; 내부 눈·입·색면과 1픽셀 투명 테두리는 보존"
+    ]
+  },
+  {
+    "key": "03-tiger",
+    "size": [
+      32,
+      32
+    ],
+    "colors": 6,
+    "bbox": [
+      2,
+      3,
+      30,
+      29
+    ],
+    "added_outline_pixels": 84,
+    "original_opaque_pixels_preserved": true,
+    "transparent_canvas_rim_preserved": true,
+    "cleanup": [
+      "깊은 검정 외곽선",
+      "넓은 이마·턱, 절제된 좁은 눈, 닫힌 입으로 수정 생성안을 직접 재구성; 복잡한 줄무늬 단순화",
+      "바깥 실루엣에 검정 1픽셀을 보강해 주된 외곽선을 약 2픽셀로 확대; 내부 눈·입·색면과 1픽셀 투명 테두리는 보존"
+    ]
+  },
+  {
+    "key": "04-rabbit",
+    "size": [
+      32,
+      32
+    ],
+    "colors": 6,
+    "bbox": [
+      6,
+      1,
+      26,
+      31
+    ],
+    "added_outline_pixels": 82,
+    "original_opaque_pixels_preserved": true,
+    "transparent_canvas_rim_preserved": true,
+    "cleanup": [
+      "깊은 검정 외곽선",
+      "얼굴·턱을 모두 드러내고 귀를 세움; 간은 턱 아래 아랫배의 5픽셀 높이로 분리; 외곽선 단절 직접 복구",
+      "바깥 실루엣에 검정 1픽셀을 보강해 주된 외곽선을 약 2픽셀로 확대; 내부 눈·입·색면과 1픽셀 투명 테두리는 보존"
+    ]
+  },
+  {
+    "key": "05-dragon",
+    "size": [
+      32,
+      32
+    ],
+    "colors": 6,
+    "bbox": [
+      1,
+      2,
+      31,
+      30
+    ],
+    "added_outline_pixels": 120,
+    "original_opaque_pixels_preserved": true,
+    "transparent_canvas_rim_preserved": true,
+    "cleanup": [
+      "2차 네이티브 원본에서 외곽선을 불투명한 깊은 검정으로 변경",
+      "낮은 검은 눈꺼풀과 금색 눈을 배치해 기존 청색·금색 용의 수호신 인상 강화",
+      "바깥 실루엣에 검정 1픽셀을 보강해 주된 외곽선을 약 2픽셀로 확대; 내부 눈·입·색면과 1픽셀 투명 테두리는 보존"
+    ]
+  },
+  {
+    "key": "06-snake",
+    "size": [
+      32,
+      32
+    ],
+    "colors": 7,
+    "bbox": [
+      3,
+      3,
+      28,
+      29
+    ],
+    "added_outline_pixels": 71,
+    "original_opaque_pixels_preserved": true,
+    "transparent_canvas_rim_preserved": true,
+    "cleanup": [
+      "2차 네이티브 원본에서 외곽선을 불투명한 깊은 검정으로 변경",
+      "머리를 든 자세를 유지하고 검은 눈꺼풀 아래 작은 금색 시선을 배치",
+      "바깥 실루엣에 검정 1픽셀을 보강해 주된 외곽선을 약 2픽셀로 확대; 내부 눈·입·색면과 1픽셀 투명 테두리는 보존"
+    ]
+  },
+  {
+    "key": "07-horse",
+    "size": [
+      32,
+      32
+    ],
+    "colors": 5,
+    "bbox": [
+      2,
+      2,
+      30,
+      29
+    ],
+    "added_outline_pixels": 81,
+    "original_opaque_pixels_preserved": true,
+    "transparent_canvas_rim_preserved": true,
+    "cleanup": [
+      "2차 네이티브 원본에서 외곽선을 불투명한 깊은 검정으로 변경",
+      "청색 갈기와 흰 머리를 유지하며 눈 위 경계와 차가운 밝은 눈점을 보강",
+      "바깥 실루엣에 검정 1픽셀을 보강해 주된 외곽선을 약 2픽셀로 확대; 내부 눈·입·색면과 1픽셀 투명 테두리는 보존"
+    ]
+  },
+  {
+    "key": "08-goat",
+    "size": [
+      32,
+      32
+    ],
+    "colors": 7,
+    "bbox": [
+      1,
+      3,
+      31,
+      28
+    ],
+    "added_outline_pixels": 70,
+    "original_opaque_pixels_preserved": true,
+    "transparent_canvas_rim_preserved": true,
+    "cleanup": [
+      "2차 네이티브 원본에서 외곽선을 불투명한 깊은 검정으로 변경",
+      "외뿔 아래 묵직한 눈꺼풀과 호박색 눈으로 심판하는 시선 강조",
+      "바깥 실루엣에 검정 1픽셀을 보강해 주된 외곽선을 약 2픽셀로 확대; 내부 눈·입·색면과 1픽셀 투명 테두리는 보존"
+    ]
+  },
+  {
+    "key": "09-monkey",
+    "size": [
+      32,
+      32
+    ],
+    "colors": 7,
+    "bbox": [
+      4,
+      4,
+      28,
+      28
+    ],
+    "added_outline_pixels": 68,
+    "original_opaque_pixels_preserved": true,
+    "transparent_canvas_rim_preserved": true,
+    "cleanup": [
+      "2차 네이티브 원본에서 외곽선을 불투명한 깊은 검정으로 변경",
+      "동그란 점눈을 검은 눈꺼풀 아래의 또렷한 시선으로 정리하고 입을 절제",
+      "바깥 실루엣에 검정 1픽셀을 보강해 주된 외곽선을 약 2픽셀로 확대; 내부 눈·입·색면과 1픽셀 투명 테두리는 보존"
+    ]
+  },
+  {
+    "key": "10-chicken",
+    "size": [
+      32,
+      32
+    ],
+    "colors": 7,
+    "bbox": [
+      5,
+      2,
+      27,
+      30
+    ],
+    "added_outline_pixels": 72,
+    "original_opaque_pixels_preserved": true,
+    "transparent_canvas_rim_preserved": true,
+    "cleanup": [
+      "2차 네이티브 원본에서 외곽선을 불투명한 깊은 검정으로 변경",
+      "머리와 볏을 든 자세를 유지하며 검은 눈꺼풀과 금빛 눈으로 시선 보강",
+      "바깥 실루엣에 검정 1픽셀을 보강해 주된 외곽선을 약 2픽셀로 확대; 내부 눈·입·색면과 1픽셀 투명 테두리는 보존"
+    ]
+  },
+  {
+    "key": "11-dog",
+    "size": [
+      32,
+      32
+    ],
+    "colors": 6,
+    "bbox": [
+      1,
+      4,
+      30,
+      27
+    ],
+    "added_outline_pixels": 76,
+    "original_opaque_pixels_preserved": true,
+    "transparent_canvas_rim_preserved": true,
+    "cleanup": [
+      "2차 네이티브 원본에서 외곽선을 불투명한 깊은 검정으로 변경",
+      "검은 털의 명도 구획을 분리하고 옅은 푸른 시선을 낮은 눈꺼풀 아래에 배치",
+      "바깥 실루엣에 검정 1픽셀을 보강해 주된 외곽선을 약 2픽셀로 확대; 내부 눈·입·색면과 1픽셀 투명 테두리는 보존"
+    ]
+  },
+  {
+    "key": "12-pig",
+    "size": [
+      32,
+      32
+    ],
+    "colors": 7,
+    "bbox": [
+      1,
+      3,
+      30,
+      29
+    ],
+    "added_outline_pixels": 84,
+    "original_opaque_pixels_preserved": true,
+    "transparent_canvas_rim_preserved": true,
+    "cleanup": [
+      "2차 네이티브 원본에서 외곽선을 불투명한 깊은 검정으로 변경",
+      "분홍색과 그림자를 차분하게 낮추고 짧은 눈꺼풀 아래 집중한 시선 배치",
+      "바깥 실루엣에 검정 1픽셀을 보강해 주된 외곽선을 약 2픽셀로 확대; 내부 눈·입·색면과 1픽셀 투명 테두리는 보존"
+    ]
+  }
+]
