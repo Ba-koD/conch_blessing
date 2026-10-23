@@ -336,21 +336,26 @@ class PlayerIdentity(unittest.TestCase):
             assert(UM[p2.hash].mult[14].Damage==nil and UM[p1.hash].mult[14].Damage and p2.evals==2)
         ''')
 
-    def test_a_minus_hit_demotes_every_held_and_smelted_copy(self):
+    def test_a_minus_hit_demotes_every_held_copy_and_never_a_smelted_one(self):
         self.run_lua('''
             require('scripts.items.trinkets.a_minus')
             local p=newPlayer(0,11); p.slots={14,14+GOLD}
             assert(hits.A_MINUS(nil,p,1,0)==true)
             assert(p.slots[1]==0 and p.slots[2]==0,'second A- skipped after slot shift')
             assert(#spawned==2 and spawned[1][3]==13 and spawned[2][3]==13+GOLD)
+            -- A smelted A- is fixed for good, with or without the smelt API.
             local s=newPlayer(0,22); enableSmeltApi(s)
             s.smelted[14]={trinketAmount=1,goldenTrinketAmount=1}
-            assert(hits.A_MINUS(nil,s,1,0)==true)
-            assert(s.smelted[14].trinketAmount==0 and s.smelted[14].goldenTrinketAmount==0)
-            assert(s.smelted[13].trinketAmount==1 and s.smelted[13].goldenTrinketAmount==1,'smelted copy not demoted')
-            -- Without REPENTOGON a smelted A- stays as it is.
+            assert(hits.A_MINUS(nil,s,1,0)==false)
+            assert(s.smelted[14].trinketAmount==1 and s.smelted[14].goldenTrinketAmount==1,'smelted A- changed')
+            assert(s.smelted[13]==nil and #spawned==2,'a smelted A- made a B-')
             local base=newPlayer(0,33); base.smelted[14]={trinketAmount=1,goldenTrinketAmount=0}
             assert(hits.A_MINUS(nil,base,1,0)==false and base.smelted[14].trinketAmount==1)
+            -- Holding one and having smelted another demotes only the held copy.
+            local both=newPlayer(0,55); enableSmeltApi(both); both.slots={14,0}
+            both.smelted[14]={trinketAmount=1,goldenTrinketAmount=0}
+            assert(hits.A_MINUS(nil,both,1,0)==true and both.slots[1]==0 and #spawned==3)
+            assert(both.smelted[14].trinketAmount==1 and both.smelted[13]==nil)
             assert(hits.A_MINUS(nil,newPlayer(0,44),1,0)==nil,'a player without A- reported a demotion')
         ''')
 

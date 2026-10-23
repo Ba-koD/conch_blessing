@@ -241,38 +241,9 @@ local function demoteHeld(player)
 	return demoted
 end
 
--- Smelted copies become smelted B-, keeping their golden state. Only
--- REPENTOGON can remove and add a smelted trinket; without it a smelted A-
--- stays as it is.
-local function demoteSmelted(player)
-	if type(player.TryRemoveSmeltedTrinket) ~= "function" or type(player.AddSmeltedTrinket) ~= "function" then
-		return 0
-	end
-	local normal, golden = TrinketUtils.getSmeltedCounts(player, TID)
-	if not normal then return 0 end
-	local demoted = 0
-	for _, entry in ipairs({ { normal, 0 }, { golden, TrinketUtils.GOLDEN_FLAG } }) do
-		for _ = 1, entry[1] do
-			local beforeNormal, beforeGolden = TrinketUtils.getSmeltedCounts(player, TID)
-			local ok = pcall(function() player:TryRemoveSmeltedTrinket(TID + entry[2]) end)
-			local afterNormal, afterGolden = TrinketUtils.getSmeltedCounts(player, TID)
-			local removed = ok and afterNormal and (afterNormal + afterGolden) < (beforeNormal + beforeGolden)
-			if not removed then
-				ConchBlessing.printError(string.format("[A-] smelted trinket %d could not be removed for demotion", TID + entry[2]))
-				return demoted
-			end
-			local ok, added = pcall(function() return player:AddSmeltedTrinket(TID_B + entry[2], false) end)
-			if not ok or added == false then
-				ConchBlessing.printError(string.format("[A-] smelted B- %d could not be added", TID_B + entry[2]))
-			end
-			demoted = demoted + 1
-		end
-	end
-	return demoted
-end
-
--- A real hit demotes A- to B- (self-damage and Sacrifice Room spikes are not
--- hits, scripts/lib/player_hits.lua).
+-- A real hit demotes a carried A- to B- (self-damage and Sacrifice Room spikes
+-- are not hits, scripts/lib/player_hits.lua). A smelted A- is fixed for good and
+-- keeps its effect (user rule, 2026-10-23).
 Hits.register("A_MINUS", function(_, ent, amount, flags, src, countdown)
 	local player = ent and ent:ToPlayer() or nil
 	if not player then return end
@@ -283,11 +254,10 @@ Hits.register("A_MINUS", function(_, ent, amount, flags, src, countdown)
 	if not TID_B or TID_B <= 0 then return end
 	if not hasTrinketEffect(player, TID) then return end
 
-	local demoted = demoteHeld(player) + demoteSmelted(player)
-	return demoted > 0
+	return demoteHeld(player) > 0
 end)
 
 -- Test hooks for scripts/dev/rng_probe.lua. Pure helpers, no gameplay use.
 ConchBlessing.aminus._test = { computeRandomSplit = computeRandomSplit, demoteHeld = demoteHeld,
-	demoteSmelted = demoteSmelted, updatePlayerMultipliers = updatePlayerMultipliers }
+	updatePlayerMultipliers = updatePlayerMultipliers }
 return true
