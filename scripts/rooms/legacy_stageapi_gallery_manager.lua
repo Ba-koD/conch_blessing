@@ -4544,11 +4544,14 @@ local function isHourglassCopyCard(player)
 end
 
 function M.onInputAction(_, entity, inputHook, action)
-    if not ConchBlessing.GalleryManager.isBackendActive(M) then return end
-    if M._runLifecycleReady ~= true then return end
+    -- The engine asks for every action of every player several times a frame;
+    -- only the item and card keys matter here, so they are checked first and
+    -- the save lookup behind isBackendActive runs only for them.
     if action ~= ButtonAction.ACTION_ITEM and action ~= ButtonAction.ACTION_PILLCARD then
         return
     end
+    if not ConchBlessing.GalleryManager.isBackendActive(M) then return end
+    if M._runLifecycleReady ~= true then return end
     local player = entity and entity:ToPlayer() or nil
     if not player or not M.isCurrentGalleryRoom() then return end
     local blocksHourglass = action == ButtonAction.ACTION_ITEM

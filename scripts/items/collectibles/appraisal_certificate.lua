@@ -70,6 +70,8 @@ function M.onUseItem(_, _, _, player)
 end
 
 function M.onInputAction(_, entity, hook, action)
+    -- Asked for every action of every player each frame: the key comes first.
+    if action ~= ButtonAction.ACTION_ITEM and action ~= ButtonAction.ACTION_PILLCARD then return end
     local player = entity and entity:ToPlayer() or nil
     if not player or player:GetNumCoins() >= M.config.costCoins then return end
     local item = ConchBlessing.ItemData.APPRAISAL_CERTIFICATE.id
