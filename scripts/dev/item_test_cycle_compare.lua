@@ -114,7 +114,7 @@ local function close(plan, validate, required, separateMetadata)
             ctx.recipe, ctx.arm, w.name, status, C.total(w.before), C.total(w.after), decreasing, preview,
             tostring(delta.lost), tostring(delta.known), w.frames, tostring(Game():GetSeeds():GetStartSeed()), contract, metadata, observerMode,
             tostring(ctx.expectedPool), source, audit and tostring(audit.same) or "NA", audit and tostring(audit.cross) or "NA",
-            C.signature(w.before, false), C.signature(w.after, false), delta.detail, table.concat(trace, ","),
+            C.signature(w.before, false, "exact"), C.signature(w.after, false, "exact"), delta.detail, table.concat(trace, ","),
             (w.reason or "native observation") .. (separateMetadata and "; metadata: " .. w.metadataReason or ""))
     end)
     if validate then
@@ -207,6 +207,15 @@ local function fixture(player, index, seed)
     return p
 end
 
+-- The same provider choice as Oath's held-bonus count, with the public
+-- query/set/exhaust APIs a fixture needs to pin and restore it.
+local function goldenProvider()
+    local provider = Epiphany and type(Epiphany.HasGoldenItem) == "function" and Epiphany or GoldenItems
+    if provider and type(provider.HasGoldenItem) == "function" and type(provider.SetGoldenItem) == "function"
+        and type(provider.ExaustGoldenItem) == "function" then return provider end
+    return nil
+end
+
 local function fixtureEvidence(ctx)
     local spawned, live = {}, {}
     for _, row in ipairs(ctx.spawnedFixtures or {}) do
@@ -267,10 +276,8 @@ local function prepare(plan, recipe, arm)
     end)
     if recipe.gold and arm == "oath" then
         plan.require("optional held-active golden provider", function(_, ctx)
-            local provider = Epiphany and type(Epiphany.HasGoldenItem) == "function" and Epiphany or GoldenItems
-            ctx.gold = provider
-            return (provider and type(provider.HasGoldenItem) == "function" and type(provider.SetGoldenItem) == "function"
-                and type(provider.ExaustGoldenItem) == "function") and true or nil, "golden public query/set/exhaust APIs required"
+            ctx.gold = goldenProvider()
+            return ctx.gold and true or nil, "golden public query/set/exhaust APIs required"
         end)
     end
     visit(plan, recipe)
@@ -312,10 +319,23 @@ local function prepare(plan, recipe, arm)
                     CollectibleType.COLLECTIBLE_BREAKFAST, CollectibleType.COLLECTIBLE_INNER_EYE}
                 for n = 1, recipe.tail do assert(p:AddCollectibleCycle(ids[(n - 1) % #ids + 1]), "fixture append rejected") end
             end
-            p.Price, p.ShopItemId, p.AutoUpdatePrice = recipe.metadata and i * 5 or 0, -1, false
+            -- Every native turn re-initializes a rotating pedestal ("Entity Pickup
+            -- Initialized" per turn in log.txt) and turns a forced
+            -- AutoUpdatePrice=false back to true in both arms; a fixed price is
+            -- then re-derived. Write the state a native turn keeps, so a window
+            -- measures the card or Oath instead of the engine's first turn. The
+            -- metadata recipe mixes a paid and an unpriced pedestal.
+            p.Price = recipe.metadata and (i == 2 and 0 or 15) or 0
+            p.ShopItemId, p.AutoUpdatePrice = -1, true
             p.OptionsPickupIndex = recipe.metadata and 7201 or 0
         end
-        ctx.fixtures = C.snapshot()
+        ctx.written, ctx.turned = C.snapshot(), {}
+    end)
+    plan.waitUntil(function(_, ctx) return C.observeTurns(ctx.written, ctx.turned) end, 120,
+        "native turn observed on every rotating fixture")
+    plan.act(function(_, ctx) ctx.fixtures = C.snapshot() end)
+    plan.require("fixture shop/deal contract survives a native turn before either implementation", function(_, ctx)
+        return C.sameMetadata(ctx.written, ctx.fixtures)
     end)
     plan.require("unowned fixture is valid before either implementation", function(player, ctx)
         if player:HasCollectible(ConchBlessing.ItemData.SEVERED_OATH.id) then return false, "Oath contaminated native baseline" end
@@ -323,25 +343,41 @@ local function prepare(plan, recipe, arm)
             local expected = recipe.tail and recipe.tail + 1 or recipe.nativeSize
             if expected and #row.ring ~= expected then return false, "native choices=" .. #row.ring .. " expected=" .. expected end
         end
-        return true, C.signature(ctx.fixtures, false)
+        return true, C.signature(ctx.fixtures, false, "exact")
     end)
     -- Both arms enter the same kind of room with the same initial fixtures.
     -- Pools/run seeds are independent: this is NOT an exact random-ID A/B test.
     enter(plan, "origin")
-    plan.act(function(player, ctx)
-        local id = ConchBlessing.ItemData.SEVERED_OATH.id
-        if arm == "oath" then
-            player:AddCollectible(id, 0, false, ActiveSlot.SLOT_PRIMARY)
-            if ctx.gold then
-                local wasGold = ctx.gold:HasGoldenItem(id, player, ActiveSlot.SLOT_PRIMARY) == true
-                ctx.cleanupFns[#ctx.cleanupFns + 1] = function()
-                    if wasGold then ctx.gold:SetGoldenItem(id, player, ActiveSlot.SLOT_PRIMARY)
-                    else ctx.gold:ExaustGoldenItem(id, player, ActiveSlot.SLOT_PRIMARY) end
-                end
-                ctx.gold:SetGoldenItem(id, player, ActiveSlot.SLOT_PRIMARY)
-                assert(ctx.gold:HasGoldenItem(id, player, ActiveSlot.SLOT_PRIMARY) == true, "held active upgrade rejected")
+    if arm == "oath" then
+        plan.act(function(player, ctx)
+            local id, slot = ConchBlessing.ItemData.SEVERED_OATH.id, ActiveSlot.SLOT_PRIMARY
+            player:AddCollectible(id, 0, false, slot)
+            -- The held active's golden state decides +1 or +2. Golden Items keeps
+            -- it per ID in its run save, and it outlived the bench's run restarts:
+            -- every ordinary arm gained +2 while its save1.dat held 1001=true.
+            -- Pin each arm through the public API and restore the prior value.
+            local provider = ctx.gold or goldenProvider()
+            ctx.goldProvider = provider
+            if not provider then return end
+            local wasGold = provider:HasGoldenItem(id, player, slot) == true
+            local want = recipe.gold == true
+            ctx.goldBefore = wasGold
+            if wasGold == want then return end
+            ctx.cleanupFns[#ctx.cleanupFns + 1] = function()
+                if wasGold then provider:SetGoldenItem(id, player, slot) else provider:ExaustGoldenItem(id, player, slot) end
             end
-        end
+            if want then provider:SetGoldenItem(id, player, slot) else provider:ExaustGoldenItem(id, player, slot) end
+        end)
+        plan.require("held Severed Oath is " .. (recipe.gold and "golden" or "ordinary") .. " for this arm", function(player, ctx)
+            local provider = ctx.goldProvider
+            if not provider then return true, "no golden provider; the held active is ordinary" end
+            local id = ConchBlessing.ItemData.SEVERED_OATH.id
+            local now = provider:HasGoldenItem(id, player, ActiveSlot.SLOT_PRIMARY) == true
+            return now == (recipe.gold == true), string.format("golden=%s before=%s%s", tostring(now),
+                tostring(ctx.goldBefore), ctx.goldBefore ~= (recipe.gold == true) and " (pinned for this arm, restored at cleanup)" or "")
+        end)
+    end
+    plan.act(function(player, ctx)
         if recipe.roomType then
             -- A real unrelated preview leaves misleading GetLastPool history.
             -- It is setup, outside the measured grant, in both independent arms.
@@ -360,11 +396,21 @@ local function prepare(plan, recipe, arm)
     plan.check("no new same-pedestal or cross-pedestal overlaps (existing duplicates preserved)", function(_, ctx)
         return ctx.window.audit.overlap, ctx.window.audit.overlapDetail
     end)
-    plan.check("no charge when the full queue delivered no additional choice", function(_, ctx)
+    local function fullQueueCharge(ctx)
         local w = ctx.window
         if C.total(w.after) ~= C.total(w.before) then return true, "bonus delivered; draw amplification is reported as DIAG" end
         return C.noCharge(w)
-    end)
+    end
+    if arm == "oath" then
+        plan.check("no charge when the full queue delivered no additional choice", function(_, ctx) return fullQueueCharge(ctx) end)
+    else
+        -- Oath's own contract (insert before a decreasing draw). The one-shot
+        -- card draws first; its cost is the control's evidence, not a FAIL.
+        plan.note("native full-queue charge (engine card control, not an Oath contract)", function(_, ctx)
+            local ok, detail = fullQueueCharge(ctx)
+            return (ok == true and "none" or ok == false and "charged" or "unknown") .. ": " .. tostring(detail)
+        end)
+    end
     phase(plan, "idle", nil, 96, unchanged)
 end
 
@@ -442,9 +488,11 @@ local function dice(plan)
         end, 8, function(player, _, w)
             if #w.after ~= #w.before then return false, "reroll changed pedestal count" end
             local expected = {}
-            for _, row in ipairs(w.before) do expected[row.anchor] = C.metadata(row) end
+            for _, row in ipairs(w.before) do expected[row.anchor] = C.contract(row) end
             for _, row in ipairs(w.after) do
-                if expected[row.anchor] ~= C.metadata(row) then return false, "reroll changed pedestal price/options contract" end
+                if expected[row.anchor] ~= C.contract(row) then
+                    return false, "reroll changed pedestal price/options contract at " .. row.anchor .. " to " .. C.metadata(row)
+                end
                 if player:HasCollectible(ConchBlessing.ItemData.SEVERED_OATH.id) and #row.ring < 2 then return false, "held Oath lost its reroll bonus" end
             end
             return true, "actual dice result; IDs may change; D100 may also remove the held active"

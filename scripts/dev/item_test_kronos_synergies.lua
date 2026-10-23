@@ -160,18 +160,18 @@ local function extended(plan,name)
         end
     elseif name=="buddy_in_a_box" or name=="lil_delirium" then
         plan.check("one stable floor pick per absorbed copy",function(player,ctx)
-            local picks=ConchBlessing.SaveManager.GetRunSave(nil).kronos.floorPicks
+            local picks=ConchBlessing.SaveManager.GetRunSave(player).kronos.floorPicks
             if not picks or #picks.ids~=2 then return false,"expected two floor picks" end
             ctx.pickIds=table.concat(picks.ids,",")
             return true,ctx.pickIds
         end)
         plan.wait(30)
         plan.check("same-floor updates do not reroll picks",function(player,ctx)
-            return table.concat(ConchBlessing.SaveManager.GetRunSave(nil).kronos.floorPicks.ids,",")==ctx.pickIds,"stable picks"
+            return table.concat(ConchBlessing.SaveManager.GetRunSave(player).kronos.floorPicks.ids,",")==ctx.pickIds,"stable picks"
         end)
         S.newFloor(plan,2)
         plan.check("new floor retains exactly two effect picks",function(player)
-            return H.expect(#ConchBlessing.SaveManager.GetRunSave(nil).kronos.floorPicks.ids,2)
+            return H.expect(#ConchBlessing.SaveManager.GetRunSave(player).kronos.floorPicks.ids,2)
         end)
     elseif name=="mongo_baby" then
         plan.check("actual Minisaac count matches absorbed copies",function()
@@ -284,6 +284,13 @@ for _,name in ipairs(names) do
             ctx.totalGiven=0
             if spec.grant then
                 ctx.grantId=assert(CollectibleType["COLLECTIBLE_" .. spec.grant],"unresolved promised grant " .. spec.grant)
+                if name=="seraphim" then
+                    -- The owned Sacred Heart plus Kronos's grant take shot speed
+                    -- to 0.5. Stat Change Commands lifts anything under 0.6 and
+                    -- keeps the deficit as a run-long offset, which would read as
+                    -- a Kronos leftover. Speed Ball (+0.2) keeps it at 0.7.
+                    player:AddCollectible(CollectibleType.COLLECTIBLE_SPEED_BALL,0,false)
+                end
                 -- A pre-owned copy must survive eventual loss of Kronos.
                 player:AddCollectible(ctx.grantId,0,false)
             end

@@ -128,12 +128,12 @@ for key, spec in pairs({ TIME_POWER = { namespace = "timepowertrinket", field = 
     TIME_LUCK = { namespace = "timelucktrinket", field = "luckBonus", rate = 0.01 } }) do
     C[key] = { permanent = true, beforeChange = function(player, ctx, n)
         if n == 0 then
-            local s = ConchBlessing[spec.namespace].state.perPlayer[tostring(player:GetPlayerType())]
+            local s = ConchBlessing[spec.namespace].getPlayerState(player)
             ctx.dropTotal = s[spec.field] + s.permanentBonus
         end
     end, stage = function(plan, id, n)
         local function state(player)
-            return ConchBlessing[spec.namespace].state.perPlayer[tostring(player:GetPlayerType())]
+            return ConchBlessing[spec.namespace].getPlayerState(player)
         end
         plan.act(function(player, ctx)
             local s = state(player)

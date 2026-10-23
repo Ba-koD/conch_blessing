@@ -522,8 +522,9 @@ class CycleCompareTests(unittest.TestCase):
     def test_revisit_separates_price_drift_from_cycle_identity_and_pool_cost(self):
         self.load_plans()
         self.lua.execute('''
-            local old={key='10:71',anchor='a',seed=71,ring={1,2},price=12,options=7,shop=-1,auto=true}
-            local new={key='20:71',anchor='a',seed=71,ring={2,1},price=15,options=7,shop=-1,auto=true}
+            -- A fixed price (AutoUpdatePrice off) is exact; its drift stays a FAIL.
+            local old={key='10:71',anchor='a',seed=71,ring={1,2},price=12,options=7,shop=-1,auto=false}
+            local new={key='20:71',anchor='a',seed=71,ring={2,1},price=15,options=7,shop=-1,auto=false}
             local pool={entries={},removed={},blacklist={}}
             C.snapshot=function() return {new} end; C.poolSnapshot=function() return pool end
             Game=function() return {GetFrameCount=function() return 10 end} end
@@ -536,6 +537,159 @@ class CycleCompareTests(unittest.TestCase):
             new.seed=71;new.ring={1,3};close({},ctx);assert(not ctx.window.ok,'revisit resurrected choice passed')
             new.ring={2,1};ctx.window.events={{decrease=true}};close({},ctx)
             assert(not ctx.window.ok,'metadata failure concealed repeat pool draw')
+        ''')
+
+    def test_auto_updated_amount_is_engine_owned_but_every_contract_field_stays_strict(self):
+        self.lua.execute('''
+            local function row(price,auto,options,shop)
+                return {anchor='a',seed=1,key='1:1',ring={1,2},price=price,options=options or 7201,shop=shop or -1,auto=auto}
+            end
+            -- Logged in game: the auto price followed the displayed choice 15>4>15.
+            local ok,detail=C.sameMetadata({row(15,true)},{row(4,true)})
+            assert(ok and detail:find('a:15>4',1,true),'engine re-derived auto price failed or was hidden')
+            assert(C.addition(row(15,true),{anchor='a',ring={1,2,3},price=4,options=7201,shop=-1,auto=true},1))
+            assert(C.signature({row(15,true)},'anchor')==C.signature({row(4,true)},'anchor'))
+            assert(C.signature({row(15,true)},'anchor','exact')~=C.signature({row(4,true)},'anchor','exact'),'DIAG lost exact price')
+            for _,case in ipairs({
+                {row(15,true),row(0,true),'paid pedestal became unpriced'},
+                {row(15,true),row(-1,true),'coin price became a heart deal'},
+                {row(0,true),row(15,true),'unpriced pedestal became paid'},
+                {row(15,true),row(15,false),'automatic price frozen'},
+                {row(0,false),row(0,true),'forced fixed flag flip hidden'},
+                {row(12,false),row(15,false),'fixed price drift hidden'},
+                {row(15,true),row(15,true,0),'option group lost'},
+                {row(15,true),row(15,true,7201,-2),'shop/deal id changed'}}) do
+                local passed,why=C.sameMetadata({case[1]},{case[2]})
+                assert(passed==false and why:find('before=',1,true),case[3])
+                assert(C.signature({case[1]},'anchor')~=C.signature({case[2]},'anchor'),case[3]..' (signature)')
+                local after=case[2]; after.ring={1,2,3}
+                assert(not C.addition(case[1],after,1),case[3]..' (addition)')
+            end
+        ''')
+
+    def native_turn_fixture(self, recipe):
+        self.load_plans()
+        self.lua.execute('''
+            CollectibleType={COLLECTIBLE_BREAKFAST=25,COLLECTIBLE_SAD_ONION=1,COLLECTIBLE_INNER_EYE=2}
+            Isaac={GetItemConfig=function() return {GetCollectible=function(_,id) return id>0 end} end}
+            GetPtrHash=function(p) return p.ptr end
+            pickups={}
+            for i=1,3 do
+                local p={ptr=i,InitSeed=740000+i,SubType=1,Position={X=i*80,Y=200},tail={},
+                    Price=77,ShopItemId=9,AutoUpdatePrice=false,OptionsPickupIndex=3}
+                function p:RemoveCollectibleCycle() self.tail={} end
+                function p:AddCollectibleCycle(id) self.tail[#self.tail+1]=id; return true end
+                function p:GetCollectibleCycle() return self.tail end
+                pickups[i]=p
+            end
+            C.stock=function() return pickups end
+        ''')
+        self.lua.execute(f"ops=build('compare_{recipe}')")
+        self.lua.execute('''
+            for i,op in ipairs(ops) do
+                if op.kind=='waitUntil' and op.c=='native turn observed on every rotating fixture' then
+                    write,turnWait,settle,contract=ops[i-1],op,ops[i+1],ops[i+2]
+                end
+            end
+            assert(write.kind=='act' and settle.kind=='act' and contract.kind=='require')
+            assert(contract.a:find('survives a native turn',1,true))
+            ctx={}; write.a({},ctx)
+        ''')
+
+    def test_fixture_starts_from_the_state_a_native_turn_keeps(self):
+        self.native_turn_fixture("duplicates_metadata_native")
+        self.lua.execute('''
+            for i,p in ipairs(pickups) do
+                -- The logged engine turn resets a forced false to true.
+                assert(p.AutoUpdatePrice==true and p.ShopItemId==-1 and p.OptionsPickupIndex==7201)
+                assert(p.Price==(i==2 and 0 or 15) and #p.tail==4,'metadata fixture lost its paid/unpriced mix')
+            end
+            local done,why=turnWait.a({},ctx)
+            assert(not done and why:find('head=1',1,true),'baseline taken before any native turn')
+            pickups[1].SubType=25; assert(not turnWait.a({},ctx))
+            pickups[1].SubType=1; pickups[2].SubType=25; pickups[3].SubType=25
+            assert(turnWait.a({},ctx),'a turn back to the head was forgotten')
+            pickups[1].Price=4 -- engine re-derives an automatic price after the turn
+            settle.a({},ctx); local ok,detail=contract.b({},ctx)
+            assert(ok and detail:find('15>4',1,true),'engine-owned amount failed the prerequisite')
+            pickups[3].AutoUpdatePrice=false; settle.a({},ctx)
+            assert(contract.b({},ctx)==false,'turn that changed the contract passed the prerequisite')
+            pickups[3].AutoUpdatePrice=true; pickups[2].Price=15; settle.a({},ctx)
+            assert(contract.b({},ctx)==false,'unpriced pedestal became paid before either implementation')
+            pickups[2].Price=0; pickups[3]=nil
+            local done2,why2=turnWait.a({},{written=ctx.written,turned={}})
+            assert(not done2 and why2:find(':missing',1,true),'missing fixture accepted as turned')
+        ''')
+
+    def test_single_choice_fixture_needs_no_turn_and_keeps_zero_price(self):
+        self.native_turn_fixture("capacity0_oath")
+        self.lua.execute('''
+            for _,p in ipairs(pickups) do assert(p.Price==0 and p.AutoUpdatePrice==true and p.OptionsPickupIndex==0) end
+            assert(turnWait.a({},ctx),'a one-choice pedestal cannot turn')
+            settle.a({},ctx); assert(contract.b({},ctx))
+        ''')
+
+    def test_each_oath_arm_pins_the_held_golden_state_and_restores_it(self):
+        self.load_plans()
+        self.lua.execute('''
+            ActiveSlot={SLOT_PRIMARY=0}; ConchBlessing.ItemData={SEVERED_OATH={id=1001}}
+            -- Golden Items' shared per-ID state, left true by an earlier run.
+            local gold={list={['1001']=true},ignore=false}
+            function gold:HasGoldenItem(id) return self.list[tostring(id)]==true end
+            function gold:SetGoldenItem(id) if not self.ignore then self.list[tostring(id)]=true end end
+            function gold:ExaustGoldenItem(id) if not self.ignore then self.list[tostring(id)]=false end end
+            GoldenItems=gold
+            local function steps(name)
+                local ops=build('compare_'..name)
+                for i,op in ipairs(ops) do
+                    if op.kind=='require' and op.a:find('^held Severed Oath is') then return ops[i-1],op,ops end
+                end
+                return nil,nil,ops
+            end
+            local player={AddCollectible=function(_,id) assert(id==1001); added=added+1 end}
+            for _,case in ipairs({{'capacity0_oath',true,false,'ordinary'},{'golden0_oath',false,true,'golden'},
+                                  {'capacity0_oath',false,false,'ordinary'},{'golden0_oath',true,true,'golden'}}) do
+                gold.list['1001']=case[2]; added=0
+                local act,check=steps(case[1]); assert(check.a:find(case[4],1,true))
+                local ctx={cleanupFns={},gold=case[3] and gold or nil}
+                act.a(player,ctx); assert(added==1)
+                local ok,detail=check.b(player,ctx)
+                assert(ok==true and gold.list['1001']==case[3],case[1]..' did not hold the arm golden state: '..detail)
+                assert((case[2]~=case[3])==(detail:find('pinned',1,true)~=nil),'pinning not reported')
+                for _,fn in ipairs(ctx.cleanupFns) do fn() end
+                assert(gold.list['1001']==case[2],'provider state not restored after '..case[1])
+            end
+            gold.list['1001']=true; gold.ignore=true
+            local act,check=steps('capacity0_oath'); local ctx={cleanupFns={}}
+            act.a(player,ctx); assert(check.b(player,ctx)==false,'golden held Oath accepted as the ordinary arm')
+            GoldenItems=nil; gold.ignore=false
+            act,check=steps('capacity0_oath'); ctx={cleanupFns={}}
+            act.a(player,ctx); assert(check.b(player,ctx)==true and #ctx.cleanupFns==0)
+            local _,none=steps('capacity0_native'); assert(none==nil,'native arm holds no Severed Oath')
+        ''')
+
+    def test_native_full_queue_cost_is_control_evidence_while_oath_stays_strict(self):
+        self.load_plans()
+        self.lua.execute('''
+            local full='no charge when the full queue delivered no additional choice'
+            local function window()
+                local ring={1,25,1,25,2,25,1,25,2}
+                return {before={{anchor='a',ring=ring}},after={{anchor='a',ring=ring}},
+                    events={{decrease=true}},callbackKnown=true,
+                    poolBefore={entries={},removed={},blacklist={}},poolAfter={entries={},removed={},blacklist={}}}
+            end
+            for _,name in ipairs({'capacity8','golden8'}) do
+                local strict,note
+                for _,op in ipairs(build('compare_'..name..'_oath')) do if op.a==full then strict=op end end
+                assert(strict and strict.kind=='check','Oath full-queue charge must stay a strict check')
+                assert(strict.b({},{window=window()})==false,'Oath charge without a choice passed')
+                for _,op in ipairs(build('compare_'..name..'_native')) do
+                    assert(op.a~=full,'native card cost reported as an Oath FAIL')
+                    if op.kind=='note' and op.a:find('native full-queue charge',1,true) then note=op end
+                end
+                local detail=note.b({},{window=window()})
+                assert(detail:find('^charged: decreasing callbacks=1'),'native cost evidence lost: '..detail)
+            end
         ''')
 
 

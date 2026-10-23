@@ -415,8 +415,8 @@ local function flagNames(flags)
 end
 
 local function playerState(namespace, player)
-    local state = ConchBlessing[namespace] and ConchBlessing[namespace].state
-    return state and state.perPlayer and state.perPlayer[tostring(player:GetPlayerType())] or {}
+    local module = ConchBlessing[namespace]
+    return module and module.getPlayerState and module.getPlayerState(player) or {}
 end
 
 local function showsIcon(player, key)
@@ -610,7 +610,7 @@ case("hit_icons", function(plan, penny)
         plan.check(phase.name .. (phase.hit and " reaches every holder" or " reaches none"), function(player, ctx)
             local power = playerState("timepowertrinket", player)
             local money = playerState("timemoney", player)
-            local minus = ConchBlessing._minusNoHit[player.ControllerIndex or 0] == false
+            local minus = not ConchBlessing.minuschain.noHit(player)
             local paused = (power.pausedUntilFrame or 0) > TimerClock.now()
             local fined = (money.pendingPenalty or 0) > ctx.money
             local ok = minus == phase.hit and fined == phase.hit and (paused == phase.hit or not phase.hit)
@@ -621,7 +621,7 @@ case("hit_icons", function(plan, penny)
             damage.on = false
             if ctx.fixture and ctx.fixture:Exists() then ctx.fixture:Remove() end
             ctx.fixture = nil
-            ConchBlessing._minusNoHit[player.ControllerIndex or 0] = true
+            ConchBlessing.minuschain.setNoHit(player, true)
         end)
     end
     plan.section(KEY .. " / hit_icons / A- demotion")

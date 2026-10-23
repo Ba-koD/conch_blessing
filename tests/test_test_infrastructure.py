@@ -139,7 +139,7 @@ class RunnerInfrastructureTests(unittest.TestCase):
             Game=function() return {GetRoom=function() return {IsClear=function() return true end} end,
                 GetLevel=function() return {GetStage=function() return 1 end,
                 GetCurrentRoomDesc=function() return {ListIndex=0} end,GetDimension=function() return 0 end} end} end
-            ConchBlessing._minusNoHit={[0]=true}
+            local noHit=true; ConchBlessing.minuschain={noHit=function() return noHit end}
             ConchBlessing.getUnifiedMultiplierState=function() return {} end
             local isolation=require('scripts.dev.test_isolation'); local ctx={}; local verify
             isolation.begin({act=function(fn) fn(player,ctx) end,wait=function() end})
@@ -150,7 +150,7 @@ class RunnerInfrastructureTests(unittest.TestCase):
             itemCount=1; assert(not verify(player,ctx)); itemCount=0
             player.Damage=4; assert(not verify(player,ctx)); player.Damage=3.5
             queueEmpty=false; assert(not verify(player,ctx)); queueEmpty=true
-            ConchBlessing._minusNoHit[0]=false; assert(not verify(player,ctx))
+            noHit=false; assert(not verify(player,ctx))
         ''')
 
 
@@ -195,22 +195,23 @@ class ProductionContractTests(unittest.TestCase):
             ModCallbacks={}; CacheFlag={CACHE_DAMAGE=1}; EntityType={}
             player={held=true}; function player:GetPlayerType() return 0 end
             function player:HasTrinket() return self.held end
+            function player:GetTrinketMultiplier() return self.held and 1 or 0 end
             function player:ToPlayer() return self end
             function player:AddCacheFlags() end
             function player:EvaluateItems() end
+            GetPtrHash=function() return 1 end
             game={GetFrameCount=function() return frame end,GetNumPlayers=function() return 1 end,
                 GetPlayer=function() return player end}
             Game=function() return game end
             Isaac={GetPlayer=function() return player end}
             ConchBlessing={ItemData={TIME_POWER={id=7}},printDebug=function() end,
                 SaveManager={GetRunSave=function() return save end,Save=function() end},
-                DamageUtils={isSelfInflictedDamage=function() return false end},
-                TrinketUtils={getTrinketCounts=function() return 1,0,false end}}
+                DamageUtils={isSelfInflictedDamage=function() return false end}}
             require('scripts.items.trinkets.time_power')
             local item=ConchBlessing.timepowertrinket
             item.onGameStarted(nil,false)
             local owner={}; Clock=require('scripts.lib.timer_clock'); Clock.begin(owner)
-            item.onUpdate(); local state=item.state.perPlayer['0']; local earned=state.damageBonus
+            item.onUpdate(); local state=item.getPlayerState(player); local earned=state.damageBonus
             item.onEntityTakeDamage(nil,player,1,0,nil,30)
             Clock.advance(owner,1899); item.onUpdate(); assert(state.damageBonus==earned)
             Clock.advance(owner,1900); item.onUpdate()

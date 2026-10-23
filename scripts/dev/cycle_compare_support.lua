@@ -18,16 +18,35 @@ function M.canonical(ring)
     return best
 end
 
+-- Exact observed values, for DIAG evidence only.
 function M.metadata(row)
     return table.concat({tostring(row.price), tostring(row.options), tostring(row.shop), tostring(row.auto)}, ":")
 end
 
+local function priceKind(price)
+    if type(price) ~= "number" then return "price?" .. tostring(price) end
+    return price > 0 and "coins" or price == 0 and "unpriced" or "deal"
+end
+
+-- The shop/deal contract a comparison may require. Options, ShopItemId and
+-- AutoUpdatePrice are exact. While AutoUpdatePrice is set the engine owns the
+-- amount and re-derives it from the displayed choice on every update and
+-- native turn (measured: one paid pedestal read 15, then 4 while modded item
+-- 926 was displayed, then 15 again), so only the price kind is preserved
+-- there. A fixed price (AutoUpdatePrice off) stays exact.
+function M.contract(row)
+    local price = row.auto == true and "auto-" .. priceKind(row.price) or tostring(row.price)
+    return table.concat({price, tostring(row.options), tostring(row.shop), tostring(row.auto)}, ":")
+end
+
+-- includeMetadata: false omits it, "exact" shows observed values (DIAG), and
+-- anything else compares the contract.
 function M.signature(rows, identity, includeMetadata)
     local result = {}
     for _, row in ipairs(rows) do
         local key = identity == "anchor" and row.anchor .. ":" .. row.seed or identity and row.key
-        result[#result + 1] = (key and key .. "=" or "") .. M.canonical(row.ring)
-            .. (includeMetadata == false and "" or "@" .. M.metadata(row))
+        local metadata = includeMetadata == false and "" or "@" .. (includeMetadata == "exact" and M.metadata(row) or M.contract(row))
+        result[#result + 1] = (key and key .. "=" or "") .. M.canonical(row.ring) .. metadata
     end
     table.sort(result)
     return table.concat(result, "|")
@@ -150,7 +169,9 @@ function M.cycleAddition(before, after, extra)
 end
 
 function M.addition(before, after, extra)
-    if M.metadata(before) ~= M.metadata(after) then return false, "price/options/shop/auto changed" end
+    if M.contract(before) ~= M.contract(after) then
+        return false, "price/options/shop/auto changed before=" .. M.metadata(before) .. " after=" .. M.metadata(after)
+    end
     return M.cycleAddition(before, after, extra)
 end
 
@@ -186,11 +207,37 @@ end
 -- Metadata is still a strict assertion, but its failure must not conceal the
 -- independent cycle/cost result or abort copy/rewrite tests with a valid cycle.
 function M.sameMetadata(before, after)
+    local rederived = {}
     local ok, detail = matchRows(before, after, function(a, b)
         local old, new = M.metadata(a), M.metadata(b)
-        return old == new, "price/options/shop/auto before=" .. old .. " after=" .. new
+        if M.contract(a) ~= M.contract(b) then return false, "price/options/shop/auto before=" .. old .. " after=" .. new end
+        if old ~= new then rederived[#rederived + 1] = a.anchor .. ":" .. tostring(a.price) .. ">" .. tostring(b.price) end
+        return true
     end)
-    return ok, detail or "price/options/shop/auto preserved"
+    if not ok then return ok, detail end
+    table.sort(rederived)
+    return true, "price/options/shop/auto preserved"
+        .. (#rederived > 0 and " (engine re-derived auto-updated prices " .. table.concat(rederived, ",") .. ")" or "")
+end
+
+-- A rotating pedestal turns natively; one observed turn per fixture shows the
+-- written contract against the engine's own re-initialization before either
+-- implementation runs. turned[anchor] latches, since a turn may return to the head.
+function M.observeTurns(written, turned)
+    local live, pending = {}, {}
+    for _, p in ipairs(M.stock()) do live[M.anchor(p)] = p end
+    for _, row in ipairs(written) do
+        local distinct = false
+        for _, id in ipairs(row.ring) do if id ~= row.ring[1] then distinct = true end end
+        local p = live[row.anchor]
+        if not p then
+            pending[#pending + 1] = row.anchor .. ":missing"
+        elseif distinct and not turned[row.anchor] then
+            if p.SubType ~= row.ring[1] then turned[row.anchor] = true
+            else pending[#pending + 1] = row.anchor .. ":head=" .. tostring(p.SubType) end
+        end
+    end
+    return #pending == 0, "awaiting native turn: " .. table.concat(pending, ",")
 end
 
 function M.stock()
@@ -221,6 +268,10 @@ function M.describeEntity(entity, duringRemoval)
         tostring(sprite and sprite:GetAnimation()))
 end
 
+function M.anchor(p)
+    return string.format("%.0f,%.0f", p.Position.X, p.Position.Y)
+end
+
 function M.snapshot()
     local result = {}
     for _, p in ipairs(M.stock()) do
@@ -229,7 +280,7 @@ function M.snapshot()
         M.canonical(ring)
         for _, id in ipairs(ring) do assert(Isaac.GetItemConfig():GetCollectible(id), "missing item config " .. id) end
         result[#result + 1] = {ring = ring, key = tostring(GetPtrHash(p)) .. ":" .. p.InitSeed,
-            seed = p.InitSeed, anchor = string.format("%.0f,%.0f", p.Position.X, p.Position.Y),
+            seed = p.InitSeed, anchor = M.anchor(p),
             price = p.Price, options = p.OptionsPickupIndex, shop = p.ShopItemId, auto = p.AutoUpdatePrice}
     end
     return result

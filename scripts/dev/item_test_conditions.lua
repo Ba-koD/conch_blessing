@@ -51,7 +51,7 @@ for key, spec in pairs({ TIME_POWER={"timepowertrinket","damageBonus",0.006},
     TIME_TEAR={"timeteartrinket","spsBonus",0.0066}, TIME_LUCK={"timelucktrinket","luckBonus",0.01} }) do
     S.add(key,"hit_pause_resume",{conditions=true},function(plan,id)
         local function bonus(player)
-            return ConchBlessing[spec[1]].state.perPlayer[tostring(player:GetPlayerType())][spec[2]]
+            return ConchBlessing[spec[1]].getPlayerState(player)[spec[2]]
         end
         plan.section(key .. " / accelerated 1800-tick pause boundaries")
         plan.act(function(player,ctx) H.beginClock(ctx); player:AddTrinket(id,false) end)
@@ -127,7 +127,7 @@ S.add("TIME_MONEY","bffs_period_and_penalty",{synergies=true,conditions=true},fu
     plan.require("pickup spawn observer available",function() return ModCallbacks.MC_POST_PICKUP_INIT and true or nil,"requires pickup-init events" end)
     plan.act(function(player,ctx)
         H.beginClock(ctx)
-        ctx.cycleStart=ConchBlessing.timemoney.state.perPlayer[tostring(player:GetPlayerType())].lastDropFrame
+        ctx.cycleStart=ConchBlessing.timemoney.getPlayerState(player).lastDropFrame
         player:AddCoins(80-player:GetNumCoins())
         ctx.coins=H.capturePickups(PickupVariant.PICKUP_COIN,true)
         player:AddCollectible(id,0,false)

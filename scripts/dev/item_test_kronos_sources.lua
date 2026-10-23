@@ -97,8 +97,8 @@ S.add("KRONOS","synergy_box_of_friends",{synergies=true,conditions=true},functio
     plan.check("Box does not create a Demon Baby",function() return H.expect(#Isaac.FindByType(EntityType.ENTITY_FAMILIAR,FamiliarVariant.DEMON_BABY,-1),0) end)
     H.clearAward(plan,false)
     checkStats(2,0.06)
-    plan.check("Box does not multiply permanent Paschal earnings",function()
-        return H.expect(ConchBlessing.SaveManager.GetRunSave(nil).kronos.paschalHundredths,6)
+    plan.check("Box does not multiply permanent Paschal earnings",function(player)
+        return H.expect(ConchBlessing.SaveManager.GetRunSave(player).kronos.paschalHundredths,6)
     end)
     -- Travel to a different native room, then return to the original one. Keep
     -- collectible stock uncollidable through the existing test pickup observer.

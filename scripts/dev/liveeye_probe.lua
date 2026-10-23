@@ -15,8 +15,9 @@ local function counters()
     return ConchBlessing.liveeye._counters
 end
 
-local function multiplier()
-    return ConchBlessing.liveeye.data.damageMultiplier
+-- Live Eye keeps one multiplier per holder; the bench reads and sets the test player's.
+local function multiplier(player)
+    return ConchBlessing.liveeye.getMultiplier(player)
 end
 
 -- The multiplier the last damage evaluation actually applied.
@@ -76,7 +77,7 @@ local function build(plan)
                 -- Set right before the batch: a luck cache re-evaluation elsewhere
                 -- would restore the real value between updates.
                 player.Luck = case.luck
-                ConchBlessing.liveeye.data.damageMultiplier = 2.0
+                ConchBlessing.liveeye.setMultiplier(player, 2.0)
                 for _ = 1, BATCH do ConchBlessing.liveeye.handleMiss(player) end
             end)
             plan.wait(1)
@@ -94,24 +95,24 @@ local function build(plan)
     plan.section("multiplier", nil)
     plan.act(function(player)
         player.Luck = 10
-        ConchBlessing.liveeye.data.damageMultiplier = 2.0
+        ConchBlessing.liveeye.setMultiplier(player, 2.0)
         for _ = 1, 5 do ConchBlessing.liveeye.handleMiss(player) end
     end)
-    plan.check("Luck 10: 5 misses leave the multiplier at x2.00", function()
-        return math.abs(multiplier() - 2.0) < 1e-9, string.format("x%.2f", multiplier())
+    plan.check("Luck 10: 5 misses leave the multiplier at x2.00", function(player)
+        return math.abs(multiplier(player) - 2.0) < 1e-9, string.format("x%.2f", multiplier(player))
     end)
     plan.act(function(player)
         player.Luck = -10
-        ConchBlessing.liveeye.data.damageMultiplier = 2.0
+        ConchBlessing.liveeye.setMultiplier(player, 2.0)
         for _ = 1, 2 do ConchBlessing.liveeye.handleMiss(player) end
     end)
-    plan.check("Luck -10: 2 misses lower it by 0.15 each", function()
-        return math.abs(multiplier() - 1.7) < 1e-9, string.format("x%.2f", multiplier())
+    plan.check("Luck -10: 2 misses lower it by 0.15 each", function(player)
+        return math.abs(multiplier(player) - 1.7) < 1e-9, string.format("x%.2f", multiplier(player))
     end)
 
     plan.section("non-tear attack", nil)
     plan.act(function(player, ctx)
-        ConchBlessing.liveeye.data.damageMultiplier = 2.0
+        ConchBlessing.liveeye.setMultiplier(player, 2.0)
         ctx.misses = counters().misses
         player:AddCollectible(CollectibleType.COLLECTIBLE_BRIMSTONE, 0, false)
     end)

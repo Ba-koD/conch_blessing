@@ -70,6 +70,67 @@ class DamageOracles(unittest.TestCase):
             assert(not O.evaluate(0.7,capture,0.7,1000,'blue_flame'),'missing decay passed')
         ''')
 
+    # Float32 subtraction, hit by hit, as the engine stores NPC HP.
+    F32 = '''
+        local function f32(x) return (string.unpack('f', string.pack('f', x))) end
+        function hpAfter(hp, list, committed, scale)
+            hp = f32(hp)
+            for i, amount in ipairs(list) do
+                if i > (committed or #list) then break end
+                hp = f32(hp - f32(amount) * (scale or 1))
+            end
+            return hp
+        end
+        function hits(spec)
+            local list = {}
+            for _, row in ipairs(spec) do for _ = 1, row[2] do list[#list + 1] = (string.unpack('f', string.pack('f', row[1]))) end end
+            return list
+        end
+    '''
+
+    def test_logged_dragon_hp_gaps_are_float32_rounding_and_hits_in_flight(self):
+        self.run_lua(self.F32 + '''
+            -- 2026-10-23 log, 100,000 HP targets: (HP loss, strikes of 1.925, contact ticks of 0.175).
+            for _, row in ipairs({{5.703125,1,22},{3.296875,1,8},{5.359375,1,20},{8.828125,2,29},
+                {5.53125,1,21},{4.84375,1,17},{4.671875,1,16},{8.3125,2,26}}) do
+                local list = hits({{1.925,row[2]},{0.175,row[3]}})
+                assert(100000 - hpAfter(100000, list) == row[1], 'rounding does not explain ' .. row[1])
+                -- Rounding alone is never reported as missing damage: at that baseline
+                -- the bound either covers it or refuses a window it cannot resolve.
+                local ok, detail = O.hpSum(100000, hpAfter(100000, list), list)
+                assert(ok or detail:find('too coarse', 1, true), detail)
+                assert(O.hpSum(1000, hpAfter(1000, list), list), 'low baseline lost a hit')
+            end
+            -- 41 contact ticks: 7.046875 lost at 100,000 HP, as logged.
+            local contact = hits({{0.175,41}})
+            assert(100000 - hpAfter(100000, contact) == 7.046875)
+            assert(not O.hpSum(100000, 100000 - 7.175, contact), 'unresolvable baseline passed')
+            assert(O.hpSum(1000, hpAfter(1000, contact), contact))
+            -- 6.5625 lost against 6.475 recorded: a tick from before the window opened.
+            local early = hits({{1.925,1},{0.175,27}})
+            local recorded = hits({{1.925,1},{0.175,26}})
+            assert(100000 - hpAfter(100000, early) == 6.5625)
+            assert(not O.hpSum(1000, hpAfter(1000, early), recorded), 'hit outside the record passed')
+            -- Weather: 170 twister touches recorded, the last two not yet in HP.
+            local twisters = hits({{0.175,170}})
+            assert(100000 - hpAfter(100000, twisters, 168) == 28.875)
+            assert(not O.hpSum(1000, hpAfter(1000, twisters, 168), twisters), 'hits in flight passed')
+            assert(O.hpSum(1000, hpAfter(1000, twisters), twisters))
+        ''')
+
+    def test_hp_sum_bound_is_float_precision_not_a_share_of_damage(self):
+        self.run_lua(self.F32 + '''
+            local contact = hits({{0.175,41}})
+            assert(not O.hpSum(1000, hpAfter(1000, contact, nil, 0.99), contact), '1% trimmed after the callback passed')
+            assert(not O.hpSum(1000, hpAfter(1000, contact, 40), contact), 'one missing tick passed')
+            local ok, detail = O.hpSum(1000, hpAfter(1000, contact), contact)
+            assert(ok and detail:find('hits=41', 1, true), detail)
+            assert(42 * O.ulp(1000) < 0.003, 'bound wider than 42 float32 steps at 1,000 HP')
+            assert(O.hpSum(1000, 1000, {}), 'untouched target')
+            assert(not O.hpSum(1000, 999.9, {}), 'HP lost with nothing recorded passed')
+            assert(O.ulp(1000) == 2^-14 and O.ulp(100000) == 2^-7 and O.ulp(0.5) == 2^-23)
+        ''')
+
 
 class ObserverIsolation(unittest.TestCase):
     run_lua = shared.BenchTests.run_lua

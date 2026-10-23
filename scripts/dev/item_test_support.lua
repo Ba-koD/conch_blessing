@@ -210,6 +210,13 @@ function H.sampleAttackDamage(plan, expected, selectAttack, options)
         H.isolateAttack(ctx.attack)
         ctx.target = H.target(player, true)
         ctx.target:ClearEntityFlags(EntityFlag.FLAG_NO_TARGET)
+        -- The contract here is the attack's own hit. A damaging status that hit
+        -- may roll (Fire Breath's burn ticks with the owning player as source one
+        -- update after the hit commits) has its own bench (status_conditions);
+        -- statusFree keeps it out of this one-hit window instead of accepting it.
+        if options.statusFree then
+            ctx.target:AddEntityFlags(assert(EntityFlag.FLAG_NO_STATUS_EFFECTS, "status-immune target flag unavailable"))
+        end
         ctx.target.EntityCollisionClass = EntityCollisionClass.ENTCOLL_ALL
         ctx.target.Position=player.Position+Vector(-100,100)
         -- Avoid 100,000 HP float rounding swallowing small damage differences.
@@ -404,6 +411,10 @@ function H.damageEvidence(ctx)
         parts[#parts+1]=string.format("hit%d amount=%s age=%s timeout=%s collisionDamage=%s freeze=%s",
             index,tostring(hit.amount),tostring(hit.age),tostring(hit.timeout),tostring(hit.damage),tostring(hit.freeze))
     end
+    for index,hit in ipairs(capture.foreign or {}) do
+        parts[#parts+1]=string.format("foreign%d amount=%s source=%s flags=%s",
+            index,tostring(hit.amount),hit.source,tostring(hit.flags))
+    end
     return table.concat(parts,"; ")
 end
 
@@ -531,7 +542,7 @@ if ModCallbacks.MC_POST_LASER_INIT then
 end
 
 if ModCallbacks.MC_POST_ENTITY_TAKE_DMG then
-    ConchBlessing:AddCallback(ModCallbacks.MC_POST_ENTITY_TAKE_DMG,function(_,entity,amount,_,source,_,extraSource)
+    ConchBlessing:AddCallback(ModCallbacks.MC_POST_ENTITY_TAKE_DMG,function(_,entity,amount,flags,source,_,extraSource)
         if damageCapture and damageCapture.target==GetPtrHash(entity) and amount>0 then
             local attack=require("scripts.lib.damage_provenance").getSourceEntity(source,extraSource)
             if attack and damageCapture.attack==GetPtrHash(attack) then
@@ -542,6 +553,10 @@ if ModCallbacks.MC_POST_ENTITY_TAKE_DMG then
                 if damageCapture.stopAfterFirst and attack:Exists() then attack:Remove() end
             else
                 damageCapture.foreignHits=(damageCapture.foreignHits or 0)+1
+                -- Name what it was, so a failure says which damage got in.
+                damageCapture.foreign=damageCapture.foreign or {}
+                damageCapture.foreign[#damageCapture.foreign+1]={amount=amount,flags=flags,
+                    source=attack and (tostring(attack.Type)..":"..tostring(attack.Variant)..":"..tostring(attack.SubType)) or "none"}
             end
         end
         if not (observing and observing.targetHash==GetPtrHash(entity) and amount>0) then return end

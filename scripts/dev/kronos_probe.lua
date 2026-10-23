@@ -200,10 +200,10 @@ local function spawnEnemies(kind, count)
     out(string.format("  spawned %d %s (%d HP)", count, kind, ENEMY_HP))
 end
 
+-- The player's own Kronos ledger (every player keeps their own).
 local function getRunSave(player)
     ConchBlessing.kronos._getAbsorbedCount(player, C.COLLECTIBLE_BROTHER_BOBBY) -- creates the table
-    local run = ConchBlessing.SaveManager.GetRunSave(nil)
-    return run and run.kronos or nil
+    return ConchBlessing.kronos._getLedger(player)
 end
 
 function probe.legacyDaddy(player)
@@ -335,9 +335,9 @@ local function delta(ctx, name)
     return (counters()[name] or 0) - (ctx.c0 and ctx.c0[name] or 0)
 end
 
+-- The bench runs single-player: player one's own Kronos ledger.
 local function runSave()
-    local run = ConchBlessing.SaveManager.GetRunSave(nil)
-    return run and run.kronos or {}
+    return ConchBlessing.kronos._getLedger(Isaac.GetPlayer(0)) or {}
 end
 
 local function absorbed(player, id)
@@ -419,6 +419,84 @@ local function giveAll(player, list)
         for _ = 1, entry[2] do player:AddCollectible(entry[1], 0, false) end
     end
 end
+
+-- The barrier shot is a real enemy projectile placed inside the player's own
+-- collision circle, so its first collision is the player. The old shot started
+-- 12px away and had to cross the space where the familiars left by the earlier
+-- sections stand (GB Bug's returned ones, Tonsil), came from the proc-afflicted
+-- Fatty and was fired after a fixed wait; in game it never reached the damage
+-- callback. This one sits on the side away from the player's face, clear of
+-- anything that catches shots in front of the player, and has no spawner, like the
+-- engine's own stray bullet in Two Faced Penny's hit_kinds bench.
+local BARRIER_SHOT_INSET = 4
+local BARRIER_SHOT_UPDATES = 30
+
+local function facingOf(player)
+    local head = type(player.GetHeadDirection) == "function" and player:GetHeadDirection() or nil
+    local d = Direction or {}
+    if head ~= nil and head == d.LEFT then return Vector(-1, 0) end
+    if head ~= nil and head == d.UP then return Vector(0, -1) end
+    if head ~= nil and head == d.RIGHT then return Vector(1, 0) end
+    return Vector(0, 1) -- Down, or no direction: standing still faces the camera
+end
+
+local function barrierShotPosition(player)
+    return player.Position - facingOf(player) * BARRIER_SHOT_INSET
+end
+
+local function spawnBarrierShot(player, ctx)
+    local effects = player:GetEffects()
+    local shot = Isaac.Spawn(EntityType.ENTITY_PROJECTILE, 0, 0, barrierShotPosition(player), Vector.Zero, nil)
+    local token = ConchBlessing.EIDDynamicTokens and ConchBlessing.EIDDynamicTokens.KRONOS_BLOCK
+    ctx.barrierShot = {
+        ptr = shot and EntityPtr(shot), hash = shot and GetPtrHash(shot), updates = 0, alive = 0,
+        cooldown = type(player.GetDamageCooldown) == "function" and player:GetDamageCooldown() or nil,
+        mantles = effects and type(effects.GetCollectibleEffectNum) == "function"
+            and effects:GetCollectibleEffectNum(C.COLLECTIBLE_HOLY_MANTLE) or nil,
+        head = type(player.GetHeadDirection) == "function" and player:GetHeadDirection() or nil,
+        chance = type(token) == "function" and token(player) or nil,
+    }
+end
+
+-- Sampled every update until the shot is ignored, disappears or the bound passes;
+-- the record is the evidence for the DIAG line, never a pass condition.
+local function followBarrierShot(player, ctx)
+    local state = ctx.barrierShot
+    if not state then return true end
+    state.updates = state.updates + 1
+    local shot = state.ptr and state.ptr.Ref
+    if shot and shot:Exists() and GetPtrHash(shot) == state.hash then
+        state.alive = state.alive + 1
+        state.distance = shot.Position:Distance(player.Position)
+        local projectile = shot:ToProjectile()
+        local flag = ProjectileFlags and ProjectileFlags.CANT_HIT_PLAYER
+        if flag and projectile and type(projectile.HasProjectileFlags) == "function"
+            and projectile:HasProjectileFlags(flag) then
+            state.cantHitPlayer = true
+        end
+    elseif not state.goneAt then
+        state.goneAt = state.updates
+    end
+    return delta(ctx, "projectileBlocks") > 0 or state.goneAt ~= nil or state.updates >= BARRIER_SHOT_UPDATES
+end
+
+local function describeBarrierShot(ctx)
+    local s = ctx.barrierShot or {}
+    return string.format("blocks=%d sparks=%d; shot alive %d updates, gone after %s, last distance %s,"
+        .. " cannot hit player=%s; at spawn: damage cooldown=%s, Holy Mantle effects=%s, head=%s, ignore chance=%s",
+        delta(ctx, "projectileBlocks"), delta(ctx, "blockSparks"), s.alive or 0, tostring(s.goneAt),
+        s.distance and string.format("%.1f", s.distance) or "nil", tostring(s.cantHitPlayer == true),
+        tostring(s.cooldown), tostring(s.mantles), tostring(s.head), tostring(s.chance))
+end
+
+probe._test = {
+    barrierShotPosition = barrierShotPosition,
+    spawnBarrierShot = spawnBarrierShot,
+    followBarrierShot = followBarrierShot,
+    describeBarrierShot = describeBarrierShot,
+    BARRIER_SHOT_INSET = BARRIER_SHOT_INSET,
+    BARRIER_SHOT_UPDATES = BARRIER_SHOT_UPDATES,
+}
 
 local function buildPlan(plan)
     local act, wait, check, section, waitUntil = plan.act, plan.wait, plan.check, plan.section, plan.waitUntil
@@ -716,15 +794,26 @@ local function buildPlan(plan)
 
     -- projectile barrier ----------------------------------------------------------
     section("barrier", "the ignored shot shows a small white spark at your side, you flash pale for a moment, and a quiet high chime plays")
-    act(function(player) giveAll(player, { { C.COLLECTIBLE_SWORN_PROTECTOR, 20 } }) end)
-    wait(40)
+    act(function(player, ctx)
+        ctx.barrierWait = 0
+        giveAll(player, { { C.COLLECTIBLE_SWORN_PROTECTOR, 20 } })
+    end)
+    -- The shot needs the absorbed barrier and a player outside the damage
+    -- cooldown: wait for those states (bounded), not a fixed number of updates.
+    waitUntil(function(player, ctx)
+        ctx.barrierWait = ctx.barrierWait + 1
+        return owns(player, C.COLLECTIBLE_SWORN_PROTECTOR) == 0 and vulnerable(player) or ctx.barrierWait >= 120
+    end, 121, "Sworn Protectors absorbed and damage cooldown over")
+    eqCheck("all 20 Sworn Protectors absorbed before the shot", function(p) return owns(p, C.COLLECTIBLE_SWORN_PROTECTOR) end, 0)
     act(function(player, ctx)
         snapshotCounters(ctx)
         ctx.hearts = player:GetHearts() + player:GetSoulHearts()
-        -- Spawned right beside the player so no orbital can block it first.
-        Isaac.Spawn(EntityType.ENTITY_PROJECTILE, 0, 0, player.Position + Vector(12, 0), Vector(-4, 0), ctx.target)
+        spawnBarrierShot(player, ctx)
     end)
-    wait(30)
+    waitUntil(function(player, ctx) return followBarrierShot(player, ctx) end, BARRIER_SHOT_UPDATES + 1,
+        "the barrier shot reaches the player")
+    wait(5) -- a shot ignored once must not land again
+    plan.note("barrier shot", function(_, ctx) return describeBarrierShot(ctx) end)
     eqCheck("projectile hit ignored", function(_, ctx) return delta(ctx, "projectileBlocks") end, 1)
     eqCheck("ignored hit shows its spark", function(_, ctx) return delta(ctx, "blockSparks") end, 1)
     check("no health lost", function(player, ctx)

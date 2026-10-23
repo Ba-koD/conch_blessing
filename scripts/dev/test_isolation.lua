@@ -79,10 +79,34 @@ local function empty(value)
     return true
 end
 
+-- The room's own ambience, which no fixture made: the engine keeps spawning
+-- these backdrop effects for the stage (Burning Basement's falling embers, the
+-- Cellar's bugs, Flooded Caves' drips and tadpoles, flies around poop). A fresh
+-- one can be on screen at any moment, so waiting for them to expire never sees
+-- a room without them. Only a spawner-less, damage-free effect of these kinds is
+-- ambience: anything an entity spawned, or that can hurt, stays a leftover.
+local AMBIENT_EFFECTS={"FALLING_EMBER","TINY_BUG","TINY_FLY","WALL_BUG","WATER_DROPLET","TADPOLE"}
+
+local function spawnerOf(entity)
+    local ok,spawner=pcall(function() return entity.SpawnerEntity end)
+    return ok and spawner or nil
+end
+
+local function isRoomAmbience(entity)
+    if entity.Type~=EntityType.ENTITY_EFFECT or type(EffectVariant)~="table" then return false end
+    local ambient=false
+    for _,name in ipairs(AMBIENT_EFFECTS) do
+        if EffectVariant[name]~=nil and entity.Variant==EffectVariant[name] then ambient=true;break end
+    end
+    if not ambient or (tonumber(entity.CollisionDamage) or 0)~=0 then return false end
+    return (tonumber(entity.SpawnerType) or 0)==0 and spawnerOf(entity)==nil
+end
+
 local function gameplayEntities(includeEffects)
     local rows={}
     for _,entity in ipairs(Isaac.GetRoomEntities()) do
-        if entity.Type~=EntityType.ENTITY_PLAYER and (includeEffects or entity.Type~=EntityType.ENTITY_EFFECT) then
+        if entity.Type~=EntityType.ENTITY_PLAYER and (includeEffects or entity.Type~=EntityType.ENTITY_EFFECT)
+            and not isRoomAmbience(entity) then
             rows[GetPtrHash(entity)]=entity
         end
     end
@@ -102,7 +126,7 @@ local function entityEvidence(entity)
     end
     return {key=key,type=entity.Type,hash=GetPtrHash(entity),
         detail=key.." ptr="..tostring(GetPtrHash(entity)).." age="..tostring(entity.FrameCount)
-            .." damage="..tostring(entity.CollisionDamage)}
+            .." damage="..tostring(entity.CollisionDamage).." spawner="..tostring(entity.SpawnerType or 0)}
 end
 
 local function snapshotEntities(includeEffects)
@@ -137,7 +161,7 @@ function M.begin(plan, includeEffects)
             entities=snapshotEntities(includeEffects),includeEffects=includeEffects,trinkets={},actives={},coins=player:GetNumCoins(),
             bombs=player:GetNumBombs(),keys=player:GetNumKeys(),hearts=player:GetHearts(),maxHearts=player:GetMaxHearts(),
             soulHearts=player:GetSoulHearts(),blackHearts=player:GetBlackHearts(),fly=player.CanFly,flags=player.TearFlags}
-        ctx.isolation.minusNoHit = ConchBlessing._minusNoHit and ConchBlessing._minusNoHit[player.ControllerIndex or 0]
+        ctx.isolation.minusNoHit = ConchBlessing.minuschain and ConchBlessing.minuschain.noHit(player)
         for slot=0,1 do ctx.isolation.trinkets[slot]=player:GetTrinket(slot) end
         for slot=0,3 do
             ctx.isolation.actives[slot]={id=player:GetActiveItem(slot),charge=player:GetActiveCharge(slot),
@@ -272,14 +296,14 @@ function M.finish(plan,key,id,requireClean)
             if not empty(unified and unified[group] and unified[group][id]) then return false,"orphan "..group end
         end
         if key=="ORAL_STEROIDS" then
-            if not empty(H.save(player).oralSteroids) or not empty(ConchBlessing.oralsteroids.storedMultipliers) then
+            if not empty(H.save(player).oralSteroids) then
                 return false,"stored steroid rolls remain"
             end
             for _,count in pairs(ConchBlessing.oralsteroids._lastItemCount or {}) do
                 if count~=0 then return false,"steroid count tracking remains" end
             end
         end
-        local noHit=ConchBlessing._minusNoHit and ConchBlessing._minusNoHit[player.ControllerIndex or 0]
+        local noHit=ConchBlessing.minuschain and ConchBlessing.minuschain.noHit(player)
         -- The admitted Kronos batches exercise hits but contain no floor rewards
         -- or Minus trinkets. Preserve that unrelated damage history, never reset it.
         if key~="KRONOS" and noHit~=base.minusNoHit then return false,"floor damage/evolution state changed" end
@@ -289,14 +313,15 @@ function M.finish(plan,key,id,requireClean)
             end
         end
         if key=="KRONOS" then
-            local saved=ConchBlessing.SaveManager.GetRunSave(nil).kronos or {}
+            -- Every player keeps their own Kronos ledger in their own run save.
+            local saved=ConchBlessing.SaveManager.GetRunSave(player).kronos or {}
             for _,field in ipairs({"absorbed","itemGrants","itemGrantTotals","itemGrantBaselines",
                 "spared","floorPicks","tempFloor","tempPermanent","clearCounters","paschalHundredths","milkSerial",
                 "lostSoulRewardPending","prettyFlies"}) do
                 if not empty(saved[field]) then return false,"Kronos saved effect remains: "..field end
             end
             if (saved.totalAbsorbed or 0)~=0 then return false,"Kronos absorbed total remains" end
-            local temporary=ConchBlessing.kronos._getRoomTemporary()
+            local temporary=ConchBlessing.kronos._getRoomTemporary(player)
             if (temporary.double or 0)~=0 or not empty(temporary.counts) or not empty(temporary.twins)
                 or not empty(temporary.mongoCopies) then return false,"Kronos room temporary effect remains" end
             local pending=ConchBlessing.kronos._test and ConchBlessing.kronos._test.pendingCounts

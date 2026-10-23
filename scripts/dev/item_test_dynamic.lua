@@ -52,7 +52,7 @@ function M.prepare(plan, key)
 end
 
 local function factor(player, key, stat)
-    if key == "LIVE_EYE" and stat == "Damage" then return ConchBlessing.liveeye.data.damageMultiplier end
+    if key == "LIVE_EYE" and stat == "Damage" then return ConchBlessing.liveeye.getMultiplier(player) end
     if key == "A_MINUS" and (stat == "Damage" or stat == "Tears" or stat == "Luck") then
         return assert(H.save(player).aMinus.split[stat], "missing A- split")
     end

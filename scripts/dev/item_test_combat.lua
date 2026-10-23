@@ -94,6 +94,50 @@ C.TIME_MONEY = { stage = function(plan, _, n)
     end)
 end }
 
+-- HP windows over many hits (both dragons). Isaac keeps NPC HP as a float32
+-- and commits damage on a later update, while these items hit pinned targets
+-- every update. So the targets get a low HP baseline (the shared fixture's
+-- 100,000 HP rounds every 0.175 tick down to 0.171875), and a window opens and
+-- closes only with no hit in flight: the targets are made intangible
+-- (ENTCOLL_NONE makes IsVulnerableEnemy false, and both items strike only
+-- vulnerable enemies) and the edge waits until the hit record has been quiet
+-- long enough for the engine to commit HP. A hit that still lands on an
+-- intangible target is recorded and keeps the wait open until it times out.
+local DamageOracle = require("scripts.dev.damage_oracle")
+local SUM_TARGET_HP = 1000
+local QUIET_UPDATES = 6
+
+local function sumTarget(player)
+    local target = H.target(player, true)
+    target.HitPoints, target.MaxHitPoints = SUM_TARGET_HP, SUM_TARGET_HP
+    return target
+end
+
+local function setTangible(targets, on)
+    for _, target in ipairs(targets) do
+        if target:Exists() then
+            target.EntityCollisionClass = on and EntityCollisionClass.ENTCOLL_ALL or EntityCollisionClass.ENTCOLL_NONE
+        end
+    end
+end
+
+local function waitQuiet(plan, hits, hold, label)
+    plan.waitUntil(function(player, ctx)
+        hold(player, ctx)
+        local count = #hits()
+        if count ~= ctx.quietCount then ctx.quietCount, ctx.quiet = count, 0 else ctx.quiet = ctx.quiet + 1 end
+        if ctx.quiet < QUIET_UPDATES then return false, "hits still landing (recorded=" .. count .. ")" end
+        ctx.quietCount, ctx.quiet = nil, nil
+        return true
+    end, 30, label)
+end
+
+local function amounts(list)
+    local out = {}
+    for _, hit in ipairs(list) do out[#out + 1] = hit.amount end
+    return out
+end
+
 -- Azure Dragon (console only): one long familiar per copy, no flight or spectral tears. Contact 5%
 -- of damage per tick; lightning for 55% of the damage on every enemy its snout
 -- runs into, once every 5 / tears seconds each per dragon. The
@@ -144,7 +188,7 @@ C.AZURE_DRAGON = { stage = function(plan, _, n)
         player.Position = ctx.center
         ctx.dragon = dragonsOf(player)[1]
         ctx.targets = {}
-        for i = 1, #DRAGON_SPOTS do ctx.targets[i] = H.target(player, true) end
+        for i = 1, #DRAGON_SPOTS do ctx.targets[i] = sumTarget(player) end
         pinTargets(ctx)
         ctx.hp = {}
         H.recordDragonHits(true)
@@ -155,12 +199,16 @@ C.AZURE_DRAGON = { stage = function(plan, _, n)
             local ready, why = H.targetReady(target)
             if not ready then return false, why end
         end
-        for i, target in ipairs(ctx.targets) do ctx.hp[i] = target.HitPoints end
+        setTangible(ctx.targets, false)
         return true
     end, 60, "six far targets initialized and vulnerable")
-    plan.act(function()
-        -- Readiness waits are over; count only hits from here on.
+    local function hold(player, ctx) pinTargets(ctx); player.Position = ctx.center end
+    waitQuiet(plan, function() return H.dragonHits() end, hold, "no dragon hit in flight before the HP window")
+    plan.act(function(_, ctx)
+        -- Readiness waits are over; count only hits from here on, from settled HP.
         H.recordDragonHits(true)
+        for i, target in ipairs(ctx.targets) do ctx.hp[i] = target.HitPoints end
+        setTangible(ctx.targets, true)
     end)
     -- The dragon hunts the targets in turn; lightning strikes each one its snout runs into.
     plan.waitUntil(function(player, ctx)
@@ -170,13 +218,11 @@ C.AZURE_DRAGON = { stage = function(plan, _, n)
         for _, target in ipairs(ctx.targets) do
             if #H.dragonHits(target, player.Damage * 0.25) > 0 then struck = struck + 1 end
         end
-        return struck >= 3, "targets struck=" .. struck
+        if struck < 3 then return false, "targets struck=" .. struck end
+        setTangible(ctx.targets, false)
+        return true
     end, 450, "the dragon runs into and strikes several targets")
-    plan.waitUntil(function(player, ctx)
-        pinTargets(ctx); player.Position = ctx.center
-        ctx.settle = (ctx.settle or 0) + 1
-        return ctx.settle >= 6
-    end, 8, "HP settles")
+    waitQuiet(plan, function() return H.dragonHits() end, hold, "HP settles with no dragon hit in flight")
     plan.check("every enemy the snout runs into is struck for 55% of the current damage", function(player, ctx)
         local expected = player.Damage * ConchBlessing.azureDragon.data.lightningDamageMultiplier * (player:HasCollectible(CollectibleType.COLLECTIBLE_BFFS) and 2 or 1)
         local struck, wrong = 0, {}
@@ -187,10 +233,8 @@ C.AZURE_DRAGON = { stage = function(plan, _, n)
                 if not H.near(bolt.amount, expected) then wrong[#wrong + 1] = i .. ":bolt " .. bolt.amount end
             end
             -- Every HP point lost is a recorded dragon hit (lightning plus body contact).
-            local loss = ctx.hp[i] - target.HitPoints
-            if math.abs(loss - H.dragonDamage(target)) > math.max(0.02, expected * 0.002) then
-                wrong[#wrong + 1] = i .. ":HP loss " .. loss .. " vs hits " .. H.dragonDamage(target)
-            end
+            local same, detail = DamageOracle.hpSum(ctx.hp[i], target.HitPoints, amounts(H.dragonHits(target)))
+            if not same then wrong[#wrong + 1] = i .. ":" .. detail end
         end
         return struck >= 3 and #wrong == 0, string.format("struck=%d damage=%s wrong=%s", struck, expected, table.concat(wrong, ","))
     end)
@@ -213,19 +257,27 @@ C.AZURE_DRAGON = { stage = function(plan, _, n)
     plan.act(function(player, ctx)
         for i = 2, #ctx.targets do ctx.targets[i]:Remove() end
         ctx.biter = ctx.targets[1]
-        ctx.contactTicks, ctx.contactHp = 0, nil
+        ctx.contactTicks = 0
         ctx.contactExpected = player.Damage * 0.05 * (player:HasCollectible(CollectibleType.COLLECTIBLE_BFFS) and 2 or 1)
+        -- The biter is still intangible and settled: open the window here.
         H.recordDragonHits(true)
+        ctx.contactHp = ctx.biter.HitPoints
+        setTangible({ ctx.biter }, true)
     end)
     plan.waitUntil(function(player, ctx)
         player.Position = ctx.center
         local state = ctx.dragon:GetData().__ConchDragon
         ctx.biter.Position = state.segments[6]
         ctx.biter.Velocity = Vector.Zero
-        if not ctx.contactHp then ctx.contactHp = ctx.biter.HitPoints end
         ctx.contactTicks = ctx.contactTicks + 1
-        return ctx.contactTicks > 40
+        if ctx.contactTicks <= 40 then return false end
+        setTangible({ ctx.biter }, false)
+        return true
     end, 45, "an enemy held against the dragon's body")
+    waitQuiet(plan, function() return H.dragonHits() end, function(player, ctx)
+        player.Position = ctx.center
+        ctx.biter.Velocity = Vector.Zero
+    end, "HP settles with no dragon hit in flight")
     plan.check("contact deals 5% of current damage every tick", function(_, ctx)
         -- 40 updates of contact; a bolt may land too if the head swings round.
         local touches, odd = 0, 0
@@ -237,11 +289,10 @@ C.AZURE_DRAGON = { stage = function(plan, _, n)
                 if not H.near(hit.amount, ctx.contactExpected) then odd = odd + 1 end
             end
         end
-        local loss = ctx.contactHp - ctx.biter.HitPoints
-        local recorded = H.dragonDamage(ctx.biter)
-        return touches >= 39 and touches <= 41 and odd == 0 and math.abs(loss - recorded) <= math.max(0.02, recorded * 0.002),
-            string.format("contact hits=%d (39-41 expected, %.3f each) odd=%d HP loss=%.3f recorded=%.3f",
-                touches, ctx.contactExpected, odd, loss, recorded)
+        local same, detail = DamageOracle.hpSum(ctx.contactHp, ctx.biter.HitPoints, amounts(H.dragonHits(ctx.biter)))
+        return touches >= 39 and touches <= 41 and odd == 0 and same,
+            string.format("contact hits=%d (39-41 expected, %.3f each) odd=%d %s",
+                touches, ctx.contactExpected, odd, detail)
     end)
     plan.act(function(_, ctx)
         H.recordDragonHits(false)
@@ -284,7 +335,7 @@ C.DRAGON = { stage = function(plan, _, n)
         ctx.center = Game():GetRoom():GetCenterPos()
         player.Position = ctx.center
         ctx.targets = {}
-        for i = 1, #WEATHER_SPOTS do ctx.targets[i] = H.target(player, true) end
+        for i = 1, #WEATHER_SPOTS do ctx.targets[i] = sumTarget(player) end
         pinWeatherTargets(ctx)
         H.recordPlayerHits(true)
     end)
@@ -294,12 +345,17 @@ C.DRAGON = { stage = function(plan, _, n)
             local ready, why = H.targetReady(target)
             if not ready then return false, why end
         end
+        setTangible(ctx.targets, false)
         return true
     end, 60, "three far-apart targets initialized and vulnerable")
+    local function hold(player, ctx) pinWeatherTargets(ctx); player.Position = ctx.center end
+    waitQuiet(plan, function() return H.playerHits() end, hold, "no weather hit in flight before the HP window")
     plan.act(function(_, ctx)
+        -- Settled HP and an empty record open the window together.
         H.recordPlayerHits(true)
         ctx.hp = {}
         for i, target in ipairs(ctx.targets) do ctx.hp[i] = target.HitPoints end
+        setTangible(ctx.targets, true)
         ctx.ticks, ctx.risen, ctx.seenTwisters = 0, 0, {}
         ctx.boltsStart = ConchBlessing.dragon._sky.bolts
         for _, twister in ipairs(ConchBlessing.dragon._twisters) do ctx.seenTwisters[twister] = true end
@@ -308,13 +364,12 @@ C.DRAGON = { stage = function(plan, _, n)
         pinWeatherTargets(ctx); player.Position = ctx.center
         watchTwisters(ctx)
         ctx.ticks = ctx.ticks + 1
-        return ctx.ticks >= 150
+        if ctx.ticks < 150 then return false end
+        -- No enemy left to strike: no bolt is charged and no twister touches.
+        setTangible(ctx.targets, false)
+        return true
     end, 160, "five seconds of weather")
-    plan.waitUntil(function(player, ctx)
-        pinWeatherTargets(ctx); player.Position = ctx.center
-        ctx.settle = (ctx.settle or 0) + 1
-        return ctx.settle >= 6
-    end, 8, "HP settles")
+    waitQuiet(plan, function() return H.playerHits() end, hold, "HP settles with no weather hit in flight")
     plan.check("bolts follow the tears stat and copies (tears / 5 a second per copy)", function(player, ctx)
         local bolts = ConchBlessing.dragon._sky.bolts - ctx.boltsStart
         local expected = weatherStrikesExpected(player, n, ctx.ticks)
@@ -334,10 +389,8 @@ C.DRAGON = { stage = function(plan, _, n)
                 if not H.near(hit.amount, player.Damage) then wrong[#wrong + 1] = "bolt " .. hit.amount end
             end
             for i, target in ipairs(ctx.targets) do
-                local loss = ctx.hp[i] - target.HitPoints
-                if math.abs(loss - H.playerDamage(target)) > math.max(0.02, player.Damage * 0.002) then
-                    wrong[#wrong + 1] = i .. ":HP loss " .. loss .. " vs hits " .. H.playerDamage(target)
-                end
+                local same, detail = DamageOracle.hpSum(ctx.hp[i], target.HitPoints, amounts(H.playerHits(target)))
+                if not same then wrong[#wrong + 1] = i .. ":" .. detail end
             end
             return #wrong == 0, "wrong=" .. (#wrong > 0 and table.concat(wrong, ",") or "none")
         end)
@@ -351,6 +404,7 @@ C.DRAGON = { stage = function(plan, _, n)
             ConchBlessing.dragon.data.twisterChance = 1
             ctx.twister, ctx.most = nil, 0
             H.recordPlayerHits(true)
+            setTangible(ctx.targets, true)
         end)
         plan.waitUntil(function(player, ctx)
             pinWeatherTargets(ctx); player.Position = ctx.center
@@ -472,8 +526,12 @@ for key, spec in pairs({ FIRE_BREATH = { dataKey = "__ConchFireBreath", coef = 0
                 end
                 return #ctx.shots.samples > 0, "spawned chance=" .. chance .. "; actual status checked in status_conditions"
             end)
+            -- Fire Breath's hit may light a burn (luck x5%; the high-luck fixture
+            -- makes it likely), whose first tick lands inside the HP window with
+            -- the player as its source. The burn is measured by status_conditions.
             H.sampleAttackDamage(plan, function(player) return player.Damage * spec.coef * n end,
-                function(_, ctx) return ctx.shots.entities[1] end, {blueFlame=key=="ICE_BREATH"})
+                function(_, ctx) return ctx.shots.entities[1] end,
+                {blueFlame=key=="ICE_BREATH", statusFree=key=="FIRE_BREATH"})
         else
             plan.check("attack counter cleared after loss", function(player)
                 local state = player:GetData()[spec.dataKey]
@@ -493,19 +551,19 @@ C.LIVE_EYE = { stage = function(plan, _, n)
         ctx.target.EntityCollisionClass = EntityCollisionClass.ENTCOLL_ALL
         ctx.target.CollisionDamage = 0
         ctx.targetHp = ctx.target.HitPoints
-        ctx.eyeBefore = ConchBlessing.liveeye.data.damageMultiplier
+        ctx.eyeBefore = ConchBlessing.liveeye.getMultiplier(player)
         H.shoot(player, "conch_liveeye", ctx, 1)
     end)
     plan.waitUntil(function(_, ctx) return ctx.shots.triggers >= 1 end, 90, "first real tear attack")
     plan.act(function() H.stopShooting() end)
     plan.waitUntil(function(_, ctx) return ctx.target.HitPoints < ctx.targetHp end, 90, "first shot actually damages the target")
     plan.wait(2)
-    plan.check("real tear hit updates once, and stops after removal", function(_, ctx)
+    plan.check("real tear hit updates once, and stops after removal", function(player, ctx)
         local expected = n > 0 and math.min(3, ctx.eyeBefore + 0.1) or ctx.eyeBefore
-        return H.expect(ConchBlessing.liveeye.data.damageMultiplier, expected)
+        return H.expect(ConchBlessing.liveeye.getMultiplier(player), expected)
     end)
     plan.check("live multiplier applies once with duplicate copies", function(player, ctx)
-        local expected = ctx.base.Damage * (n > 0 and ConchBlessing.liveeye.data.damageMultiplier or 1)
+        local expected = ctx.base.Damage * (n > 0 and ConchBlessing.liveeye.getMultiplier(player) or 1)
         return H.expect(player.Damage, expected)
     end)
     plan.act(function(_, ctx)
