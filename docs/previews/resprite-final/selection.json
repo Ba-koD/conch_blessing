@@ -1,0 +1,428 @@
+{
+  "original_revision": "2da8c778933d7375261a1bae85fea37e13d99ca9",
+  "items": [
+    {
+      "key": "live_eye",
+      "name": "살아있는 눈",
+      "source": "resources/gfx/items/collectibles/live_eye.png",
+      "original_sha256": "580b6e135b61ffdc1f379436deeed810ae31f6424297371706474b693037aad3",
+      "selected_sha256": "580b6e135b61ffdc1f379436deeed810ae31f6424297371706474b693037aad3",
+      "mode": "original",
+      "notes": "원본 그대로 유지. 이전 새 시안을 사용하지 않음."
+    },
+    {
+      "key": "void_dagger",
+      "name": "공허의 단검",
+      "source": "resources/gfx/items/collectibles/void_dagger.png",
+      "original_sha256": "159171e53fc7e9011f2fbe086bd25d1bc34fdd38267f75fd020ea0b2ad6dce6f",
+      "selected_sha256": "159171e53fc7e9011f2fbe086bd25d1bc34fdd38267f75fd020ea0b2ad6dce6f",
+      "mode": "original",
+      "notes": "사용자 결정: 공허의 단검은 원본 그대로 유지. 2차 새 디자인은 제외."
+    },
+    {
+      "key": "eternal_flame",
+      "name": "영원한 불꽃",
+      "source": "resources/gfx/items/collectibles/eternal_flame.png",
+      "original_sha256": "fb7a1987f2576c469069ce30326c08633e338d54ffce19ea230bbac09fd04ae5",
+      "selected_sha256": "0cf4040e984457fae23d83a6a16b641e3a0c18a25693c5517c81ed3266c54b7d",
+      "mode": "new_design",
+      "notes": "완전 재디자인. 받침 없는 하나의 금빛 불꽃과 이어지는 두 불길, 밝은 심부·푸른 밑불."
+    },
+    {
+      "key": "power_training",
+      "name": "파워 트레이닝",
+      "source": "resources/gfx/items/collectibles/power_training.png",
+      "original_sha256": "2997c1f532d310cc01a1176bb8f92d0080a059053ebad9efb65b52e25e9aa3d0",
+      "selected_sha256": "2997c1f532d310cc01a1176bb8f92d0080a059053ebad9efb65b52e25e9aa3d0",
+      "mode": "original",
+      "notes": "원본 그대로 유지. 이전 새 시안을 사용하지 않음."
+    },
+    {
+      "key": "oral_steroids",
+      "name": "경구형 스테로이드",
+      "source": "resources/gfx/items/collectibles/oral_steroids.png",
+      "original_sha256": "5374ecd397eee990336251a78df8cda8b28965d3471ed1b1e97697fd22a3430a",
+      "selected_sha256": "5374ecd397eee990336251a78df8cda8b28965d3471ed1b1e97697fd22a3430a",
+      "mode": "original",
+      "notes": "사용자 최종 결정: 최초 런타임 원본 적용. 모든 새 시안 제외."
+    },
+    {
+      "key": "injectable_steroids",
+      "name": "주사 스테로이드",
+      "source": "resources/gfx/items/collectibles/injectable_steroids.png",
+      "original_sha256": "43e71420b217f5d5fda7c0c888537e3f5b02f00a7f0af6e332c9d3cf62a19668",
+      "selected_sha256": "8a0ac6f9a273b2fb289334b9e3e456c6f27eea9c21ee184e38b1d3c57f51b19a",
+      "mode": "original_edit",
+      "notes": "원본 주사기 비율·노란 약액과 기울기 유지. 바닐라 주사기처럼 단순한 유리·금속·약액 색면과 외곽선으로 정리."
+    },
+    {
+      "key": "kronos",
+      "name": "크로노스",
+      "source": "resources/gfx/items/collectibles/kronos.png",
+      "original_sha256": "30682a6ff51e13451e26307893ab3bed203892d125d0962bcdd10884f46e4a89",
+      "selected_sha256": "30682a6ff51e13451e26307893ab3bed203892d125d0962bcdd10884f46e4a89",
+      "mode": "original",
+      "notes": "원본 그대로 유지. 이전 새 시안을 사용하지 않음."
+    },
+    {
+      "key": "appraisal_certificate",
+      "name": "감정 평가서",
+      "source": "resources/gfx/items/collectibles/appraisal_certificate.png",
+      "original_sha256": "be2fe2fbdf6c336463c4e1cdb4868428b0433665609a18367eb2aa44a07d4363",
+      "selected_sha256": "be2fe2fbdf6c336463c4e1cdb4868428b0433665609a18367eb2aa44a07d4363",
+      "mode": "original",
+      "notes": "원본 그대로 유지. 이전 새 시안을 사용하지 않음."
+    },
+    {
+      "key": "money_tear",
+      "name": "돈 = 연사",
+      "source": "resources/gfx/items/collectibles/money_tear.png",
+      "original_sha256": "d0cd470032f6f334a7025558f7f4f3028d3064a806bf7ae83a46233e2f6e4f71",
+      "selected_sha256": "d0cd470032f6f334a7025558f7f4f3028d3064a806bf7ae83a46233e2f6e4f71",
+      "mode": "original",
+      "notes": "원본 그대로 유지. 이전 새 시안을 사용하지 않음."
+    },
+    {
+      "key": "utility_belt",
+      "name": "다용도 벨트",
+      "source": "resources/gfx/items/collectibles/utility_belt.png",
+      "original_sha256": "8c89ff269a14f2fd56f8162e54741fbe2eeb9d90f1983bc62fae8b387e5fbe45",
+      "selected_sha256": "b3f4bbd567c4a35a71b1ef764fd52ed1f20e0929ab70ceaee39ffb5185cf2fce",
+      "mode": "original_edit",
+      "notes": "원본 형태·외곽선·색조·알파 그대로, 검정 경계 제외 RGB 명도만 최대 +8 소폭 증가."
+    },
+    {
+      "key": "sealed_demon_sword",
+      "name": "봉인된 마검",
+      "source": "resources/gfx/items/collectibles/sealed_demon_sword.png",
+      "original_sha256": "5e9ecec1f698298a95fddb224e356f9b51f51cf7f944fde8e628274656f04cd1",
+      "selected_sha256": "5e9ecec1f698298a95fddb224e356f9b51f51cf7f944fde8e628274656f04cd1",
+      "mode": "original",
+      "notes": "사용자 최종 결정: 최초 런타임 원본 적용. 모든 새 시안 제외."
+    },
+    {
+      "key": "tyrfing",
+      "name": "티르핑",
+      "source": "resources/gfx/items/collectibles/tyrfing.png",
+      "original_sha256": "8959df6fe7630f39285621ee9e0b41b08e5edcfa7e0ada0bae7365da091fab67",
+      "selected_sha256": "8959df6fe7630f39285621ee9e0b41b08e5edcfa7e0ada0bae7365da091fab67",
+      "mode": "original",
+      "notes": "사용자 최종 결정: 최초 런타임 원본 적용. 모든 새 시안 제외."
+    },
+    {
+      "key": "ice_breath",
+      "name": "아이스 브레스",
+      "source": "resources/gfx/items/collectibles/ice_breath.png",
+      "original_sha256": "084fb9a8713e95f47ec10ed32d89867db080d7c0712baa931bd69b85d770d146",
+      "selected_sha256": "084fb9a8713e95f47ec10ed32d89867db080d7c0712baa931bd69b85d770d146",
+      "mode": "original",
+      "notes": "원본 그대로 유지. 이전 새 시안을 사용하지 않음."
+    },
+    {
+      "key": "fire_breath",
+      "name": "파이어 브레스",
+      "source": "resources/gfx/items/collectibles/fire_breath.png",
+      "original_sha256": "9ea91c54cbb33be9b7eb2e782102eb07bc319230066a050eb2412679695b040e",
+      "selected_sha256": "9ea91c54cbb33be9b7eb2e782102eb07bc319230066a050eb2412679695b040e",
+      "mode": "original",
+      "notes": "원본 그대로 유지. 이전 새 시안을 사용하지 않음."
+    },
+    {
+      "key": "soflam",
+      "name": "SOFLAM",
+      "source": "resources/gfx/items/collectibles/soflam.png",
+      "original_sha256": "e9e18292948fd1c4b58da2e88f6239ee0f9943293f216311b2d0226caf7c0d23",
+      "selected_sha256": "e9e18292948fd1c4b58da2e88f6239ee0f9943293f216311b2d0226caf7c0d23",
+      "mode": "original",
+      "notes": "사용자 요청으로 런타임 원본 PNG 그대로 복원. 이전 수정안 제외."
+    },
+    {
+      "key": "two_faced_penny",
+      "name": "양면 동전",
+      "source": "resources/gfx/items/collectibles/two_faced_penny.png",
+      "original_sha256": "25a54507511293872697e0e2e8ead32a6113a6d3fa25a1773458a4cb5b569307",
+      "selected_sha256": "a8e10950912a4fca2dc042135829b98d2ca008ecf09284245e5315159adf0253",
+      "mode": "original_edit",
+      "notes": "우리 원본의 조커 카드 인물 도장을 그대로 보존. 금화의 흐린 음영만 큰 금색 면과 또렷한 테두리로 정리."
+    },
+    {
+      "key": "inf_d6",
+      "name": "무한 주사위",
+      "source": "resources/gfx/items/collectibles/inf_d6.png",
+      "original_sha256": "7e6332a5879a4709747c71b85aa9f782e5674d9e9b450c3e68ee943119c31b5f",
+      "selected_sha256": "7e6332a5879a4709747c71b85aa9f782e5674d9e9b450c3e68ee943119c31b5f",
+      "mode": "original",
+      "notes": "원본 그대로 유지. 이전 새 시안을 사용하지 않음."
+    },
+    {
+      "key": "severed_oath",
+      "name": "적사단지",
+      "source": "resources/gfx/items/collectibles/severed_oath.png",
+      "original_sha256": "59b6bb8f60b8076aca6aaa9d5df2380f880d0c1d964d38b957cc18e19a5525ad",
+      "selected_sha256": "59b6bb8f60b8076aca6aaa9d5df2380f880d0c1d964d38b957cc18e19a5525ad",
+      "mode": "original",
+      "notes": "사용자 최종 결정: 최초 런타임 원본 적용. 모든 새 시안 제외."
+    },
+    {
+      "key": "ceil",
+      "name": "올림",
+      "source": "resources/gfx/items/collectibles/ceil.png",
+      "original_sha256": "70f19754ca7ea43d6ffbe300c375ed05fdfdda752f5ab802663e0e125e301afb",
+      "selected_sha256": "70f19754ca7ea43d6ffbe300c375ed05fdfdda752f5ab802663e0e125e301afb",
+      "mode": "original",
+      "notes": "원본 그대로 유지. 이전 새 시안을 사용하지 않음."
+    },
+    {
+      "key": "round",
+      "name": "반올림",
+      "source": "resources/gfx/items/collectibles/round.png",
+      "original_sha256": "d0ccb0687d0643443801716458a7ae3e305bc33dde93325108301a52aeb6d17f",
+      "selected_sha256": "d0ccb0687d0643443801716458a7ae3e305bc33dde93325108301a52aeb6d17f",
+      "mode": "original",
+      "notes": "원본 그대로 유지. 이전 새 시안을 사용하지 않음."
+    },
+    {
+      "key": "floor",
+      "name": "내림",
+      "source": "resources/gfx/items/collectibles/floor.png",
+      "original_sha256": "98be010d149f0f1be153253419576d388668e383dea1eae5a2469fee643c9136",
+      "selected_sha256": "98be010d149f0f1be153253419576d388668e383dea1eae5a2469fee643c9136",
+      "mode": "original",
+      "notes": "원본 그대로 유지. 이전 새 시안을 사용하지 않음."
+    },
+    {
+      "key": "real_eyes",
+      "name": "진실된 눈",
+      "source": "resources/gfx/items/collectibles/real_eyes.png",
+      "original_sha256": "125f056e01232095ce3b8270d219d3a55139a45d371360b3e505ebfd7c71d401",
+      "selected_sha256": "125f056e01232095ce3b8270d219d3a55139a45d371360b3e505ebfd7c71d401",
+      "mode": "original",
+      "notes": "사용자 요청으로 런타임 원본 PNG 그대로 복원. 이전 수정안 제외."
+    },
+    {
+      "key": "ar_glasses",
+      "name": "AR 안경",
+      "source": "resources/gfx/items/collectibles/ar_glasses.png",
+      "original_sha256": "3e2035c308cacb7662013a542004ed9a080a78a8393a8cfcaaf2ed0491eaae3f",
+      "selected_sha256": "3e2035c308cacb7662013a542004ed9a080a78a8393a8cfcaaf2ed0491eaae3f",
+      "mode": "original",
+      "notes": "원본 그대로 유지. 이전 새 시안을 사용하지 않음."
+    },
+    {
+      "key": "hemispatial_neglect",
+      "name": "편측 무시",
+      "source": "resources/gfx/items/collectibles/hemispatial_neglect.png",
+      "original_sha256": "fc38dbee6b74de3e3818ba52199b13ab3cc6bb4e8ee557bd4609631fb38e8a5e",
+      "selected_sha256": "9bcf9e2262999962a6abdc998649abe63d692ae44dd94a97936897b556b935a9",
+      "mode": "original_edit",
+      "notes": "바닐라 아이작 HeadDown 얼굴의 오른쪽 절반을 원래 픽셀 그대로 잘라 사용. 크기 변경·재해석 없음."
+    },
+    {
+      "key": "rat",
+      "name": "자",
+      "source": "resources/gfx/items/collectibles/rat.png",
+      "original_sha256": "827e93c738dff75dbdb3282f23f6494d0d38cef963da16a88d6dd87b4ed02fed",
+      "selected_sha256": "827e93c738dff75dbdb3282f23f6494d0d38cef963da16a88d6dd87b4ed02fed",
+      "mode": "original",
+      "notes": "원본 그대로 유지. 이전 새 시안을 사용하지 않음."
+    },
+    {
+      "key": "ox",
+      "name": "축 (WIP)",
+      "source": "resources/gfx/items/collectibles/ox.png",
+      "original_sha256": "4e3480056ed0f685ce389b833c51125fee5cdf73bf555869f3479332cf79437b",
+      "selected_sha256": "5ecc51594eb28e9d50c29079a0b13540423f173f48997a9d7e1851cdaa5b6837",
+      "mode": "selected_v1",
+      "notes": "사용자가 더 낫다고 선택한 1차 새 시안을 그대로 채택. 추가 변경 없음."
+    },
+    {
+      "key": "tiger",
+      "name": "인 (WIP)",
+      "source": "resources/gfx/items/collectibles/tiger.png",
+      "original_sha256": "4c9fc4dc7c2431499a5177d39a806e9bfe343e239a5dbae4a1d5da2013516bfc",
+      "selected_sha256": "4d4b53f05a6d7140a6b0b737cc41c6cbc0f0e025c80b49fa44c08ce869ad6b73",
+      "mode": "selected_v1",
+      "notes": "사용자가 더 낫다고 선택한 1차 새 시안을 그대로 채택. 추가 변경 없음."
+    },
+    {
+      "key": "rabbit",
+      "name": "묘 (WIP)",
+      "source": "resources/gfx/items/collectibles/rabbit.png",
+      "original_sha256": "fbc9a19b5fcf44a86ab0901bba79a681120989405dd6fac57b7903ddddf37efd",
+      "selected_sha256": "b642a10257d6b527be345beae72624013e94449710427e74813e4e3d49c7a470",
+      "mode": "original_edit",
+      "notes": "원본 유지 기반: 얼굴에만 작은 흰 눈과 검은 동공을 추가. 긴 귀·표정·아래쪽 간 보존."
+    },
+    {
+      "key": "dragon",
+      "name": "진",
+      "source": "resources/gfx/items/collectibles/dragon.png",
+      "original_sha256": "fd1fb66f131371dfdd16acaad86990bd54cd01f3cf58e8a363328bff0e71e75b",
+      "selected_sha256": "af7bea22c0239d9be346025aff9abd0f56726d2bff1af2c689662f2203be1302",
+      "mode": "original_edit",
+      "notes": "원본 유지 기반: 눈 자리의 금색을 작은 밝은 흰자와 검은 동공으로 구분. 뿔·수염·얼굴 보존."
+    },
+    {
+      "key": "snake",
+      "name": "사 (WIP)",
+      "source": "resources/gfx/items/collectibles/snake.png",
+      "original_sha256": "26703b91de95f1e9914b133c9d5e8377aa4e82548518b66d518935df8cdd408f",
+      "selected_sha256": "26703b91de95f1e9914b133c9d5e8377aa4e82548518b66d518935df8cdd408f",
+      "mode": "original",
+      "notes": "원본 그대로 유지. 이전 새 시안을 사용하지 않음."
+    },
+    {
+      "key": "horse",
+      "name": "오 (WIP)",
+      "source": "resources/gfx/items/collectibles/horse.png",
+      "original_sha256": "26288b5d7b1e03eecdb76b066f322767d9a776abfdeb0289f592c5a2bd609c9b",
+      "selected_sha256": "44777b351c104be9696fc9cbd72250a48a35eb69efdcdf775bae49b85194ae75",
+      "mode": "original_edit",
+      "notes": "원본 유지 기반: 작은 흰자와 검은 동공으로 눈만 조금 더 보이게 조정. 흰 얼굴·푸른 갈기 보존."
+    },
+    {
+      "key": "goat",
+      "name": "미 (WIP)",
+      "source": "resources/gfx/items/collectibles/goat.png",
+      "original_sha256": "9916ff2802d1af9d87be121151e23bc82fad88acec7c6c47d89d21cca28f7225",
+      "selected_sha256": "368d7d8b21594625ac5377cdc13610ec00f7d601c85d251662e77481e9767238",
+      "mode": "original_edit",
+      "notes": "양이 먼저 읽히는 비스듬한 전신 구도: 둥근 양털 몸통, 앞으로 나온 짙은 얼굴·처진 귀·짧은 발. 기존 정면 투구형 얼굴을 교체."
+    },
+    {
+      "key": "monkey",
+      "name": "신 (WIP)",
+      "source": "resources/gfx/items/collectibles/monkey.png",
+      "original_sha256": "f5f3547cbb9118f4af8e48037c67551b1bf5ddfb2f945490dcc028b3b0d68d60",
+      "selected_sha256": "f5f3547cbb9118f4af8e48037c67551b1bf5ddfb2f945490dcc028b3b0d68d60",
+      "mode": "original",
+      "notes": "원본 그대로 유지. 이전 새 시안을 사용하지 않음."
+    },
+    {
+      "key": "chicken",
+      "name": "유 (WIP)",
+      "source": "resources/gfx/items/collectibles/chicken.png",
+      "original_sha256": "d64abe6a979631e926bcb662b9e204a1545043d9e70f1f60d8949e39fe3baef5",
+      "selected_sha256": "d64abe6a979631e926bcb662b9e204a1545043d9e70f1f60d8949e39fe3baef5",
+      "mode": "original",
+      "notes": "원본 그대로 유지. 이전 새 시안을 사용하지 않음."
+    },
+    {
+      "key": "dog",
+      "name": "술 (WIP)",
+      "source": "resources/gfx/items/collectibles/dog.png",
+      "original_sha256": "4c0d8c072f5476d6550c06f3ced685d720663a311f6a00b5239b8870d83d2802",
+      "selected_sha256": "9e7768fb37c0e32e7f302a9e9d2fc4ec8ad89ef92655bc3dc3991c20498d99c8",
+      "mode": "original_edit",
+      "notes": "정면 백구 유지. 목걸이와 검정 테두리 완전 제거, 낮고 단단한 눈썹·안쪽으로 기운 눈매·넓은 턱으로 용맹한 인상. 기존 32×32를 직접 수정."
+    },
+    {
+      "key": "pig",
+      "name": "해 (WIP)",
+      "source": "resources/gfx/items/collectibles/pig.png",
+      "original_sha256": "dfea40292a7e575386f4ec023939c2edb88b7d12d7acd6969c14566093359736",
+      "selected_sha256": "dfea40292a7e575386f4ec023939c2edb88b7d12d7acd6969c14566093359736",
+      "mode": "original",
+      "notes": "원본 그대로 유지. 이전 새 시안을 사용하지 않음."
+    },
+    {
+      "key": "time_money",
+      "name": "시간 = 돈",
+      "source": "resources/gfx/items/collectibles/time_money.png",
+      "original_sha256": "ce87a00e0fc62cce4a24e5fedd0531c9fbde2ae14200fee16eb1d442c7a3c538",
+      "selected_sha256": "85ec481d7fcfc0c1b9e9708dab5312ed7fa50997d18ab650ff66a28b5424a8d9",
+      "mode": "original_edit",
+      "notes": "원본 돈주머니의 크기·실루엣·매듭 유지. 부분 투명 번짐을 없애고 금색 밝은 면·갈색 그림자·외곽선을 구분."
+    },
+    {
+      "key": "azure_dragon",
+      "name": "청룡",
+      "source": "resources/gfx/items/collectibles/azure_dragon.png",
+      "original_sha256": "073378ebb926afdf5ee1f0add13a930eab2912ad77d4617262cabf6838c6fde6",
+      "selected_sha256": "1b1d04f990f3d4fc44ea2668c7e8d71176453c6cfafda2c2f76ae5eda328c7c4",
+      "mode": "original_edit",
+      "notes": "원본 청룡의 얼굴·뿔·노란 눈·푸른 배색 유지. 흐린 중간색을 단단한 청색 면으로 묶고 눈·코·외곽 대비 개선."
+    },
+    {
+      "key": "time_power",
+      "name": "시간 = 힘",
+      "source": "resources/gfx/items/trinkets/time_power.png",
+      "original_sha256": "925ee0cb718d25eed428718eef69ca1b80b72b14558088e404f4cd87ca1d6b47",
+      "selected_sha256": "925ee0cb718d25eed428718eef69ca1b80b72b14558088e404f4cd87ca1d6b47",
+      "mode": "original",
+      "notes": "원본 그대로 유지. 이전 새 시안을 사용하지 않음."
+    },
+    {
+      "key": "time_tear",
+      "name": "시간 = 연사",
+      "source": "resources/gfx/items/trinkets/time_tear.png",
+      "original_sha256": "32c3758e6da44a0e51c5c13a68a52ddcec97428c5d641b61102ca4fb7772c098",
+      "selected_sha256": "32c3758e6da44a0e51c5c13a68a52ddcec97428c5d641b61102ca4fb7772c098",
+      "mode": "original",
+      "notes": "원본 그대로 유지. 이전 새 시안을 사용하지 않음."
+    },
+    {
+      "key": "time_luck",
+      "name": "시간 = 행운",
+      "source": "resources/gfx/items/trinkets/time_luck.png",
+      "original_sha256": "1a1febcf688be81fb786c4b60cc1bd08ec087826055c5c0c92a4d33b02e69127",
+      "selected_sha256": "1a1febcf688be81fb786c4b60cc1bd08ec087826055c5c0c92a4d33b02e69127",
+      "mode": "original",
+      "notes": "원본 그대로 유지. 이전 새 시안을 사용하지 않음."
+    },
+    {
+      "key": "f_minus",
+      "name": "F -",
+      "source": "resources/gfx/items/trinkets/f_minus.png",
+      "original_sha256": "c24acbc30d962d624275ab6e77a5b3ad4aac2856ea7413918b3af97e0f393295",
+      "selected_sha256": "6c6c7e0dac50e6f98c27b4aee0030e079fc2dcc98953e797b11a6047dab323a6",
+      "mode": "original_edit",
+      "notes": "Perfection의 A+를 원 안쪽에서 완전히 제거. 기존 3×5에서 4×6으로 키운 글자·1~2픽셀 굵은 획과 분리된 마이너스를 새로 배치."
+    },
+    {
+      "key": "c_minus",
+      "name": "C -",
+      "source": "resources/gfx/items/trinkets/c_minus.png",
+      "original_sha256": "dadba031c0a5a1af94839019cbcdb4c27db0483f44fc551dcf93ff21499c097e",
+      "selected_sha256": "2f00ea5f3d3bee997f793936c253c670ff965e774583363efc2396423461b10f",
+      "mode": "original_edit",
+      "notes": "Perfection의 A+를 원 안쪽에서 완전히 제거. 기존 3×5에서 4×6으로 키운 글자·1~2픽셀 굵은 획과 분리된 마이너스를 새로 배치."
+    },
+    {
+      "key": "b_minus",
+      "name": "B -",
+      "source": "resources/gfx/items/trinkets/b_minus.png",
+      "original_sha256": "f24165dd3597210bdc4e145ac0a915dea4bebca1d3f847fceade491d6b66ec9c",
+      "selected_sha256": "9a78d3c86bf356c192cbd983bbe232f9020fca2531eafa6437bfff1a8c155727",
+      "mode": "original_edit",
+      "notes": "Perfection의 A+를 원 안쪽에서 완전히 제거. 기존 3×5에서 4×6으로 키운 글자·1~2픽셀 굵은 획과 분리된 마이너스를 새로 배치."
+    },
+    {
+      "key": "a_minus",
+      "name": "A -",
+      "source": "resources/gfx/items/trinkets/a_minus.png",
+      "original_sha256": "e07443793cb040c716f779cb28b0edb98fc6c26ca550d0a8cac51ff55946d127",
+      "selected_sha256": "73c3cf880db21b51b88f76c6fcc8f438758c99fe5c98526681629de2385bfadf",
+      "mode": "original_edit",
+      "notes": "Perfection의 A+를 원 안쪽에서 완전히 제거. 기존 3×5에서 4×6으로 키운 글자·1~2픽셀 굵은 획과 분리된 마이너스를 새로 배치."
+    },
+    {
+      "key": "atropos",
+      "name": "아트로포스",
+      "source": "resources/gfx/items/trinkets/atropos.png",
+      "original_sha256": "5aa9b5a0f17fa1c004077643dc27c7d694c0545b2a43b035d69ed1038e0a18ac",
+      "selected_sha256": "34da55ae6d76f2b6d08f391ccdbc33bbb4ed8a0a78746057dc4ffebe19e76135",
+      "mode": "original_edit",
+      "notes": "원본의 세로 금색 가위·붉은 축·두 고리 유지. 흐린 외곽선과 금색 면만 정리."
+    },
+    {
+      "key": "angels_crown",
+      "name": "천사의 왕관",
+      "source": "resources/gfx/items/trinkets/angels_crown.png",
+      "original_sha256": "4b878453cf3cf36c24b2fd4ef63ba7337d576b5aa39aa3872b91f051949ac7b8",
+      "selected_sha256": "4b878453cf3cf36c24b2fd4ef63ba7337d576b5aa39aa3872b91f051949ac7b8",
+      "mode": "original",
+      "notes": "원본 그대로 유지. 이전 새 시안을 사용하지 않음."
+    }
+  ]
+}

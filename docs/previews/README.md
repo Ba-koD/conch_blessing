@@ -1,5 +1,7 @@
 # 강화 연출 미리보기
 
+아이템 그림의 최종 적용본과 원본 비교는 [스프라이트 최종 선택](resprite-final/README.md)에 정리되어 있습니다.
+
 > 진화 미리보기(받침대 위로 결과가 나무처럼 갈라지는 표시)는 `evolution-branch-preview.html`을 직접 열면 됩니다. 수치는 `scripts/lib/upgrade_branch_preview.lua`·`scripts/conch_blessing_highlight.lua`와 같고, 게임 안 확인은 `conch_test evolution`입니다. 시안을 고친 뒤에는 두 Lua 파일도 같은 값으로 맞춥니다.
 
 `item-upgrade-player.html`을 직접 열면 재생됩니다. 서버와 인터넷은 필요하지 않습니다.
