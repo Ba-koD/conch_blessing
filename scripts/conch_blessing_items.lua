@@ -58,10 +58,10 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 --   hidden: true/false - hidden item
 --   stackable: true when more copies change the item's effect. Conch Pearl may roll
 --     such an item again while someone holds it; a non-stackable passive or any
---     active is left out while anyone holds it. A trinket stacks when a golden
---     copy, Mom's Box or more copies strengthen it, even if only golden copies and
---     Mom's Box do. The codex site (tboi.rnen.kr) shows it on every collectible and
---     trinket. Mark a new item whose copies stack.
+--     active is left out while anyone holds it. A trinket stacks when more copies
+--     strengthen it; what a golden copy or Mom's Box does is a separate fact, read
+--     from its `specials`. The codex site (tboi.rnen.kr) shows both on every
+--     trinket and stacking on every collectible. Mark a new item whose copies stack.
 --   devilprice: number - price in devil room (heart count)
 --   shopprice: number - price in shop (coin count)
 --   maxcharges: number - max charges for active item
@@ -1230,7 +1230,6 @@ ConchBlessing.ItemData = {
     ANGELS_CROWN = {
         type = "trinket",
         id = Isaac.GetTrinketIdByName("Angel's Crown"),
-        stackable = true, -- golden copies and Mom's Box strengthen it
         gfx = "angels_crown.png",
         tags = "utility",
         hidden = false,
