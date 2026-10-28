@@ -581,7 +581,8 @@ class MorphBenchOracleTests(unittest.TestCase):
                         circle=t.circle~=false, committed=committed, locked=t.locked}
                 end
                 for i=1,3 do turn(false) end
-                local ctx={wheel=wheel, turnsBefore=3, job={status='complete',committed=true,endReason='complete'}}
+                local ctx={wheel=wheel, turnsBefore=3, job={status='complete',committed=true,endReason='complete'},
+                    offShow={jobs=0, shown=1, kept=true, now='1,2,7'}}
                 turn(false,{locked=true}); turn(true); turn(true)
                 if mutate then mutate(ctx,wheel,turn) end
                 local failed,skipped={},{}
@@ -602,6 +603,7 @@ class MorphBenchOracleTests(unittest.TestCase):
             'commits while the pedestal turns':
                 "function(c) c.job.status='cancelled'; c.job.committed=false; c.job.endReason='expired' end",
             'stayed locked': 'function(c,w) w.turns[4].locked=false end',
+            'another choice shows': 'function(c) c.offShow.jobs=1 end',
             'every other choice stayed': 'function(c,w) w.entity.cycle={7,2} end',
             'turns through the new circle': 'function(c,w) w.turns[6].circle=false end',
         }

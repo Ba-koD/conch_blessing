@@ -462,7 +462,8 @@ end
 -- A rotating pedestal (REPENTOGON collectible cycle) keeps turning its choices
 -- while the upgrade plays. DIAG lines record what a native turn does to the
 -- pickup (reference, GetData, seed, Morph callbacks); the checks require the
--- real transaction to convert the matching choice and keep the whole circle.
+-- real transaction to convert only the choice on show at the answer (user
+-- decision 2026-10-29), wherever it has turned to, and keep the whole circle.
 local CYCLE_KEY = "LIVE_EYE" -- Dead Eye -> Live Eye, the default positive animation
 local CYCLE_PROBE_KEY = "__ConchBlessingCycleProbe"
 local morphWatch = nil -- Morph callbacks seen for the fixture: { hash, post }
@@ -531,7 +532,7 @@ local function stageCycle(plan)
     local key = CYCLE_KEY
     local item = ConchBlessing.ItemData[key]
     plan.section("rotating pedestal (" .. string.lower(key) .. ")",
-        "the pedestal keeps turning between Dead Eye, Sad Onion and Inner Eye; Dead Eye turns into Live Eye with the white flash while the pedestal keeps turning")
+        "the pedestal keeps turning between Dead Eye, Sad Onion, a second Dead Eye and Inner Eye; the Dead Eye on show turns into Live Eye with the white flash while the pedestal keeps turning, and the other Dead Eye stays")
     plan.act(function(player, ctx)
         removeFixture(ctx)
         local variant, id = Visuals.origin(item)
@@ -558,13 +559,11 @@ local function stageCycle(plan)
     plan.act(function(_, ctx)
         local p = assert(livePickup(ctx), "origin pedestal disappeared")
         p:RemoveCollectibleCycle()
-        for _, extra in ipairs({ CollectibleType.COLLECTIBLE_SAD_ONION, CollectibleType.COLLECTIBLE_INNER_EYE }) do
+        for _, extra in ipairs({ CollectibleType.COLLECTIBLE_SAD_ONION, ctx.sourceId, CollectibleType.COLLECTIBLE_INNER_EYE }) do
             assert(p:AddCollectibleCycle(extra), "AddCollectibleCycle refused " .. extra)
         end
-        local source, target = circleOf(p), {}
-        for i, id in ipairs(source) do target[i] = id == ctx.sourceId and item.id or id end
         ctx.wheel = { entity = p, hash = GetPtrHash(p), head = p.SubType, ptr = EntityPtr(p), seed = p.InitSeed,
-            token = {}, turns = {}, source = source, target = target, post = 0 }
+            token = {}, turns = {}, source = circleOf(p), post = 0 }
         p:GetData()[CYCLE_PROBE_KEY] = ctx.wheel.token
         morphWatch = { hash = ctx.wheel.hash, post = 0 }
     end)
@@ -591,6 +590,22 @@ local function stageCycle(plan)
     end)
     plan.waitUntil(function(_, ctx)
         trackTurns(ctx)
+        return ctx.wheel.entity.SubType ~= ctx.sourceId, "showing " .. tostring(ctx.wheel.entity.SubType)
+    end, 400, "a choice that does not evolve shows on the pedestal")
+    plan.act(function(_, ctx)
+        local p = assert(ctx.wheel.entity:ToPickup(), "fixture is not a pickup")
+        local before = circleOf(p)
+        local jobs = ConchBlessing.upgrade._test.queueResult({ type = item.flag }, { p }) or {}
+        for _, job in ipairs(jobs) do ConchBlessing.upgrade.cancel(job) end
+        ctx.offShow = { jobs = #jobs, shown = before[1], kept = sameCircle(circleOf(p), before),
+            now = table.concat(circleOf(p), ",") }
+    end)
+    plan.check(key .. ": an answer while another choice shows leaves the circle alone", function(_, ctx)
+        local off = ctx.offShow
+        return off.jobs == 0 and off.kept, off.jobs .. " jobs while showing " .. tostring(off.shown) .. "; now " .. off.now
+    end)
+    plan.waitUntil(function(_, ctx)
+        trackTurns(ctx)
         return ctx.wheel.entity.SubType == ctx.sourceId, "showing " .. tostring(ctx.wheel.entity.SubType)
     end, 400, "Dead Eye shows on the pedestal")
     plan.act(function(player, ctx)
@@ -598,6 +613,10 @@ local function stageCycle(plan)
         local job, reason = ConchBlessing.upgrade.queuePickup(p, key, player)
         assert(job, "queue refused: " .. tostring(reason))
         assert(job.cyclePlan, "queued without its cycle plan")
+        -- Only the Dead Eye on show now evolves; the other copy stays.
+        local target = circleOf(p)
+        target[1] = item.id
+        ctx.wheel.target = target
         ctx.job = job
         ctx.turnsBefore = #ctx.wheel.turns
     end)
@@ -627,7 +646,7 @@ local function stageCycle(plan)
         end
         return open == 0, open .. " turns left it collectible"
     end)
-    plan.check(key .. ": Dead Eye became Live Eye and every other choice stayed, in the same circle", function(_, ctx)
+    plan.check(key .. ": the Dead Eye on show became Live Eye and every other choice stayed, in the same circle", function(_, ctx)
         local now = circleOf(ctx.wheel.entity)
         return sameCircle(now, ctx.wheel.target),
             "now " .. table.concat(now, ",") .. "; want " .. table.concat(ctx.wheel.target, ",")

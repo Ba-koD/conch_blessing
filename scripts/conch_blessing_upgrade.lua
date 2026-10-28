@@ -379,36 +379,48 @@ local function _buildCollectibleCyclePlan(pickup, resultType)
     local plan = {
         sourceCycle = _copySequence(snapshot.items),
         replacements = {},
-        upgradeDataBySource = {},
         matched = false,
     }
 
-    local function inspectItem(itemId)
-        local upgradeData = _mapCycleItem(itemId, resultType)
-        if not upgradeData then
-            return itemId
-        end
-        if upgradeData.itemData and upgradeData.itemData.type == "trinket" then
-            return nil, "a collectible cycle target cannot be a trinket"
-        end
-
-        plan.matched = true
-        plan.replacements[itemId] = upgradeData.upgradeId
-        plan.upgradeDataBySource[itemId] = upgradeData
-        if not plan.primaryUpgradeData or itemId == pickup.SubType then
-            plan.primaryUpgradeData = upgradeData
-        end
-        return upgradeData.upgradeId
+    -- Only the choice on show when the answer comes evolves (user decision
+    -- 2026-10-29): the player has to time the Conch to the choice they want,
+    -- even when the circle holds other evolvable ones.
+    local shownId = plan.sourceCycle[1]
+    local upgradeData = _mapCycleItem(shownId, resultType)
+    if not upgradeData then
+        return plan
+    end
+    if upgradeData.itemData and upgradeData.itemData.type == "trinket" then
+        return nil, "a collectible cycle target cannot be a trinket"
     end
 
-    for _, itemId in ipairs(plan.sourceCycle) do
-        local targetId, mapError = inspectItem(itemId)
-        if not targetId then
-            return nil, mapError
-        end
-    end
-
+    plan.matched = true
+    plan.primaryUpgradeData = upgradeData
+    plan.replacements[shownId] = upgradeData.upgradeId
     return plan
+end
+
+-- Where the choice that was on show at the answer sits in the live circle. The
+-- circle keeps turning, so it may be anywhere by the commit. A circle that
+-- repeats itself (A,B,A,B) fits several turns; those places hold the same
+-- item, so the one on show now wins.
+local function _shownChoicePosition(sourceCycle, liveItems)
+    local count = #liveItems
+    local found = nil
+    for offset = 0, count - 1 do
+        local fits = true
+        for index, itemId in ipairs(sourceCycle) do
+            if liveItems[((index + offset - 1) % count) + 1] ~= itemId then
+                fits = false
+                break
+            end
+        end
+        if fits then
+            if offset == 0 then return 1 end
+            found = found or offset + 1
+        end
+    end
+    return found
 end
 
 -- Morph may reinitialize native lifetime/pointer bookkeeping even when its
@@ -699,15 +711,15 @@ local function _commitCycleUpgrade(job, pickup)
     end
 
     local sourceAtCommit = _copySequence(liveCycle.items)
-    local targetAtCommit = {}
-    local titleItemData = nil
-    for index, itemId in ipairs(sourceAtCommit) do
-        local liveUpgradeData = job.cyclePlan.upgradeDataBySource[itemId]
-        targetAtCommit[index] = liveUpgradeData and liveUpgradeData.upgradeId or itemId
-        if liveUpgradeData and (not titleItemData or index == 1) then
-            titleItemData = liveUpgradeData.itemData
-        end
+    local position = _shownChoicePosition(job.cyclePlan.sourceCycle, sourceAtCommit)
+    if not position then
+        return false, "the evolving choice cannot be found in the circle"
     end
+    -- Only that one choice changes; any other copy of the same item stays.
+    local upgradeData = job.cyclePlan.primaryUpgradeData
+    local targetAtCommit = _copySequence(sourceAtCommit)
+    targetAtCommit[position] = upgradeData.upgradeId
+    local titleItemData = upgradeData.itemData
 
     local rebuilt, rebuildError = _rebuildCollectibleCycle(pickup, targetAtCommit, job)
     if rebuilt then
@@ -1276,6 +1288,9 @@ function ConchBlessing.upgrade.queuePickup(pickup, itemKey, visualOwner)
     job.templateState.visualOwner = visualOwner
     return job
 end
+
+-- Test hook: the room-wide result path limited to the given pickups.
+ConchBlessing.upgrade._test = { queueResult = queueResult }
 
 function ConchBlessing.upgrade.cancel(job)
     if not job then return end

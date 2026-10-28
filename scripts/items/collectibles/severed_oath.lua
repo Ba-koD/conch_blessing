@@ -1783,7 +1783,9 @@ end
 -- replace or clear it. Keep the grant ledger, but never re-add historical IDs.
 
 -- Keep this item's owned bonus identity aligned when the central Magic Conch
--- transaction rewrites one or more members of the same collectible cycle.
+-- transaction rewrites a member of the same collectible cycle. It may change
+-- only one copy of an item the circle holds twice, so a bonus entry follows the
+-- rewrite only when the circle no longer holds enough of the old item for it.
 function M.onCollectibleCycleRewritten(pickup, replacements)
     if not pickup or type(replacements) ~= "table" then
         return
@@ -1792,10 +1794,15 @@ function M.onCollectibleCycleRewritten(pickup, replacements)
     markPickupCycleState(pickup)
     local state = getPickupCycleState(pickup)
     if not (state and state.bonusItems) then return end
+    local left = {}
+    for _, itemId in ipairs(getCollectibleCycleValues(pickup)) do left[itemId] = (left[itemId] or 0) + 1 end
+    left[pickup.SubType] = (left[pickup.SubType] or 0) + 1
     local changed = false
     for i, oldBonus in ipairs(state.bonusItems) do
         local newBonus = replacements[oldBonus]
-        if newBonus ~= oldBonus and isValidCollectibleId(newBonus) then
+        local stillThere = (left[oldBonus] or 0) > 0
+        if stillThere then left[oldBonus] = left[oldBonus] - 1 end
+        if not stillThere and newBonus ~= oldBonus and isValidCollectibleId(newBonus) then
             state.bonusItems[i] = newBonus
             changed = true
         end

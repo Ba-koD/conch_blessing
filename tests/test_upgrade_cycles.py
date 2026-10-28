@@ -1,9 +1,11 @@
 """Magic Conch upgrades on rotating pedestals through the shipped transaction.
 
-A rotating (REPENTOGON collectible cycle) pedestal keeps turning its choices
-while the upgrade presentation plays. The engine may turn it in place or through
-a native Morph, which expires the job's EntityPtr; both must still commit every
-matching choice. Offline doubles only: `conch_test morph cycle` checks the engine.
+A rotating (REPENTOGON collectible cycle) pedestal evolves only the choice on
+show when the answer comes (user decision 2026-10-29), and keeps turning its
+choices while the upgrade presentation plays. The engine may turn it in place or
+through a native Morph, which expires the job's EntityPtr; both must still commit
+that one choice wherever it has turned to. Offline doubles only:
+`conch_test morph cycle` checks the engine.
 """
 import unittest
 
@@ -71,7 +73,7 @@ class RotatingPedestalUpgradeTests(unittest.TestCase):
     def run_rotating(self, via_morph):
         self.lua.globals().viaMorph = via_morph
         self.lua.execute('''
-            p=rotating(77,{origin,88})
+            p=rotating(origin,{77,88})
             actualConchResult({type='positive'})
             job=ConchBlessing._upgradeJobs[1]
             assert(job and job.cyclePlan and #ConchBlessing._upgradeJobs==1, 'rotating pedestal queued with its cycle')
@@ -90,12 +92,12 @@ class RotatingPedestalUpgradeTests(unittest.TestCase):
             end
         ''')
 
-    def test_turning_in_place_commits_every_matching_choice(self):
+    def test_turning_in_place_commits_the_choice_on_show(self):
         self.run_rotating(False)
         self.lua.execute('''
             assert(job.status=='complete' and job.committed and job.endReason=='complete', tostring(job.endReason))
             assert(#morphs==1 and turns>=5)
-            assert(sameCircle(circle(p), {target,88,77}), table.concat(circle(p),','))
+            assert(sameCircle(circle(p), {target,77,88}), table.concat(circle(p),','))
             assert(lockedAfterTurn and titles[1]==target and #errors==0)
         ''')
 
@@ -104,7 +106,7 @@ class RotatingPedestalUpgradeTests(unittest.TestCase):
         self.lua.execute('''
             assert(job.status=='complete' and job.committed and job.endReason=='complete', tostring(job.endReason))
             assert(#morphs==1 and turns>=5)
-            assert(sameCircle(circle(p), {target,88,77}), table.concat(circle(p),','))
+            assert(sameCircle(circle(p), {target,77,88}), table.concat(circle(p),','))
             -- The rebound job kept the pickup locked and its presentation alive.
             assert(lockedAfterTurn, 'collision lock survives the replaced GetData')
             assert(cut==nil or not cut:find('^before'), 'presentation cut before the change: '..tostring(cut))
@@ -114,9 +116,58 @@ class RotatingPedestalUpgradeTests(unittest.TestCase):
             assert(rebound>=1)
         ''')
 
+    def test_an_evolvable_choice_not_on_show_stays(self):
+        self.lua.execute('''
+            p=rotating(77,{origin,88})
+            actualConchResult({type='positive'})
+            assert(#ConchBlessing._upgradeJobs==0, 'only the choice on show decides')
+            for tick=1,220 do
+                if tick%20==0 then turn(p, false) end
+                event(1)
+            end
+            assert(#morphs==0 and #titles==0 and #errors==0)
+            assert(sameCircle(circle(p), {77,origin,88}), table.concat(circle(p),','))
+        ''')
+
+    def test_only_the_copy_on_show_evolves_and_turns_do_not_stop_it(self):
+        for via_morph in (False, True):
+            with self.subTest(via_morph=via_morph):
+                self.lua.globals().viaMorph = via_morph
+                self.lua.execute('''
+                    p=rotating(origin,{77,origin})
+                    actualConchResult({type='positive'})
+                    job=ConchBlessing._upgradeJobs[1]
+                    assert(job and #ConchBlessing._upgradeJobs==1)
+                    local turned=0
+                    for tick=1,220 do
+                        if tick%20==0 then turn(p, viaMorph); if not job.committed then turned=turned+1 end end
+                        event(1)
+                    end
+                    assert(turned>=2 and job.status=='complete' and job.committed, tostring(job.endReason))
+                    assert(sameCircle(circle(p), {target,77,origin}), table.concat(circle(p),','))
+                    assert(#errors==0)
+                ''')
+
+    def test_a_repeating_circle_changes_the_copy_on_show_at_the_commit(self):
+        self.lua.execute('''
+            p=rotating(origin,{77,origin,77})
+            actualConchResult({type='positive'})
+            job=ConchBlessing._upgradeJobs[1]
+            -- Two turns bring the other copy of the evolving item on show.
+            local committedShown
+            for tick=1,220 do
+                if tick==20 or tick==40 then turn(p, false) end
+                local before=job.committed
+                event(1)
+                if job.committed and not before then committedShown=p.SubType end
+            end
+            assert(job.committed and committedShown==target, 'the copy on show changed: '..tostring(committedShown))
+            assert(sameCircle(circle(p), {target,77,origin,77}), table.concat(circle(p),','))
+        ''')
+
     def test_native_reroll_morph_cancels_and_restores_the_pedestal(self):
         self.lua.execute(f'''
-            p=rotating(77,{{origin,88}})
+            p=rotating(origin,{{77,88}})
             p.sprite.Color=Color(1,1,1,0.8); p.sprite.Color.original=true
             actualConchResult({{type='positive'}})
             job=ConchBlessing._upgradeJobs[1]
@@ -137,7 +188,7 @@ class RotatingPedestalUpgradeTests(unittest.TestCase):
 
     def test_reference_lost_without_a_morph_callback_fails_closed_with_a_reason(self):
         self.lua.execute('''
-            p=rotating(77,{origin,88})
+            p=rotating(origin,{77,88})
             actualConchResult({type='positive'})
             job=ConchBlessing._upgradeJobs[1]
             for i=1,5 do event(1) end
@@ -148,21 +199,21 @@ class RotatingPedestalUpgradeTests(unittest.TestCase):
             for _,line in ipairs(debugLines) do logged=logged or line:find('Pickup reference expired',1,true)~=nil end
             assert(logged and #morphs==0)
             for i=1,200 do event(1) end
-            assert(#morphs==0 and p.SubType==77)
+            assert(#morphs==0 and p.SubType==origin)
         ''')
 
     def test_cancelled_native_morph_never_proves_a_recycled_address(self):
         self.lua.execute(f'''
-            p=rotating(77,{{origin,88}})
+            p=rotating(origin,{{77,88}})
             actualConchResult({{type='positive'}})
             job=ConchBlessing._upgradeJobs[1]
             for i=1,5 do event(1) end
             -- Another mod cancels this Morph after our PRE: POST never runs.
             event({MORPH_PRE},p,5,100,origin,true,true,true)
             p:Remove()
-            local q=Isaac.Spawn(5,100,77,p.Position,Vector(0,0),nil)
+            local q=Isaac.Spawn(5,100,origin,p.Position,Vector(0,0),nil)
             q.pointerHash=p.pointerHash; q.InitSeed=p.InitSeed
-            q.cycle={{origin,88}}
+            q.cycle={{77,88}}
             function q:GetCollectibleCycle() local t={{}} for i,v in ipairs(self.cycle) do t[i]=v end return t end
             entities={{q}}
             event({MORPH_PRE},q,5,100,origin,true,true,true)
@@ -173,7 +224,7 @@ class RotatingPedestalUpgradeTests(unittest.TestCase):
             assert(job.status=='cancelled' and job.endReason=='expired', tostring(job.endReason))
             assert(event(10,q,player)==nil and next(q:GetData())==nil, 'the recycled pickup is not claimed')
             for i=1,200 do event(1) end
-            assert(#morphs==0 and q.SubType==77)
+            assert(#morphs==0 and q.SubType==origin)
         ''')
 
 

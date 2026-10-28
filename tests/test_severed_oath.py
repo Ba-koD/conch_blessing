@@ -423,6 +423,19 @@ class SeveredOathTests(unittest.TestCase):
             assert(#p.tail==1 and next(GoldenItems.goldActiveList)==nil)
         ''')
 
+    def test_bonus_follows_a_cycle_upgrade_only_when_its_copy_changed(self):
+        # A rotating pedestal evolves only the choice on show, so the circle may
+        # still hold another copy of the bonus item after the rewrite.
+        self.lua.execute('''
+            p=pedestal(71,1,{2,2}); update(p); local bonus=p.tail[3]
+            p.tail={2,2,bonus,55}
+            M.onCollectibleCycleRewritten(p,{[bonus]=55})
+            assert(saves[key(p)].severedOath.bonusItems[1]==bonus, 'a copy of the bonus is still there')
+            p.tail={2,2,55,55}
+            M.onCollectibleCycleRewritten(p,{[bonus]=55}); update(p)
+            assert(saves[key(p)].severedOath.bonusItems[1]==55 and draws==1)
+        ''')
+
     def test_same_seed_copies_have_independent_ownership_and_saves(self):
         self.lua.execute('''
             p=pedestal(71,1,{2,2}); update(p); local bonus=p.tail[3]
