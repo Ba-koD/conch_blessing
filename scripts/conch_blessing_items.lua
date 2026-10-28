@@ -58,8 +58,11 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 --   hidden: true/false - hidden item
 --   stackable: true when more copies change the item's effect. Conch Pearl may roll
 --     such an item again while someone holds it; a non-stackable passive or any
---     active is left out while anyone holds it. The codex site (tboi.rnen.kr) shows
---     it on every collectible. Mark a new item whose copies stack.
+--     active is left out while anyone holds it. A trinket stacks when the engine's
+--     trinket multiplier (golden copies, Mom's Box, more copies) strengthens it;
+--     "golden" marks one that only a golden copy or Mom's Box changes. The codex
+--     site (tboi.rnen.kr) shows it on every collectible and trinket. Mark a new item
+--     whose copies stack.
 --   devilprice: number - price in devil room (heart count)
 --   shopprice: number - price in shop (coin count)
 --   maxcharges: number - max charges for active item
@@ -1079,6 +1082,7 @@ ConchBlessing.ItemData = {
     TIME_POWER = {
         type = "trinket",
         id = Isaac.GetTrinketIdByName("Time = Power"),
+        stackable = true, -- the trinket multiplier (golden, Mom's Box, more copies) scales it
         gfx = "time_power.png",
         tags = "offensive",
         cache = "damage",
@@ -1098,6 +1102,7 @@ ConchBlessing.ItemData = {
     TIME_TEAR = {
         type = "trinket",
         id = Isaac.GetTrinketIdByName("Time = Tear"),
+        stackable = true, -- the trinket multiplier (golden, Mom's Box, more copies) scales it
         gfx = "time_tear.png",
         tags = "offensive",
         cache = "firedelay",
@@ -1117,6 +1122,7 @@ ConchBlessing.ItemData = {
     TIME_LUCK = {
         type = "trinket",
         id = Isaac.GetTrinketIdByName("Time = Luck"),
+        stackable = true, -- the trinket multiplier (golden, Mom's Box, more copies) scales it
         gfx = "time_luck.png",
         tags = "utility",
         cache = "luck",
@@ -1137,6 +1143,7 @@ ConchBlessing.ItemData = {
         WorkingNow=false,
         type = "trinket",
         id = Isaac.GetTrinketIdByName("F -"),
+        stackable = true, -- the trinket multiplier (golden, Mom's Box, more copies) scales it
         gfx = "f_minus.png",
         tags = "offensive",
         cache = "luck",
@@ -1152,6 +1159,7 @@ ConchBlessing.ItemData = {
         WorkingNow=false,
         type = "trinket",
         id = Isaac.GetTrinketIdByName("C -"),
+        stackable = true, -- the trinket multiplier (golden, Mom's Box, more copies) scales it
         gfx = "c_minus.png",
         tags = "offensive",
         cache = "firedelay",
@@ -1167,6 +1175,7 @@ ConchBlessing.ItemData = {
         WorkingNow=false,
         type = "trinket",
         id = Isaac.GetTrinketIdByName("B -"),
+        stackable = true, -- the trinket multiplier (golden, Mom's Box, more copies) scales it
         gfx = "b_minus.png",
         tags = "offensive",
         cache = "luck damage",
@@ -1182,6 +1191,7 @@ ConchBlessing.ItemData = {
         WorkingNow=false,
         type = "trinket",
         id = Isaac.GetTrinketIdByName("A -"),
+        stackable = true, -- the trinket multiplier (golden, Mom's Box, more copies) scales it
         gfx = "a_minus.png",
         tags = "offensive",
         cache = "luck damage firedelay",
@@ -1221,6 +1231,7 @@ ConchBlessing.ItemData = {
     ANGELS_CROWN = {
         type = "trinket",
         id = Isaac.GetTrinketIdByName("Angel's Crown"),
+        stackable = "golden", -- only a golden copy or Mom's Box changes it
         gfx = "angels_crown.png",
         tags = "utility",
         hidden = false,
