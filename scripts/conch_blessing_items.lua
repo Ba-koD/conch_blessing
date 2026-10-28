@@ -58,7 +58,8 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 --   hidden: true/false - hidden item
 --   stackable: true when more copies change the item's effect. Conch Pearl may roll
 --     such an item again while someone holds it; a non-stackable passive or any
---     active is left out while anyone holds it. Mark a new item whose copies stack.
+--     active is left out while anyone holds it. The codex site (tboi.rnen.kr) shows
+--     it on every collectible. Mark a new item whose copies stack.
 --   devilprice: number - price in devil room (heart count)
 --   shopprice: number - price in shop (coin count)
 --   maxcharges: number - max charges for active item
@@ -560,6 +561,7 @@ ConchBlessing.ItemData = {
     TYRFING = {
         type = "passive",
         id = Isaac.GetItemIdByName("Tyrfing"),
+        stackable = true, -- copies stack (hidden, so Conch Pearl never rolls it)
         pool = {},
         gfx = "tyrfing.png",
         tags = "offensive",
@@ -1049,6 +1051,7 @@ ConchBlessing.ItemData = {
         -- Inf D6: hidden, in no pool, numbered after the finished items.
         type = "familiar",
         id = Isaac.GetItemIdByName("Azure Dragon"),
+        stackable = true, -- copies stack (hidden, so Conch Pearl never rolls it)
         gfx = "azure_dragon.png",
         anm2 = "dragon.anm2",
         entity = { variant = 778, collisiondamage = 0, collisionmass = 3, collisionradius = 8, friction = 1, numgridcollisionpoints = 1, shadowsize = 0 },
