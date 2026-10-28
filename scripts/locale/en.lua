@@ -612,6 +612,14 @@ return {
             name = "Hemispatial Neglect", description = "              am I seeing?",
             eid = { "{{Damage}} Damage ×2.", "#Tears cannot be fired from the right eye." },
         },
+        CONCH_PEARL = {
+            name = "Conch Pearl", description = "Destined for blessings",
+            eid = {
+                "Quality {{Quality0}}/{{Quality1}} items no longer appear.",
+                "#Quality {{Quality2}} items have a 10% chance to turn into a Conch's Blessing item.",
+                "#Does not turn into an item you already hold whose copies don't stack.",
+            },
+        },
 
         -- Familiars
         TIME_MONEY = {
@@ -854,6 +862,11 @@ return {
                 "Enable debug output in the log and console.",
                 "ON: show debug diagnostics",
                 "OFF: hide debug diagnostics (default)",
+            },
+            preview_range = "Evolution Preview Range: %s (%s tiles)",
+            preview_range_info = {
+                "How close you must stand to an upgradeable item",
+                "to see its Magic Conch results. Default: 128 (3.2 tiles)",
             },
             reset = "Reset to Default",
             reset_info = {

@@ -11,7 +11,25 @@ local DefaultConfig = {
     spawnTrinkets = false,     -- allow trinkets to spawn naturally (default: false)
     soundVolume = 10,          -- every sound this mod plays, in 10% steps (scripts/lib/sound_volume.lua)
     rainVolume = 10,           -- 진's rain loop on top of that, in 10% steps
+    previewRange = 128,        -- evolution preview opening distance (twice the original 64)
 }
+
+-- The evolution preview opens within `previewRange` world units of a player (a
+-- grid tile is 40) and closes a quarter further out, so standing at the edge
+-- does not flicker. MCM moves it in STEP units between MIN and MAX.
+ConchBlessing_Config.PREVIEW_RANGE = {
+    DEFAULT = DefaultConfig.previewRange, MIN = 32, MAX = 320, STEP = 16, CLOSE_FACTOR = 1.25,
+}
+
+---@return number openRange, number closeRange
+function ConchBlessing_Config.GetPreviewRanges(mod)
+    mod = mod or ConchBlessing
+    local limits = ConchBlessing_Config.PREVIEW_RANGE
+    local value = tonumber(mod and mod.Config and mod.Config.previewRange)
+    if not value or value ~= value then value = limits.DEFAULT end
+    value = math.max(limits.MIN, math.min(limits.MAX, value))
+    return value, value * limits.CLOSE_FACTOR
+end
 
 -- Supported language codes for validation
 ConchBlessing_Config.SUPPORTED_LANGS = { "en", "kr", "urimal", "ja", "zh" }

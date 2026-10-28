@@ -11,7 +11,7 @@ for _, module in ipairs({"synergies","conditions","damage","kronos_synergies","k
 end
 local CycleCompare = require("scripts.dev.item_test_cycle_compare")
 local contracts = {}
-for _, module in ipairs({ "stats", "combat", "special", "rat" }) do
+for _, module in ipairs({ "stats", "combat", "special", "rat", "conch_pearl" }) do
     for key, contract in pairs(require("scripts.dev.item_test_" .. module)) do
         assert(not contracts[key], "duplicate item contract: " .. key)
         contracts[key] = contract

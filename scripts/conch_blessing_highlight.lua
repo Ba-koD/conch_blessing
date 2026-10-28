@@ -10,6 +10,7 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 local UpgradeHighlight = ConchBlessing.UpgradeHighlight or {}
 ConchBlessing.UpgradeHighlight = UpgradeHighlight
 local Preview = require("scripts.lib.upgrade_branch_preview")
+local Config = require("scripts.conch_blessing_config")
 
 local FLAG_ORDER = { "positive", "neutral", "negative" }
 local ROOM_SCAN_INTERVAL = 15
@@ -19,9 +20,9 @@ local HUD_PULSE_BASE_BRIGHTNESS = 1.0
 local HUD_PULSE_PEAK_BRIGHTNESS = 2.15
 local HUD_PULSE_BASE_ALPHA = 0.0
 local HUD_PULSE_PEAK_ALPHA = 0.72
--- A tree opens when a player comes this close and closes past the second
--- distance, so standing at the edge does not flicker.
-local OPEN_RANGE, CLOSE_RANGE = 64, 80
+-- A tree opens when a player comes within the MCM preview range and closes a
+-- quarter further out, so standing at the edge does not flicker
+-- (Config.GetPreviewRanges, read each update so a changed setting applies at once).
 local CLOSE_RATE = 1.5
 local EVENT_LIMIT = 40
 
@@ -387,10 +388,11 @@ end
 
 local function stepPreview(rec, pickup, clock)
     local distance = nearestPlayerDistance(pickup.Position)
-    if rec.open and distance > CLOSE_RANGE then
+    local openRange, closeRange = Config.GetPreviewRanges()
+    if rec.open and distance > closeRange then
         rec.open = false
         record("CLOSE", rec)
-    elseif not rec.open and distance <= OPEN_RANGE then
+    elseif not rec.open and distance <= openRange then
         rec.open = true
         rec.opens = rec.opens + 1
         record("OPEN", rec)
@@ -477,7 +479,7 @@ end
 function UpgradeHighlight.previewEvents()
     return UpgradeHighlight._previewEvents
 end
-UpgradeHighlight.OPEN_RANGE, UpgradeHighlight.CLOSE_RANGE = OPEN_RANGE, CLOSE_RANGE
+function UpgradeHighlight.ranges() return Config.GetPreviewRanges() end
 
 function UpgradeHighlight.ScanRoom(frame)
     frame = frame or getFrame()

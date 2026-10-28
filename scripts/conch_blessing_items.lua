@@ -56,6 +56,9 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 --       noeden - Items that can't be randomly rolled
 --   cache: "cache flag" - cache flag (all, damage, firedelay, shotspeed, range, tearflag, etc.)
 --   hidden: true/false - hidden item
+--   stackable: true when more copies change the item's effect. Conch Pearl may roll
+--     such an item again while someone holds it; a non-stackable passive or any
+--     active is left out while anyone holds it. Mark a new item whose copies stack.
 --   devilprice: number - price in devil room (heart count)
 --   shopprice: number - price in shop (coin count)
 --   maxcharges: number - max charges for active item
@@ -184,6 +187,7 @@ ConchBlessing.ItemData = {
     ETERNAL_FLAME = {
         type = "passive",
         id = Isaac.GetItemIdByName("Eternal Flame"),
+        stackable = true, -- copies stack: Conch Pearl may roll it again
         pool = {
             RoomType.ROOM_ANGEL
         },
@@ -234,6 +238,7 @@ ConchBlessing.ItemData = {
     ORAL_STEROIDS = {
         type = "passive",
         id = Isaac.GetItemIdByName("Oral Steroids"),
+        stackable = true, -- copies stack: Conch Pearl may roll it again
         pool = {
             RoomType.ROOM_DEVIL,
             RoomType.ROOM_CURSE,
@@ -478,6 +483,7 @@ ConchBlessing.ItemData = {
     MONEY_TEAR = {
         type = "passive",
         id = Isaac.GetItemIdByName("Money = Tear"),
+        stackable = true, -- copies stack: Conch Pearl may roll it again
         pool = {
             RoomType.ROOM_TREASURE,
             RoomType.ROOM_SHOP,
@@ -528,6 +534,7 @@ ConchBlessing.ItemData = {
     SEALED_DEMON_SWORD = {
         type = "passive",
         id = Isaac.GetItemIdByName("Sealed Demon Sword"),
+        stackable = true, -- copies stack: Conch Pearl may roll it again
         pool = {
             RoomType.ROOM_DEVIL,
             RoomType.ROOM_CURSE
@@ -574,6 +581,7 @@ ConchBlessing.ItemData = {
     ICE_BREATH = {
         type = "passive",
         id = Isaac.GetItemIdByName("Ice Breath"),
+        stackable = true, -- copies stack: Conch Pearl may roll it again
         pool = {
             RoomType.ROOM_SHOP,
             RoomType.ROOM_TREASURE
@@ -599,6 +607,7 @@ ConchBlessing.ItemData = {
     FIRE_BREATH = {
         type = "passive",
         id = Isaac.GetItemIdByName("Fire Breath"),
+        stackable = true, -- copies stack: Conch Pearl may roll it again
         pool = {
             RoomType.ROOM_SHOP,
             RoomType.ROOM_TREASURE
@@ -652,6 +661,7 @@ ConchBlessing.ItemData = {
     TWO_FACED_PENNY = {
         type = "passive",
         id = Isaac.GetItemIdByName("Two Faced Penny"),
+        stackable = true, -- copies stack: Conch Pearl may roll it again
         pool = {
             RoomType.ROOM_DEVIL,
             RoomType.ROOM_CURSE
@@ -812,6 +822,7 @@ ConchBlessing.ItemData = {
     HEMISPATIAL_NEGLECT = {
         type = "passive",
         id = Isaac.GetItemIdByName("Hemispatial Neglect"),
+        stackable = true, -- copies stack: Conch Pearl may roll it again
         costume = "characters/conch_neglect_toggle.anm2",
         costume_priority = -1,
         pool = { RoomType.ROOM_DEVIL, RoomType.ROOM_CURSE },
@@ -837,12 +848,39 @@ ConchBlessing.ItemData = {
         },
     },
 
+    CONCH_PEARL = {
+        -- The Magic Conch's Sacred Orb: quality 0-1 never appear and quality 2
+        -- becomes one of this mod's items 10% of the time.
+        type = "passive",
+        id = Isaac.GetItemIdByName("Conch Pearl"),
+        pool = { RoomType.ROOM_ANGEL, RoomType.ROOM_SECRET },
+        quality = 4,
+        tags = "summonable offensive nocantrip angel",
+        hidden = false,
+        shopprice = 15,
+        devilprice = 2,
+        origin = { id = CollectibleType.COLLECTIBLE_SACRED_ORB, type = "collectible" },
+        flag = "positive",
+        script = "scripts/items/collectibles/conch_pearl",
+        callbacks = {
+            postGetCollectible = "conchpearl.onPostGetCollectible",
+            postPickupInit = "conchpearl.onPickupInit",
+            postUpdate = "conchpearl.onUpdate",
+            postRender = "conchpearl.onRender",
+            postNewRoom = "conchpearl.onNewRoom",
+            postGameStarted = "conchpearl.reset",
+            preGameExit = "conchpearl.reset",
+            preModUnload = "conchpearl.reset",
+        },
+    },
+
     -- The twelve zodiac items (십이지) close the collectible group in their own
     -- order, 자 … 해, followed by the familiars and trinkets.
     RAT = {
         -- 자, the rat that ate a fingernail: one fake of the holder per copy.
         type = "passive",
         id = Isaac.GetItemIdByName("Rat"),
+        stackable = true, -- copies stack: Conch Pearl may roll it again
         gfx = "rat.png",
         pool = {
             RoomType.ROOM_TREASURE,
@@ -894,6 +932,7 @@ ConchBlessing.ItemData = {
         -- 진, God of Weather: fifth of the zodiac block (user order, 2026-10-24).
         type = "passive",
         id = Isaac.GetItemIdByName("Dragon"),
+        stackable = true, -- copies stack: Conch Pearl may roll it again
         gfx = "dragon.png",
         pool = {
             RoomType.ROOM_TREASURE,
@@ -974,6 +1013,7 @@ ConchBlessing.ItemData = {
     TIME_MONEY = {
         type = "familiar",
         id = Isaac.GetItemIdByName("Time = Money"),
+        stackable = true, -- copies stack: Conch Pearl may roll it again
         script = "scripts/items/familiars/time_money",
         uniquefamiliar = true,
         -- Entities2.xml generation config

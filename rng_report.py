@@ -43,6 +43,7 @@ SRC = {
     "kronos": "scripts/items/collectibles/kronos.lua",
     "liveeye": "scripts/items/collectibles/live_eye.lua",
     "dragon": "scripts/items/collectibles/dragon.lua",
+    "pearl": "scripts/items/collectibles/conch_pearl.lua",
 }
 
 _cache: dict[str, list[str]] = {}
@@ -633,6 +634,32 @@ def build(samples: int, seed: int) -> str:
     w("")
     w(f"Always on target from Luck {math.ceil(round((1 - base) / per, 9)):g}; at most "
       f"{floor_:.0%} below Luck {math.floor(round((floor_ - base) / per, 9)):g}.")
+    w("")
+
+    # 13 -------------------------------------------------------------------------
+    chance, chance_cite = const("pearl", "convertChance")
+    redraws, redraws_cite = const("pearl", "maxRedraws")
+    w("## 13. Conch Pearl")
+    w("")
+    w("While any living player holds it, every collectible an item pool draws is checked in")
+    w("`MC_POST_GET_COLLECTIBLE`. Quest items and this mod's own items stay. A quality 0-1 result is drawn")
+    w(f"again from the same pool, up to {int(redraws)} times ({redraws_cite}), so it never appears; if every")
+    w("redraw is still quality 0-1, one of this mod's items appears instead. A quality 2 result rolls")
+    w(f"`RandomFloat() < {chance:g}` ({chance_cite}) on an RNG seeded from the draw's own seed and becomes one")
+    w("of this mod's items, picked uniformly from the candidates listed for that pool (any candidate when")
+    w("the pool lists none). The roll is a single draw, so the odds equal the constant. Copies do not stack.")
+    w("")
+    rows = []
+    for quality in range(5):
+        if quality <= 1:
+            exact, measured = "redrawn (never shown)", "-"
+        elif quality == 2:
+            hits = sum(1 for _ in range(samples) if rng.random() < chance)
+            exact, measured = f"**{chance:.0%}**", f"{hits / samples:.3%}"
+        else:
+            exact, measured = "0%", "-"
+        rows.append([str(quality), exact, measured])
+    w("\n".join(table(["Drawn quality", "Exact P (becomes one of ours)", "Measured"], rows)))
     w("")
 
     return "\n".join(md) + "\n"

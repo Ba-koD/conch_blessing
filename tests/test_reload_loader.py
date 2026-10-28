@@ -19,7 +19,9 @@ HEADER = 'local require = ConchBlessingRequire or require -- reloadable loader, 
 # custom-placement backend never runs.
 EXEMPT = {'scripts/lib/isaacscript-common.lua', 'scripts/lib/save_manager.lua',
           'scripts/rooms/native_gallery_rooms.lua'}
-CALLS_REQUIRE = re.compile(r'(^|[^\w.:])require\s*\(', re.M)
+# A direct call, or require passed to pcall (scripts/locale/init.lua once slipped
+# through and kept the session's first English table across luamod).
+CALLS_REQUIRE = re.compile(r'(^|[^\w.:])require\s*\(|pcall\(\s*require\s*,', re.M)
 
 
 def runtime_files():

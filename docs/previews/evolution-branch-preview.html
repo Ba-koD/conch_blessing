@@ -45,7 +45,7 @@ ul { margin:4px 0 10px; padding-left:20px; }
 <h2>받침대와 장신구</h2>
 <canvas id="main" width="1080" height="600"></canvas>
 <ul>
-  <li>캐릭터가 1.6칸(64) 안에 들어오면 나무가 자라나 계속 떠 있고, 2칸(80) 밖으로 나가면 접힙니다. 경계에서 깜빡이지 않도록 여는 거리와 닫는 거리를 다르게 했습니다.</li>
+  <li>캐릭터가 3.2칸(128) 안에 들어오면 나무가 자라나 계속 떠 있고, 4칸(160) 밖으로 나가면 접힙니다. 경계에서 깜빡이지 않도록 여는 거리와 닫는 거리를 다르게 했습니다. 여는 거리는 MCM의 Evolution Preview Range에서 바꿀 수 있고(0.8–8칸), 닫는 거리는 늘 그 1.25배입니다.</li>
   <li>선은 1px 직선이 직각으로만 꺾이고, 1px 어두운 테두리로 어느 바닥에서나 보입니다. 줄기와 가로대는 연한 흰색, 결과로 가는 마지막 가지와 아이콘 테두리·글자는 답변 색입니다.</li>
   <li>결과는 왼쪽부터 긍정 → 중립 → 부정 순서로 26 간격을 두고 가운데 정렬됩니다(결과가 하나면 곧게 위로).</li>
   <li>아무도 가까이 없으면 아이템 그림만(받침대·그림자·가격은 그대로) 제자리에서 웅크렸다가 7px, 5px로 재빨리 두 번 뛰고(0.5초) 찌그러지며 착지합니다. 그다음 뛴 시간만큼(0.5초) 쉬고 다시 뜁니다. 캐릭터가 1.6칸 안에 들어올 때까지 횟수 제한 없이 계속하며, 아이템마다 박자가 엇갈립니다. REPENTOGON이 없으면 뛰지 않습니다.</li>
@@ -70,7 +70,7 @@ const FLAGS = ["positive", "neutral", "negative"];
 const TRUNK_RGB = [0.92, 0.9, 0.86];
 const RESULT_SCALE = 0.75, SOURCE_SCALE = 0.5, RESULT_SPACING = 26, GROUP_GAP = 8, RESULT_HALF = 12, SOURCE_HALF = 8, STAGGER = 2;
 const ITEM_TOP = { pedestal:-40, shop:-22, trinket:-22 };
-const OPEN_RANGE = 64, CLOSE_RANGE = 80, CLOSE_RATE = 1.5;
+const OPEN_RANGE = 128, CLOSE_RANGE = 160, CLOSE_RATE = 1.5; // MCM default (Evolution Preview Range); twice the original 64/80
 // { dy, x scale, y scale }: a crouch, two quick hops in place (7px, 5px) with squashed landings, then a rest as long.
 const HOP_KEYS = [[0,1.16,0.84],
   [-4,0.88,1.14],[-6,0.94,1.07],[-7,1,1],[-6,1,1],[-4,0.96,1.05],[-1,0.92,1.08],
@@ -294,9 +294,9 @@ function walk(keys, loop) {
 }
 
 // ---- scene 1: Dead Eye, Libra, Perfection; the player visits Libra, then Perfection ----
-const MAIN_W = 360, MAIN_H = 200, MAIN_LOOP = 600;
+const MAIN_W = 720, MAIN_H = 400, MAIN_LOOP = 600;
 let SPOTS = [];
-const MAIN_PATH = walk([[0, 40, 188], [150, 40, 188], [200, 180, 150], [330, 180, 150], [370, 262, 164], [470, 262, 164], [530, 40, 188], [600, 40, 188]], MAIN_LOOP);
+const MAIN_PATH = walk([[0, 80, 376], [150, 80, 376], [200, 360, 300], [330, 360, 300], [370, 524, 328], [470, 524, 328], [530, 80, 376], [600, 80, 376]], MAIN_LOOP);
 function drawMain(T) {
   const ctx = begin(document.getElementById("main"), MAIN_W, MAIN_H);
   const state = simulate(SPOTS, MAIN_PATH, T % MAIN_LOOP), p = MAIN_PATH(T % MAIN_LOOP), roots = [];
@@ -309,9 +309,9 @@ function drawMain(T) {
 }
 
 // ---- scene 2: a rotating pedestal ----
-const CW = 180, CH = 140, CYCLE = ["deadeye", "libra", "sadonion"], CYCLE_LOOP = 420;
+const CW = 360, CH = 280, CYCLE = ["deadeye", "libra", "sadonion"], CYCLE_LOOP = 420;
 let CYCLE_SPOT = null;
-const CYCLE_PATH = walk([[0, 24, 132], [90, 24, 132], [140, 90, 132], [300, 90, 132], [350, 24, 132], [420, 24, 132]], CYCLE_LOOP);
+const CYCLE_PATH = walk([[0, 48, 264], [90, 48, 264], [140, 180, 264], [300, 180, 264], [350, 48, 264], [420, 48, 264]], CYCLE_LOOP);
 function drawCycle(T) {
   const ctx = begin(document.getElementById("cycle"), CW, CH);
   const t = T % CYCLE_LOOP, state = simulate([CYCLE_SPOT], CYCLE_PATH, t)[0], p = CYCLE_PATH(t);
@@ -336,11 +336,11 @@ function frame(now) {
 function start() {
   const res = list => list.map(([flag, img]) => ({ flag, img:IMG[img] }));
   SPOTS = [
-    { x:100, y:104, kind:"pedestal", img:"deadeye", offset:0, layout:layout([{ results:res([["positive","live_eye"]]) }], false) },
-    { x:180, y:104, kind:"pedestal", img:"libra", offset:13, layout:layout([{ results:res([["positive","ceil"],["neutral","round"],["negative","floor"]]) }], false) },
-    { x:262, y:118, kind:"trinket", img:"perfection", offset:25, layout:layout([{ results:res([["positive","time_luck"],["negative","f_minus"]]) }], false) },
+    { x:200, y:208, kind:"pedestal", img:"deadeye", offset:0, layout:layout([{ results:res([["positive","live_eye"]]) }], false) },
+    { x:360, y:208, kind:"pedestal", img:"libra", offset:13, layout:layout([{ results:res([["positive","ceil"],["neutral","round"],["negative","floor"]]) }], false) },
+    { x:524, y:236, kind:"trinket", img:"perfection", offset:25, layout:layout([{ results:res([["positive","time_luck"],["negative","f_minus"]]) }], false) },
   ];
-  CYCLE_SPOT = { x:90, y:116, offset:7, layout:layout([
+  CYCLE_SPOT = { x:180, y:232, offset:7, layout:layout([
     { source:IMG.deadeye, results:res([["positive","live_eye"]]) },
     { source:IMG.libra, results:res([["positive","ceil"],["neutral","round"],["negative","floor"]]) },
   ], true) };

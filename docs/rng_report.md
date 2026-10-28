@@ -428,3 +428,21 @@ Dragon RNG (`scripts/items/collectibles/dragon.lua:39`, `scripts/items/collectib
 
 Always on target from Luck 10; at most 10% below Luck -8.
 
+## 13. Conch Pearl
+
+While any living player holds it, every collectible an item pool draws is checked in
+`MC_POST_GET_COLLECTIBLE`. Quest items and this mod's own items stay. A quality 0-1 result is drawn
+again from the same pool, up to 20 times (`scripts/items/collectibles/conch_pearl.lua:16`), so it never appears; if every
+redraw is still quality 0-1, one of this mod's items appears instead. A quality 2 result rolls
+`RandomFloat() < 0.1` (`scripts/items/collectibles/conch_pearl.lua:15`) on an RNG seeded from the draw's own seed and becomes one
+of this mod's items, picked uniformly from the candidates listed for that pool (any candidate when
+the pool lists none). The roll is a single draw, so the odds equal the constant. Copies do not stack.
+
+| Drawn quality | Exact P (becomes one of ours) | Measured |
+|---|---|---|
+| 0 | redrawn (never shown) | - |
+| 1 | redrawn (never shown) | - |
+| 2 | **10%** | 9.902% |
+| 3 | 0% | - |
+| 4 | 0% | - |
+

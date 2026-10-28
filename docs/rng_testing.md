@@ -70,6 +70,7 @@ The measured helpers are module-scope locals, so each item file exposes them thr
 | `kronos.lua` | `getProjectileBlockChance`, `getSpawnChance`, `getStackedChance`, `pickRandomCopies`, `pickFromPool`, `getFloorPickPool` (+ their constant tables) |
 | `live_eye.lua` | `getMissForgiveChance` |
 | `dragon.lua` | `rollStrikeKind`, `boltsPerUpdate` |
+| `conch_pearl.lua` | `converts(roll)`, `classify(quality, quest, own)` |
 
 `rollStat` was hoisted from a per-call closure to a module function so the probe
 measures the shipped expression instead of a copy. That also removed three duplicated

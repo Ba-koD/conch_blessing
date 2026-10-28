@@ -412,6 +412,30 @@ function probe.dragonAccuracy(samples)
     end
 end
 
+-- --------------------------------------------------------------- conch pearl
+function probe.conchPearl(samples)
+    header("Conch Pearl (a quality 2 draw becomes one of this mod's items)")
+    local module = ConchBlessing.conchpearl
+    local t, d = module and module._test, module and module.data
+    if not t or not t.converts or not t.classify then out("SKIPPED (module not loaded)") return end
+    local rng = RNG()
+    local seed = Random()
+    if seed == 0 then seed = 1 end
+    rng:SetSeed(seed, 35)
+    local converted = quietly(function()
+        local n = 0
+        for _ = 1, samples do
+            if t.converts(rng:RandomFloat()) then n = n + 1 end
+        end
+        return n
+    end)
+    out(string.format("  quality 2 configured=%6.2f%%  measured=%7.3f%%", d.convertChance * 100,
+        converted / samples * 100))
+    for quality = 0, 4 do
+        out(string.format("  quality %d -> %s", quality, t.classify(quality, false, false)))
+    end
+end
+
 -- --------------------------------------------------------------- death spiral
 function probe.injectableDeath()
     header("Injectable Steroids instant death (cumulative over one floor)")
@@ -497,6 +521,7 @@ function probe.run(params)
     probe.liveEye(samples, luck)
     probe.dragonTwister(samples)
     probe.dragonAccuracy(samples)
+    probe.conchPearl(samples)
     probe.injectableDeath()
     out("")
     out("conch_test rng: done")

@@ -597,6 +597,14 @@ return {
             name = "편측 무시", description = "              게 보이는 거지?",
             eid = { "{{Damage}} 때리는 힘 ×2.", "#오른쪽 눈에서 눈물이 나오지 않습니다." },
         },
+        CONCH_PEARL = {
+            name = "소라 진주", description = "타고난 복",
+            eid = {
+                "{{Quality0}}/{{Quality1}}등급 아이템이 나오지 않습니다.",
+                "#{{Quality2}}등급 아이템이 1할 확률로 Conch's Blessing 아이템으로 바뀝니다.",
+                "#내가 지닌 아이템 가운데 여러 개 지녀도 소용없는 아이템으로는 바뀌지 않습니다.",
+            },
+        },
 
         -- Familiars
         TIME_MONEY = {

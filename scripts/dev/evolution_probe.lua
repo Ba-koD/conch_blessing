@@ -14,8 +14,14 @@ local Visuals = require("scripts.lib.upgrade_visuals")
 local View = require("scripts.lib.conch_answer_view")
 
 local FLAG_ORDER = { "positive", "neutral", "negative" }
--- Far is down and to the right: the hop must still stay in place.
-local FAR, NEAR = Vector(100, 110), Vector(0, 50)
+-- Far is down and to the right, past the closing distance: the hop must still
+-- stay in place. The bench runs at the default range (see build) whatever the
+-- player set in MCM, so these positions fit inside a normal room.
+local NEAR = Vector(0, 50)
+local function far()
+    local _, closeRange = require("scripts.conch_blessing_config").GetPreviewRanges()
+    return Vector(100, 110):Normalized() * (closeRange + 30)
+end
 
 local function H() return ConchBlessing.UpgradeHighlight end
 
@@ -122,7 +128,7 @@ local function spawnFixture(plan, label, key)
         local variant, id = originOf(key)
         local room = Game():GetRoom()
         ctx.fixturePos = ctx.fixturePos or room:FindFreePickupSpawnPosition(room:GetCenterPos() + Vector(0, -40), 0, true)
-        stand(player, ctx, FAR)
+        stand(player, ctx, far())
         local entity = Isaac.Spawn(EntityType.ENTITY_PICKUP, variant, id, ctx.fixturePos, Vector(0, 0), nil)
         ctx.fixture = { entity = entity, ptr = EntityPtr(entity), hash = GetPtrHash(entity), variant = variant, id = id }
         local pickup = assert(entity:ToPickup(), "origin is not a pickup")
@@ -154,7 +160,7 @@ end
 -- Read the resting item layer only while no hop is in the air.
 local function captureRest(plan, label)
     plan.waitUntil(function(player, ctx)
-        stand(player, ctx, FAR)
+        stand(player, ctx, far())
         local r = rec(ctx)
         return r ~= nil and r.hop == nil, "hop in the air"
     end, 40, label .. ": the item is at rest")
@@ -209,7 +215,7 @@ local function stagePedestal(plan)
         ctx.baseColor = ctx.baseColor and { ctx.baseColor.R, ctx.baseColor.G, ctx.baseColor.B, ctx.baseColor.A }
     end)
     plan.waitUntil(function(player, ctx)
-        stand(player, ctx, FAR)
+        stand(player, ctx, far())
         if not ctx.layerApi then return true end
         local pickup = live(ctx)
         local now = pickup and layerState(pickup)
@@ -229,7 +235,7 @@ local function stagePedestal(plan)
     end)
     plan.act(function(_, ctx) ctx.hopsBefore = rec(ctx).hops end)
     plan.waitUntil(function(player, ctx)
-        stand(player, ctx, FAR)
+        stand(player, ctx, far())
         local r = rec(ctx)
         return not ctx.layerApi or (r ~= nil and r.hops >= ctx.hopsBefore + 2), r and (r.hops - ctx.hopsBefore) .. " more hops" or "no record"
     end, 100, "Libra: it keeps hopping while nobody comes near")
@@ -242,7 +248,7 @@ local function stagePedestal(plan)
         return samePlace and sameColor, string.format("position kept %s, colour kept %s", tostring(samePlace), tostring(sameColor))
     end)
     plan.waitUntil(function(player, ctx)
-        stand(player, ctx, FAR)
+        stand(player, ctx, far())
         local r = rec(ctx)
         return not ctx.layerApi or (r ~= nil and r.hop == nil), "hop still in the air"
     end, 40, "Libra: the hop lands")
@@ -275,9 +281,9 @@ local function stagePedestal(plan)
         return sparks > 0 and pops > 0 and still, string.format("spark frames %d, pop frames %d, item layer at rest %s",
             sparks, pops, tostring(still))
     end)
-    plan.act(function(player, ctx) stand(player, ctx, FAR) end)
+    plan.act(function(player, ctx) stand(player, ctx, far()) end)
     plan.waitUntil(function(player, ctx)
-        stand(player, ctx, FAR)
+        stand(player, ctx, far())
         local r = rec(ctx)
         return r ~= nil and r.t == 0, r and ("t=" .. tostring(r.t)) or "no record"
     end, 40, "Libra: the tree folds when the player leaves")
@@ -323,7 +329,7 @@ local function stageHopUpgrade(plan)
     checkResults(plan, "Dead Eye")
     captureRest(plan, "Dead Eye")
     plan.waitUntil(function(player, ctx)
-        stand(player, ctx, FAR)
+        stand(player, ctx, far())
         if not ctx.layerApi then return true end
         local r, pickup = rec(ctx), live(ctx)
         return r ~= nil and r.hop ~= nil and not sameState(layerState(pickup), ctx.baseLayer), "on the ground"
@@ -369,7 +375,7 @@ local function stageHidden(plan)
         stand(player, ctx, NEAR)
     end)
     for _ = 1, 4 do
-        plan.act(function(player, ctx) stand(player, ctx, ctx.hiddenNear and NEAR or FAR); ctx.hiddenNear = not ctx.hiddenNear end)
+        plan.act(function(player, ctx) stand(player, ctx, ctx.hiddenNear and NEAR or far()); ctx.hiddenNear = not ctx.hiddenNear end)
         plan.wait(25)
     end
     plan.check("Curse of the Blind: no tree and no hop, near or far", function(_, ctx)
@@ -502,6 +508,11 @@ local function stageReroll(plan)
 end
 
 local function build(plan)
+    plan.act(function(_, ctx)
+        -- The player's MCM range stays saved; only this run uses the default.
+        ctx.savedPreviewRange = ConchBlessing.Config.previewRange
+        ConchBlessing.Config.previewRange = require("scripts.conch_blessing_config").PREVIEW_RANGE.DEFAULT
+    end)
     plan.require("real upgrade queue and preview available", function()
         local ok = ConchBlessing.upgrade and type(ConchBlessing.upgrade.queuePickup) == "function"
             and H() and type(H().previewFor) == "function"
@@ -518,7 +529,14 @@ local function build(plan)
     stageReroll(plan)
 end
 
+local function cleanup(ctx)
+    removeFixture(ctx)
+    if ctx.savedPreviewRange ~= nil then
+        ConchBlessing.Config.previewRange, ctx.savedPreviewRange = ctx.savedPreviewRange, nil
+    end
+end
+
 TestBench.register({ command = "conch_test evolution", tag = "EvolutionProbe", duration = "about 40 seconds",
-    cleanup = removeFixture, build = build })
+    cleanup = cleanup, build = build })
 
 return { expectedResults = expectedResults }

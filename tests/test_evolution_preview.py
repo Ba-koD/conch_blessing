@@ -245,17 +245,31 @@ class EvolutionPreviewTests(unittest.TestCase):
             local p=spawn(100,304,320,200); local pl=player(320,400)
             H.ScanRoom(frame)
             local rec=assert(H.previewFor(p))
+            -- Default: open within 128 (twice the original 64), close past 160.
+            local openRange,closeRange=H.ranges()
+            assert(openRange==128 and closeRange==160, openRange..'/'..closeRange)
             tick(40); assert(rec.t==0 and not rec.open)
-            pl.Position=Vector(320,260)               -- 60 away: open
+            pl.Position=Vector(320,320)               -- 120 away: open
             tick(1); assert(rec.open and rec.t==1)
             tick(400); assert(rec.open and rec.t==rec.layout.openEnd, 'stays open while near')
-            pl.Position=Vector(320,275)               -- 75: inside the closing distance
+            pl.Position=Vector(320,350)               -- 150: inside the closing distance
             tick(30); assert(rec.open)
-            pl.Position=Vector(320,290)               -- 90: closes
+            pl.Position=Vector(320,370)               -- 170: closes
             tick(1); assert(not rec.open)
             tick(20); assert(rec.t==0)
             pl.Position=Vector(320,250); tick(1)
             assert(rec.opens==2 and H.previewFor(p)==rec)
+            -- The MCM value applies at once: 64 opens within 64 and closes past 80.
+            ConchBlessing.Config={previewRange=64}
+            pl.Position=Vector(320,290); tick(1); assert(not rec.open, '90 is past 80')
+            tick(20); pl.Position=Vector(320,275); tick(1); assert(not rec.open, '75 does not open at 64')
+            pl.Position=Vector(320,260); tick(1); assert(rec.open, '60 opens')
+            pl.Position=Vector(320,275); tick(5); assert(rec.open, '75 holds it open')
+            -- Out-of-range and broken values are clamped or fall back to the default.
+            ConchBlessing.Config={previewRange=9999}; assert(H.ranges()==320)
+            ConchBlessing.Config={previewRange=1}; assert(H.ranges()==32)
+            ConchBlessing.Config={previewRange='abc'}; assert(H.ranges()==128)
+            ConchBlessing.Config=nil; assert(H.ranges()==128)
             -- Rendering follows the open state only.
             renders={}; event(2); assert(#renders>0)
             pl.Position=Vector(320,400); tick(30); renders={}; event(2); assert(#renders==0)

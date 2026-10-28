@@ -106,6 +106,28 @@ function ConchBlessing_MCM.Setup(mod)
         Info = lines("debug_mode_info")
     })
 
+    -- Evolution preview range, in world units (a grid tile is 40).
+    local range = ConchBlessing_Config.PREVIEW_RANGE
+    ModConfigMenu.AddSetting(category, GENERAL, {
+        Type = ModConfigMenu.OptionType.NUMBER,
+        Minimum = range.MIN,
+        Maximum = range.MAX,
+        ModifyBy = range.STEP,
+        CurrentSetting = function()
+            return (ConchBlessing_Config.GetPreviewRanges(mod))
+        end,
+        Display = function()
+            local open = ConchBlessing_Config.GetPreviewRanges(mod)
+            return text("preview_range", tostring(open), string.format("%.1f", open / 40))
+        end,
+        OnChange = function(value)
+            local step = math.floor((tonumber(value) or range.DEFAULT) / range.STEP + 0.5) * range.STEP
+            mod.Config.previewRange = math.max(range.MIN, math.min(range.MAX, step))
+            ConchBlessing_MCM.saveConfigToSaveManager(mod)
+        end,
+        Info = lines("preview_range_info")
+    })
+
     -- Reset to Default (General)
     ModConfigMenu.AddSetting(category, GENERAL, {
         Type = ModConfigMenu.OptionType.BOOLEAN,

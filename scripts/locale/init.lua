@@ -1,3 +1,4 @@
+local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Locale loader. Every player-facing string lives in scripts/locale/<lang>.lua,
 -- which is pure data (see the header of en.lua for its layout). This module:
 --   * loads those tables (English is the fallback for anything missing),
