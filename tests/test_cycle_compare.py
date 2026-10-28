@@ -135,6 +135,9 @@ class CycleCompareTests(unittest.TestCase):
                 if name=='scripts.dev.item_scenarios' then return S end
                 if name=='scripts.dev.item_test_support' then return H end
                 if name=='scripts.dev.cycle_compare_support' then return C end
+                if name=='scripts.dev.test_bench' then
+                    return {register=function(def) registered=registered or {}; registered[def.command]=def end}
+                end
                 error('unexpected module '..name)
             end
             ModCallbacks={MC_POST_GET_COLLECTIBLE=1,MC_PRE_PICKUP_UPDATE=2,MC_POST_PICKUP_UPDATE=3,MC_POST_ENTITY_REMOVE=4}
@@ -171,14 +174,47 @@ class CycleCompareTests(unittest.TestCase):
             end
         ''')
 
-    def test_native_arm_calls_real_card_and_oath_arm_does_not(self):
+    def test_birthright_parity_plans_pair_a_birthright_control_with_each_oath_arm(self):
+        self.load_plans()
+        self.lua.execute('ActiveSlot={SLOT_PRIMARY=0,SLOT_SECONDARY=1}')
+        parity = self.lua.execute((ROOT / "scripts/dev/item_test_birthright_parity.lua").read_text(encoding="utf-8"))
+        self.assertEqual(len(parity.commands), 20)
+        self.lua.execute('''
+            local arms={}
+            for _,row in ipairs(S.rows) do
+                local case,arm=row.name:match('^birthright_(.+)_(%a+)$')
+                if case then
+                    arms[case]=(arms[case] or '')..arm..';'
+                    local checks=0
+                    for _,op in ipairs(build(row.name)) do
+                        if op.kind=='check' then checks=checks+1 end
+                    end
+                    assert((checks>=1 or case=='golden_binge') and row.groups.birthright_parity,row.name)
+                end
+            end
+            for _,case in ipairs({'first_visit','seen_room','mid_room','swap_while_held','dice','copy','death_certificate',
+                    'damocles','golden_binge'}) do
+                assert(arms[case]=='birthright;oath;',case..' lacks its Birthright control or Oath arm')
+            end
+            -- Tainted Isaac's own cycle is the control for the Oath stacking on it.
+            for _,arm in ipairs({'native','oath'}) do
+                local def=registered['conch_test severed_oath combo_tainted_isaac_'..arm]
+                assert(def and def.restartCommand=='restart 21' and def.finalRestartCommand=='restart 0')
+                assert(def.resetReason:find('consumes pools',1,true))
+                local checks=0
+                for _,op in ipairs(build('combo_tainted_isaac_'..arm)) do if op.kind=='check' then checks=checks+1 end end
+                assert(checks>=6,'Tainted Isaac '..arm..' arm checks='..checks)
+            end
+        ''')
+
+    def test_native_arm_calls_real_card_and_oath_arm_holds_the_oath_before_its_fixtures(self):
         self.load_plans()
         self.lua.execute('''
             Card={CARD_SOUL_ISAAC=93}; UseFlag={USE_NOANIM=1,USE_NOANNOUNCER=2}
             local player={UseCard=function(_,id,flags) assert(id==93 and flags==3); calls=calls+1 end}
             -- The action immediately after the treasure-entry wait is the arm's
             -- native operation; no mocked gameplay callback supplies its result.
-            for _,case in ipairs({{'capacity0_native',1},{'golden0_native',2},{'capacity0_oath',0}}) do
+            for _,case in ipairs({{'capacity0_native',1},{'golden0_native',2}}) do
                 calls=0; local ops=build('compare_'..case[1]); local lastWait
                 for i,op in ipairs(ops) do
                     if op.kind=='waitUntil' and op.c=='native room transition: roomGrid' then lastWait=i end
@@ -186,6 +222,18 @@ class CycleCompareTests(unittest.TestCase):
                 end
                 assert(ops[lastWait+1].kind=='act'); ops[lastWait+1].a(player,{})
                 assert(calls==case[2],case[1]..' routed to wrong operation')
+            end
+            -- Like Birthright, the Oath arm's fixtures are created while it is
+            -- held and measured in place: no room re-entry before the grant.
+            local ops,valid,note=build('compare_capacity0_oath')
+            for i,op in ipairs(ops) do
+                if op.kind=='require' and op.a=="fixtures are valid before the Oath's first update" then valid=i end
+                if op.kind=='note' and op.a=='CYCLE_COMPARE' and not note then note=i end
+            end
+            assert(valid and note and valid<note,'Oath arm lost its in-place grant window')
+            for i=valid,note do
+                assert(not (ops[i].kind=='waitUntil' and tostring(ops[i].c):find('native room transition',1,true)),
+                    'Oath arm re-entered the room before its grant')
             end
         ''')
 
@@ -622,7 +670,7 @@ class CycleCompareTests(unittest.TestCase):
         ''')
 
     def test_single_choice_fixture_needs_no_turn_and_keeps_zero_price(self):
-        self.native_turn_fixture("capacity0_oath")
+        self.native_turn_fixture("capacity0_native")
         self.lua.execute('''
             for _,p in ipairs(pickups) do assert(p.Price==0 and p.AutoUpdatePrice==true and p.OptionsPickupIndex==0) end
             assert(turnWait.a({},ctx),'a one-choice pedestal cannot turn')

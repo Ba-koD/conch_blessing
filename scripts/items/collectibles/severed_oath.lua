@@ -9,10 +9,15 @@ local MAX_COLLECTIBLE_CYCLE_ITEMS = 8
 local EXTRA_CYCLE_PICK_ATTEMPTS = 12
 local SPLIT_MARKER = "__conchBlessingSeveredOathSplit"
 local SPLIT_ITEM_MARKER = "__conchBlessingSeveredOathSplitItem"
+local SPLIT_SEED_MARKER = "__conchBlessingSeveredOathSplitSeed"
 local CYCLE_ELIGIBLE_MARKER = "__conchBlessingSeveredOathCycleEligible"
 local CYCLE_DONE_MARKER = "__conchBlessingSeveredOathCycleDone"
 local CYCLE_POOL_MARKER = "__conchBlessingSeveredOathCyclePool"
 local SAVE_KEY = "severedOath"
+-- Death Certificate rooms: StageID HOME with these room subtypes, dimension 2.
+local HOME_STAGE_ID = 35
+local DEATH_CERTIFICATE_SUBTYPES = { [33] = true, [34] = true }
+local DEATH_CERTIFICATE_DIMENSION = 2
 
 local ACTIVE_SLOTS = {
     (ActiveSlot and (ActiveSlot.SLOT_PRIMARY or ActiveSlot.PRIMARY)) or 0,
@@ -26,10 +31,16 @@ M._cyclePickupStates = M._cyclePickupStates or {}
 M._cycleRoomKey = M._cycleRoomKey or nil
 M._pendingPoolChecks = M._pendingPoolChecks or {}
 M._cycleRoomSnapshotReady = false
+M._roomFirstVisit = false
 M._gameStartResolved = false
 -- Scoped native calls may replace GetData/EntityPtr and re-enter callbacks.
 local grantInFlight = {}
 local identityErrorReported = false
+-- Seeds of the pickups this room has already classified, by pointer hash.
+local seenPickups = {}
+-- Fresh same-seed copies (Diplopia, Crooked Penny) that SaveManager handed a
+-- copy of their source's record, by pointer hash.
+local copiedPickups = {}
 
 local function isValidCollectibleId(itemId)
     if type(itemId) ~= "number" or itemId <= 0 then
@@ -155,7 +166,23 @@ local function ensureCycleRoomState()
         M._cyclePickupStates = {}
         M._cycleRoomKey = roomKey
         M._cycleRoomSnapshotReady = false
+        seenPickups, copiedPickups = {}, {}
     end
+end
+
+-- Isaac's Birthright gives no choice to the items in the Death Certificate area.
+local function inDeathCertificateArea()
+    local level = Game():GetLevel()
+    local ok, data = pcall(function() return level:GetCurrentRoomDesc().Data end)
+    local stage = ok and data and tonumber(data.StageID)
+    if stage then
+        return stage == HOME_STAGE_ID and DEATH_CERTIFICATE_SUBTYPES[tonumber(data.Subtype)] == true
+    end
+    if type(level.GetDimension) == "function" then
+        local dimOk, dimension = pcall(level.GetDimension, level)
+        return dimOk and dimension == DEATH_CERTIFICATE_DIMENSION
+    end
+    return false
 end
 
 local function getPickupCycleKey(pickup)
@@ -240,22 +267,12 @@ local function markSavedSplitPickup(pickup, itemId)
 
     save.split = true
     save.splitItem = tonumber(itemId) or tonumber(pickup and pickup.SubType)
+    save.eligible = false
     save.poolType = nil
     save.bonusItem = nil
     save.bonusItems = nil
     save.bonusSeen = nil
     save.pendingSwap = nil
-    saveManagerSave()
-end
-
-local function clearSavedSplitPickup(pickup)
-    local save = getPickupSaveState(pickup, false)
-    if type(save) ~= "table" or save.split ~= true then
-        return
-    end
-
-    save.split = false
-    save.splitItem = nil
     saveManagerSave()
 end
 
@@ -290,6 +307,7 @@ local function markSavedBonusState(pickup, state)
     end
 
     save.split = false
+    save.eligible = true
     save.poolType = tonumber(state.poolType) or 0
     save.bonusItem = tonumber(state.bonusItem)
     save.bonusItems = copyBonusItems(state)
@@ -329,6 +347,7 @@ local function setPickupCycleState(pickup, state)
         end
         state.pickupPtr = ref
         M._cyclePickupStates[key] = state
+        seenPickups[GetPtrHash(pickup)] = pickup.InitSeed
     end
     writeCycleStateToPickup(pickup, state)
 end
@@ -1171,86 +1190,84 @@ local function getExtraCycleItem(pickup, excludedItems)
     return nil
 end
 
-local function markPickupCycleState(pickup)
+-- Like Isaac's Birthright, the extra choice belongs to a pedestal created
+-- while someone holds the Oath: the stock of a room's first visit, or one that
+-- appears later (a reward, a copy, a reroll with a new seed). Items seen
+-- before, an item a player dropped onto a pedestal, a shown item that changes
+-- (a turn, a swap, an upgrade) and the Death Certificate area never gain one.
+local function isNewPedestal(pickup, atRoomEntry)
+    if pickup.Touched == true then return false end
+    if inDeathCertificateArea() then return false end
+    if atRoomEntry then return M._roomFirstVisit == true end
+    return true
+end
+
+local function decidePickupCycleState(pickup, atRoomEntry)
+    local eligible = isNewPedestal(pickup, atRoomEntry) and anyoneHoldsSeveredOath()
+    setPickupCycleState(pickup, {
+        eligible = eligible,
+        done = not eligible,
+        poolType = getRoomPoolType(),
+        item = tonumber(pickup.SubType),
+        bonusItem = nil,
+        bonusItems = {},
+        bonusSeen = false,
+    })
+    -- Kept with the pedestal so a revisit, Continue or native turn reads the
+    -- same answer. SaveManager drops it when a reroll changes the seed.
+    local save = getPickupSaveState(pickup, true)
+    if type(save) == "table" then save.eligible = eligible end
+end
+
+local function markPickupCycleState(pickup, atRoomEntry)
     if not pickup or pickup.Variant ~= PickupVariant.PICKUP_COLLECTIBLE then
         return
     end
 
     local existingState = getPickupCycleState(pickup)
     if existingState then
-        local currentItem = tonumber(pickup.SubType)
-        local stateSplitItem = tonumber(existingState.splitItem)
-        if not stateSplitItem and existingState.eligible == false and existingState.done == true then
-            local data = pickup:GetData()
-            stateSplitItem = tonumber(data[SPLIT_ITEM_MARKER]) or getSavedSplitItem(pickup)
-            existingState.splitItem = stateSplitItem
+        updateBonusSeen(pickup, existingState)
+        writeCycleStateToPickup(pickup, existingState)
+        return
+    end
+
+    local hash = type(GetPtrHash) == "function" and GetPtrHash(pickup) or nil
+    -- A native turn re-initializes a pedestal SaveManager may also treat as a
+    -- copy, so only a pickup this room has not classified yet is one.
+    if hash and copiedPickups[hash] == pickup.InitSeed and seenPickups[hash] ~= pickup.InitSeed
+        and not atRoomEntry and M._cycleRoomSnapshotReady == true then
+        -- The copy is a pedestal of its own; the copied record is its source's.
+        copiedPickups[hash] = nil
+        local save = getPickupSaveState(pickup, false)
+        if type(save) == "table" then
+            for field in pairs(save) do save[field] = nil end
         end
-        local stateItem = tonumber(existingState.item)
-        if not stateSplitItem and existingState.eligible == false and stateItem and stateItem ~= currentItem and anyoneHoldsSeveredOath() then
-            local key = getPickupCycleKey(pickup)
-            if key then
-                M._cyclePickupStates[key] = nil
-            end
-            logVerify(string.format(
-                "cycle-resume rerolled newly eligible seed=%s subtype=%s oldItem=%s",
-                tostring(pickup.InitSeed),
-                tostring(pickup.SubType),
-                tostring(stateItem)
-            ))
-        elseif stateSplitItem and stateSplitItem ~= currentItem then
-            local key = getPickupCycleKey(pickup)
-            if key then
-                M._cyclePickupStates[key] = nil
-            end
-            local data = pickup:GetData()
-            data[SPLIT_MARKER] = nil
-            data[SPLIT_ITEM_MARKER] = nil
-            clearSavedSplitPickup(pickup)
-            logVerify(string.format(
-                "cycle-resume rerolled split-state seed=%s subtype=%s oldSplitItem=%s",
-                tostring(pickup.InitSeed),
-                tostring(pickup.SubType),
-                tostring(stateSplitItem)
-            ))
-        else
-            updateBonusSeen(pickup, existingState)
-            writeCycleStateToPickup(pickup, existingState)
-            return
-        end
+        logVerify(string.format("cycle-copy new pedestal seed=%s subtype=%s",
+            tostring(pickup.InitSeed), tostring(pickup.SubType)))
+        decidePickupCycleState(pickup, false)
+        return
     end
 
     local data = pickup:GetData()
     local currentItem = tonumber(pickup.SubType)
-    local dataSplitItem = tonumber(data[SPLIT_ITEM_MARKER])
     local savedSplitItem = getSavedSplitItem(pickup)
-    local dataMatchesSplitItem = data[SPLIT_MARKER] == true and dataSplitItem ~= nil and dataSplitItem == currentItem
-    local saveMatchesSplitItem = savedSplitItem ~= nil and savedSplitItem == currentItem
-    if dataMatchesSplitItem or saveMatchesSplitItem then
+    local dataSplit = data[SPLIT_MARKER] == true and data[SPLIT_SEED_MARKER] == pickup.InitSeed
+    if savedSplitItem ~= nil or dataSplit then
+        -- A split product stays one item, whatever is later dropped onto it.
         setPickupCycleState(pickup, {
             eligible = false,
             done = true,
             poolType = getRoomPoolType(),
             item = currentItem,
-            splitItem = currentItem,
+            splitItem = savedSplitItem or tonumber(data[SPLIT_ITEM_MARKER]) or currentItem,
         })
-        logVerify(string.format(
-            "cycle-skip split item seed=%s subtype=%s splitItem=%s",
-            tostring(pickup.InitSeed),
-            tostring(pickup.SubType),
-            tostring(dataSplitItem or savedSplitItem)
-        ))
         return
     end
-    if data[SPLIT_MARKER] or savedSplitItem ~= nil then
+    if data[SPLIT_MARKER] then
+        -- Rerolled to a new seed: no longer the split product.
         data[SPLIT_MARKER] = nil
         data[SPLIT_ITEM_MARKER] = nil
-        clearSavedSplitPickup(pickup)
-        logVerify(string.format(
-            "cycle-resume rerolled split seed=%s subtype=%s oldSplitItem=%s",
-            tostring(pickup.InitSeed),
-            tostring(pickup.SubType),
-            tostring(dataSplitItem or savedSplitItem)
-        ))
+        data[SPLIT_SEED_MARKER] = nil
     end
 
     local savedBonusState = getSavedBonusState(pickup)
@@ -1283,23 +1300,26 @@ local function markPickupCycleState(pickup)
         return
     end
 
+    local save = getPickupSaveState(pickup, false)
+    if type(save) == "table" and type(save.eligible) == "boolean" then
+        setPickupCycleState(pickup, {
+            eligible = save.eligible,
+            done = not save.eligible,
+            poolType = getRoomPoolType(),
+            item = currentItem,
+            bonusItem = nil,
+            bonusItems = {},
+            bonusSeen = false,
+        })
+        return
+    end
+
     -- Pickup init callbacks can run before the room boundary callback. Wait for
     -- that boundary to classify the pedestals which already belonged to the room.
     if M._cycleRoomSnapshotReady ~= true then
         return
     end
-
-    local eligible = anyoneHoldsSeveredOath()
-    local state = {
-        eligible = eligible,
-        done = not eligible,
-        poolType = getRoomPoolType(),
-        item = currentItem,
-        bonusItem = nil,
-        bonusItems = {},
-        bonusSeen = false,
-    }
-    setPickupCycleState(pickup, state)
+    decidePickupCycleState(pickup, atRoomEntry)
 end
 
 local function sameTail(a, b)
@@ -1556,6 +1576,7 @@ local function spawnSplitPickup(itemId, pos, state, player, optionsPickupIndex)
     local data = pickup:GetData()
     data[SPLIT_MARKER] = true
     data[SPLIT_ITEM_MARKER] = itemId
+    data[SPLIT_SEED_MARKER] = pickup.InitSeed -- the Morph below keeps this seed
     data[CYCLE_DONE_MARKER] = true
 
     local ok = pcall(function()
@@ -1565,6 +1586,10 @@ local function spawnSplitPickup(itemId, pos, state, player, optionsPickupIndex)
         pickup:Remove()
         return nil
     end
+    data = pickup:GetData()
+    data[SPLIT_MARKER] = true
+    data[SPLIT_ITEM_MARKER] = itemId
+    data[SPLIT_SEED_MARKER] = pickup.InitSeed
     if type(pickup.RemoveCollectibleCycle) == "function" then
         pcall(function()
             pickup:RemoveCollectibleCycle()
@@ -1787,6 +1812,28 @@ function M.onCollectibleCycleRewritten(pickup, replacements)
     ))
 end
 
+-- SaveManager copies a source's record onto a fresh same-seed copy before
+-- this item's own init callback; note the copy so only its record is dropped.
+-- It forgets the pairing every update, so a native turn or Morph of a pedestal
+-- with a same-seed twin would overwrite that pedestal's own record with the
+-- twin's; refuse the copy for a pedestal this room already classified.
+function M.onDupePickupDataLoad(_, _, duped)
+    if not (duped and type(GetPtrHash) == "function") then return end
+    ensureCycleRoomState()
+    local hash = GetPtrHash(duped)
+    if seenPickups[hash] == duped.InitSeed then return true end
+    copiedPickups[hash] = duped.InitSeed
+end
+
+do
+    local mod = ConchBlessing.originalMod
+    local saveManager = ConchBlessing.SaveManager or SaveManager
+    local callback = saveManager and saveManager.SaveCallbacks and saveManager.SaveCallbacks.DUPE_PICKUP_DATA_LOAD
+    if mod and mod.__SAVEMANAGER_UNIQUE_KEY and callback and type(mod.AddCallback) == "function" then
+        mod:AddCallback(callback, M.onDupePickupDataLoad)
+    end
+end
+
 function M.onPostPickupInit(_, pickup)
     if M._gameStartResolved ~= true then return end
     if pickup and type(GetPtrHash) == "function" and grantInFlight[GetPtrHash(pickup)] then return end
@@ -1833,6 +1880,12 @@ function M.onPostPickupUpdate(_, pickup)
     end
 end
 
+local function isFirstVisit()
+    local room = Game():GetRoom()
+    local ok, first = pcall(function() return room:IsFirstVisit() end)
+    return ok and first == true
+end
+
 function M.onGameStarted(_, isContinued)
     M._cyclePickupStates = {}
     M._cycleRoomKey = nil
@@ -1840,8 +1893,10 @@ function M.onGameStarted(_, isContinued)
     M._gameStartResolved = true
 
     local pickups = captureRoomPickupSnapshot()
+    -- A continued room was seen before the save; only a new run's room is new.
+    M._roomFirstVisit = isContinued ~= true and isFirstVisit()
     for _, pickup in ipairs(pickups) do
-        markPickupCycleState(pickup)
+        markPickupCycleState(pickup, true)
     end
     logVerify(string.format(
         "game-start continued=%s pickups=%d",
@@ -1860,10 +1915,11 @@ function M.onPostNewRoom()
     end
 
     local pickups = captureRoomPickupSnapshot()
+    M._roomFirstVisit = isFirstVisit()
     for _, pickup in ipairs(pickups) do
-        markPickupCycleState(pickup)
+        markPickupCycleState(pickup, true)
     end
-    logVerify(string.format("room-snapshot pickups=%d", #pickups))
+    logVerify(string.format("room-snapshot pickups=%d first=%s", #pickups, tostring(M._roomFirstVisit)))
 end
 
 function M.onExecuteCmd(_, command, params)

@@ -250,17 +250,23 @@ class FixtureOracleTests(unittest.TestCase):
             local golden=checks['a new-seed pedestal gets its own Oath choices again: golden D6'][1]
             stock={pedestal(2,10,{50,51},{50,51})}; assert(golden(nil,ctx))
             stock={pedestal(2,10,{50},{50})}; assert(not golden(nil,ctx), 'a golden Oath grants two')
-            local copies=checks['Diplopia copies only the shown item while each source keeps its choice'][1]
-            local source,copy=pedestal(7,10,{50},{50}),pedestal(8,10,{},nil)
+            local copies=checks['each Diplopia copy gains one choice of its own while each source keeps its choice'][1]
+            local source,copy=pedestal(7,10,{50},{50}),pedestal(8,10,{60},{60})
             local copyCtx={beforeCopy=1,copySources={[7]={tail=1,seed=7}}}
             stock={source,copy}; assert(copies(nil,copyCtx))
-            copy.tail={60}; assert(not copies(nil,copyCtx), 'a copy gained a choice'); copy.tail={}
+            copy.tail={}; assert(not copies(nil,copyCtx), 'a copy without a choice of its own')
+            copy.tail={60,61}; assert(not copies(nil,copyCtx), 'a copy with two choices'); copy.tail={60}
             source.tail={}; assert(not copies(nil,copyCtx), 'the source lost its choice'); source.tail={50}
             stock={source}; assert(not copies(nil,copyCtx), 'no copy')
             local morph=checks['a seed-keeping Morph is not a reroll: no new Oath choice'][1]
             local m=pedestal(9,1,{},{50})
-            local morphCtx={morphed=m,morphSeed=9,morphGrants='50',morphTail=1}
+            local morphCtx={morphed=m,morphSeed=9,morphGrants='50',morphSettled='50',morphPending='none',morphTail=1}
             assert(morph(nil,morphCtx))
+            -- A pending paid swap may settle to its paid ID in the same slot.
+            morphCtx.morphSettled='60'; saves[m]={severedOath={bonusItems={60}}}; assert(morph(nil,morphCtx))
+            saves[m]={severedOath={bonusItems={61}}}; assert(not morph(nil,morphCtx), 'an unrelated grant replaced the paid one')
+            saves[m]={severedOath={bonusItems={50}}}; morphCtx.draws={{decrease=true}}
+            assert(not morph(nil,morphCtx), 'the Morph made a new paid draw'); morphCtx.draws=nil; morphCtx.morphSettled='50'
             saves[m]={severedOath={bonusItems={50,70}}}; assert(not morph(nil,morphCtx), 'a Morph re-granted')
             saves[m]={severedOath={bonusItems={50}}}; m.tail={50,70}; assert(not morph(nil,morphCtx), 'choices grew')
         ''')
@@ -276,15 +282,16 @@ class FixtureOracleTests(unittest.TestCase):
             end
             function EntityPtr(p) return {Ref=p} end
             function GetPtrHash(p) return p.hash end
-            local source=pickup(1,{2,2,200}); local sibling=pickup(1,{})
+            local source=pickup(1,{2,2,200}); local sibling=pickup(1,{5})
             source.hash=10; sibling.hash=20; source.InitSeed=77; sibling.InitSeed=77
             stock={sibling,source}; local ctx={draws={},copySource=EntityPtr(source),
                 copySourceHash=10,copySourceSeed=77,copyHead=1,
                 copySourceCycle={total=4,counts={[1]=1,[2]=2,[200]=1}}}
-            local copied=requires['native copy retains the displayed choice while source keeps its queue']
+            local copied=requires['native copy shows the displayed choice plus its own while source keeps its queue']
             assert(copied(nil,ctx)); assert(ctx.changed.ptr.Ref==source and ctx.untouched.ptr.Ref==sibling)
             sibling.tail={2,2,200}; assert(not copied(nil,ctx))
-            sibling.tail={}; sibling.SubType=2; assert(not copied(nil,ctx)); sibling.SubType=1
+            sibling.tail={}; assert(not copied(nil,ctx), 'a copy without a choice of its own'); sibling.tail={5}
+            sibling.SubType=2; assert(not copied(nil,ctx)); sibling.SubType=1
             source.tail={2,3,200}; assert(not copied(nil,ctx)); source.tail={2,2,200}
             source.hash=30; assert(not copied(nil,ctx)); source.hash=10
             ctx.copySource.Ref=nil; assert(not copied(nil,ctx)); ctx.copySource=EntityPtr(source)
@@ -294,7 +301,7 @@ class FixtureOracleTests(unittest.TestCase):
             assert(check(nil,ctx))
             source.tail={2,2,55,200}; assert(not check(nil,ctx))
             source.tail={2,2,55}; sibling.tail={2,2,55}; assert(not check(nil,ctx))
-            sibling.tail={}; ctx.draws={{id=77}}; assert(not check(nil,ctx)); ctx.draws={}
+            sibling.tail={5}; ctx.draws={{id=77}}; assert(not check(nil,ctx)); ctx.draws={}
             -- A native turn expires the source's EntityPtr; its hash and seed still find it.
             ctx.changed.ptr={}; assert(check(nil,ctx), 'a turned pedestal is still the fixture')
             source.hash=30; assert(not check(nil,ctx), 'another pedestal is not the fixture'); source.hash=10

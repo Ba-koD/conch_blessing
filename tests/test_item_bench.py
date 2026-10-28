@@ -414,7 +414,7 @@ class BenchTests(unittest.TestCase):
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','kronos detail')
             assert(started=='conch_test kronos detail')
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','all')
-            assert(label=='conch_test' and #selected==231,'update the documented suite count when it changes')
+            assert(label=='conch_test' and #selected==251,'update the documented suite count when it changes')
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','rat characters')
             assert(label=='conch_test rat characters' and #selected==34,'every selectable character once')
             for _,name in ipairs(selected) do assert(name:match('^conch_test rat same_')) end
@@ -424,6 +424,14 @@ class BenchTests(unittest.TestCase):
             assert(selected[2]=='conch_test severed_oath compare_capacity0_oath')
             for _,name in ipairs(selected) do
                 assert(not bench.get(name).reuseGroup,'comparison arm reused a consumed pool')
+                assert(bench.get(name).resetReason:find('consumes pools',1,true))
+            end
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','severed_oath birthright')
+            assert(label=='conch_test severed_oath birthright' and #selected==20)
+            assert(selected[1]=='conch_test severed_oath birthright_first_visit_birthright')
+            assert(selected[2]=='conch_test severed_oath birthright_first_visit_oath')
+            for _,name in ipairs(selected) do
+                assert(not bench.get(name).reuseGroup,'Birthright arm reused a consumed pool')
                 assert(bench.get(name).resetReason:find('consumes pools',1,true))
             end
             local previous=selected

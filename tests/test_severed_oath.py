@@ -103,11 +103,12 @@ class SeveredOathTests(unittest.TestCase):
                 local tail={}; for n=1,choose(9) do tail[n]=2+choose(3) end
                 local p=pedestal(sample*100,1,tail)
                 local spent=0
+                local eligible=player.held
                 local stepLabel='initial'
                 local function verify()
                     frame=frame+31
                     local head,old,before=p.SubType,copy(p.tail),draws
-                    local due=player.held and math.min(target-spent,8-#old) or 0
+                    local due=(eligible and player.held) and math.min(target-spent,8-#old) or 0
                     update(p)
                     assert(p.SubType==head,'stress: displayed head replaced')
                     assert(#p.tail==#old+due,string.format('stress sample=%d step=%s seed=%d held=%s spent=%d target=%d old=%d due=%d actual=%d',
@@ -128,15 +129,16 @@ class SeveredOathTests(unittest.TestCase):
                         for i=1,choose(9) do p.tail[i]=30+choose(4) end
                     elseif event==2 then p.generation=(p.generation or 0)+1
                     elseif event==3 then
+                        -- Like Birthright, gaining the Oath never reaches stock
+                        -- that already exists, not even on a later room entry.
                         player.held=not player.held
-                        -- Existing unowned stock becomes eligible on held room
-                        -- entry; acquisition alone is not that gameplay event.
-                        if player.held then roomIndex=2; M.onPostNewRoom(); roomIndex=1; M.onPostNewRoom() end
+                        roomIndex=2; M.onPostNewRoom(); roomIndex=1; M.onPostNewRoom()
                     elseif event==4 then
                         roomIndex=2; M.onPostNewRoom(); roomIndex=1; M.onPostNewRoom()
                     elseif event==5 and #p.tail<8 then p.tail[#p.tail+1]=40+choose(3)
                     elseif event==6 then
                         p.InitSeed=p.InitSeed+1; p.SubType=1; p.tail={}; spent=0
+                        eligible=player.held -- a reroll is a new pedestal
                     end
                     verify()
                 end
@@ -214,13 +216,99 @@ class SeveredOathTests(unittest.TestCase):
             p.tail={}; update(p); assert(#p.tail==0 and draws==2,'external clearing resurrected historical IDs')
         ''')
 
-    def test_unmodified_visited_room_gains_bonus_on_entry_while_held(self):
+    def test_seen_stock_never_gains_on_revisit_or_continue(self):
+        # Birthright: "Previously seen items are unaffected."
         self.lua.execute('''
             player.held=false; p=pedestal(71,1); update(p); assert(#p.tail==0)
             roomIndex=2; M.onPostNewRoom(); player.held=true
-            roomIndex=1; M.onPostNewRoom(); update(p); assert(#p.tail==1 and draws==1)
-            q=pedestal(72,2); M.onGameStarted(nil,true); update(p); update(q)
-            assert(#p.tail==1 and #q.tail==1 and draws==2,'continue skipped unmodified room stock')
+            roomIndex=1; M.onPostNewRoom(); update(p); assert(#p.tail==0 and draws==0,'seen stock gained on revisit')
+            M.onGameStarted(nil,true); update(p)
+            assert(#p.tail==0 and draws==0,'seen stock gained on continue')
+            q=pedestal(72,2); update(q); assert(#q.tail==1 and draws==1,'new stock while held')
+        ''')
+
+    def test_first_visit_stock_gains_and_keeps_its_answer(self):
+        self.lua.execute('''
+            room.IsFirstVisit=function() return firstVisit end
+            firstVisit=true; roomIndex=3; stock={}
+            p=pedestal(71,1); q=pedestal(72,2); M.onPostNewRoom(); update(p); update(q)
+            assert(#p.tail==1 and #q.tail==1 and draws==2,'first visit stock while held')
+            player.held=false; firstVisit=true; roomIndex=4; stock={}
+            r=pedestal(73,3); M.onPostNewRoom(); update(r); assert(#r.tail==0)
+            player.held=true; firstVisit=false; roomIndex=5; M.onPostNewRoom(); roomIndex=4; M.onPostNewRoom(); update(r)
+            assert(#r.tail==0 and draws==2,'stock first seen without the Oath gained later')
+            -- A continued room was seen before the save, even if it reads as a first visit.
+            stock={}; s=pedestal(74,4); firstVisit=true; M.onGameStarted(nil,true); update(s)
+            assert(#s.tail==0 and draws==2,'continued stock counted as new')
+            -- A legacy record-less pedestal in a visited room is old too.
+            firstVisit=false; roomIndex=6; stock={}; t=pedestal(75,5); M.onPostNewRoom(); update(t)
+            assert(#t.tail==0 and draws==2)
+        ''')
+
+    def test_acquiring_mid_room_leaves_existing_stock_alone(self):
+        # Picking up the Oath (or Birthright) only reaches pedestals created afterwards.
+        self.lua.execute('''
+            player.held=false
+            p=pedestal(71,999); c=pedestal(72,5,{6,7}); u=pedestal(73,8)
+            update(p); update(c); update(u)
+            player.held=true
+            p.SubType=50; p.Touched=true -- the old active dropped onto the Oath's pedestal
+            for _=1,4 do c:rotate(); c.generation=(c.generation or 0)+1; update(c) end
+            u.SubType=9 -- a Magic Conch upgrade keeps the seed
+            update(p); update(c); update(u)
+            assert(#p.tail==0 and #c.tail==2 and #u.tail==0 and draws==0,'existing stock gained after acquisition')
+            n=pedestal(74,10); update(n); assert(#n.tail==1 and draws==1,'a pedestal created afterwards')
+        ''')
+
+    def test_item_dropped_onto_a_pedestal_never_gains(self):
+        self.lua.execute('''
+            p=pedestal(71,8); update(p); assert(#p.tail==1 and draws==1)
+            -- Swapping actives: the old active stands on the same pedestal.
+            p.SubType=50; p.tail={}; p.Touched=true; for _=1,5 do update(p) end
+            assert(#p.tail==0 and draws==1,'dropped active became a choice again')
+            -- Even if the engine handed the pedestal a new seed, a touched one is not new.
+            p.InitSeed=81; p.SubType=51; for _=1,5 do update(p) end
+            assert(#p.tail==0 and draws==1,'touched pedestal counted as new')
+            s=pedestal(72,9); saves[key(s)]={severedOath={split=true,splitItem=9}}; update(s)
+            s.SubType=52; s.Touched=true; for _=1,5 do update(s) end
+            assert(#s.tail==0 and draws==1,'swap onto a split product became a choice')
+        ''')
+
+    def test_death_certificate_area_never_gains(self):
+        self.lua.execute('''
+            room.IsFirstVisit=function() return true end
+            desc={Data={StageID=35,Subtype=34}}
+            level.GetCurrentRoomDesc=function() return desc end
+            roomIndex=7; stock={}; p=pedestal(71,1); M.onPostNewRoom(); update(p)
+            q=pedestal(72,2); update(q)
+            assert(#p.tail==0 and #q.tail==0 and draws==0 and preview==0,'Death Certificate stock gained')
+            desc={Data={StageID=35,Subtype=33}}; r=pedestal(73,3); update(r); assert(#r.tail==0)
+            -- Without a readable RoomConfig the dimension decides.
+            desc={}; level.GetDimension=function() return 2 end; M.onPostNewRoom()
+            s=pedestal(74,4); update(s); assert(#s.tail==0)
+            level.GetDimension=function() return 0 end; roomIndex=8; M.onPostNewRoom(); t=pedestal(75,5); update(t)
+            desc={Data={StageID=35,Subtype=1}}; v=pedestal(76,6); update(v)
+            assert(#t.tail==1 and #v.tail==1 and draws==2,'ordinary rooms stopped gaining')
+        ''')
+
+    def test_copy_is_a_new_pedestal_with_its_own_choice(self):
+        # SaveManager copies the source's record onto a fresh same-seed copy.
+        self.lua.execute('''
+            p=pedestal(71,1); update(p); local bonus=p.tail[1]
+            q=pedestal(71,1); saves[key(q)]=copy(saves[key(p)]); M.onDupePickupDataLoad(nil,p,q); update(q)
+            assert(#q.tail==1 and draws==2,'copy did not get its own choice')
+            assert(saves[key(p)].severedOath.bonusItems[1]==bonus and saves[key(q)].severedOath.bonusItems[1]~=nil)
+            for _=1,5 do update(p); update(q) end; assert(draws==2)
+            player.held=false
+            r=pedestal(71,1); saves[key(r)]=copy(saves[key(p)]); M.onDupePickupDataLoad(nil,p,r); update(r)
+            assert(#r.tail==0 and draws==2,'copy made without the Oath gained')
+            -- A native turn re-initializes the source; SaveManager calls that a copy
+            -- again and would overwrite the source's record with its twin's.
+            player.held=true; p.generation=(p.generation or 0)+1
+            assert(M.onDupePickupDataLoad(nil,q,p)==true,'re-initialized source accepted its twin record')
+            update(p); assert(#p.tail==1 and draws==2,'turning source counted as a copy')
+            assert(saves[key(p)].severedOath.bonusItems[1]==bonus,'source record replaced')
+            assert(M.onDupePickupDataLoad(nil,p,pedestal(71,1))==nil,'a fresh copy was refused')
         ''')
 
     def test_owner_loss_keeps_existing_choices_but_grants_no_new_choices(self):
@@ -260,7 +348,8 @@ class SeveredOathTests(unittest.TestCase):
             p=pedestal(71,1); update(p); assert(#p.tail==1)
             q=pedestal(72,2); saves[key(q)]={severedOath={split=true,splitItem=2}}
             goldenProvider(); GoldenItems:SetGoldenItem(999); update(q); assert(#q.tail==0 and draws==1)
-            q.SubType=3; update(q); assert(#q.tail==2 and draws==3,'rerolled split item never became eligible')
+            q.SubType=3; update(q); assert(#q.tail==0 and draws==1,'a same-seed item change is not a reroll')
+            q.InitSeed=73; q.SubType=4; update(q); assert(#q.tail==2 and draws==3,'rerolled split item never became eligible')
         ''')
 
     def test_coop_holder_and_reroll_seed_use_new_pedestal_state(self):
@@ -291,7 +380,9 @@ class SeveredOathTests(unittest.TestCase):
             player.held=false; update(p); update(q)
             r=pedestal(73,3); update(r); assert(#r.tail==0)
             player.held=true; roomIndex=2; M.onPostNewRoom(); update(r)
-            assert(#r.tail==1 and draws==4,'normal reacquisition inherited golden bonus')
+            assert(#r.tail==0 and draws==3,'stock made while unowned gained on reacquisition')
+            s=pedestal(74,4); update(s)
+            assert(#s.tail==1 and draws==4,'normal reacquisition inherited golden bonus')
         ''')
 
     def test_slot_scoped_provider_ignores_other_owner_and_stale_slot(self):
@@ -308,7 +399,9 @@ class SeveredOathTests(unittest.TestCase):
             player.slots={}; player.held=false
             q=pedestal(72,2); update(q); assert(#q.tail==0,'removed active still grants')
             other.slots[0]=999; roomIndex=2; M.onPostNewRoom(); update(q)
-            assert(#q.tail==2 and draws==4,'second actual holder not recognized')
+            assert(#q.tail==0 and draws==2,'stock made while nobody held it gained')
+            r=pedestal(73,3); update(r)
+            assert(#r.tail==2 and draws==4,'second actual holder not recognized')
         ''')
 
     def test_player_slot_provider_precedes_standalone_global_ledger(self):

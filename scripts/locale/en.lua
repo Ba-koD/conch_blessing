@@ -558,8 +558,9 @@ return {
             name = "Severed Oath",
             description = "Cut the thread of fate",
             eid = {
-                "While held, adds 1 cycling choice to item pedestals on room entry.",
+                "While held, new item pedestals get 1 extra cycling choice. Items already seen are unaffected.",
                 "#Stacks with existing cycling choices. Adds 2 if Severed Oath itself is golden-upgraded.",
+                "#Does not apply to items in the {c:DEATH_CERTIFICATE} Death Certificate area.",
                 "#On use, separates cycling items in the room into individual items.",
                 "#{{Warning}} Requires REPENTOGON!",
             },

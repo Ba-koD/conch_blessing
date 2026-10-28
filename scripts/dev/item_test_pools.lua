@@ -203,6 +203,15 @@ local function oathGrants(p)
     return items
 end
 
+-- A grant whose paid draw differed from its preview, still waiting to swap
+-- the queued preview ID for the paid one (no further draw).
+local function oathPending(p)
+    local ok,save=pcall(ConchBlessing.SaveManager.TryGetNoRerollPickupSave,p)
+    local state=ok and type(save)=="table" and save.severedOath or nil
+    local swap=type(state)=="table" and state.pendingSwap or nil
+    return type(swap)=="table" and {from=swap.from,to=swap.to,slot=swap.slot} or nil
+end
+
 local function circleHas(p,cid)
     if p.SubType==cid then return true end
     for _,other in ipairs(p:GetCollectibleCycle()) do if other==cid then return true end end
@@ -279,9 +288,9 @@ S.add("SEVERED_OATH","dice_copy_split",{conditions=true},function(plan,id)
     end)
     plan.wait(4)
     plan.check("Diplopia copies each pedestal exactly once",function(_,ctx) return H.expect(#pedestals(),2*ctx.beforeCopy) end)
-    -- Native Diplopia copies the shown item, not the source's queue, and a copy
-    -- is not a reroll: it gets no Oath choice of its own (cycle_ownership agrees).
-    plan.check("Diplopia copies only the shown item while each source keeps its choice",function(_,ctx)
+    -- Native Diplopia copies the shown item, not the source's queue. Like
+    -- Birthright, the copy is a new pedestal and gets one Oath choice of its own.
+    plan.check("each Diplopia copy gains one choice of its own while each source keeps its choice",function(_,ctx)
         local sources,copies,seeds=0,0,{}
         for _,p in ipairs(pedestals()) do
             local source=ctx.copySources[GetPtrHash(p)]
@@ -292,17 +301,25 @@ S.add("SEVERED_OATH","dice_copy_split",{conditions=true},function(plan,id)
             else
                 copies=copies+1
                 seeds[#seeds+1]=tostring(p.InitSeed)
-                if tail~=0 then return false,string.format("copy item=%s gained %d choice(s)",p.SubType,tail) end
+                if tail~=1 then return false,string.format("copy item=%s has %d choice(s), expected 1",p.SubType,tail) end
             end
         end
         return sources==ctx.beforeCopy and copies==ctx.beforeCopy,
-            string.format("%d sources kept their choice; %d copies show one item (seeds %s)",sources,copies,table.concat(seeds,","))
+            string.format("%d sources kept their choice; %d copies have one each (seeds %s)",sources,copies,table.concat(seeds,","))
     end)
     plan.act(function(_,ctx)
         ctx.morphed=pedestals()[1]
         ctx.morphSeed=ctx.morphed.InitSeed
-        ctx.morphGrants=table.concat(oathGrants(ctx.morphed),",")
+        local grants=oathGrants(ctx.morphed)
+        ctx.morphGrants=table.concat(grants,",")
+        -- A pending swap may still settle afterwards: the same slot then holds
+        -- the paid ID instead of the preview, without another draw.
+        local pending=oathPending(ctx.morphed)
+        if pending and grants[pending.slot]==pending.from then grants[pending.slot]=pending.to end
+        ctx.morphSettled=table.concat(grants,",")
+        ctx.morphPending=pending and (pending.from.."->"..pending.to) or "none"
         ctx.morphTail=#ctx.morphed:GetCollectibleCycle()
+        observe(ctx)
         ctx.morphed:Morph(EntityType.ENTITY_PICKUP,PickupVariant.PICKUP_COLLECTIBLE,CollectibleType.COLLECTIBLE_SAD_ONION,true,true,true)
     end)
     plan.wait(4)
@@ -310,9 +327,12 @@ S.add("SEVERED_OATH","dice_copy_split",{conditions=true},function(plan,id)
         local p=ctx.morphed
         if not p:Exists() then return false,"morphed pedestal disappeared" end
         local grants,tail=table.concat(oathGrants(p),","),#p:GetCollectibleCycle()
-        return p.InitSeed==ctx.morphSeed and grants==ctx.morphGrants and tail<=ctx.morphTail,
-            string.format("seed kept=%s; Oath grants [%s]->[%s]; alternates %d->%d",tostring(p.InitSeed==ctx.morphSeed),
-                ctx.morphGrants,grants,ctx.morphTail,tail)
+        local paid=0
+        for _,draw in ipairs(ctx.draws or {}) do if draw.decrease then paid=paid+1 end end
+        return p.InitSeed==ctx.morphSeed and (grants==ctx.morphGrants or grants==ctx.morphSettled)
+            and tail<=ctx.morphTail and paid==0,
+            string.format("seed kept=%s; Oath grants [%s]->[%s] (pending %s); alternates %d->%d; new paid draws=%d",
+                tostring(p.InitSeed==ctx.morphSeed),ctx.morphGrants,grants,ctx.morphPending,ctx.morphTail,tail,paid)
     end)
     -- Reroll every pedestal so each has its own choice again before the split.
     plan.act(function(player,ctx)
@@ -416,19 +436,17 @@ S.add("SEVERED_OATH","cycle_ownership",{conditions=true},function(plan,id)
     plan.act(function(_,ctx) H.suppressRandomGoldenPedestals(ctx) end)
     visitTreasure(plan)
     cycleCapability(plan)
-    plan.act(function(player)
-        for _,p in ipairs(pedestals()) do p:Remove() end
-        H.pickup(player,CollectibleType.COLLECTIBLE_SAD_ONION)
-    end)
-    plan.wait(4)
     plan.act(function(player,ctx)
-        local p=pedestals()[1]
-        p:RemoveCollectibleCycle()
-        for _=1,8 do assert(p:AddCollectibleCycle(CollectibleType.COLLECTIBLE_BREAKFAST)) end
+        for _,p in ipairs(pedestals()) do p:Remove() end
         player:AddCollectible(id,0,false)
         observe(ctx)
+        -- Created while the Oath is held, so it is eligible; its queue is
+        -- filled before its first update, when the bonus would be added.
+        local p=H.pickup(player,CollectibleType.COLLECTIBLE_SAD_ONION)
+        p:RemoveCollectibleCycle()
+        for _=1,8 do assert(p:AddCollectibleCycle(CollectibleType.COLLECTIBLE_BREAKFAST)) end
     end)
-    -- Holding on entry makes the pre-existing fixture eligible.
+    plan.wait(4)
     revisit(plan)
     plan.check("full native queue consumes no pool selections",function(_,ctx)
         return #ctx.draws==0 and #pedestals()[1]:GetCollectibleCycle()==8,"draws="..#ctx.draws
@@ -457,7 +475,7 @@ S.add("SEVERED_OATH","cycle_ownership",{conditions=true},function(plan,id)
         player:UseActiveItem(CollectibleType.COLLECTIBLE_DIPLOPIA,UseFlag.USE_NOANIM,-1)
     end)
     plan.wait(4)
-    plan.require("native copy retains the displayed choice while source keeps its queue",function(_,ctx)
+    plan.require("native copy shows the displayed choice plus its own while source keeps its queue",function(_,ctx)
         local stock=pedestals()
         if #stock~=2 then return false,"pedestals="..#stock end
         if not ctx.copySource.Ref then return false,"original source disappeared" end
@@ -472,10 +490,11 @@ S.add("SEVERED_OATH","cycle_ownership",{conditions=true},function(plan,id)
         for item,n in pairs(ctx.copySourceCycle.counts) do
             if a.counts[item]~=n then return false,"source lost item "..item end
         end
-        -- Native Diplopia copies the displayed item, not the source's cycle tail.
-        if b.total~=1 or b.counts[ctx.copyHead]~=1 then return false,"copy differs from native displayed choice" end
+        -- Native Diplopia copies the displayed item, not the source's cycle tail;
+        -- the copy is a new pedestal and gets one Oath choice of its own.
+        if b.total~=2 or (b.counts[ctx.copyHead] or 0)<1 then return false,"copy lacks the displayed choice plus one of its own" end
         ctx.changed=fixtureRef(source); ctx.untouched=fixtureRef(copy); ctx.untouchedCycle=b
-        return true,"source choices="..a.total.."; independent copy choices=1"
+        return true,"source choices="..a.total.."; independent copy choices=2"
     end)
     plan.act(function(_,ctx)
         local p=assert(liveFixture(ctx.changed),"source disappeared")
@@ -561,7 +580,22 @@ S.add("SEVERED_OATH","cycle_stacking",{conditions=true,synergies=true},function(
         end)
         plan.act(function(player) player:AddCollectible(id,0,false) end)
         reenterTreasure(plan)
-        plan.check(case.name.." existing room gains exactly +1 on entry",function(_,ctx) return addedChoices(ctx,1) end)
+        -- Like Birthright: a pedestal seen before the Oath keeps its choices.
+        plan.check(case.name.." seen pedestal gains nothing on entry",function(_,ctx) return addedChoices(ctx,0) end)
+        plan.act(function(player)
+            for _,p in ipairs(pedestals()) do p:Remove() end
+            H.pickup(player,CollectibleType.COLLECTIBLE_BREAKFAST)
+        end)
+        plan.wait(4)
+        plan.check(case.name.." a pedestal created while held gains exactly +1 over the native choices",function(_,ctx)
+            local p=pedestals()[1]
+            local grants=oathGrants(p)
+            if #grants~=1 then return false,"Oath grants="..#grants end
+            for _,cid in ipairs(grants) do
+                if not circleHas(p,cid) then return false,"granted "..cid.." is not in the circle" end
+            end
+            return H.expect(cycleSnapshot(p).total,ctx.beforeCycle.total+1)
+        end)
         revisit(plan)
         plan.act(function(player,ctx) markRoll(ctx); player:UseActiveItem(CollectibleType.COLLECTIBLE_D6,UseFlag.USE_NOANIM,-1) end)
         plan.wait(4)
@@ -611,14 +645,23 @@ S.add("SEVERED_OATH","golden_cycle",{conditions=true,synergies=true},function(pl
         end)
         plan.act(function(player) player:AddCollectible(id,0,false) end)
         reenterTreasure(plan)
-        plan.check("normal held active gives +1 regardless of target gold",function(_,ctx) return addedChoices(ctx,1) end)
+        plan.check("seen stock gains nothing on entry",function(_,ctx) return addedChoices(ctx,0) end)
+        plan.act(function(player)
+            for _,p in ipairs(pedestals()) do p:Remove() end
+            H.pickup(player,CollectibleType.COLLECTIBLE_BREAKFAST)
+        end)
+        plan.wait(4)
+        plan.require("normal held active gives a new pedestal +1 regardless of target gold",function(_,ctx)
+            ctx.beforeCycle=cycleSnapshot(pedestals()[1])
+            return H.expect(ctx.beforeCycle.total,(native and 5 or 1)+1)
+        end)
         plan.act(function(player,ctx) ctx.goldProvider:SetGoldenItem(id,player,ActiveSlot.SLOT_PRIMARY) end)
         plan.wait(4)
         plan.require("provider confirms held Severed Oath upgrade",function(player,ctx)
             return ctx.goldProvider:HasGoldenItem(id,player,ActiveSlot.SLOT_PRIMARY)==true,
                 "golden state must belong to the held active"
         end)
-        plan.check("golden held active increases committed bonus to +2 once",function(_,ctx) return addedChoices(ctx,2) end)
+        plan.check("golden held active increases committed bonus to +2 once",function(_,ctx) return addedChoices(ctx,1) end)
         revisit(plan)
         plan.act(function(player,ctx) markRoll(ctx); player:UseActiveItem(CollectibleType.COLLECTIBLE_D6,UseFlag.USE_NOANIM,-1) end)
         plan.wait(4)
@@ -652,6 +695,14 @@ S.add("SEVERED_OATH","golden_cycle",{conditions=true,synergies=true},function(pl
         end)
         plan.act(function(player) player:AddCollectible(id,0,false) end)
         reenterTreasure(plan)
+        plan.check("stock made while unowned stays as it was after reacquisition",function()
+            return H.expect(#pedestals()[1]:GetCollectibleCycle()+1,native and 5 or 1)
+        end)
+        plan.act(function(player)
+            for _,p in ipairs(pedestals()) do p:Remove() end
+            H.pickup(player,CollectibleType.COLLECTIBLE_BREAKFAST)
+        end)
+        plan.wait(4)
         plan.check("normal reacquisition gains +1 without stale gold",function()
             return H.expect(#pedestals()[1]:GetCollectibleCycle()+1,(native and 5 or 1)+1)
         end)

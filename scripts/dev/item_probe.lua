@@ -10,6 +10,7 @@ for _, module in ipairs({"synergies","conditions","damage","kronos_synergies","k
     require("scripts.dev.item_test_" .. module)
 end
 local CycleCompare = require("scripts.dev.item_test_cycle_compare")
+local BirthrightParity = require("scripts.dev.item_test_birthright_parity")
 local contracts = {}
 for _, module in ipairs({ "stats", "combat", "special", "rat", "conch_pearl" }) do
     for key, contract in pairs(require("scripts.dev.item_test_" .. module)) do
@@ -193,6 +194,7 @@ local function listItem(key)
     end
     if key == "SEVERED_OATH" then
         out("  " .. prefix .. " compare [50 isolated native/Oath comparison benches]")
+        out("  " .. prefix .. " birthright [Isaac's Birthright control vs Severed Oath, 7 cases x 2 arms, fresh run each]")
         out("  " .. prefix .. " cycles [ownership, dice/copy/split, stacking and golden cases in one run]")
     end
     for _, row in ipairs(Scenarios.rows) do
@@ -326,6 +328,9 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
     if not singleRun() then out("Start a single-player test run first."); return end
     if key == "SEVERED_OATH" and case == "compare" then
         TestBench.startSuite("conch_test severed_oath compare", CycleCompare.commands); return
+    end
+    if key == "SEVERED_OATH" and case == "birthright" then
+        TestBench.startSuite("conch_test severed_oath birthright", BirthrightParity.commands); return
     end
     if key == "RAT" and case == "characters" then
         -- A fresh run as every selectable character, each fake against its original.

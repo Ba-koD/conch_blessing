@@ -207,6 +207,26 @@ local function fixture(player, index, seed)
     return p
 end
 
+-- Fixed-ID queue fixtures deliberately include duplicate head/tail IDs.
+-- Native modifier cases keep the engine-generated queue untouched.
+local function writeFixture(p, i, recipe)
+    if recipe.tail then
+        p:RemoveCollectibleCycle()
+        local ids = {CollectibleType.COLLECTIBLE_BREAKFAST, CollectibleType.COLLECTIBLE_SAD_ONION,
+            CollectibleType.COLLECTIBLE_BREAKFAST, CollectibleType.COLLECTIBLE_INNER_EYE}
+        for n = 1, recipe.tail do assert(p:AddCollectibleCycle(ids[(n - 1) % #ids + 1]), "fixture append rejected") end
+    end
+    -- Every native turn re-initializes a rotating pedestal ("Entity Pickup
+    -- Initialized" per turn in log.txt) and turns a forced
+    -- AutoUpdatePrice=false back to true in both arms; a fixed price is
+    -- then re-derived. Write the state a native turn keeps, so a window
+    -- measures the card or Oath instead of the engine's first turn. The
+    -- metadata recipe mixes a paid and an unpriced pedestal.
+    p.Price = recipe.metadata and (i == 2 and 0 or 15) or 0
+    p.ShopItemId, p.AutoUpdatePrice = -1, true
+    p.OptionsPickupIndex = recipe.metadata and 7201 or 0
+end
+
 -- The same provider choice as Oath's held-bonus count, with the public
 -- query/set/exhaust APIs a fixture needs to pin and restore it.
 local function goldenProvider()
@@ -287,68 +307,11 @@ local function prepare(plan, recipe, arm)
         for _, name in ipairs(recipe.modifiers or {}) do player:AddCollectible(assert(CollectibleType[name]), 0, false) end
     end)
     plan.wait(4)
-    plan.act(function(player, ctx)
-        ctx.spawnedFixtures = {}
-        ctx.fixtureTrace = {keys = {}, events = {}}
-        fixtureCapture = ctx.fixtureTrace
-        for i = 1, recipe.count or 1 do
-            local p = fixture(player, i, 740000 + recipe.index * 10 + i)
-            ctx.spawnedFixtures[#ctx.spawnedFixtures + 1] = {pointer = EntityPtr(p), initial = C.describeEntity(p)}
-            fixtureCapture.keys[tostring(GetPtrHash(p)) .. ":" .. tostring(p.InitSeed)] = true
-            traceFixture("spawn-return", p)
-        end
-    end)
-    plan.wait(4)
-    plan.require("native cycle inspection and rewrite capability", function(_, ctx)
-        fixtureCapture = nil
-        local stock = C.stock()
-        if #stock ~= (recipe.count or 1) then
-            return false, "unexpected fixture count=" .. #stock .. " expected=" .. (recipe.count or 1) .. "; " .. fixtureEvidence(ctx)
-        end
-        local p = stock[1]
-        return (type(p.GetCollectibleCycle) == "function" and type(p.AddCollectibleCycle) == "function"
-            and type(p.RemoveCollectibleCycle) == "function") or nil, "REPENTOGON cycle methods required"
-    end)
-    plan.act(function(_, ctx)
-        -- Fixed-ID queue fixtures deliberately include duplicate head/tail IDs.
-        -- Native modifier cases keep the engine-generated queue untouched.
-        for i, p in ipairs(C.stock()) do
-            if recipe.tail then
-                p:RemoveCollectibleCycle()
-                local ids = {CollectibleType.COLLECTIBLE_BREAKFAST, CollectibleType.COLLECTIBLE_SAD_ONION,
-                    CollectibleType.COLLECTIBLE_BREAKFAST, CollectibleType.COLLECTIBLE_INNER_EYE}
-                for n = 1, recipe.tail do assert(p:AddCollectibleCycle(ids[(n - 1) % #ids + 1]), "fixture append rejected") end
-            end
-            -- Every native turn re-initializes a rotating pedestal ("Entity Pickup
-            -- Initialized" per turn in log.txt) and turns a forced
-            -- AutoUpdatePrice=false back to true in both arms; a fixed price is
-            -- then re-derived. Write the state a native turn keeps, so a window
-            -- measures the card or Oath instead of the engine's first turn. The
-            -- metadata recipe mixes a paid and an unpriced pedestal.
-            p.Price = recipe.metadata and (i == 2 and 0 or 15) or 0
-            p.ShopItemId, p.AutoUpdatePrice = -1, true
-            p.OptionsPickupIndex = recipe.metadata and 7201 or 0
-        end
-        ctx.written, ctx.turned = C.snapshot(), {}
-    end)
-    plan.waitUntil(function(_, ctx) return C.observeTurns(ctx.written, ctx.turned) end, 120,
-        "native turn observed on every rotating fixture")
-    plan.act(function(_, ctx) ctx.fixtures = C.snapshot() end)
-    plan.require("fixture shop/deal contract survives a native turn before either implementation", function(_, ctx)
-        return C.sameMetadata(ctx.written, ctx.fixtures)
-    end)
-    plan.require("unowned fixture is valid before either implementation", function(player, ctx)
-        if player:HasCollectible(ConchBlessing.ItemData.SEVERED_OATH.id) then return false, "Oath contaminated native baseline" end
-        for _, row in ipairs(ctx.fixtures) do
-            local expected = recipe.tail and recipe.tail + 1 or recipe.nativeSize
-            if expected and #row.ring ~= expected then return false, "native choices=" .. #row.ring .. " expected=" .. expected end
-        end
-        return true, C.signature(ctx.fixtures, false, "exact")
-    end)
-    -- Both arms enter the same kind of room with the same initial fixtures.
-    -- Pools/run seeds are independent: this is NOT an exact random-ID A/B test.
-    enter(plan, "origin")
     if arm == "oath" then
+        -- Like Isaac's Birthright, only a pedestal created while the Oath is
+        -- held gains (user rule 2026-10-28), so the Oath is acquired first and
+        -- each fixture is made and written in one update, before its first
+        -- pickup update adds the bonus. Native queues come from its init.
         plan.act(function(player, ctx)
             local id, slot = ConchBlessing.ItemData.SEVERED_OATH.id, ActiveSlot.SLOT_PRIMARY
             player:AddCollectible(id, 0, false, slot)
@@ -376,19 +339,91 @@ local function prepare(plan, recipe, arm)
             return now == (recipe.gold == true), string.format("golden=%s before=%s%s", tostring(now),
                 tostring(ctx.goldBefore), ctx.goldBefore ~= (recipe.gold == true) and " (pinned for this arm, restored at cleanup)" or "")
         end)
+        plan.require("REPENTOGON cycle methods", function()
+            return REPENTOGON ~= nil or nil, "REPENTOGON cycle methods required"
+        end)
+        plan.act(function(_, ctx)
+            if recipe.roomType then
+                -- A real unrelated preview leaves misleading GetLastPool history.
+                -- It is setup, outside the measured grant, in both independent arms.
+                local other = ctx.expectedPool == ItemPoolType.POOL_TREASURE and ItemPoolType.POOL_SHOP or ItemPoolType.POOL_TREASURE
+                Game():GetItemPool():GetCollectible(other, false, 470001, CollectibleType.COLLECTIBLE_BREAKFAST)
+            end
+        end)
+        plan.act(function(player, ctx)
+            for i = 1, recipe.count or 1 do
+                local p = fixture(player, i, 740000 + recipe.index * 10 + i)
+                writeFixture(p, i, recipe)
+            end
+            ctx.fixtures = C.snapshot()
+            open(ctx, "grant", ctx.fixtures)
+        end)
+        plan.require("fixtures are valid before the Oath's first update", function(_, ctx)
+            if #ctx.fixtures ~= (recipe.count or 1) then return false, "fixtures=" .. #ctx.fixtures end
+            for _, row in ipairs(ctx.fixtures) do
+                local expected = recipe.tail and recipe.tail + 1 or recipe.nativeSize
+                if expected and #row.ring ~= expected then return false, "native choices=" .. #row.ring .. " expected=" .. expected end
+            end
+            return true, C.signature(ctx.fixtures, false, "exact")
+        end)
+        plan.wait(8)
+    else
+        plan.act(function(player, ctx)
+            ctx.spawnedFixtures = {}
+            ctx.fixtureTrace = {keys = {}, events = {}}
+            fixtureCapture = ctx.fixtureTrace
+            for i = 1, recipe.count or 1 do
+                local p = fixture(player, i, 740000 + recipe.index * 10 + i)
+                ctx.spawnedFixtures[#ctx.spawnedFixtures + 1] = {pointer = EntityPtr(p), initial = C.describeEntity(p)}
+                fixtureCapture.keys[tostring(GetPtrHash(p)) .. ":" .. tostring(p.InitSeed)] = true
+                traceFixture("spawn-return", p)
+            end
+        end)
+        plan.wait(4)
+        plan.require("native cycle inspection and rewrite capability", function(_, ctx)
+            fixtureCapture = nil
+            local stock = C.stock()
+            if #stock ~= (recipe.count or 1) then
+                return false, "unexpected fixture count=" .. #stock .. " expected=" .. (recipe.count or 1) .. "; " .. fixtureEvidence(ctx)
+            end
+            local p = stock[1]
+            return (type(p.GetCollectibleCycle) == "function" and type(p.AddCollectibleCycle) == "function"
+                and type(p.RemoveCollectibleCycle) == "function") or nil, "REPENTOGON cycle methods required"
+        end)
+        plan.act(function(_, ctx)
+            for i, p in ipairs(C.stock()) do writeFixture(p, i, recipe) end
+            ctx.written, ctx.turned = C.snapshot(), {}
+        end)
+        plan.waitUntil(function(_, ctx) return C.observeTurns(ctx.written, ctx.turned) end, 120,
+            "native turn observed on every rotating fixture")
+        plan.act(function(_, ctx) ctx.fixtures = C.snapshot() end)
+        plan.require("fixture shop/deal contract survives a native turn before either implementation", function(_, ctx)
+            return C.sameMetadata(ctx.written, ctx.fixtures)
+        end)
+        plan.require("unowned fixture is valid before either implementation", function(player, ctx)
+            if player:HasCollectible(ConchBlessing.ItemData.SEVERED_OATH.id) then return false, "Oath contaminated native baseline" end
+            for _, row in ipairs(ctx.fixtures) do
+                local expected = recipe.tail and recipe.tail + 1 or recipe.nativeSize
+                if expected and #row.ring ~= expected then return false, "native choices=" .. #row.ring .. " expected=" .. expected end
+            end
+            return true, C.signature(ctx.fixtures, false, "exact")
+        end)
+        -- Both arms enter the same kind of room with the same initial fixtures.
+        -- Pools/run seeds are independent: this is NOT an exact random-ID A/B test.
+        enter(plan, "origin")
+        plan.act(function(player, ctx)
+            if recipe.roomType then
+                -- A real unrelated preview leaves misleading GetLastPool history.
+                -- It is setup, outside the measured grant, in both independent arms.
+                local other = ctx.expectedPool == ItemPoolType.POOL_TREASURE and ItemPoolType.POOL_SHOP or ItemPoolType.POOL_TREASURE
+                Game():GetItemPool():GetCollectible(other, false, 470001, CollectibleType.COLLECTIBLE_BREAKFAST)
+            end
+            open(ctx, "grant", ctx.fixtures)
+        end)
+        enter(plan, "roomGrid")
+        plan.act(function(player) soul(player, recipe.gold and 2 or 1) end)
+        plan.wait(8)
     end
-    plan.act(function(player, ctx)
-        if recipe.roomType then
-            -- A real unrelated preview leaves misleading GetLastPool history.
-            -- It is setup, outside the measured grant, in both independent arms.
-            local other = ctx.expectedPool == ItemPoolType.POOL_TREASURE and ItemPoolType.POOL_SHOP or ItemPoolType.POOL_TREASURE
-            Game():GetItemPool():GetCollectible(other, false, 470001, CollectibleType.COLLECTIBLE_BREAKFAST)
-        end
-        open(ctx, "grant", ctx.fixtures)
-    end)
-    enter(plan, "roomGrid")
-    plan.act(function(player) if arm == "native" then soul(player, recipe.gold and 2 or 1) end end)
-    plan.wait(8)
     close(plan, function(_, _, w) return C.cycleAdditions(w.before, w.after, recipe.gold and 2 or 1) end, true, true)
     plan.check("new choices follow this room's pool (unknown final overrides require review)", function(_, ctx)
         return ctx.window.audit.source, ctx.window.audit.sourceDetail
@@ -409,6 +444,14 @@ local function prepare(plan, recipe, arm)
         plan.note("native full-queue charge (engine card control, not an Oath contract)", function(_, ctx)
             local ok, detail = fullQueueCharge(ctx)
             return (ok == true and "none" or ok == false and "charged" or "unknown") .. ": " .. tostring(detail)
+        end)
+    end
+    if arm == "oath" then
+        plan.act(function(_, ctx) ctx.written, ctx.turned = ctx.window.after, {} end)
+        plan.waitUntil(function(_, ctx) return C.observeTurns(ctx.written, ctx.turned) end, 120,
+            "native turn observed on every rotating fixture")
+        plan.require("fixture shop/deal contract survives a native turn", function(_, ctx)
+            return C.sameMetadata(ctx.written, C.snapshot())
         end)
     end
     phase(plan, "idle", nil, 96, unchanged)
@@ -466,12 +509,18 @@ local function copying(plan)
             end
             -- Native control: Diplopia copies the displayed item, not its
             -- entire rotating queue. Requiring two full queues prevented the
-            -- actual same-seed isolation test from ever running.
-            if #duplicate.ring ~= 1 or duplicate.ring[1] ~= w.before[1].ring[1] then
-                return false, "Diplopia copy differs from displayed original item"
+            -- actual same-seed isolation test from ever running. Like
+            -- Birthright, a copy made while the Oath is held is a new pedestal
+            -- with one choice of its own.
+            local own, shown = ctx.arm == "oath" and 1 or 0, false
+            for _, id in ipairs(duplicate.ring) do if id == w.before[1].ring[1] then shown = true end end
+            if #duplicate.ring ~= 1 + own or not shown then
+                return false, "Diplopia copy must show the displayed original item" .. (own > 0 and " plus one choice of its own" or "")
             end
             ctx.copyKey = duplicate.key
-            return C.noCharge(w)
+            if own == 0 then return C.noCharge(w) end
+            local decreasing = C.drawCounts(w.events)
+            return decreasing == 1, "the copy's own choice made " .. decreasing .. " decreasing draw(s), expected 1"
         end, true)
     plan.note("copy seeds/pointers (equal seeds are allowed)", function(_, ctx)
         local a, b = ctx.window.after[1], ctx.window.after[2]
@@ -513,7 +562,7 @@ local function lateStock(plan, arm)
         end
         if C.signature(old, true) ~= C.signature(ctx.oldStock, true) then return false, "late spawn changed old stock" end
         if #new ~= 1 or #new[1].ring ~= (arm == "oath" and 2 or 1) then return false, "late-spawn scope differs from arm contract" end
-        return true, arm == "native" and "native one-shot card does not cover future spawns" or "only newly eligible pedestal gains +1"
+        return true, arm == "native" and "native one-shot card does not cover future spawns" or "only the pedestal created while held gains +1"
     end)
     if arm == "native" then
         phase(plan, "card_reapply", function(player) soul(player, 1) end, 8,
@@ -541,20 +590,32 @@ local function lateStock(plan, arm)
         enter(plan, "origin")
         enter(plan, "roomGrid")
         plan.wait(8)
-        plan.check("reacquisition pays only the previously unowned pedestal", function(_, ctx)
+        -- Like Birthright, stock seen while the Oath was not held never gains.
+        plan.check("reacquisition leaves the stock it finds as it was", function(_, ctx)
             local after = C.snapshot()
             for _, old in ipairs(ctx.preReacquire) do
                 local found
                 for _, row in ipairs(after) do
                     if row.anchor == old.anchor then
                         found = true
-                        local ok, reason = C.addition(old, row, #old.ring == 1 and 1 or 0)
+                        local ok, reason = C.addition(old, row, 0)
                         if not ok then return false, reason end
                     end
                 end
                 if not found then return false, "pedestal missing after reacquisition" end
             end
-            return #after == #ctx.preReacquire, "existing paid choices retained, unpaid stock gains +1"
+            return #after == #ctx.preReacquire, "paid choices retained, the unowned pedestal stays unpaid"
+        end)
+        phase(plan, "reacquired_spawn", function(player, ctx)
+            ctx.reacquiredAnchor = C.anchor(fixture(player, 4, 920003))
+        end, 8, function(_, ctx, w)
+            local old, new = {}, {}
+            for _, row in ipairs(w.after) do
+                if row.anchor == ctx.reacquiredAnchor then new[#new + 1] = row else old[#old + 1] = row end
+            end
+            if C.signature(old, true) ~= C.signature(w.before, true) then return false, "the new pedestal changed existing stock" end
+            if #new ~= 1 or #new[1].ring ~= 2 then return false, "a pedestal created after reacquisition did not gain +1" end
+            return true, "only the pedestal created after reacquisition gains +1"
         end)
     end
 end
