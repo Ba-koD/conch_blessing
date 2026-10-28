@@ -9,7 +9,9 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 --   synergies: { [{ id = CollectibleType.COLLECTIBLE_X, type = "collectible" }] = "line", ... }
 --     - each value names its line under items.<KEY>.synergies in the locale files
 --   pool: { RoomType.ROOM_XXX, ... } - item pools it appears in (can specify multiple pools as an array)
---     possible pools: ROOM_DEFAULT, ROOM_SHOP, ROOM_TREASURE, ROOM_BOSS, ROOM_MINIBOSS, ROOM_SECRET, ROOM_ARCADE, ROOM_CURSE, ROOM_CHALLENGE, ROOM_LIBRARY, ROOM_SACRIFICE, ROOM_DEVIL, ROOM_ANGEL, ROOM_DUNGEON, ROOM_BOSSRUSH, ROOM_ISAACS, ROOM_BARREN, ROOM_CHEST, ROOM_DICE, ROOM_BLACK_MARKET, ROOM_GREED_EXIT, ROOM_PLANETARIUM, ROOM_TELEPORTER, ROOM_TELEPORTER_EXIT, ROOM_SECRET_EXIT, ROOM_BLUE, ROOM_ULTRASECRET
+--     room types with a real game pool: ROOM_TREASURE, ROOM_SHOP, ROOM_BOSS, ROOM_SECRET,
+--     ROOM_SUPERSECRET (also the secret pool), ROOM_LIBRARY, ROOM_CURSE, ROOM_DEVIL, ROOM_ANGEL,
+--     ROOM_PLANETARIUM, ROOM_ULTRASECRET (the Ultra Secret Room's red-item pool)
 --     pool can be specified as:
 --       - RoomType.ROOM_XXX (uses default values: weight=1.0, decrease_by=1, remove_on=0.1)
 --       - {RoomType.ROOM_XXX, weight=1.0, decrease_by=1, remove_on=0.1} (custom values)
@@ -127,7 +129,6 @@ ConchBlessing.ItemData = {
             RoomType.ROOM_ANGEL,
             RoomType.ROOM_SECRET,
             RoomType.ROOM_SUPERSECRET,
-            RoomType.ROOM_BLUE,
             -- Use custom values
             -- { RoomType.ROOM_ARCADE, weight=1, decrease_by=1, remove_on=0.1 },
         },
@@ -184,8 +185,7 @@ ConchBlessing.ItemData = {
         type = "passive",
         id = Isaac.GetItemIdByName("Eternal Flame"),
         pool = {
-            RoomType.ROOM_ANGEL,
-            RoomType.ROOM_ULTRASECRET
+            RoomType.ROOM_ANGEL
         },
         quality = 4,
         tags = "offensive angel",
@@ -237,7 +237,6 @@ ConchBlessing.ItemData = {
         pool = {
             RoomType.ROOM_DEVIL,
             RoomType.ROOM_CURSE,
-            RoomType.ROOM_BLACK_MARKET,
             RoomType.ROOM_SECRET,
             RoomType.ROOM_SUPERSECRET
         },
@@ -262,8 +261,7 @@ ConchBlessing.ItemData = {
         id = Isaac.GetItemIdByName("Injectable Steroids"),
         pool = {
             RoomType.ROOM_DEVIL,
-            RoomType.ROOM_CURSE,
-            RoomType.ROOM_BLACK_MARKET
+            RoomType.ROOM_CURSE
         },
         quality = 3,
         tags = "offensive",
@@ -293,9 +291,9 @@ ConchBlessing.ItemData = {
 		id = Isaac.GetItemIdByName("Kronos"),
 		gfx = "kronos.png",
 		pool = {
-			RoomType.ROOM_ANGEL,
 			RoomType.ROOM_DEVIL,
-			RoomType.ROOM_TREASURE
+			RoomType.ROOM_TREASURE,
+			RoomType.ROOM_SHOP
 		},
 		quality = 4,
 		tags = "offensive",
@@ -454,8 +452,8 @@ ConchBlessing.ItemData = {
         type = "active",
         id = Isaac.GetItemIdByName("Appraisal Certificate"),
         pool = {
-            RoomType.ROOM_TREASURE,
             RoomType.ROOM_SHOP,
+            RoomType.ROOM_SECRET,
         },
         quality = 3,
         tags = "offensive",
@@ -626,7 +624,8 @@ ConchBlessing.ItemData = {
         type = "passive",
         id = Isaac.GetItemIdByName("SOFLAM"),
         pool = {
-            RoomType.ROOM_TREASURE
+            RoomType.ROOM_TREASURE,
+            RoomType.ROOM_SHOP
         },
         quality = 4,
         tags = "offensive",
@@ -654,8 +653,8 @@ ConchBlessing.ItemData = {
         type = "passive",
         id = Isaac.GetItemIdByName("Two Faced Penny"),
         pool = {
-            RoomType.ROOM_TREASURE,
-            RoomType.ROOM_SHOP
+            RoomType.ROOM_DEVIL,
+            RoomType.ROOM_CURSE
         },
         gfx = "two_faced_penny.png",
         tags = "utility",
@@ -785,7 +784,7 @@ ConchBlessing.ItemData = {
     REAL_EYES = {
         type = "passive",
         id = Isaac.GetItemIdByName("Real Eyes"),
-        pool = { RoomType.ROOM_DEVIL, RoomType.ROOM_CURSE },
+        pool = { RoomType.ROOM_ANGEL },
         quality = 3,
         hidden = false,
         shopprice = 15,
@@ -985,7 +984,6 @@ ConchBlessing.ItemData = {
         pool = {
             RoomType.ROOM_DEVIL,
             RoomType.ROOM_SHOP,
-            RoomType.ROOM_GREED_EXIT,
             RoomType.ROOM_SECRET
         },
         quality = 4,

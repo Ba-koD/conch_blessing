@@ -4,23 +4,16 @@
         <Item Name="Live Eye" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Eternal Flame" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Power Training" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
-        <Item Name="Kronos" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Money = Tear" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Real Eyes" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
     <Pool Name="secret">
         <Item Name="Live Eye" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Oral Steroids" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Appraisal Certificate" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Severed Oath" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="AR Glasses" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Time = Money" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
-    </Pool>
-    <Pool Name="ultraSecret">
-        <Item Name="Live Eye" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
-        <Item Name="Eternal Flame" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
-        <Item Name="Oral Steroids" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
-    </Pool>
-    <Pool Name="blue">
-        <Item Name="Live Eye" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
     <Pool Name="devil">
         <Item Name="Void Dagger" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
@@ -28,7 +21,7 @@
         <Item Name="Injectable Steroids" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Kronos" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Sealed Demon Sword" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
-        <Item Name="Real Eyes" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Two Faced Penny" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Hemispatial Neglect" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Time = Money" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
@@ -36,13 +29,11 @@
         <Item Name="Void Dagger" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Power Training" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Kronos" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
-        <Item Name="Appraisal Certificate" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Money = Tear" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Utility Belt" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Ice Breath" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Fire Breath" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="SOFLAM" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
-        <Item Name="Two Faced Penny" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Severed Oath" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Ceil" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Round" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
@@ -52,12 +43,13 @@
     </Pool>
     <Pool Name="shop">
         <Item Name="Power Training" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Kronos" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Appraisal Certificate" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Money = Tear" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Utility Belt" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Ice Breath" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Fire Breath" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
-        <Item Name="Two Faced Penny" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="SOFLAM" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Severed Oath" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="AR Glasses" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Time = Money" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
@@ -66,12 +58,8 @@
         <Item Name="Oral Steroids" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Injectable Steroids" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Sealed Demon Sword" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
-        <Item Name="Real Eyes" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Two Faced Penny" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Hemispatial Neglect" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
-    </Pool>
-    <Pool Name="blackMarket">
-        <Item Name="Oral Steroids" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
-        <Item Name="Injectable Steroids" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
     <Pool Name="planetarium">
         <Item Name="Ceil" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
@@ -79,8 +67,5 @@
         <Item Name="Floor" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Rat" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Dragon" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
-    </Pool>
-    <Pool Name="greedExit">
-        <Item Name="Time = Money" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
 </ItemPools>

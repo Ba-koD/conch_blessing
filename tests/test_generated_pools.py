@@ -34,6 +34,28 @@ class GeneratedPoolTests(unittest.TestCase):
         pooled = {i.get('Name') for pool in ET.parse(out).getroot() for i in pool}
         self.assertEqual(pooled, {'Shown'})
 
+    def test_super_secret_rooms_use_the_secret_pool_and_list_an_item_once(self):
+        # Super Secret Rooms draw from the secret pool; ultraSecret is the Ultra
+        # Secret Room's red-item pool and only ROOM_ULTRASECRET reaches it.
+        out = ROOT / '.tmp' / 'test_generated_pools.xml'
+        out.parent.mkdir(exist_ok=True)
+        create_itempools_xml({
+            'BOTH': {'name': 'Both', 'type': 'passive', 'pools': ['ROOM_SECRET', 'ROOM_SUPERSECRET']},
+            'SUPER': {'name': 'Super', 'type': 'passive', 'pools': ['ROOM_SUPERSECRET']},
+            'RED': {'name': 'Red', 'type': 'passive', 'pools': ['ROOM_ULTRASECRET']},
+        }, str(out))
+        pools = {p.get('Name'): [i.get('Name') for i in p] for p in ET.parse(out).getroot()}
+        self.assertEqual(pools['secret'], ['Both', 'Super'])
+        self.assertEqual(pools['ultraSecret'], ['Red'])
+
+    def test_shipped_pools_are_real_game_pools(self):
+        vanilla = ROOT.parents[1] / 'extracted_resources' / 'resources' / 'itempools.xml'
+        if not vanilla.exists():
+            self.skipTest('extracted vanilla itempools.xml is not available')
+        names = {p.get('Name') for p in ET.parse(vanilla).getroot()}
+        shipped = {p.get('Name') for p in ET.parse(ROOT / 'content/itempools.xml').getroot()}
+        self.assertEqual(shipped - names, set(), 'a pool the game does not have would silently drop its items')
+
 
 class GeneratedIdOrderTests(unittest.TestCase):
     """Each ID space runs ordinary items, then console-only items, then WIP previews;

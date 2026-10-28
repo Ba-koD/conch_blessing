@@ -1054,7 +1054,9 @@ def create_itempools_xml(items, output_path):
         'ROOM_BOSS': 'boss',
         'ROOM_MINIBOSS': 'miniboss',
         'ROOM_SECRET': 'secret',
-        'ROOM_SUPERSECRET': 'ultraSecret',
+        # Super Secret Rooms draw from the ordinary secret pool; ultraSecret is the
+        # red-item pool of the Ultra Secret Room behind the red rooms.
+        'ROOM_SUPERSECRET': 'secret',
         'ROOM_ARCADE': 'arcade',
         'ROOM_CURSE': 'curse',
         'ROOM_CHALLENGE': 'challenge',
@@ -1080,7 +1082,7 @@ def create_itempools_xml(items, output_path):
         'TREASURE': 'treasure',
         'SHOP': 'shop',
         'SECRET': 'secret',
-        'SUPERSECRET': 'ultraSecret',
+        'SUPERSECRET': 'secret',
         'DEVIL': 'devil',
         'ANGEL': 'angel',
         'BOSS': 'boss',
@@ -1134,7 +1136,10 @@ def create_itempools_xml(items, output_path):
             
             if pool_name not in pool_items:
                 pool_items[pool_name] = []
-            
+            # Two room types can share a pool (Secret and Super Secret); list the item once.
+            if any(entry['name'] == item_info.get('name', item_key) for entry in pool_items[pool_name]):
+                continue
+
             pool_items[pool_name].append({
                 'name': item_info.get('name', item_key),  # name이 없으면 item_key 사용
                 'weight': weight,
