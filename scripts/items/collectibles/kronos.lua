@@ -603,6 +603,43 @@ function Rune.isPaid(player)
     return Rune.hasEffects(player)
 end
 
+-- Transformation (set) progress, measured 2026-10-29: the engine counts every
+-- copy it adds as a first pickup toward each transformation its runtime
+-- ItemConfig tags name (these leave Seraphim out of the angel set);
+-- RemoveCollectible takes one back per tag unless told not to (even from a copy
+-- that never counted), and a counter below the threshold ends the transformation.
+-- An absorbed familiar keeps counting as if it were still held: it leaves the
+-- inventory without giving its count back. A released one comes back through
+-- AddCollectible(id, 0, false), which never counts, so nothing counts twice.
+function Rune.removeKeepingForms(player, itemId)
+    player:RemoveCollectible(itemId, false, ActiveSlot.SLOT_PRIMARY, false)
+end
+
+-- Each transformation items count toward, by its tag (playerforms.xml).
+Rune.FORM_TAGS = { GUPPY = "GUPPY", LORD_OF_THE_FLIES = "FLY", MUSHROOM = "MUSHROOM", ANGEL = "ANGEL", BOB = "BOB",
+    DRUGS = "SYRINGE", MOM = "MOM", BABY = "BABY", EVIL_ANGEL = "DEVIL", POOP = "POOP", BOOK_WORM = "BOOK",
+    SPIDERBABY = "SPIDER" }
+
+-- An absorbed copy used up for good gives its count back, as the engine's own
+-- removal of a held copy would. Needs REPENTOGON's IncrementPlayerFormCounter;
+-- without it the count stays.
+function Rune.withdrawForms(player, itemId, copies)
+    if not (copies and copies > 0) or type(player.IncrementPlayerFormCounter) ~= "function" then return end
+    local config = Isaac.GetItemConfig():GetCollectible(itemId)
+    if not (config and type(config.HasTags) == "function" and PlayerForm and ItemConfig) then return end
+    for formName, tagName in pairs(Rune.FORM_TAGS) do
+        local formId, tag = PlayerForm["PLAYERFORM_" .. formName], ItemConfig["TAG_" .. tagName]
+        if formId and tag and config:HasTags(tag) then
+            local current = type(player.GetPlayerFormCounter) == "function" and player:GetPlayerFormCounter(formId) or copies
+            local take = math.min(copies, current)
+            if take > 0 then player:IncrementPlayerFormCounter(formId, -take) end
+        end
+    end
+end
+-- For the in-game bench, which runs them on items with several transformation tags.
+ConchBlessing.kronos._removeKeepingForms = Rune.removeKeepingForms
+ConchBlessing.kronos._withdrawForms = Rune.withdrawForms
+
 local function clearKronosRuntime(player)
     if not player then return end
 
@@ -1001,7 +1038,7 @@ function ConchBlessing.kronos._detectAndAbsorb(player)
             local removed = 0
             for _ = 1, ownedNow - keep do
                 if player:HasCollectible(famId, true) then
-                    player:RemoveCollectible(famId)
+                    Rune.removeKeepingForms(player, famId)
                     removed = removed + 1
                     ConchBlessing.kronos._queueTransferEffect(player, famId, false)
                 end
@@ -1156,6 +1193,9 @@ function ConchBlessing.kronos._trackConvertedItemRemoval(player)
                     local absorbedCount = ConchBlessing.kronos._getAbsorbedCount(player, familiarId)
                     local permanentTaken = math.min(absorbedCount, taken - floorTaken)
                     local newAbsorbedCount = absorbedCount - permanentTaken
+                    -- The charged copies are used up, so their transformation
+                    -- count goes too; temporary credits never counted.
+                    Rune.withdrawForms(player, familiarId, permanentTaken)
                     if newAbsorbedCount > 0 then
                         rs.absorbed[key] = { count = newAbsorbedCount, id = familiarId }
                     else
@@ -3272,11 +3312,15 @@ local function releaseCopies(player, rs, familiarIds, returnToPlayer)
             if returnToPlayer then
                 rs.spared[key] = (tonumber(rs.spared[key]) or 0) + count
             end
+            -- A returned copy kept its transformation count while absorbed and
+            -- comes back uncounted; a sacrificed one gives it back, as the
+            -- vanilla altar does for a held familiar.
             for _ = 1, count do
                 if returnToPlayer then
                     player:AddCollectible(familiarId, 0, false)
                 end
             end
+            if not returnToPlayer then Rune.withdrawForms(player, familiarId, count) end
             ConchBlessing.kronos._queueTransferEffect(player, familiarId, true, nil, count)
             released = released + count
             dbg(string.format("%s familiar %d x%d (%d -> %d)", returnToPlayer and "Released" or "Sacrificed",
@@ -4729,7 +4773,7 @@ function Rune.devourOne(player, ledger, pick)
             effects:RemoveCollectibleEffect(itemId, 1)
             if fam then fam:Remove() end
         elseif player:GetCollectibleNum(itemId, true) > 0 then
-            player:RemoveCollectible(itemId)
+            Rune.removeKeepingForms(player, itemId)
             if fam then fam:Remove() end
         elseif fam then
             fam:Remove()

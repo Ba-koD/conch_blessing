@@ -6,7 +6,7 @@ local H = require("scripts.dev.item_test_support")
 local Dynamic = require("scripts.dev.item_test_dynamic")
 local Isolation = require("scripts.dev.test_isolation")
 local Scenarios = require("scripts.dev.item_scenarios")
-for _, module in ipairs({"synergies","conditions","damage","kronos_synergies","kronos_batches","kronos_sources","pools","real_eyes","eye_upgrades","penny"}) do
+for _, module in ipairs({"synergies","conditions","damage","kronos_synergies","kronos_batches","kronos_sources","kronos_forms","pools","real_eyes","eye_upgrades","penny"}) do
     require("scripts.dev.item_test_" .. module)
 end
 local CycleCompare = require("scripts.dev.item_test_cycle_compare")

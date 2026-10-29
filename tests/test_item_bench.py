@@ -414,7 +414,7 @@ class BenchTests(unittest.TestCase):
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','kronos detail')
             assert(started=='conch_test kronos detail')
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','all')
-            assert(label=='conch_test' and #selected==251,'update the documented suite count when it changes')
+            assert(label=='conch_test' and #selected==259,'update the documented suite count when it changes')
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','rat characters')
             assert(label=='conch_test rat characters' and #selected==34,'every selectable character once')
             for _,name in ipairs(selected) do assert(name:match('^conch_test rat same_')) end

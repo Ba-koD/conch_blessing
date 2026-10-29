@@ -58,6 +58,14 @@ SOFLAM 지연·상태 이상 지속 시간과 기존 상세 벤치의 캡션 렌
 | `conch_test kronos conversions` | 지급형 48종을 함께 흡수·중첩하고 대량 반환 및 원래 아이템 보존 검사 |
 | `conch_test kronos barriers` | 차단형 22종의 개별 기여량·중첩·합산 100% 차단·반환 검사 |
 | `conch_test kronos exclusions` | 제외형 10종을 함께 1개·2개 보유하고 흡수되지 않는지 검사 |
+| `conch_test kronos transformation_before` / `_after` | 받침대에서 실제로 주운 형제 바비(샴쌍둥이 세트)가 크로노스보다 먼저/나중에 들어와 흡수돼도 엔진 카운터가 그대로이고, 크로노스를 잃어 돌려받아도 두 번 세지 않는지(엔진 `GetPlayerFormCounter`, 각각 새 런) |
+| `conch_test kronos transformation_progress` | 이미 가진 멀리건(파리 세트 1/3)에 흡수한 파리 패밀리어 2개가 더해져 3/3에서 벨제붑이 되고, 반환 뒤에도 3과 변신이 그대로인지 |
+| `conch_test kronos transformation_conversion` | 천사 세트: 헤일로 + 흡수한 세라핌 + 변환된 성심이 3으로 세라핌 변신, 반환하면 성심만큼 빠지고 세라핌의 샴쌍둥이 진행도는 유지 |
+| `conch_test kronos transformation_release` | 친구 상자·몬스터 매뉴얼의 임시 펫은 진행도를 더하지 않고, GB 버그·크로노스 상실로 돌아온 펫은 두 번 세지 않는지 |
+| `conch_test kronos transformation_sacrifice` | 희생 제단: 바닐라 대조(보유 펫 1개당 -1)를 먼저 재고, 흡수된 펫이 바쳐지면 같은 양이 빠지는지(REPENTOGON 필요) |
+| `conch_test kronos transformation_thurisaz` | 투리사즈가 먹은 펫의 진행도가 보유할 때처럼 남는지 |
+| `conch_test kronos transformation_multi` | 세트가 둘 이상인 아이템: 스카톨(똥+파리)에 크로노스의 흡수 제거·반환·소모 함수를 그대로 써서 모든 세트가 유지되고 소모 때 모두 빠지는지, 그리고 이 설치본에서 세트가 둘 이상인 패밀리어를 찾아 실제로 흡수·반환(없으면 SKIP, 목록은 DIAG) |
+| `conch_test kronos transformation_engine` | 측정 전용(이름으로만 실행): 획득·중복·`FirstTimePickingUp=false`·`RemoveFromPlayerForm`·기본 제거·제단·`IncrementPlayerFormCounter`가 카운터와 변신에 주는 영향을 DIAG로 기록 |
 | `conch_test appraisal` | 감정 평가서 생명주기·상세·아트로포스 시너지 검사 |
 | `conch_test utility_belt` / `conch_test belt` | 벨트 생명주기 + 제외 액티브 7개 양쪽 획득 순서를 한 묶음으로 검사 |
 | `conch_test kronos attacks` | 공격·상태 이상 펫 13종을 같은 런에서 순차 검사 |
