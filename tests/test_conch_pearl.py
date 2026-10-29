@@ -39,6 +39,7 @@ class ConchPearlTests(unittest.TestCase):
             local function player(items)
                 local p={items=items or {},dead=false,ghost=false}
                 function p:HasCollectible(id) return (self.items[id] or 0)>0 end
+                function p:GetCollectibleNum(id) return self.items[id] or 0 end
                 function p:IsDead() return self.dead end
                 function p:IsCoopGhost() return self.ghost end
                 return p
@@ -103,7 +104,7 @@ class ConchPearlTests(unittest.TestCase):
                 printError=function(e) errors[#errors+1]=tostring(e) end,
                 printDebug=function(e) debugs[#debugs+1]=e end,
                 ItemData={
-                    CONCH_PEARL={type='passive',id=900,pool={RoomType.ROOM_ANGEL,RoomType.ROOM_SECRET}},
+                    CONCH_PEARL={type='passive',id=900,stackable=true,pool={RoomType.ROOM_ANGEL,RoomType.ROOM_SECRET}},
                     KRONOS={type='passive',id=901,pool={RoomType.ROOM_TREASURE,RoomType.ROOM_DEVIL}},
                     DRAGON={type='passive',id=902,stackable=true,pool={RoomType.ROOM_TREASURE,RoomType.ROOM_PLANETARIUM}},
                     POWER_TRAINING={type='active',id=903,pool={RoomType.ROOM_ANGEL,RoomType.ROOM_SHOP}},
@@ -178,13 +179,42 @@ class ConchPearlTests(unittest.TestCase):
     def test_quality_two_converts_below_ten_percent_only(self):
         self.run_lua('''
             assert(M.data.convertChance==0.10)
-            assert(M._test.converts(0.0999999) and not M._test.converts(0.1) and not M._test.converts(0.5))
+            assert(M._test.converts(0.0999999,0.1) and not M._test.converts(0.1,0.1) and not M._test.converts(0.5,0.1))
             forcedFloats={0.1}
             assert(draw(3,ItemPoolType.POOL_TREASURE,true)==nil and #removed==0)
             forcedFloats={0.0999}
             local result=draw(3,ItemPoolType.POOL_TREASURE,true)
             assert(result==901 or result==902,'treasure candidate: '..tostring(result))
             assert(#poolCalls==0,'quality 2 is not redrawn')
+        ''')
+
+    def test_each_copy_held_adds_ten_percent(self):
+        self.run_lua('''
+            local f=M._test.chanceFor
+            assert(f(0)==0 and f(1)==0.1 and math.abs(f(2)-0.2)<1e-12 and math.abs(f(3)-0.3)<1e-12)
+            assert(f(10)==1 and f(12)==1,'capped at 100%')
+            players[1].items[900]=2
+            assert(M.copiesHeld()==2 and math.abs(M.currentChance()-0.2)<1e-12)
+            forcedFloats={0.19}
+            assert(draw(3,ItemPoolType.POOL_TREASURE,false)~=nil,'two copies convert a 0.19 roll')
+            forcedFloats={0.2}
+            assert(draw(3,ItemPoolType.POOL_TREASURE,false)==nil,'two copies stop at 20%')
+            -- Every living player's copies count together; a dead holder's do not.
+            players[2]=newPlayer({[900]=1})
+            assert(M.copiesHeld()==3)
+            forcedFloats={0.29}
+            assert(draw(3,ItemPoolType.POOL_TREASURE,false)~=nil,'three copies across players convert a 0.29 roll')
+            players[2].dead=true
+            assert(M.copiesHeld()==2,'a dead holder adds nothing')
+            players[1].items[900]=0
+            assert(M.copiesHeld()==0 and not M.isActive(),'only a dead holder left: off')
+        ''')
+
+    def test_the_held_pearl_may_come_again_because_it_stacks(self):
+        self.run_lua('''
+            local offered=false
+            for _,id in ipairs(M.candidatesFor(ItemPoolType.POOL_ANGEL)) do offered=offered or id==900 end
+            assert(offered,'a held Conch Pearl stays a candidate')
         ''')
 
     def test_preview_draws_do_not_touch_the_pools(self):
@@ -205,7 +235,8 @@ class ConchPearlTests(unittest.TestCase):
             for _,id in ipairs({901,902,903,904,908,909}) do players[1].items[id]=1 end
             local ids={}
             for _,id in ipairs(M.candidatesFor(ItemPoolType.POOL_BOSS)) do ids[#ids+1]=id end
-            assert(table.concat(ids,',')=='902,908,909','only stackable items remain: '..table.concat(ids,','))
+            assert(table.concat(ids,',')=='900,902,908,909','only stackable items remain: '..table.concat(ids,','))
+            ConchBlessing.ItemData.CONCH_PEARL.stackable=nil
             ConchBlessing.ItemData.DRAGON.stackable=nil
             ConchBlessing.ItemData.TIME_MONEY.stackable=nil
             ConchBlessing.ItemData.SEALED_DEMON_SWORD.stackable=nil
@@ -221,17 +252,23 @@ class ConchPearlTests(unittest.TestCase):
                 for _,id in ipairs(M.candidatesFor(poolType)) do list[#list+1]=id end
                 return table.concat(list,',')
             end
-            -- The holder's own Conch Pearl is never offered while held.
+            -- The holder's own Conch Pearl stacks, so it stays on offer while held.
             assert(ids(ItemPoolType.POOL_DEVIL)=='901,904,909','devil: '..ids(ItemPoolType.POOL_DEVIL))
             assert(ids(ItemPoolType.POOL_SHOP)=='903,908','shop with a { room, weight } entry: '..ids(ItemPoolType.POOL_SHOP))
-            assert(ids(ItemPoolType.POOL_ANGEL)=='903','angel: '..ids(ItemPoolType.POOL_ANGEL))
-            assert(ids(ItemPoolType.POOL_BOSS)=='901,902,903,904,908,909','no ours in boss: any released one')
-            assert(ids(nil)=='901,902,903,904,908,909')
+            assert(ids(ItemPoolType.POOL_ANGEL)=='900,903','angel: '..ids(ItemPoolType.POOL_ANGEL))
+            assert(ids(ItemPoolType.POOL_BOSS)=='900,901,902,903,904,908,909','no ours in boss: any released one')
+            assert(ids(nil)=='900,901,902,903,904,908,909')
             players[1].items[901]=1 -- Kronos: copies add nothing
             players[1].items[903]=1 -- Power Training: an active
             players[1].items[902]=3 -- Dragon: copies stack
-            assert(ids(ItemPoolType.POOL_BOSS)=='902,904,908,909','held singles and actives skipped')
-            assert(ids(ItemPoolType.POOL_ANGEL)=='902,904,908,909','held angel active: fall back to any')
+            assert(ids(ItemPoolType.POOL_BOSS)=='900,902,904,908,909','held singles and actives skipped')
+            assert(ids(ItemPoolType.POOL_ANGEL)=='900','held angel active: only the pearl is left there')
+            players[1].items[900]=0
+            assert(ids(ItemPoolType.POOL_ANGEL)=='900','an unheld pearl is on offer too')
+            ConchBlessing.ItemData.CONCH_PEARL.stackable=nil; M._test.resetRegistry()
+            players[1].items[900]=1
+            assert(ids(ItemPoolType.POOL_ANGEL)=='902,904,908,909','without stacking: held angel items fall back to any')
+            ConchBlessing.ItemData.CONCH_PEARL.stackable=true; M._test.resetRegistry()
             players[2]=newPlayer({[904]=1})
             assert(ids(ItemPoolType.POOL_DEVIL)=='909','another player holding counts too')
             players[2].dead=true
@@ -248,7 +285,7 @@ class ConchPearlTests(unittest.TestCase):
                     local r=RNG()
                     local seed=i*797+13
                     r:SetSeed(useMix and M._test.mixSeed(seed) or seed,35)
-                    if M._test.converts(r:RandomFloat()) then hits=hits+1 end
+                    if M._test.converts(r:RandomFloat(),0.1) then hits=hits+1 end
                 end
                 return hits/n
             end
@@ -259,6 +296,10 @@ class ConchPearlTests(unittest.TestCase):
             for i=1,4000 do if draw(3,ItemPoolType.POOL_TREASURE,false,i*797+13) then converted=converted+1 end end
             local shipped=converted/4000
             assert(math.abs(shipped-0.1)<=3*math.sqrt(0.09/4000),'the shipped draw path converts 10%: '..shipped)
+            players[1].items[900]=3
+            converted=0
+            for i=1,4000 do if draw(3,ItemPoolType.POOL_TREASURE,false,i*797+13) then converted=converted+1 end end
+            assert(math.abs(converted/4000-0.3)<=3*math.sqrt(0.21/4000),'three copies convert 30%: '..converted/4000)
             assert(M._test.mixSeed(0)~=0 and M._test.mixSeed(-1)~=0,'every seed maps to a usable RNG seed')
         ''')
 

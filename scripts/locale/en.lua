@@ -618,6 +618,7 @@ return {
             eid = {
                 "Quality {{Quality0}}/{{Quality1}} items no longer appear.",
                 "#Quality {{Quality2}} items have a 10% chance to turn into a Conch's Blessing item.",
+                "#Increases by 10% for each copy held.",
                 "#Does not turn into an item you already hold whose copies don't stack.",
             },
         },

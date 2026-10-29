@@ -645,21 +645,28 @@ def build(samples: int, seed: int) -> str:
     w("`MC_POST_GET_COLLECTIBLE`. Quest items and this mod's own items stay. A quality 0-1 result is drawn")
     w(f"again from the same pool, up to {int(redraws)} times ({redraws_cite}), so it never appears; if every")
     w("redraw is still quality 0-1, one of this mod's items appears instead. A quality 2 result rolls")
-    w(f"`RandomFloat() < {chance:g}` ({chance_cite}) on an RNG seeded from the draw's own seed and becomes one")
-    w("of this mod's items, picked uniformly from the candidates listed for that pool (any candidate when")
-    w("the pool lists none). The roll is a single draw, so the odds equal the constant. Copies do not stack.")
+    w(f"`RandomFloat() < min(1, {chance:g} x copies)` ({chance_cite}) on an RNG seeded from the draw's own seed,")
+    w("where copies counts every living player's copies together, and becomes one of this mod's items,")
+    w("picked uniformly from the candidates listed for that pool (any candidate when the pool lists none).")
+    w("The roll is a single draw, so the odds equal that expression.")
     w("")
     rows = []
     for quality in range(5):
         if quality <= 1:
-            exact, measured = "redrawn (never shown)", "-"
+            exact = "redrawn (never shown)"
         elif quality == 2:
-            hits = sum(1 for _ in range(samples) if rng.random() < chance)
-            exact, measured = f"**{chance:.0%}**", f"{hits / samples:.3%}"
+            exact = f"**{chance:.0%} per copy held**"
         else:
-            exact, measured = "0%", "-"
-        rows.append([str(quality), exact, measured])
-    w("\n".join(table(["Drawn quality", "Exact P (becomes one of ours)", "Measured"], rows)))
+            exact = "0%"
+        rows.append([str(quality), exact])
+    w("\n".join(table(["Drawn quality", "Exact P (becomes one of ours)"], rows)))
+    w("")
+    rows = []
+    for copies in (1, 2, 3, 5, 10, 12):
+        p = min(1.0, chance * copies)
+        hits = sum(1 for _ in range(samples) if rng.random() < p)
+        rows.append([str(copies), f"**{p:.0%}**", f"{hits / samples:.3%}"])
+    w("\n".join(table(["Copies held", "Exact P (a quality 2 draw becomes one of ours)", "Measured"], rows)))
     w("")
 
     return "\n".join(md) + "\n"

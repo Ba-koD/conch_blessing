@@ -50,6 +50,12 @@ C.CONCH_PEARL = { stage = function(plan, _, n)
     plan.check("filter follows ownership through stacking, removal and reacquisition", function()
         return pearl().isActive() == (n > 0), "copies=" .. n .. " active=" .. tostring(pearl().isActive())
     end)
+    plan.check("each copy held adds 10% to the conversion chance", function()
+        local expected = math.min(1, 0.1 * n)
+        local actual = pearl().currentChance()
+        return math.abs(actual - expected) < 1e-9, string.format("copies=%d chance=%.0f%% (expected %.0f%%)",
+            n, actual * 100, expected * 100)
+    end)
     plan.check(n > 0 and "treasure draws never show quality 0-1" or "no holder: draws are left alone", function()
         local module = pearl()
         module._test.resetEvidence()
@@ -95,24 +101,30 @@ S.add("CONCH_PEARL", "draws", { conditions = true }, function(plan, id)
         end
         return true, SEEDS .. " seeds x " .. #POOLS .. " pools"
     end)
-    plan.check("quality 2 converts at the advertised 10%", function(_, ctx)
-        local q2, converted = 0, 0
+    -- Quality 2 draws the held run turned into one of ours, against the advertised chance.
+    local function conversionRate(ctx, held, chance)
+        local q2, converted, lost = 0, 0, 0
         for _, name in ipairs(POOLS) do
             for i = 1, SEEDS do
                 local v = info(ctx.control[name][i])
                 if v and v.quality == 2 and not v.quest and not v.own then
                     q2 = q2 + 1
-                    if ctx.held[name][i] ~= ctx.control[name][i] then converted = converted + 1 end
+                    local changed = held[name][i] ~= ctx.control[name][i]
+                    if changed then converted = converted + 1 end
+                    -- The roll is fixed by the draw's seed, so a copy only ever adds conversions.
+                    if held ~= ctx.held and ctx.held[name][i] ~= ctx.control[name][i] and not changed then lost = lost + 1 end
                 end
             end
         end
-        local chance = pearl().data.convertChance
         if q2 < 100 then return nil, "only " .. q2 .. " quality 2 draws; inconclusive" end
         local rate = converted / q2
         local bound = 3 * math.sqrt(chance * (1 - chance) / q2)
-        return math.abs(rate - chance) <= bound,
-            string.format("converted %d/%d = %.2f%% (expected %.0f%% +/- %.2f%%)", converted, q2,
-                rate * 100, chance * 100, bound * 100)
+        return math.abs(rate - chance) <= bound and lost == 0,
+            string.format("converted %d/%d = %.2f%% (expected %.0f%% +/- %.2f%%), lost %d", converted, q2,
+                rate * 100, chance * 100, bound * 100, lost)
+    end
+    plan.check("quality 2 converts at the advertised 10% with one copy", function(_, ctx)
+        return conversionRate(ctx, ctx.held, 0.1)
     end)
     plan.check("conversions come from the draw's pool first, else from any of ours", function(_, ctx)
         for _, name in ipairs(POOLS) do
@@ -133,6 +145,15 @@ S.add("CONCH_PEARL", "draws", { conditions = true }, function(plan, id)
         return "redraws=" .. e.redraws .. " conversions=" .. e.conversions .. " fallbacks=" .. e.fallbacks
             .. " spawnCollectibles=" .. tostring(ConchBlessing.Config and ConchBlessing.Config.spawnCollectibles)
     end)
+    plan.act(function(player, ctx)
+        player:AddCollectible(id, 0, false)
+        player:AddCollectible(id, 0, false)
+        ctx.held3 = {}
+        for _, name in ipairs(POOLS) do ctx.held3[name] = drawAll(ItemPoolType[name]) end
+    end)
+    plan.check("three copies convert 30%, keeping every one-copy conversion", function(_, ctx)
+        return conversionRate(ctx, ctx.held3, 0.3)
+    end)
 end)
 
 S.add("CONCH_PEARL", "exclusions", { conditions = true }, function(plan, id)
@@ -150,10 +171,10 @@ S.add("CONCH_PEARL", "exclusions", { conditions = true }, function(plan, id)
         player:AddCollectible(ctx.dragon, 0, false)       -- copies stack
     end)
     plan.wait(4)
-    plan.check("held single-copy items, held actives and the pearl itself are never offered", function(_, ctx)
+    plan.check("held single-copy items and held actives are never offered; stacking ones and the pearl are", function(_, ctx)
         local offered = {}
         for _, candidate in ipairs(pearl().candidatesFor(ItemPoolType.POOL_BOSS)) do offered[candidate] = true end
-        return not offered[ctx.kronos] and not offered[ctx.power] and not offered[id] and offered[ctx.dragon] == true,
+        return not offered[ctx.kronos] and not offered[ctx.power] and offered[id] == true and offered[ctx.dragon] == true,
             "kronos=" .. tostring(offered[ctx.kronos]) .. " power=" .. tostring(offered[ctx.power])
                 .. " pearl=" .. tostring(offered[id]) .. " dragon=" .. tostring(offered[ctx.dragon])
     end)
@@ -161,7 +182,7 @@ S.add("CONCH_PEARL", "exclusions", { conditions = true }, function(plan, id)
         local dragon, total = 0, 0
         for _, name in ipairs(POOLS) do
             for _, result in ipairs(drawAll(ItemPoolType[name])) do
-                if result == ctx.kronos or result == ctx.power or result == id then
+                if result == ctx.kronos or result == ctx.power then
                     return false, name .. " drew excluded " .. result
                 end
                 if result == ctx.dragon then dragon = dragon + 1 end

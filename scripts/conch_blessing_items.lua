@@ -857,6 +857,7 @@ ConchBlessing.ItemData = {
         -- becomes one of this mod's items 10% of the time.
         type = "passive",
         id = Isaac.GetItemIdByName("Conch Pearl"),
+        stackable = true, -- each copy adds 10% to the conversion chance
         pool = { RoomType.ROOM_ANGEL, RoomType.ROOM_SECRET },
         quality = 4,
         tags = "summonable offensive nocantrip angel",

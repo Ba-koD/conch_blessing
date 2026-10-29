@@ -3,16 +3,16 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- holds it, every collectible an item pool draws passes through the pool's own
 -- MC_POST_GET_COLLECTIBLE: a quality 0-1 result never appears (the same pool
 -- draws again, as Sacred Orb does) and a quality 2 result becomes one of this
--- mod's items 10% of the time. Quest items and this mod's own items are left
--- alone. A replaced item's icon floats over its new pedestal and crumbles into
--- the air so the player sees what it was. Copies do not stack, and it works
--- whatever the MCM Spawn Collectibles setting says: it picks from the registry,
--- not from the pools that setting empties.
+-- mod's items 10% of the time for each copy living players hold together (20%
+-- with two, at most 100%). Quest items and this mod's own items are left alone.
+-- A replaced item's icon floats over its new pedestal and crumbles into the air
+-- so the player sees what it was. It works whatever the MCM Spawn Collectibles
+-- setting says: it picks from the registry, not from the pools that setting empties.
 local M = {}
 ConchBlessing.conchpearl = M
 
 M.data = {
-    convertChance = 0.10, -- a quality 2 draw becomes one of this mod's items
+    convertChance = 0.10, -- per copy held: a quality 2 draw becomes one of this mod's items
     maxRedraws = 20,      -- pool draws tried for a quality 0-1 result before falling back to ours
 }
 
@@ -99,15 +99,18 @@ local function isActingPlayer(player)
     return true
 end
 
--- One living holder turns it on; copies and other holders add nothing.
-function M.isActive()
-    if ITEM_ID <= 0 then return false end
+-- Copies every living player holds, counted together: the draw belongs to no one.
+function M.copiesHeld()
+    if ITEM_ID <= 0 then return 0 end
+    local copies = 0
     for index = 0, Game():GetNumPlayers() - 1 do
         local player = Isaac.GetPlayer(index)
-        if isActingPlayer(player) and player:HasCollectible(ITEM_ID) then return true end
+        if isActingPlayer(player) then copies = copies + player:GetCollectibleNum(ITEM_ID) end
     end
-    return false
+    return copies
 end
+
+function M.isActive() return M.copiesHeld() > 0 end
 
 local function anyoneHolds(id)
     for index = 0, Game():GetNumPlayers() - 1 do
@@ -141,9 +144,16 @@ local function classify(quality, quest, own)
     return "keep"
 end
 
-local function converts(roll)
-    return roll < M.data.convertChance
+-- The quality 2 conversion chance with `copies` held: convertChance each, at most 1.
+local function chanceFor(copies)
+    return math.min(1, M.data.convertChance * math.max(0, copies or 0))
 end
+
+local function converts(roll, chance)
+    return roll < chance
+end
+
+function M.currentChance() return chanceFor(M.copiesHeld()) end
 
 -- The engine's RNG returns its seed's xorshift as the first value, which for a
 -- small seed stays small (sequential seeds 7919*i+13 rolled < 0.1 26% of the
@@ -197,7 +207,9 @@ end
 -- MC_POST_GET_COLLECTIBLE(selected, poolType, decrease, seed). Returns the ID that
 -- appears instead, or nil to keep the pool's choice.
 function M.onPostGetCollectible(_, selected, poolType, decrease, seed)
-    if drawing or not M.isActive() then return nil end
+    if drawing then return nil end
+    local copies = M.copiesHeld()
+    if copies <= 0 then return nil end
     local info = describe(selected)
     if not info then return nil end
     local action = classify(info.quality, info.quest, info.own)
@@ -218,7 +230,7 @@ function M.onPostGetCollectible(_, selected, poolType, decrease, seed)
         end
         debugLog("redraw " .. tostring(selected) .. " -> " .. tostring(found) .. " pool=" .. tostring(poolType))
     end
-    if action == "fallback" or (action == "roll" and converts(rng:RandomFloat())) then
+    if action == "fallback" or (action == "roll" and converts(rng:RandomFloat(), chanceFor(copies))) then
         local list = M.candidatesFor(poolType)
         if #list > 0 then
             local id = list[rng:RandomInt(#list) + 1]
@@ -419,6 +431,7 @@ end
 M._test = {
     classify = classify,
     converts = converts,
+    chanceFor = chanceFor,
     mixSeed = mixSeed,
     describe = describe,
     getRegistry = getRegistry,
