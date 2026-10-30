@@ -6,24 +6,24 @@
     <active id="3" name="Power Training" gfx="power_training.png" quality="4" tags="offensive" cache="damage firedelay range luck" shopprice="20" devilprice="2" maxcharges="12" chargetype="normal" initcharge="6"/>
     <passive id="4" name="Oral Steroids" gfx="oral_steroids.png" quality="2" tags="offensive" cache="damage firedelay range luck" shopprice="20" devilprice="1"/>
     <active id="5" name="Injectable Steroids" gfx="injectable_steroids.png" quality="3" tags="offensive" cache="damage firedelay range luck" shopprice="15" devilprice="2" maxcharges="12" chargetype="normal" initcharge="6"/>
-    <passive id="6" name="Kronos" gfx="kronos.png" quality="4" tags="offensive" cache="damage firedelay"/>
+    <passive id="6" name="Kronos" gfx="kronos.png" quality="4" tags="offensive" cache="damage firedelay" shopprice="30" devilprice="2"/>
     <active id="7" name="Appraisal Certificate" gfx="appraisal_certificate.png" quality="3" tags="offensive" shopprice="20" devilprice="2" maxcharges="0"/>
     <passive id="8" name="Money = Tear" gfx="money_tear.png" quality="4" tags="offensive" cache="firedelay" shopprice="20"/>
-    <passive id="9" name="Utility Belt" gfx="utility_belt.png" quality="3" tags="utility" shopprice="15"/>
+    <passive id="9" name="Utility Belt" gfx="utility_belt.png" quality="3" tags="utility" shopprice="15" devilprice="1"/>
     <passive id="10" name="Sealed Demon Sword" gfx="sealed_demon_sword.png" quality="0" tags="offensive" cache="speed" shopprice="10" devilprice="1"/>
     <passive id="11" name="Tyrfing" gfx="tyrfing.png" quality="4" tags="offensive" cache="damage" hidden="true" shopprice="30" devilprice="2"/>
     <passive id="12" name="Ice Breath" gfx="ice_breath.png" quality="4" tags="offensive" shopprice="30" devilprice="2"/>
     <passive id="13" name="Fire Breath" gfx="fire_breath.png" quality="4" tags="offensive" shopprice="30" devilprice="2"/>
     <passive id="14" name="SOFLAM" gfx="soflam.png" quality="4" tags="offensive" cache="weapon" shopprice="25" devilprice="2"/>
-    <passive id="15" name="Two Faced Penny" gfx="two_faced_penny.png" quality="4" tags="utility" shopprice="15"/>
-    <active id="16" name="Severed Oath" gfx="severed_oath.png" quality="3" tags="utility" shopprice="15" devilprice="2" maxcharges="4" chargetype="normal" initcharge="4"/>
+    <passive id="15" name="Two Faced Penny" gfx="two_faced_penny.png" quality="4" tags="utility" shopprice="30" devilprice="2"/>
+    <active id="16" name="Severed Oath" gfx="severed_oath.png" quality="3" tags="utility" shopprice="30" devilprice="2" maxcharges="4" chargetype="normal" initcharge="4"/>
     <passive id="17" name="Ceil" gfx="ceil.png" quality="4" tags="offensive stars" cache="speed firedelay damage range shotspeed luck" shopprice="20" devilprice="2"/>
     <passive id="18" name="Round" gfx="round.png" quality="3" tags="offensive stars" cache="speed firedelay damage range shotspeed luck" shopprice="15" devilprice="2"/>
     <passive id="19" name="Floor" gfx="floor.png" quality="2" tags="offensive stars" cache="speed firedelay damage range shotspeed luck" shopprice="15" devilprice="1"/>
-    <passive id="20" name="Real Eyes" gfx="real_eyes.png" quality="3" shopprice="15" devilprice="1"/>
-    <passive id="21" name="AR Glasses" gfx="ar_glasses.png" quality="3" shopprice="15" devilprice="1"/>
+    <passive id="20" name="Real Eyes" gfx="real_eyes.png" quality="3" shopprice="20" devilprice="2"/>
+    <passive id="21" name="AR Glasses" gfx="ar_glasses.png" quality="4" shopprice="30" devilprice="2"/>
     <passive id="22" name="Hemispatial Neglect" gfx="hemispatial_neglect.png" quality="2" cache="damage" shopprice="15" devilprice="1"/>
-    <passive id="23" name="Conch Pearl" gfx="conch_pearl.png" quality="4" tags="summonable offensive nocantrip angel" shopprice="15" devilprice="2"/>
+    <passive id="23" name="Conch Pearl" gfx="conch_pearl.png" quality="4" tags="summonable offensive nocantrip angel" shopprice="30" devilprice="2"/>
     <passive id="24" name="Rat" gfx="rat.png" quality="4" shopprice="20" devilprice="2"/>
     <passive id="25" name="Dragon" gfx="dragon.png" quality="4" tags="offensive" shopprice="20" devilprice="2"/>
     <familiar id="26" name="Time = Money" gfx="time_money.png" quality="4" cache="familiars" shopprice="30" devilprice="2"/>
