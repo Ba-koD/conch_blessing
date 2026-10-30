@@ -104,10 +104,12 @@ return {
             },
         },
         TIGER = {
-            name = "Tiger (WIP)",
-            description = "Work in progress",
+            name = "Tiger",
+            description = "Lord of the Mountain",
             eid = {
-                "No gameplay effect yet.",
+                "Killing an enemy has a 1/3 chance to spawn a Changgwi ghost.",
+                "#The Changgwi flies at an enemy and explodes for 3x your damage.",
+                "#Enemies hit by the Changgwi are feared for 3 seconds.",
             },
         },
         RABBIT = {

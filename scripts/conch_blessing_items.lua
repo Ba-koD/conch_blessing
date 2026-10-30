@@ -62,6 +62,11 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 --     strengthen it; what a golden copy or Mom's Box does is a separate fact, read
 --     from its `specials`. The codex site (tboi.rnen.kr) shows both on every
 --     trinket and stacking on every collectible. Mark a new item whose copies stack.
+--   stackCap: with stackable, the copies after which more change nothing (a chance
+--     reaching 100%, a slot limit). From there Conch Pearl treats the item as one
+--     that does not stack. Copies count per player, the most any one living player
+--     holds, unless `stackShared = true` says the effect counts every living
+--     player's copies together. Leave it out when every copy keeps adding.
 --   devilprice: number - price in devil room (heart count)
 --   shopprice: number - price in shop (coin count)
 --   maxcharges: number - max charges for active item
@@ -861,7 +866,9 @@ ConchBlessing.ItemData = {
         -- becomes one of this mod's items 10% of the time.
         type = "passive",
         id = Isaac.GetItemIdByName("Conch Pearl"),
-        stackable = true, -- each copy adds 10% to the conversion chance
+        stackable = true, -- each copy adds 10% to the conversion chance...
+        stackCap = 10,    -- ...which every living player's copies reach together at ten
+        stackShared = true,
         pool = { RoomType.ROOM_ANGEL, RoomType.ROOM_SECRET },
         quality = 4,
         tags = "summonable offensive nocantrip angel",
@@ -889,7 +896,9 @@ ConchBlessing.ItemData = {
         -- 자, the rat that ate a fingernail: one fake of the holder per copy.
         type = "passive",
         id = Isaac.GetItemIdByName("Rat"),
-        stackable = true, -- copies stack: Conch Pearl may roll it again
+        stackable = true, -- one fake per copy...
+        stackCap = 7,     -- ...while the eight player slots last: one player and seven fakes
+        stackShared = true, -- every holder's fakes share those slots
         gfx = "rat.png",
         pool = {
             RoomType.ROOM_TREASURE,
@@ -915,7 +924,7 @@ ConchBlessing.ItemData = {
     },
 
     -- The rest of the twelve: unfinished previews, hidden from natural pools,
-    -- available by name. 진 sits between 묘 and 사.
+    -- available by name. 인 and 진 sit among them in order.
     OX = {
         WorkingNow = true,
         hidden = true,
@@ -924,11 +933,32 @@ ConchBlessing.ItemData = {
         id = Isaac.GetItemIdByName("Ox (WIP)"),
     },
     TIGER = {
-        WorkingNow = true,
-        hidden = true,
+        -- 인, the mountain lord: a kill may raise a 창귀 that explodes on an enemy.
         type = "passive",
+        id = Isaac.GetItemIdByName("Tiger"),
+        stackable = true, -- each copy adds 1/3 to the kill chance...
+        stackCap = 3,     -- ...so a fourth copy changes nothing
         gfx = "tiger.png",
-        id = Isaac.GetItemIdByName("Tiger (WIP)"),
+        pool = {
+            RoomType.ROOM_TREASURE,
+            RoomType.ROOM_PLANETARIUM
+        },
+        quality = 4,
+        tags = "offensive",
+        hidden = false,
+        shopprice = 20,
+        devilprice = 2,
+        origin = { id = CollectibleType.COLLECTIBLE_PISCES, type = "collectible" },
+        flag = "positive",
+        script = "scripts/items/collectibles/tiger",
+        callbacks = {
+            postEntityKill = "tiger.onEntityKill",
+            postUpdate = "tiger.onUpdate",
+            postNewRoom = "tiger.reset",
+            gameStarted = "tiger.reset",
+            preGameExit = "tiger.reset",
+            preModUnload = "tiger.reset"
+        },
     },
     RABBIT = {
         WorkingNow = true,

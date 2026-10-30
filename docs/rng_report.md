@@ -432,11 +432,11 @@ Always on target from Luck 10; at most 10% below Luck -8.
 
 While any living player holds it, every collectible an item pool draws is checked in
 `MC_POST_GET_COLLECTIBLE`. Quest items and this mod's own items stay. A quality 0-1 result is drawn
-again from the same pool, up to 20 times (`scripts/items/collectibles/conch_pearl.lua:18`), so it never appears. If the
+again from the same pool, up to 20 times (`scripts/items/collectibles/conch_pearl.lua:20`), so it never appears. If the
 pool runs out on the way (the last redraw is Breakfast, the engine's empty-pool item), Breakfast
 appears, as with Sacred Orb; if every redraw is still some other quality 0-1 item, one of this mod's
 items appears instead. A quality 2 result rolls
-`RandomFloat() < min(1, 0.1 x copies)` (`scripts/items/collectibles/conch_pearl.lua:17`) on an RNG seeded from the draw's own seed,
+`RandomFloat() < min(1, 0.1 x copies)` (`scripts/items/collectibles/conch_pearl.lua:19`) on an RNG seeded from the draw's own seed,
 where copies counts every living player's copies together, and becomes one of this mod's items,
 picked uniformly from the candidates listed for that pool (any candidate when the pool lists none).
 The roll is a single draw, so the odds equal that expression.
@@ -457,4 +457,20 @@ The roll is a single draw, so the odds equal that expression.
 | 5 | **50%** | 50.050% |
 | 10 | **100%** | 100.000% |
 | 12 | **100%** | 100.000% |
+
+## 14. Tiger
+
+When an enemy dies from damage (HP at or below 0 in `MC_POST_ENTITY_KILL`) and the last hit it took
+belongs to a living holder, that holder rolls `RandomFloat() < min(1, chancePerCopy x copies)`
+with chancePerCopy = 0.333333 (`scripts/items/collectibles/tiger.lua:48`) on their Tiger collectible RNG, copies being their own.
+A kill by a 창귀's explosion is the holder's kill too, so it rolls again. A raised 창귀 hits each
+enemy its explosion reaches once for 3x the holder's damage (`scripts/items/collectibles/tiger.lua:49`) and fears it for
+90 updates (`scripts/items/collectibles/tiger.lua:50`), three seconds. The roll is a single draw, so the odds equal that expression.
+
+| Copies held | Exact P (a kill raises a 창귀) | Measured |
+|---|---|---|
+| 1 | **33.33%** | 33.187% |
+| 2 | **66.67%** | 66.529% |
+| 3 | **100.00%** | 100.000% |
+| 4 | **100.00%** | 100.000% |
 

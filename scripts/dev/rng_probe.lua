@@ -439,6 +439,30 @@ function probe.conchPearl(samples)
     end
 end
 
+-- --------------------------------------------------------------- tiger
+function probe.tiger(samples)
+    header("Tiger (a kill by the holder raises a 창귀)")
+    local module = ConchBlessing.tiger
+    local t, d = module and module._test, module and module.data
+    if not t or not t.spawns or not t.chanceFor then out("SKIPPED (module not loaded)") return end
+    local rng = RNG()
+    local seed = Random()
+    if seed == 0 then seed = 1 end
+    rng:SetSeed(seed, 35)
+    for _, copies in ipairs({ 1, 2, 3, 4 }) do
+        local chance = t.chanceFor(copies)
+        local raised = quietly(function()
+            local n = 0
+            for _ = 1, samples do
+                if t.spawns(rng:RandomFloat(), chance) then n = n + 1 end
+            end
+            return n
+        end)
+        out(string.format("  %d cop%s: configured=%6.2f%%  measured=%7.3f%%", copies, copies == 1 and "y " or "ies",
+            math.min(1, d.chancePerCopy * copies) * 100, raised / samples * 100))
+    end
+end
+
 -- --------------------------------------------------------------- death spiral
 function probe.injectableDeath()
     header("Injectable Steroids instant death (cumulative over one floor)")
@@ -525,6 +549,7 @@ function probe.run(params)
     probe.dragonTwister(samples)
     probe.dragonAccuracy(samples)
     probe.conchPearl(samples)
+    probe.tiger(samples)
     probe.injectableDeath()
     out("")
     out("conch_test rng: done")

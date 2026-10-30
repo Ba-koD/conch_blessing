@@ -3,7 +3,7 @@ const {createCanvas,Image:CanvasImage}=require('@napi-rs/canvas');
 const html=fs.readFileSync('docs/previews/item-upgrade-player.html','utf8');
 const source=html.match(/<script>([\s\S]*?)<\/script>/)[1];
 const json=id=>JSON.parse(html.match(new RegExp('id="'+id+'"[^>]*>([\\s\\S]*?)</script>'))[1]);
-const rows=json('upgrade-data');assert.equal(rows.length,36);new vm.Script(source);
+const rows=json('upgrade-data');assert.equal(rows.length,37);new vm.Script(source);
 assert(!/<select\b/.test(html));assert(!/fetch\(|https?:\/\//.test(source));
 async function run(reduced=false){
  const els=new Map(),frames=new Map(),probe={},audio=[];let next=0,now=0;
@@ -280,5 +280,5 @@ async function run(reduced=false){
 
 
 
- console.log('PASS: 36 before/after identities and playback controls; the game's default flag animation for items without their own; turned Saturn ring with slow darkening and colour return; owned-only selection including modded snapshots, one-pet timing, empty-only random without replacement, stable pause/scrub snapshot; specific void/impact/chomp/flood contracts; fixed flame tip with downward growth and concealed conversion; red native reticle with the SOFLAM lock-on warning and launch/blast cues, small articulated clock, native halo/glints; Cancer trinket; original vanilla crop/padding bounds; audio gesture, pause, silent scrub, laser alternate; applied/pending filter and combined Korean search; IME/search; reduced motion; offline assets. Direct Canvas frame sheets saved, browser layout not verified.');
+ console.log('PASS: 37 before/after identities and playback controls; the game'+"'"+'s default flag animation for items without their own; turned Saturn ring with slow darkening and colour return; owned-only selection including modded snapshots, one-pet timing, empty-only random without replacement, stable pause/scrub snapshot; specific void/impact/chomp/flood contracts; fixed flame tip with downward growth and concealed conversion; red native reticle with the SOFLAM lock-on warning and launch/blast cues, small articulated clock, native halo/glints; Cancer trinket; original vanilla crop/padding bounds; audio gesture, pause, silent scrub, laser alternate; applied/pending filter and combined Korean search; IME/search; reduced motion; offline assets. Direct Canvas frame sheets saved, browser layout not verified.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

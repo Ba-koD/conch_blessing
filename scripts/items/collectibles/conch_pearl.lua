@@ -5,6 +5,8 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- draws again, as Sacred Orb does) and a quality 2 result becomes one of this
 -- mod's items 10% of the time for each copy living players hold together (20%
 -- with two, at most 100%). Quest items and this mod's own items are left alone.
+-- Ten copies make it certain, so from ten it no longer rolls itself: a stacking
+-- item stops coming once its copies reach the registry's stackCap.
 -- A pool that has run out gives Breakfast, and that Breakfast stays, as it does
 -- with Sacred Orb.
 -- A replaced item's icon floats over its new pedestal and crumbles into the air
@@ -86,8 +88,10 @@ local function getRegistry()
         if type(row) == "table" and COLLECTIBLE_TYPES[row.type] and type(row.id) == "number" and row.id > 0 then
             own[row.id] = true
             if row.hidden ~= true and row.WorkingNow ~= true and row.console ~= true then
+                local cap = row.stackable == true and tonumber(row.stackCap) or nil
                 candidates[#candidates + 1] = { id = row.id, key = key, active = row.type == "active",
-                    stackable = row.stackable == true, pools = poolsOf(row, map) }
+                    stackable = row.stackable == true, pools = poolsOf(row, map),
+                    cap = cap and cap > 0 and math.floor(cap) or nil, shared = row.stackShared == true }
             end
         end
     end
@@ -124,13 +128,33 @@ local function anyoneHolds(id)
     return false
 end
 
+-- Copies of a stacking item as its own effect counts them: every living
+-- player's together for a shared count, else the most one living player holds.
+local function copiesTowardCap(id, shared)
+    local total, most = 0, 0
+    for index = 0, Game():GetNumPlayers() - 1 do
+        local player = Isaac.GetPlayer(index)
+        if isActingPlayer(player) then
+            local copies = player:GetCollectibleNum(id)
+            total, most = total + copies, math.max(most, copies)
+        end
+    end
+    return shared and total or most
+end
+
+-- An active, or an item whose copies add nothing, is left out while anyone
+-- holds it; a stacking item is left out once its copies reach its stackCap.
+local function excluded(candidate)
+    if candidate.active or not candidate.stackable then return anyoneHolds(candidate.id) end
+    return candidate.cap ~= nil and copiesTowardCap(candidate.id, candidate.shared) >= candidate.cap
+end
+
 -- What a quality 0-1 or 2 draw may become: our items listed for that pool first,
--- else any of ours. An active, or an item whose copies add nothing, is left out
--- while anyone holds it; an item whose copies stack may come again.
+-- else any of ours, leaving out the excluded ones.
 function M.candidatesFor(poolType)
     local open, inPool = {}, {}
     for _, candidate in ipairs(getRegistry().candidates) do
-        if not ((candidate.active or not candidate.stackable) and anyoneHolds(candidate.id)) then
+        if not excluded(candidate) then
             open[#open + 1] = candidate.id
             if poolType ~= nil and candidate.pools[poolType] then inPool[#inPool + 1] = candidate.id end
         end
@@ -449,6 +473,7 @@ M._test = {
     mixSeed = mixSeed,
     describe = describe,
     getRegistry = getRegistry,
+    copiesTowardCap = copiesTowardCap,
     DUST = DUST,
     effects = function() return effects end,
     pending = function() return pending end,

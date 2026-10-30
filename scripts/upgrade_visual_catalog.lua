@@ -42,4 +42,5 @@ return {
     -- Every Magic Conch result has a row, so the preview can show its default too.
     { key = "RAT" },
     { key = "CONCH_PEARL" },
+    { key = "TIGER" },
 }

@@ -5,6 +5,7 @@ draw, the way the engine does, so nested redraws run through the real guard.
 No in-game image or real pool weights are claimed here.
 """
 from pathlib import Path
+import re
 import unittest
 from lupa.lua53 import LuaRuntime
 
@@ -298,6 +299,76 @@ class ConchPearlTests(unittest.TestCase):
             players[2].dead=true
             assert(ids(ItemPoolType.POOL_DEVIL)=='909','a dead player still holds the item')
         ''')
+
+    def test_a_stacking_item_stops_coming_at_its_cap(self):
+        self.run_lua('''
+            local function offered(id)
+                for _,candidate in ipairs(M.candidatesFor(ItemPoolType.POOL_BOSS)) do
+                    if candidate==id then return true end
+                end
+                return false
+            end
+            -- Per player (Tiger: each holder rolls with their own copies).
+            ConchBlessing.ItemData.DRAGON.stackCap=3; M._test.resetRegistry()
+            players[1].items[902]=2
+            assert(offered(902),'two of three: still offered')
+            players[1].items[902]=3
+            assert(not offered(902),'at the cap: left out')
+            players[1].items[902]=2; players[2]=newPlayer({[902]=2})
+            assert(offered(902),'per player: two holders with two each are below the cap')
+            players[2].items[902]=5; players[2].dead=true
+            assert(offered(902),'a dead holder does not count toward the cap')
+            players[2]=nil
+            -- Shared (Conch Pearl: every living player's copies together).
+            ConchBlessing.ItemData.CONCH_PEARL.stackCap=10; ConchBlessing.ItemData.CONCH_PEARL.stackShared=true
+            M._test.resetRegistry()
+            players[1].items[900]=5; players[2]=newPlayer({[900]=4})
+            assert(offered(900),'nine together: still offered')
+            players[2].items[900]=5
+            assert(not offered(900),'ten together: left out')
+            players[2].ghost=true
+            assert(offered(900),'a co-op ghost does not count toward the shared cap')
+            players[2]=nil
+            -- A stacking item without a cap keeps coming whatever the count.
+            players[1].items[909]=50
+            assert(offered(909),'no cap: always offered')
+            -- A cap never makes a non-stacking item come back.
+            ConchBlessing.ItemData.KRONOS.stackCap=5; M._test.resetRegistry()
+            players[1].items[901]=1
+            assert(not offered(901),'a held single stays out')
+            assert(M._test.copiesTowardCap(900,true)==5 and M._test.copiesTowardCap(902,false)==2)
+        ''')
+
+    def test_registry_caps_follow_each_items_own_numbers(self):
+        import math
+        items = (ROOT / 'scripts/conch_blessing_items.lua').read_text(encoding='utf-8')
+        rows = dict(re.findall(r'^    ([A-Z_0-9]+) = \{(.*?)\n    \},', items, re.M | re.S))
+        caps = {key: body for key, body in rows.items() if 'stackCap' in body}
+        for key, body in caps.items():
+            self.assertIn('stackable = true', body, key + ': a cap only means something on a stacking item')
+            self.assertRegex(body, r'stackCap = [1-9][0-9]*,', key)
+
+        def number(path, name):
+            text = (ROOT / path).read_text(encoding='utf-8')
+            match = re.search(r'\b' + name + r'\s*=\s*([0-9.]+)(?:\s*/\s*([0-9.]+))?', text)
+            self.assertIsNotNone(match, path + ' ' + name)
+            value = float(match.group(1))
+            return value / float(match.group(2)) if match.group(2) else value
+
+        def cap(key):
+            return int(re.search(r'stackCap = (\d+)', caps[key]).group(1))
+
+        chance = number('scripts/items/collectibles/conch_pearl.lua', 'convertChance')
+        self.assertEqual(cap('CONCH_PEARL'), math.ceil(round(1 / chance, 9)))
+        self.assertIn('stackShared = true', caps['CONCH_PEARL'], 'the pearl counts every living player together')
+        tiger = number('scripts/items/collectibles/tiger.lua', 'chancePerCopy')
+        self.assertEqual(cap('TIGER'), math.ceil(round(1 / tiger, 9)))
+        self.assertNotIn('stackShared', caps['TIGER'], 'each holder rolls with their own copies')
+        slots = number('scripts/items/collectibles/rat.lua', 'maxPlayers')
+        per = number('scripts/items/collectibles/rat.lua', 'fakesPerCopy')
+        self.assertEqual(cap('RAT'), int((slots - 1) / per), 'one player and the rest fakes')
+        self.assertIn('stackShared = true', caps['RAT'], "every holder's fakes share the slots")
+        self.assertEqual(sorted(caps), ['CONCH_PEARL', 'RAT', 'TIGER'], 'audit a new cap against its module')
 
     def test_sequential_small_seeds_still_convert_at_ten_percent(self):
         # In game the bench's seeds 7919*i+13 (up to ~3.2M) converted 25% before the

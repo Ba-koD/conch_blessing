@@ -79,7 +79,7 @@ class GeneratedIdOrderTests(unittest.TestCase):
         self.assertTrue(all(info.get('hidden') for info in registry.values() if info.get('console')),
                         'a console-only item stays hidden and out of every pool')
 
-    def test_shipped_ids_put_rat_and_dragon_before_the_familiars_and_the_previews_last(self):
+    def test_shipped_ids_put_released_zodiac_before_the_familiars_and_the_previews_last(self):
         registry = parse_lua_file(str(ROOT / 'scripts/conch_blessing_items.lua'))
         source = (ROOT / 'scripts/conch_blessing_items.lua').read_text(encoding='utf-8')
         keys = re.findall(r'^    ([A-Z_0-9]+) = \{', source, re.M)
@@ -92,11 +92,11 @@ class GeneratedIdOrderTests(unittest.TestCase):
         p = names.index('Two Faced Penny')
         self.assertEqual(names[p + 1], 'Severed Oath', 'a console item no longer sits between released items')
         i = names.index('Rat')
-        self.assertEqual(names[i:i + 3], ['Rat', 'Dragon', 'Time = Money'])
-        self.assertEqual(names[i + 3:i + 5], ['Inf D6', 'Azure Dragon'], 'console items follow the finished ones')
-        wip = ['Ox (WIP)', 'Tiger (WIP)', 'Rabbit (WIP)', 'Snake (WIP)', 'Horse (WIP)', 'Goat (WIP)',
+        self.assertEqual(names[i:i + 4], ['Rat', 'Tiger', 'Dragon', 'Time = Money'])
+        self.assertEqual(names[i + 4:i + 6], ['Inf D6', 'Azure Dragon'], 'console items follow the finished ones')
+        wip = ['Ox (WIP)', 'Rabbit (WIP)', 'Snake (WIP)', 'Horse (WIP)', 'Goat (WIP)',
                'Monkey (WIP)', 'Chicken (WIP)', 'Dog (WIP)', 'Pig (WIP)']
-        self.assertEqual(names[i + 5:i + 15], wip)
+        self.assertEqual(names[i + 6:i + 15], wip)
         self.assertEqual(rows[i + 15][0], 'trinket')
         self.assertTrue(all(tag != 'trinket' for tag, _ in rows[:i + 15]))
         self.assertEqual([info.get('name') for info in registry.values()], names)

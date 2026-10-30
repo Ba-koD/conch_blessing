@@ -44,6 +44,7 @@ SRC = {
     "liveeye": "scripts/items/collectibles/live_eye.lua",
     "dragon": "scripts/items/collectibles/dragon.lua",
     "pearl": "scripts/items/collectibles/conch_pearl.lua",
+    "tiger": "scripts/items/collectibles/tiger.lua",
 }
 
 _cache: dict[str, list[str]] = {}
@@ -65,6 +66,17 @@ def const(key: str, name: str) -> tuple[float, str]:
     if not hits:
         sys.exit(f"ERROR: constant {name!r} not found in {SRC[key]}")
     value, line_no = hits[0]
+    return value, f"`{SRC[key]}:{line_no}`"
+
+
+def fraction(key: str, name: str) -> tuple[float, str]:
+    """Return (value, "file:line") for `name = <number>` or `name = <number> / <number>`."""
+    pattern = re.compile(r"^\s*(?:local\s+)?" + re.escape(name) + r"\s*=\s*(-?[\d.]+)(?:\s*/\s*([\d.]+))?\s*,?")
+    hits = [(m, i + 1) for i, ln in enumerate(lines(key)) if (m := pattern.match(ln))]
+    if not hits:
+        sys.exit(f"ERROR: constant {name!r} not found in {SRC[key]}")
+    m, line_no = hits[0]
+    value = float(m.group(1)) / float(m.group(2)) if m.group(2) else float(m.group(1))
     return value, f"`{SRC[key]}:{line_no}`"
 
 
@@ -669,6 +681,27 @@ def build(samples: int, seed: int) -> str:
         hits = sum(1 for _ in range(samples) if rng.random() < p)
         rows.append([str(copies), f"**{p:.0%}**", f"{hits / samples:.3%}"])
     w("\n".join(table(["Copies held", "Exact P (a quality 2 draw becomes one of ours)", "Measured"], rows)))
+    w("")
+
+    # 14 -------------------------------------------------------------------------
+    per_copy, per_copy_cite = fraction("tiger", "chancePerCopy")
+    mult, mult_cite = const("tiger", "damageMultiplier")
+    fear, fear_cite = const("tiger", "fearFrames")
+    w("## 14. Tiger")
+    w("")
+    w("When an enemy dies from damage (HP at or below 0 in `MC_POST_ENTITY_KILL`) and the last hit it took")
+    w("belongs to a living holder, that holder rolls `RandomFloat() < min(1, chancePerCopy x copies)`")
+    w(f"with chancePerCopy = {per_copy:.6g} ({per_copy_cite}) on their Tiger collectible RNG, copies being their own.")
+    w("A kill by a 창귀's explosion is the holder's kill too, so it rolls again. A raised 창귀 hits each")
+    w(f"enemy its explosion reaches once for {mult:g}x the holder's damage ({mult_cite}) and fears it for")
+    w(f"{int(fear)} updates ({fear_cite}), three seconds. The roll is a single draw, so the odds equal that expression.")
+    w("")
+    rows = []
+    for copies in (1, 2, 3, 4):
+        p = min(1.0, per_copy * copies)
+        hits = sum(1 for _ in range(samples) if rng.random() < p)
+        rows.append([str(copies), f"**{p:.2%}**", f"{hits / samples:.3%}"])
+    w("\n".join(table(["Copies held", "Exact P (a kill raises a 창귀)", "Measured"], rows)))
     w("")
 
     return "\n".join(md) + "\n"

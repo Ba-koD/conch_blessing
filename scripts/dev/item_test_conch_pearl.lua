@@ -199,6 +199,46 @@ S.add("CONCH_PEARL", "exclusions", { conditions = true }, function(plan, id)
         end
         return false, "Kronos still excluded"
     end)
+    -- A stacking item stops coming once more copies change nothing (its stackCap):
+    -- Tiger at three (1/3 a copy), the pearl itself at ten (10% a copy).
+    local function offered(candidateId)
+        for _, candidate in ipairs(pearl().candidatesFor(ItemPoolType.POOL_BOSS)) do
+            if candidate == candidateId then return true end
+        end
+        return false
+    end
+    plan.act(function(player, ctx)
+        ctx.tiger = ids("TIGER")
+        assert(ctx.tiger, "Tiger unresolved")
+        player:AddCollectible(ctx.tiger, 0, false)
+        player:AddCollectible(ctx.tiger, 0, false)
+    end)
+    plan.wait(2)
+    plan.check("Tiger below its cap (2 of 3) is still offered", function(_, ctx)
+        return offered(ctx.tiger), "tiger=" .. tostring(offered(ctx.tiger))
+    end)
+    plan.act(function(player, ctx) player:AddCollectible(ctx.tiger, 0, false) end)
+    plan.wait(2)
+    plan.check("Tiger at its cap (3) is left out, and real draws never give it", function(_, ctx)
+        if offered(ctx.tiger) then return false, "tiger still offered" end
+        for _, name in ipairs(POOLS) do
+            for _, result in ipairs(drawAll(ItemPoolType[name])) do
+                if result == ctx.tiger then return false, name .. " drew Tiger" end
+            end
+        end
+        return true, "tiger left out"
+    end)
+    plan.act(function(player)
+        while player:GetCollectibleNum(id) < 9 do player:AddCollectible(id, 0, false) end
+    end)
+    plan.wait(2)
+    plan.check("nine pearls (90%) still offer the pearl", function() return offered(id), "pearl=" .. tostring(offered(id)) end)
+    plan.act(function(player) player:AddCollectible(id, 0, false) end)
+    plan.wait(2)
+    plan.check("ten pearls (100%) leave the pearl out", function()
+        return not offered(id) and pearl().currentChance() == 1,
+            "pearl=" .. tostring(offered(id)) .. " chance=" .. pearl().currentChance()
+    end)
 end)
 
 -- Every pool run dry: the engine then gives Breakfast, and Conch Pearl leaves it
