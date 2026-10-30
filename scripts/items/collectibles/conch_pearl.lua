@@ -5,6 +5,8 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- draws again, as Sacred Orb does) and a quality 2 result becomes one of this
 -- mod's items 10% of the time for each copy living players hold together (20%
 -- with two, at most 100%). Quest items and this mod's own items are left alone.
+-- A pool that has run out gives Breakfast, and that Breakfast stays, as it does
+-- with Sacred Orb.
 -- A replaced item's icon floats over its new pedestal and crumbles into the air
 -- so the player sees what it was. It works whatever the MCM Spawn Collectibles
 -- setting says: it picks from the registry, not from the pools that setting empties.
@@ -13,10 +15,12 @@ ConchBlessing.conchpearl = M
 
 M.data = {
     convertChance = 0.10, -- per copy held: a quality 2 draw becomes one of this mod's items
-    maxRedraws = 20,      -- pool draws tried for a quality 0-1 result before falling back to ours
+    maxRedraws = 20,      -- pool draws tried for a quality 0-1 result before Breakfast or ours
 }
 
 local ITEM_ID = Isaac.GetItemIdByName("Conch Pearl")
+-- What the engine draws once a pool and the treasure pool behind it are empty.
+local BREAKFAST = CollectibleType and CollectibleType.COLLECTIBLE_BREAKFAST or 25
 -- Our rolls come from the draw's own seed, shifted away from the pool's use of it,
 -- so the same draw always gives the same answer and no gameplay RNG is consumed.
 local RNG_SHIFT = 35
@@ -35,7 +39,7 @@ local pending = {} -- conversions waiting for the pickup they were drawn for
 local effects = {}
 local warned = {}
 -- Runtime evidence for conch_test conch_pearl; never saved.
-local evidence = { redraws = 0, conversions = 0, fallbacks = 0, lastConversion = nil }
+local evidence = { redraws = 0, conversions = 0, fallbacks = 0, emptyPools = 0, lastConversion = nil }
 
 local function warn(key, detail)
     if warned[key] then return end
@@ -181,16 +185,19 @@ local function describe(id)
     return { quality = config.Quality, quest = config:HasTags(questTag), own = getRegistry().own[id] == true }
 end
 
--- Draws again from the same pool until a result may appear. Our own callback lets
--- these nested draws through; other mods' callbacks still see each one.
+-- Draws again from the same pool until a result may appear, and also returns the
+-- last item drawn. Our own callback lets these nested draws through; other mods'
+-- callbacks still see each one.
 local function redraw(poolType, decrease, rng)
     local pool = Game():GetItemPool()
+    local last
     drawing = true
     local ok, found = pcall(function()
         for _ = 1, M.data.maxRedraws do
             local seed = rng:Next()
             if seed == 0 then seed = 1 end
             local id = pool:GetCollectible(poolType, decrease, seed)
+            last = id
             local info = describe(id)
             if info and classify(info.quality, info.quest, info.own) ~= "redraw" then return id end
         end
@@ -201,7 +208,7 @@ local function redraw(poolType, decrease, rng)
         warn("REDRAW_FAILED", found)
         return nil
     end
-    return found
+    return found, last
 end
 
 -- MC_POST_GET_COLLECTIBLE(selected, poolType, decrease, seed). Returns the ID that
@@ -219,11 +226,18 @@ function M.onPostGetCollectible(_, selected, poolType, decrease, seed)
     local result, replaced = selected, selected
     if action == "redraw" then
         evidence.redraws = evidence.redraws + 1
-        local found = redraw(poolType, decrease, rng)
+        local found, last = redraw(poolType, decrease, rng)
         if found then
             result, replaced = found, found
             local foundInfo = describe(found)
             action = foundInfo and classify(foundInfo.quality, foundInfo.quest, foundInfo.own) or "keep"
+        elseif last == BREAKFAST then
+            -- The pool ran out before it gave anything but quality 0-1: Breakfast
+            -- appears, as with Sacred Orb (user decision 2026-10-31).
+            evidence.emptyPools = evidence.emptyPools + 1
+            debugLog("empty pool " .. tostring(poolType) .. ": Breakfast stays")
+            if selected == BREAKFAST then return nil end
+            return BREAKFAST
         else
             -- The pool kept giving quality 0-1: one of ours appears instead.
             action = "fallback"
@@ -440,7 +454,8 @@ M._test = {
     pending = function() return pending end,
     evidence = function() return evidence end,
     resetEvidence = function()
-        evidence.redraws, evidence.conversions, evidence.fallbacks, evidence.lastConversion = 0, 0, 0, nil
+        evidence.redraws, evidence.conversions, evidence.fallbacks, evidence.emptyPools = 0, 0, 0, 0
+        evidence.lastConversion = nil
     end,
     -- The registry is static for a session; offline tests rebuild it between cases.
     resetRegistry = function() registry = nil end,

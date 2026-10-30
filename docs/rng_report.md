@@ -432,9 +432,11 @@ Always on target from Luck 10; at most 10% below Luck -8.
 
 While any living player holds it, every collectible an item pool draws is checked in
 `MC_POST_GET_COLLECTIBLE`. Quest items and this mod's own items stay. A quality 0-1 result is drawn
-again from the same pool, up to 20 times (`scripts/items/collectibles/conch_pearl.lua:16`), so it never appears; if every
-redraw is still quality 0-1, one of this mod's items appears instead. A quality 2 result rolls
-`RandomFloat() < min(1, 0.1 x copies)` (`scripts/items/collectibles/conch_pearl.lua:15`) on an RNG seeded from the draw's own seed,
+again from the same pool, up to 20 times (`scripts/items/collectibles/conch_pearl.lua:18`), so it never appears. If the
+pool runs out on the way (the last redraw is Breakfast, the engine's empty-pool item), Breakfast
+appears, as with Sacred Orb; if every redraw is still some other quality 0-1 item, one of this mod's
+items appears instead. A quality 2 result rolls
+`RandomFloat() < min(1, 0.1 x copies)` (`scripts/items/collectibles/conch_pearl.lua:17`) on an RNG seeded from the draw's own seed,
 where copies counts every living player's copies together, and becomes one of this mod's items,
 picked uniformly from the candidates listed for that pool (any candidate when the pool lists none).
 The roll is a single draw, so the odds equal that expression.

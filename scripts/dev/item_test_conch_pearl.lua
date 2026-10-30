@@ -201,6 +201,67 @@ S.add("CONCH_PEARL", "exclusions", { conditions = true }, function(plan, id)
     end)
 end)
 
+-- Every pool run dry: the engine then gives Breakfast, and Conch Pearl leaves it
+-- as Sacred Orb does. Emptying the pools needs this case's own fresh run.
+S.add("CONCH_PEARL", "empty_pool", {}, function(plan, id)
+    requireModule(plan)
+    local DRAWS = 40
+    local BREAKFAST = CollectibleType.COLLECTIBLE_BREAKFAST
+    local function breakfasts(decrease)
+        local pool, count, other = Game():GetItemPool(), 0, nil
+        for _, name in ipairs(POOLS) do
+            for i = 1, DRAWS do
+                local drawn = pool:GetCollectible(ItemPoolType[name], decrease, seedAt(i))
+                if drawn == BREAKFAST then count = count + 1 else other = other or (name .. " drew " .. drawn) end
+            end
+        end
+        return count, other
+    end
+    plan.act(function(_, ctx)
+        local pool = Game():GetItemPool()
+        for item = 1, Isaac.GetItemConfig():GetCollectibles().Size - 1 do
+            pcall(function() pool:RemoveCollectible(item) end)
+        end
+        ctx.controlCount, ctx.controlOther = breakfasts(false)
+    end)
+    plan.require("every pool is empty without the pearl (vanilla gives Breakfast)", function(_, ctx)
+        return ctx.controlCount == DRAWS * #POOLS or nil,
+            ctx.controlCount .. "/" .. DRAWS * #POOLS .. " Breakfast " .. tostring(ctx.controlOther or "")
+    end)
+    plan.act(function(player, ctx)
+        player:AddCollectible(id, 0, false)
+        pearl()._test.resetEvidence()
+        ctx.previewCount, ctx.previewOther = breakfasts(false)
+        ctx.realCount, ctx.realOther = breakfasts(true)
+    end)
+    -- An empty boss, devil or shop pool falls back to the treasure pool, and that
+    -- inner draw passes the filter too (measured 2026-10-31: 560 for 320 draws), so
+    -- each draw meets an empty pool at least once.
+    plan.check("with the pearl held an empty pool still gives Breakfast, never one of ours", function(_, ctx)
+        local e = pearl()._test.evidence()
+        local total = DRAWS * #POOLS
+        return ctx.previewCount == total and ctx.realCount == total and e.conversions == 0
+                and e.emptyPools >= 2 * total,
+            string.format("preview %d/%d real %d/%d conversions=%d emptyPools=%d %s", ctx.previewCount, total,
+                ctx.realCount, total, e.conversions, e.emptyPools, tostring(ctx.previewOther or ctx.realOther or ""))
+    end)
+    plan.act(function(player, ctx)
+        ctx.effectsBefore = #pearl()._test.effects()
+        local position = Game():GetRoom():FindFreePickupSpawnPosition(player.Position + Vector(0, -80), 0, true)
+        ctx.pickup = Game():Spawn(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_COLLECTIBLE, position,
+            Vector.Zero, nil, 0, seedAt(77)):ToPickup()
+        ctx.cleanupFns = ctx.cleanupFns or {}
+        table.insert(ctx.cleanupFns, function()
+            if ctx.pickup and ctx.pickup:Exists() then ctx.pickup:Remove() end
+        end)
+    end)
+    plan.wait(2)
+    plan.check("a real pedestal from the empty pool shows Breakfast with no dust", function(_, ctx)
+        return ctx.pickup.SubType == BREAKFAST and #pearl()._test.effects() == ctx.effectsBefore,
+            "pedestal=" .. ctx.pickup.SubType .. " effects=" .. #pearl()._test.effects()
+    end)
+end)
+
 S.add("CONCH_PEARL", "pedestal", {}, function(plan, id)
     requireModule(plan)
     plan.section("CONCH_PEARL / pedestal",

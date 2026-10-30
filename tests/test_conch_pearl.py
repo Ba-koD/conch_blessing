@@ -26,8 +26,9 @@ class ConchPearlTests(unittest.TestCase):
             PickupVariant={PICKUP_COLLECTIBLE=100,PICKUP_HEART=10}
             LevelCurse={CURSE_OF_BLIND=64}
             StageType={STAGETYPE_ORIGINAL=0,STAGETYPE_REPENTANCE=4,STAGETYPE_REPENTANCE_B=5}
-            -- Vanilla qualities: 1-2 low, 3 is quality 2, 4/5 high, 6 a quality 0 quest item.
-            qualities={[1]=0,[2]=1,[3]=2,[4]=3,[5]=4,[6]=0,[7]=2,
+            -- Vanilla qualities: 1-2 low, 3 is quality 2, 4/5 high, 6 a quality 0 quest item,
+            -- 25 Breakfast, which an empty pool gives.
+            qualities={[1]=0,[2]=1,[3]=2,[4]=3,[5]=4,[6]=0,[7]=2,[25]=1,
                 [900]=4,[901]=4,[902]=4,[903]=4,[904]=4,[905]=4,[906]=0,[907]=0,[908]=4,[909]=0}
             quests={[6]=true}
             config={GetCollectible=function(_,id)
@@ -243,6 +244,29 @@ class ConchPearlTests(unittest.TestCase):
             M._test.resetRegistry()
             assert(#M.candidatesFor(ItemPoolType.POOL_BOSS)==0)
             assert(draw(1,ItemPoolType.POOL_BOSS,true)==nil,'no candidate: the draw is left alone')
+        ''')
+
+    def test_an_empty_pool_keeps_its_breakfast_like_sacred_orb(self):
+        self.run_lua('''
+            defaultDraw=25
+            assert(draw(25,ItemPoolType.POOL_TREASURE,true)==nil,'Breakfast from an empty pool stays')
+            assert(#poolCalls==M.data.maxRedraws,'it still tried the pool: '..#poolCalls)
+            local e=M._test.evidence()
+            assert(e.emptyPools==1 and e.conversions==0 and e.fallbacks==0 and #M._test.pending()==0)
+        ''')
+
+    def test_low_quality_redraws_that_empty_the_pool_end_on_breakfast(self):
+        self.run_lua('''
+            script={2,1}; defaultDraw=25
+            assert(draw(2,ItemPoolType.POOL_BOSS,true)==25,'the pool ran out: Breakfast appears')
+            assert(M._test.evidence().emptyPools==1 and M._test.evidence().conversions==0)
+        ''')
+
+    def test_a_breakfast_from_a_pool_that_still_has_items_is_redrawn(self):
+        self.run_lua('''
+            script={25,4}
+            assert(draw(25,ItemPoolType.POOL_BOSS,true)==4,'Breakfast is quality 1 like any other')
+            assert(M._test.evidence().emptyPools==0)
         ''')
 
     def test_candidates_prefer_the_pool_and_skip_held_singles_and_actives(self):
