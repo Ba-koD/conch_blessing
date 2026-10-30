@@ -92,6 +92,8 @@ def synchronize(check=False):
     for key, sound_id in [('lock', 855), ('wing', 275), ('holy', 54), ('bite', 462), ('thunder', 472),
                           ('candle', 471), ('flame', 483), ('freeze', 496), ('launch', 537),
                           ('impact', 587), ('inhale', 957),
+                          # The neutral and negative default animations (scripts/template.lua).
+                          ('spewer', 132),
                           # Kronos concept comparison (HTML only until one is chosen).
                           ('scythes', 695), ('swing', 538), ('plant', 463), ('spin', 636),
                           ('gulp', 157), ('summon', 265), ('holeOpen', 947), ('holeExit', 948)]:

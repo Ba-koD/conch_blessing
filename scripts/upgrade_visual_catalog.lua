@@ -39,4 +39,7 @@ return {
     -- Both crowns have visible bounds (4,10)-(29,28) in their 32px art.
     -- Effects follow the crown's silhouette centre, not transparent padding.
     { key = "ANGELS_CROWN", effect = "purify", impact = 41, anchorX = 16.5, anchorY = 19 },
+    -- Every Magic Conch result has a row, so the preview can show its default too.
+    { key = "RAT" },
+    { key = "CONCH_PEARL" },
 }

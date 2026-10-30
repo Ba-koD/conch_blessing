@@ -24,7 +24,7 @@ PREVIEW_SOUNDS = {
     'wing': 'SOUND_ANGEL_WING', 'holy': 'SOUND_HOLY',
     'spin': 'SOUND_MOTHER_SPIN_START', 'summon': 'SOUND_SUMMONSOUND',
     'tick': 'Conch Upgrade Clock Tick', 'tock': 'Conch Upgrade Clock Tock', 'bell': 'Conch Upgrade Clock Bell',
-    'rain': 'Conch Upgrade Rain',
+    'rain': 'Conch Upgrade Rain', 'spewer': 'SOUND_POWERUP_SPEWER',
 }
 
 
@@ -82,15 +82,21 @@ class UpgradeSoundLevelTests(unittest.TestCase):
             result.append((name, float(volume), pitch.strip() if pitch else '1'))
         return result
 
-    def test_every_game_cue_is_audible_without_amplification(self):
-        cues = self.cues()
-        self.assertGreater(len(cues), 10)
+    def template_cues(self):
+        """The default flag animations' own cues in scripts/template.lua."""
         template = (ROOT / 'scripts/template.lua').read_text(encoding='utf-8')
+        found = []
         for block in re.split(r'\nTemplate\.(?=positive|neutral|negative)', template)[1:]:
             sound = re.search(r'soundId or SoundEffect\.(SOUND_\w+)', block)
             play = re.search(r'sfx:Play\(upgradeAnim\.soundId, (?:Sound\.volume\()?([0-9.]+)', block)
             if sound and play:
-                cues.append((sound[1], float(play[1]), '1'))
+                found.append((sound[1], float(play[1]), '1'))
+        return found
+
+    def test_every_game_cue_is_audible_without_amplification(self):
+        cues = self.cues()
+        self.assertGreater(len(cues), 10)
+        cues += self.template_cues()
         for sound, volume, _ in cues:
             with self.subTest(sound=sound, volume=volume):
                 self.assertLessEqual(volume, 1.0, 'volume above 1 is not a reliable boost')
@@ -103,7 +109,8 @@ class UpgradeSoundLevelTests(unittest.TestCase):
         body = html[html.index('function soundCues(){'):html.index('async function cue(')]
         # Kronos's other concepts (sickle, dust, pit) are HTML-only previews.
         body = '\n'.join(line for line in body.splitlines() if "if(s==='" not in line)
-        game = {(name, volume, pitch.replace(' ', '')) for name, volume, pitch in self.cues()}
+        # The preview's default animation plays the template's own cues.
+        game = {(name, volume, pitch.replace(' ', '')) for name, volume, pitch in self.cues() + self.template_cues()}
         checked = 0
         for key, volume, pitch in re.findall(r"'(\w+)',([.\d]+),([^\]]+)\]", body):
             if key not in PREVIEW_SOUNDS:

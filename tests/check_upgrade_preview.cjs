@@ -3,7 +3,7 @@ const {createCanvas,Image:CanvasImage}=require('@napi-rs/canvas');
 const html=fs.readFileSync('docs/previews/item-upgrade-player.html','utf8');
 const source=html.match(/<script>([\s\S]*?)<\/script>/)[1];
 const json=id=>JSON.parse(html.match(new RegExp('id="'+id+'"[^>]*>([\\s\\S]*?)</script>'))[1]);
-const rows=json('upgrade-data');assert.equal(rows.length,34);new vm.Script(source);
+const rows=json('upgrade-data');assert.equal(rows.length,36);new vm.Script(source);
 assert(!/<select\b/.test(html));assert(!/fetch\(|https?:\/\//.test(source));
 async function run(reduced=false){
  const els=new Map(),frames=new Map(),probe={},audio=[];let next=0,now=0;
@@ -57,6 +57,13 @@ async function run(reduced=false){
  assert.deepEqual(itemPatch(.8),itemPatch(0),'The item stays readable inside the aperture');
  const attenuation=(x,y)=>{const base=pixel(0,x,y),shade=pixel(.8,x,y);return shade.slice(0,3).reduce((a,b)=>a+b,0)/base.slice(0,3).reduce((a,b)=>a+b,0);};
  assert(attenuation(356,160)>attenuation(374,160)&&attenuation(374,160)>attenuation(395,160),'Actual rendered light falls off gently into darkness');
+ // An item without its own presentation plays the game's default flag animation.
+ probe.select('RAT');assert.equal(probe.duration(),4,'The default lasts 120 ticks');
+ assert.equal(probe.itemPose(59/30).blend,0);assert.equal(probe.itemPose(60/30).blend,1,'The default changes the item on tick 60');
+ assert.equal(JSON.stringify(probe.soundCues()),JSON.stringify([[0,'holy',1,1]]),'The positive default plays Holy as the tint begins');
+ const glow=t=>{scrub(t);return Array.from(ctx.getImageData(307,147,26,26).data).reduce((a,b,i)=>i%4===3?a:a+b,0);};
+ assert(glow(59/30)>glow(0),'The positive default brightens the item before the change');
+ scrub(61/30);assert(calls.some(a=>a[0]===probe.scenery.holySheet0||a[0]===probe.scenery.holySheet1),'Holy Light follows the change');
  probe.select('TIME_TEAR');for(const t of [.5,2,3.19,3.3,4.5])assert.equal(probe.rainWetness(t),0,'Time = Tears is never rained on');
  for(const key of ['MONEY_TEAR']){
    probe.select(key);assert.equal(probe.rainWetness(23/30),0);
@@ -273,5 +280,5 @@ async function run(reduced=false){
 
 
 
- console.log('PASS: 34 before/after identities and playback controls; turned Saturn ring with slow darkening and colour return; owned-only selection including modded snapshots, one-pet timing, empty-only random without replacement, stable pause/scrub snapshot; specific void/impact/chomp/flood contracts; fixed flame tip with downward growth and concealed conversion; red native reticle with the SOFLAM lock-on warning and launch/blast cues, small articulated clock, native halo/glints; Cancer trinket; original vanilla crop/padding bounds; audio gesture, pause, silent scrub, laser alternate; applied/pending filter and combined Korean search; IME/search; reduced motion; offline assets. Direct Canvas frame sheets saved, browser layout not verified.');
+ console.log('PASS: 36 before/after identities and playback controls; the game's default flag animation for items without their own; turned Saturn ring with slow darkening and colour return; owned-only selection including modded snapshots, one-pet timing, empty-only random without replacement, stable pause/scrub snapshot; specific void/impact/chomp/flood contracts; fixed flame tip with downward growth and concealed conversion; red native reticle with the SOFLAM lock-on warning and launch/blast cues, small articulated clock, native halo/glints; Cancer trinket; original vanilla crop/padding bounds; audio gesture, pause, silent scrub, laser alternate; applied/pending filter and combined Korean search; IME/search; reduced motion; offline assets. Direct Canvas frame sheets saved, browser layout not verified.');
 })().catch(e=>{console.error(e);process.exitCode=1;});
