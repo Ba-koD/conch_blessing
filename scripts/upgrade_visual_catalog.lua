@@ -43,4 +43,5 @@ return {
     { key = "RAT" },
     { key = "CONCH_PEARL" },
     { key = "TIGER" },
+    { key = "OX" },
 }

@@ -1254,8 +1254,16 @@ local function queueResult(result, explicitPickups)
     return queuedJobs
 end
 
+-- Other parts of the mod hear the same answer here, by name, so the provider
+-- keeps one registration for the whole mod (축 listens for praise).
+ConchBlessing.conchResultListeners = ConchBlessing.conchResultListeners or {}
+
 local function handleMagicConchResult(result)
     queueResult(result)
+    for name, listener in pairs(ConchBlessing.conchResultListeners) do
+        local ok, err = pcall(listener, result)
+        if not ok then ConchBlessing.printError("Magic Conch listener " .. tostring(name) .. " failed: " .. tostring(err)) end
+    end
 end
 
 -- Targeted entry into the same validated transaction used by Magic Conch.

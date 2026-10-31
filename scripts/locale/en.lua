@@ -97,10 +97,19 @@ return {
             },
         },
         OX = {
-            name = "Ox (WIP)",
-            description = "Work in progress",
+            name = "Ox",
+            description = "The yellow ox works better",
             eid = {
-                "No gameplay effect yet.",
+                "The yellow ox walks to the boss room, the black ox to the secret room and the super secret room",
+                "#The yellow ox's furrow doubles {{Damage}}damage, and the black ox's ditch doubles {{Tears}}tears",
+                "#Rice grows where a furrow and a ditch overlap; standing on it doubles both, which lasts 2 seconds after you step off",
+                "#If the Magic Conch answers positive in a room with only the yellow ox, the black ox grows jealous and heads for the Ultra Secret Room",
+                "#{{Warning}} REPENTOGON recommended",
+            },
+            synergies = {
+                rat = {
+                    "Your double rides the yellow ox and attacks enemies by itself.",
+                },
             },
         },
         TIGER = {

@@ -22,9 +22,21 @@ class EntityDefinitionsTests(unittest.TestCase):
             generate_xml.create_entities2_xml(items, str(path), definitions, {})
             self.assertEqual(first, path.read_bytes())
             rows = ET.parse(path).getroot().findall('entity')
-            self.assertEqual(len(rows), 2)
+            self.assertEqual(len(rows), 5)
             self.assertEqual((rows[0].get('id'), rows[0].get('variant')), ('3', '777'))
             marker = rows[1]
+            ox = rows[2]
+            self.assertEqual((ox.get('name'), ox.get('id')), (definitions['OX']['name'], '1000'))
+            self.assertEqual(ox.get('variant'), '7783', 'an effect without a variant is left at 0')
+            self.assertEqual(ox.get('anm2path'), 'effects/conch_ox.anm2')
+            self.assertTrue((Path('resources/gfx') / ox.get('anm2path')).is_file())
+            furrow = rows[3]
+            self.assertEqual((furrow.get('name'), furrow.get('variant'), furrow.get('shadowSize')),
+                             (definitions['OX_FURROW']['name'], '7784', '0'))
+            rice = rows[4]
+            self.assertEqual((rice.get('name'), rice.get('variant'), rice.get('shadowSize')),
+                             (definitions['OX_RICE']['name'], '7785', '0'))
+            self.assertTrue((Path('resources/gfx') / rice.get('anm2path')).is_file())
             self.assertEqual(marker.get('id'), '2')
             self.assertEqual(marker.get('name'), definitions['NEGLECT_TEAR']['name'])
             self.assertNotIn('variant', marker.attrib)  # engine allocates it

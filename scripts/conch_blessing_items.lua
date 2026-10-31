@@ -926,11 +926,37 @@ ConchBlessing.ItemData = {
     -- The rest of the twelve: unfinished previews, hidden from natural pools,
     -- available by name. 인 and 진 sit among them in order.
     OX = {
-        WorkingNow = true,
-        hidden = true,
+        -- 축: 누렁소 and 검은소 plough the way to the boss and the secret room.
         type = "passive",
+        id = Isaac.GetItemIdByName("Ox"),
         gfx = "ox.png",
-        id = Isaac.GetItemIdByName("Ox (WIP)"),
+        pool = {
+            RoomType.ROOM_TREASURE,
+            RoomType.ROOM_PLANETARIUM
+        },
+        quality = 4,
+        tags = "offensive",
+        cache = "damage firedelay",
+        hidden = false,
+        shopprice = 20,
+        devilprice = 2,
+        origin = { id = CollectibleType.COLLECTIBLE_AQUARIUS, type = "collectible" },
+        flag = "positive",
+        synergies = {
+            -- With 자: one of its fakes rides the walking yellow ox and shoots by itself.
+            [{ type = "collectible", name = "Rat" }] = "rat",
+        },
+        script = "scripts/items/collectibles/ox",
+        callbacks = {
+            postUpdate = "ox.onUpdate",
+            postCurseEval = "ox.onCurseEval",
+            inputAction = "ox.onInputAction",
+            entityTakeDmg = "ox.onRiderDamage",
+            postNewRoom = "ox.onNewRoom",
+            gameStarted = "ox.onGameStarted",
+            preGameExit = "ox.onPreGameExit",
+            preModUnload = "ox.onModUnload"
+        },
     },
     TIGER = {
         -- 인, the mountain lord: a kill may raise a 창귀 that explodes on an enemy.

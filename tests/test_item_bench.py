@@ -363,7 +363,7 @@ class BenchTests(unittest.TestCase):
                     total=total+1
                 end
             end
-            assert(total==144,'update the documented synergy inventory when it changes')
+            assert(total==145,'update the documented synergy inventory when it changes')
             for _,name in ipairs({'conch_test kronos detail','conch_test live_eye detail','conch_test appraisal detail'}) do
                 bench.register({command=name,build=function() end})
             end
@@ -382,7 +382,7 @@ class BenchTests(unittest.TestCase):
                 assert(selected and #selected>0,group..' group is empty')
                 for _,command in ipairs(selected) do assert(bench.get(command),command..' not registered') end
             end
-            bench.start('conch_test ox lifecycle',false); drain()
+            bench.start('conch_test rabbit lifecycle',false); drain()
             assert(output():find('0 PASS, 0 FAIL, 1 SKIP',1,true))
         """)
 
@@ -414,7 +414,7 @@ class BenchTests(unittest.TestCase):
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','kronos detail')
             assert(started=='conch_test kronos detail')
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','all')
-            assert(label=='conch_test' and #selected==265,'update the documented suite count when it changes')
+            assert(label=='conch_test' and #selected==276,'update the documented suite count when it changes')
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','rat characters')
             assert(label=='conch_test rat characters' and #selected==34,'every selectable character once')
             for _,name in ipairs(selected) do assert(name:match('^conch_test rat same_')) end

@@ -25,12 +25,12 @@
     <passive id="22" name="Hemispatial Neglect" gfx="hemispatial_neglect.png" quality="2" cache="damage" shopprice="15" devilprice="1"/>
     <passive id="23" name="Conch Pearl" gfx="conch_pearl.png" quality="4" tags="summonable offensive nocantrip angel" shopprice="30" devilprice="2"/>
     <passive id="24" name="Rat" gfx="rat.png" quality="4" shopprice="20" devilprice="2"/>
-    <passive id="25" name="Tiger" gfx="tiger.png" quality="4" tags="offensive" shopprice="20" devilprice="2"/>
-    <passive id="26" name="Dragon" gfx="dragon.png" quality="4" tags="offensive" shopprice="20" devilprice="2"/>
-    <familiar id="27" name="Time = Money" gfx="time_money.png" quality="4" cache="familiars" shopprice="30" devilprice="2"/>
-    <active id="28" name="Inf D6" gfx="inf_d6.png" quality="0" tags="utility" hidden="true" shopprice="999" maxcharges="0" chargetype="normal"/>
-    <familiar id="29" name="Azure Dragon" gfx="azure_dragon.png" quality="0" tags="offensive summonable" cache="familiars" hidden="true" shopprice="999"/>
-    <passive id="30" name="Ox (WIP)" gfx="ox.png" hidden="true"/>
+    <passive id="25" name="Ox" gfx="ox.png" quality="4" tags="offensive" cache="damage firedelay" shopprice="20" devilprice="2"/>
+    <passive id="26" name="Tiger" gfx="tiger.png" quality="4" tags="offensive" shopprice="20" devilprice="2"/>
+    <passive id="27" name="Dragon" gfx="dragon.png" quality="4" tags="offensive" shopprice="20" devilprice="2"/>
+    <familiar id="28" name="Time = Money" gfx="time_money.png" quality="4" cache="familiars" shopprice="30" devilprice="2"/>
+    <active id="29" name="Inf D6" gfx="inf_d6.png" quality="0" tags="utility" hidden="true" shopprice="999" maxcharges="0" chargetype="normal"/>
+    <familiar id="30" name="Azure Dragon" gfx="azure_dragon.png" quality="0" tags="offensive summonable" cache="familiars" hidden="true" shopprice="999"/>
     <passive id="31" name="Rabbit (WIP)" gfx="rabbit.png" hidden="true"/>
     <passive id="32" name="Snake (WIP)" gfx="snake.png" hidden="true"/>
     <passive id="33" name="Horse (WIP)" gfx="horse.png" hidden="true"/>

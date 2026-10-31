@@ -601,13 +601,13 @@ class DragonWeatherContracts(unittest.TestCase):
         self.assertIn('name = "Dragon" }] = "dragon"', block)
         self.assertIn('postRoomRenderEntities = "dragon.onRoomRender"', block)
         self.assertNotIn('entity =', block)
-        # 진 is numbered right after the released zodiac items before it (자, 인)
+        # 진 is numbered right after the released zodiac items before it (자, 축, 인)
         # and before the familiars; the unfinished previews come after them
         # (user order, 2026-10-24).
         xml = (ROOT / 'content/items.xml').read_text(encoding='utf-8')
         names = re.findall(r'<(passive|active|familiar|trinket) id="\d+" name="([^"]+)"', xml)
         start = [name for _, name in names].index('Dragon')
-        self.assertEqual(names[start - 2:start], [('passive', 'Rat'), ('passive', 'Tiger')])
+        self.assertEqual(names[start - 3:start], [('passive', 'Rat'), ('passive', 'Ox'), ('passive', 'Tiger')])
         self.assertEqual(names[start + 1][0], 'familiar')
         mapping = (ROOT / 'scripts/callback_manager.lua').read_text(encoding='utf-8')
         self.assertIn('getRepentogonCallback("MC_POST_ROOM_RENDER_ENTITIES")', mapping)
