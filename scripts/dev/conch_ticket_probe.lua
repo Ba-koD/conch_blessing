@@ -201,11 +201,12 @@ case("card", "the card itself", function(plan)
     plan.check("pocketitems.xml entry", function()
         local config = Isaac.GetItemConfig():GetCard(cardId())
         if not config then return false, "no card config" end
+        local tarot = ItemConfig and ItemConfig.CARDTYPE_TAROT
         return config.Name == "Conch Ticket" and config.Description == "Reserved" and config.MimicCharge == 4
-            and config.PickupSubtype == 7782 and config.HudAnim == "Conch Ticket",
-            string.format("name=%s desc=%s charge=%s pickup=%s hud=%s", tostring(config.Name),
+            and config.PickupSubtype == 7782 and config.HudAnim == "Conch Ticket" and config.CardType == tarot,
+            string.format("name=%s desc=%s charge=%s pickup=%s hud=%s type=%s (tarot %s)", tostring(config.Name),
                 tostring(config.Description), tostring(config.MimicCharge), tostring(config.PickupSubtype),
-                tostring(config.HudAnim))
+                tostring(config.HudAnim), tostring(config.CardType), tostring(tarot))
     end)
     plan.section("CONCH_TICKET card: in the pocket and dropped",
         "the pocket slot shows the cream ticket; dropped, it flicks up, flutters like paper and lands flat")
@@ -240,15 +241,24 @@ end)
 
 
 -- Natural drops: the game's own random card draws, which room rewards, chests
--- and rune drops use. A share above zero means it is in the pool.
+-- and rune drops use. The game first picks a card group, then a card in it;
+-- as a tarot card the ticket comes up as often as one Major Arcana card
+-- (user decision 2026-11-01), about thirty times a thousand draws.
 case("pool", "it turns up among the game's random cards", function(plan)
     local ROLLS = 4000
-    plan.check("ordinary card drops can give the Conch Ticket", function()
-        local pool, hits = Game():GetItemPool(), 0
-        for seed = 1, ROLLS do
-            if pool:GetCard(seed, true, true, false) == cardId() then hits = hits + 1 end
+    plan.check("ordinary card drops give it as often as one Major Arcana card", function()
+        local pool, counts, N = Game():GetItemPool(), {}, 20000
+        for seed = 1, N do
+            local id = pool:GetCard(seed * 7919 + 13, true, true, false)
+            counts[id] = (counts[id] or 0) + 1
         end
-        return hits > 0, string.format("%d of %d rolls", hits, ROLLS)
+        local tarot = 0
+        for id = Card.CARD_FOOL, Card.CARD_WORLD do tarot = tarot + (counts[id] or 0) end
+        local mean, hits = tarot / (Card.CARD_WORLD - Card.CARD_FOOL + 1), counts[cardId()] or 0
+        -- A Major Arcana card comes up about 580 times in 20000; the spread of
+        -- one count is about 24, so a third either way is never chance.
+        return mean > 0 and math.abs(hits - mean) <= mean / 3,
+            string.format("ticket %d of %d draws; a Major Arcana card %.1f on average", hits, N, mean)
     end)
     plan.check("card drops without runes or playing cards can give it", function()
         local pool, hits = Game():GetItemPool(), 0
@@ -256,6 +266,48 @@ case("pool", "it turns up among the game's random cards", function(plan)
             if pool:GetCard(seed, false, false, false) == cardId() then hits = hits + 1 end
         end
         return hits > 0, string.format("%d of %d rolls", hits, ROLLS)
+    end)
+end)
+
+-- Tarot Cloth doubles a tarot card's effect. What the game does with a modded
+-- tarot card is measured here: each use the engine reports opens one picker.
+case("tarot_cloth", "used while holding Tarot Cloth", function(plan)
+    local function open(player)
+        local pick = ConchBlessing.SaveManager.GetRunSave(player).conchTicketPick
+        return pick and pick.open or 0
+    end
+    plan.act(function(player, ctx)
+        ctx.uses = 0
+        ctx.listener = function(_, card) if card == cardId() then ctx.uses = ctx.uses + 1 end end
+        ConchBlessing:AddCallback(ModCallbacks.MC_USE_CARD, ctx.listener)
+        table.insert(ctx.cleanupFns, function() ConchBlessing:RemoveCallback(ModCallbacks.MC_USE_CARD, ctx.listener) end)
+        player:UseCard(cardId(), 0)
+    end)
+    plan.wait(5)
+    plan.check("without Tarot Cloth one use opens one picker", function(player, ctx)
+        return ctx.uses == 1 and open(player) == 1, string.format("uses=%d open=%d", ctx.uses, open(player))
+    end)
+    plan.act(function(player, ctx)
+        player:AddCollectible(CollectibleType.COLLECTIBLE_TAROT_CLOTH, 0, false)
+        table.insert(ctx.cleanupFns, function()
+            if player:HasCollectible(CollectibleType.COLLECTIBLE_TAROT_CLOTH) then
+                player:RemoveCollectible(CollectibleType.COLLECTIBLE_TAROT_CLOTH)
+            end
+        end)
+        ctx.uses = 0
+    end)
+    plan.wait(3)
+    plan.act(function(player, ctx)
+        ctx.before = open(player)
+        player:UseCard(cardId(), 0)
+    end)
+    plan.wait(5)
+    plan.note("with Tarot Cloth: uses the engine reports, pickers opened", function(player, ctx)
+        return string.format("uses=%d opened=%d", ctx.uses, open(player) - ctx.before)
+    end)
+    plan.check("with Tarot Cloth each reported use opens one picker", function(player, ctx)
+        local opened = open(player) - ctx.before
+        return ctx.uses >= 1 and opened == ctx.uses, string.format("uses=%d opened=%d", ctx.uses, opened)
     end)
 end)
 

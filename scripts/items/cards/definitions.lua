@@ -28,7 +28,10 @@ return {
         script = "scripts.items.cards.thurisaz",
     },
     CONCH_TICKET = {
-        type = "special",
+        -- A tarot card, so it drops as often as any one Major Arcana card (user
+        -- decision 2026-11-01): the game first picks a card group, and a
+        -- special card came up about one card drop in four hundred.
+        type = "tarot",
         pickup = 7782,
         hud = "Conch Ticket",
         anm2 = "005.300_conch_ticket.anm2",

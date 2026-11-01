@@ -525,7 +525,7 @@ class BenchTests(unittest.TestCase):
             local enum=function() return setmetatable({}, {__index=function(_, k) return #k end}) end
             CollectibleType, FamiliarVariant, EntityType, PickupVariant, ButtonAction = enum(), enum(), enum(), enum(), enum()
             local Ticket=require('scripts.dev.conch_ticket_probe')
-            local names={'pick','rooms','use','card','pool'}
+            local names={'pick','rooms','use','card','pool','tarot_cloth'}
             assert(#Ticket.commands()==#names)
             for i,name in ipairs(names) do
                 local command='conch_test conch_ticket '..name
