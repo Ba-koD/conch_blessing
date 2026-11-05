@@ -369,8 +369,8 @@ absorbed pool through the same partial Fisher-Yates draw as GB Bug.
 ## 11. Live Eye miss forgiveness
 
 A tear that misses lowers the damage multiplier unless a roll forgives it: base 50%
-(`scripts/items/collectibles/live_eye.lua:16`) plus 5% per point of luck (`scripts/items/collectibles/live_eye.lua:17`), clamped to `[0, 1]`
-(`scripts/items/collectibles/live_eye.lua:75`). The roll is `RandomFloat() < chance` on
+(`scripts/items/collectibles/live_eye.lua:20`) plus 5% per point of luck (`scripts/items/collectibles/live_eye.lua:21`), clamped to `[0, 1]`
+(`scripts/items/collectibles/live_eye.lua:95`). The roll is `RandomFloat() < chance` on
 the Live Eye collectible RNG of the tear's owner, so the effective odds equal the formula.
 
 | Luck | Exact P (no loss) | Measured |

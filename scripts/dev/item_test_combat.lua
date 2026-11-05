@@ -552,6 +552,11 @@ C.LIVE_EYE = { stage = function(plan, _, n)
         ctx.target.CollisionDamage = 0
         ctx.targetHp = ctx.target.HitPoints
         ctx.eyeBefore = ConchBlessing.liveeye.getMultiplier(player)
+        -- The saved value, read within the range the user set (2026-11-05):
+        -- x0.5-x3 with one copy, +0.5 floor and +1 cap per further copy.
+        local record = H.save(player).liveEye
+        ctx.eyeSaved = record and record.multiplier or 1
+        ctx.eyeFloor, ctx.eyeCap = 0.5 * math.max(1, n), 2 + math.max(1, n)
         H.shoot(player, "conch_liveeye", ctx, 1)
     end)
     plan.waitUntil(function(_, ctx) return ctx.shots.triggers >= 1 end, 90, "first real tear attack")
@@ -559,11 +564,13 @@ C.LIVE_EYE = { stage = function(plan, _, n)
     plan.waitUntil(function(_, ctx) return ctx.target.HitPoints < ctx.targetHp end, 90, "first shot actually damages the target")
     plan.wait(2)
     plan.check("real tear hit updates once, and stops after removal", function(player, ctx)
-        local expected = n > 0 and math.min(3, ctx.eyeBefore + 0.1) or ctx.eyeBefore
+        local function clamp(v) return math.max(ctx.eyeFloor, math.min(v, ctx.eyeCap)) end
+        local expected = n > 0 and clamp(clamp(ctx.eyeSaved) + 0.1) or ctx.eyeBefore
+        ctx.eyeExpected = expected
         return H.expect(ConchBlessing.liveeye.getMultiplier(player), expected)
     end)
     plan.check("live multiplier applies once with duplicate copies", function(player, ctx)
-        local expected = ctx.base.Damage * (n > 0 and ConchBlessing.liveeye.getMultiplier(player) or 1)
+        local expected = ctx.base.Damage * (n > 0 and ctx.eyeExpected or 1)
         return H.expect(player.Damage, expected)
     end)
     plan.act(function(_, ctx)

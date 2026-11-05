@@ -23,14 +23,13 @@ return {
             name = "Live Eye",
             description = "Misses happen",
             eid = {
-                "{{Damage}} Damage multiplier increases by 0.1 as you hit enemies.",
-                "#{{Damage}} Damage multiplier decreases by 0.15 as you miss enemies.",
+                "Hitting an enemy raises the {{Damage}}damage multiplier by 0.1; missing lowers it by 0.25.",
                 "#{{Luck}} 50% chance not to decrease. (5% per luck)",
-                "#{{Damage}} Damage multiplier is capped at 3.0 and cannot go below 0.75.",
-                "#With a non-tear attack, the {{Damage}}damage multiplier is fixed at x1.5.",
+                "#{{Damage}} Multiplier range x0.5~x3 (each extra copy: min +0.5, max +1)",
+                "#With a non-tear attack, the {{Damage}}damage multiplier is fixed at half the maximum.",
             },
             synergies = {
-                rock_bottom = "The damage multiplier is fixed at the maximum, x3.0 (also with a non-tear attack).",
+                rock_bottom = "The damage multiplier is fixed at the maximum. (also with a non-tear attack)",
             },
         },
         VOID_DAGGER = {

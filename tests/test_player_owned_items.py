@@ -75,8 +75,8 @@ class LiveEyeOwnership(unittest.TestCase):
             near(L.getMultiplier(a),1.3); near(L.getMultiplier(b),1.0)
             assert(b.evaluations==0,'a hit refreshed the other holder')
             near(a.Damage,3.5*1.3)
-            L.handleMiss(b); near(L.getMultiplier(b),0.85); near(L.getMultiplier(a),1.3)
-            b.roll=0; L.handleMiss(b); near(L.getMultiplier(b),0.85) -- forgiven by b's own roll
+            L.handleMiss(b); near(L.getMultiplier(b),0.75); near(L.getMultiplier(a),1.3)
+            b.roll=0; L.handleMiss(b); near(L.getMultiplier(b),0.75) -- forgiven by b's own roll
             assert(a.evaluations==3)
         ''')
 
@@ -93,16 +93,92 @@ class LiveEyeOwnership(unittest.TestCase):
             -- Continue: a new process and empty entity data, the saved run save.
             for _,p in ipairs(players) do p.data={} end
             loadEye(); L.onGameStarted(nil,true)
-            near(a.Damage,3.5*1.2); near(b.Damage,3.5*0.85)
+            near(a.Damage,3.5*1.2); near(b.Damage,3.5*0.75)
             runs={}; L.onGameStarted(nil,false); near(a.Damage,3.5); near(b.Damage,3.5)
         ''')
 
     def test_set_multiplier_clamps_and_reports_a_missing_save(self):
         self.lua.execute(r'''
-            local a=eye(1); near(L.setMultiplier(a,10),3.0); near(L.setMultiplier(a,-1),0.75)
+            local a=eye(1); near(L.setMultiplier(a,10),3.0); near(L.setMultiplier(a,-1),0.5)
             local get=SM.GetRunSave; SM.GetRunSave=function() return nil end
             assert(L.setMultiplier(a,2)==nil); L.handleHit(a); assert(#errors==1)
-            SM.GetRunSave=get; near(L.getMultiplier(a),0.75)
+            SM.GetRunSave=get; near(L.getMultiplier(a),0.5)
+        ''')
+
+    def test_each_copy_raises_the_floor_by_half_and_the_cap_by_one(self):
+        # User decision 2026-11-05: x0.5-x3 with one copy, x1-x4 with two, x1.5-x5 with three.
+        self.lua.execute(r'''
+            local a=eye(1)
+            for copies,range in ipairs({{0.5,3},{1,4},{1.5,5},{2,6}}) do
+                a.items[50]=copies
+                near(L.setMultiplier(a,100),range[2]); near(L.setMultiplier(a,-100),range[1])
+                local floor,cap=L._test.getRange(a); near(floor,range[1]); near(cap,range[2])
+            end
+            -- Holding none reads one copy's range (the multiplier does not apply then).
+            a.items[50]=0; local floor,cap=L._test.getRange(a); near(floor,0.5); near(cap,3)
+        ''')
+
+    def test_hits_and_misses_move_by_their_steps_and_stop_at_the_ends(self):
+        self.lua.execute(r'''
+            local a=eye(1); a.roll=0.99 -- every miss counts
+            L.setMultiplier(a,2.0); L.handleMiss(a); near(L.getMultiplier(a),1.75)
+            L.handleHit(a); near(L.getMultiplier(a),1.85)
+            for _=1,40 do L.handleMiss(a) end; near(L.getMultiplier(a),0.5); near(a.Damage,3.5*0.5)
+            for _=1,40 do L.handleHit(a) end; near(L.getMultiplier(a),3.0); near(a.Damage,3.5*3)
+            a.items[50]=2; for _=1,40 do L.handleHit(a) end; near(L.getMultiplier(a),4.0)
+        ''')
+
+    def test_a_new_copy_lifts_the_floor_and_a_lost_one_lowers_the_cap(self):
+        self.lua.execute(r'''
+            local a=eye(1); a.items[50]=3
+            -- A fresh multiplier of x1 applies as the three-copy floor, and a hit moves from there.
+            near(L.getMultiplier(a),1.5); a:EvaluateItems(); near(a.Damage,3.5*1.5)
+            L.handleHit(a); near(L.getMultiplier(a),1.6)
+            L.setMultiplier(a,5)
+            -- Losing copies lowers what applies; the saved value comes back with the copies.
+            a.items[50]=2; near(L.getMultiplier(a),4); a.items[50]=1; near(L.getMultiplier(a),3)
+            a.items[50]=3; near(L.getMultiplier(a),5)
+            -- A miss after a lost copy moves from the value that applies (x3 - 0.25).
+            a.items[50]=1; a.roll=0.99; L.handleMiss(a); near(L.getMultiplier(a),2.75)
+            a.items[50]=3; near(L.getMultiplier(a),2.75)
+        ''')
+
+    def test_non_tear_attack_fixes_half_the_cap_and_rock_bottom_the_cap(self):
+        self.lua.execute(r'''
+            local a=eye(1); L.setMultiplier(a,1.2)
+            function a:HasWeaponType(t) return t==2 end -- a non-tear weapon such as Brimstone
+            for copies,half in ipairs({1.5,2,2.5}) do
+                a.items[50]=copies; near(L._test.getFixedMultiplier(a),half)
+                a:EvaluateItems(); near(a.Damage,3.5*half)
+            end
+            a.items[562]=1 -- Rock Bottom: the cap, with or without tears
+            for copies,cap in ipairs({3,4,5}) do
+                a.items[50]=copies; near(L._test.getFixedMultiplier(a),cap)
+            end
+            function a:HasWeaponType(t) return t==1 end
+            for copies,cap in ipairs({3,4,5}) do
+                a.items[50]=copies; near(L._test.getFixedMultiplier(a),cap)
+                a:EvaluateItems(); near(a.Damage,3.5*cap)
+            end
+            a.items[562]=0; a.items[50]=1; assert(L._test.getFixedMultiplier(a)==nil)
+            a:EvaluateItems(); near(a.Damage,3.5*1.2)
+        ''')
+
+    def test_eid_states_the_numbers_the_module_uses(self):
+        text = {lang: source('scripts/locale/%s.lua' % lang) for lang in ('en', 'kr', 'urimal')}
+        for lang, body in text.items():
+            entry = re.search(r'\n        LIVE_EYE = \{(.*?)\n        \},', body, re.S).group(1)
+            for number in ('0.1', '0.25', 'x0.5', 'x3', '+0.5', '+1'):
+                self.assertIn(number, entry, '%s: Live Eye EID lacks %s' % (lang, number))
+            for stale in ('0.15', '0.75', 'x1.5', 'x3.0'):
+                self.assertNotIn(stale, entry, '%s: Live Eye EID still says %s' % (lang, stale))
+        self.assertIn('"#{{Luck}} 50% 확률로 감소하지 않습니다.(행운 1당 5%)"', text['kr'],
+                      'user-designated miss-protection line must stay verbatim')
+        self.lua.execute(r'''
+            local d=L.data
+            assert(d.hitMultiplierIncrease==0.1 and d.missMultiplierDecrease==0.25)
+            assert(d.minDamageMultiplier==0.5 and d.maxDamageMultiplier==3 and d.minPerExtraCopy==0.5 and d.maxPerExtraCopy==1)
+            assert(d.nonTearMaxShare==0.5 and d.missForgiveBaseChance==0.5 and d.missForgiveLuckBonus==0.05)
         ''')
 
 

@@ -86,18 +86,23 @@ S.add("LIVE_EYE", "weapon_and_rock_bottom", { synergies = true, conditions = tru
         ctx.damage = player.Damage
     end)
     plan.wait(4)
-    for _, spec in ipairs({ {true,false,1.5}, {false,false,1}, {false,true,3}, {true,true,3} }) do
+    -- {copies, Brimstone, Rock Bottom, applied}: a non-tear weapon fixes half the
+    -- cap and Rock Bottom the cap, which each further copy raises by 1 (x3, x4).
+    for _, spec in ipairs({ {1,true,false,1.5}, {1,false,false,1}, {1,false,true,3}, {1,true,true,3},
+        {2,true,false,2}, {2,false,false,1}, {2,false,true,4}, {2,true,true,4} }) do
         plan.act(function(player)
-            S.collectible(player, CollectibleType.COLLECTIBLE_BRIMSTONE, spec[1] and 1 or 0)
-            S.collectible(player, CollectibleType.COLLECTIBLE_ROCK_BOTTOM, spec[2] and 1 or 0)
+            S.collectible(player, id, spec[1])
+            S.collectible(player, CollectibleType.COLLECTIBLE_BRIMSTONE, spec[2] and 1 or 0)
+            S.collectible(player, CollectibleType.COLLECTIBLE_ROCK_BOTTOM, spec[3] and 1 or 0)
         end)
         plan.wait(4)
-        plan.check("weapon and Rock Bottom change the applied multiplier", function(player)
-            return H.expect(player:GetData().__conchLiveEyeApplied, spec[3])
+        plan.check(string.format("%d %s: weapon and Rock Bottom change the applied multiplier", spec[1],
+            spec[1] == 1 and "copy" or "copies"), function(player)
+            return H.expect(player:GetData().__conchLiveEyeApplied, spec[4])
         end)
     end
     plan.act(function(player)
-        player:RemoveCollectible(id)
+        S.collectible(player, id, 0)
         player:RemoveCollectible(CollectibleType.COLLECTIBLE_BRIMSTONE)
         player:RemoveCollectible(CollectibleType.COLLECTIBLE_ROCK_BOTTOM)
     end)

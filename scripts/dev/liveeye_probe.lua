@@ -1,8 +1,10 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Live Eye test bench: `conch_test live_eye detail` restarts the run, checks that a missed
 -- tear can be forgiven (50% + 5% per luck), that only unforgiven misses lower
--- the damage multiplier, that a non-tear attack fixes it at x1.5 and Rock Bottom
--- at x3.0, then restarts the run again (scripts/dev/test_bench.lua).
+-- the damage multiplier (by 0.25; a hit raises it by 0.1), that one copy keeps it
+-- within x0.5-x3 and every further copy raises the floor by 0.5 and the cap by 1,
+-- that a non-tear attack fixes it at half the cap and Rock Bottom at the cap, then
+-- restarts the run again (scripts/dev/test_bench.lua).
 -- This file is dev tooling and only acts while its command runs.
 
 local TestBench = require("scripts.dev.test_bench")
@@ -28,8 +30,19 @@ end
 local function appliedIs(label, value)
     return function(player)
         local now = applied(player)
-        return now == value, string.format("%s: applied x%s", label, tostring(now))
+        return type(now) == "number" and math.abs(now - value) < 1e-9,
+            string.format("%s: applied x%s, want x%s", label, tostring(now), tostring(value))
     end
+end
+
+-- The range the user set (2026-11-05), written out here rather than read from
+-- the module: x0.5-x3 with one copy, +0.5 floor and +1 cap per further copy.
+local RANGES = { { 0.5, 3 }, { 1, 4 }, { 1.5, 5 } }
+
+local function setCopies(player, wanted)
+    local current = player:GetCollectibleNum(LIVE_EYE_ID)
+    for _ = current + 1, wanted do player:AddCollectible(LIVE_EYE_ID, 0, false) end
+    for _ = wanted + 1, current do player:RemoveCollectible(LIVE_EYE_ID) end
 end
 
 -- Odds checked over MISSES_PER_LUCK misses. 0% and 100% must be exact; the
@@ -106,9 +119,58 @@ local function build(plan)
         ConchBlessing.liveeye.setMultiplier(player, 2.0)
         for _ = 1, 2 do ConchBlessing.liveeye.handleMiss(player) end
     end)
-    plan.check("Luck -10: 2 misses lower it by 0.15 each", function(player)
-        return math.abs(multiplier(player) - 1.7) < 1e-9, string.format("x%.2f", multiplier(player))
+    plan.check("Luck -10: 2 misses lower it by 0.25 each", function(player)
+        return math.abs(multiplier(player) - 1.5) < 1e-9, string.format("x%.2f", multiplier(player))
     end)
+    plan.act(function(player)
+        ConchBlessing.liveeye.setMultiplier(player, 2.0)
+        for _ = 1, 3 do ConchBlessing.liveeye.handleHit(player) end
+    end)
+    plan.check("3 hits raise it by 0.1 each", function(player)
+        return math.abs(multiplier(player) - 2.3) < 1e-9, string.format("x%.2f", multiplier(player))
+    end)
+
+    -- Each copy count: unforgiven misses stop at the floor, hits at the cap, and
+    -- the damage evaluation applies exactly those values.
+    for copies, range in ipairs(RANGES) do
+        plan.section(string.format("%d %s", copies, copies == 1 and "copy" or "copies"), nil)
+        plan.act(function(player) setCopies(player, copies) end)
+        plan.wait(10)
+        plan.act(function(player)
+            player.Luck = -10
+            for _ = 1, 40 do ConchBlessing.liveeye.handleMiss(player) end
+        end)
+        plan.check(string.format("misses stop at the floor x%s", range[1]), appliedIs("floor", range[1]))
+        plan.act(function(player)
+            for _ = 1, 60 do ConchBlessing.liveeye.handleHit(player) end
+        end)
+        plan.check(string.format("hits stop at the cap x%s", range[2]), appliedIs("cap", range[2]))
+    end
+
+    plan.section("copies change the range", nil)
+    plan.act(function(player)
+        setCopies(player, 2)
+        ConchBlessing.liveeye.setMultiplier(player, 1.0)
+        setCopies(player, 3)
+    end)
+    plan.wait(10)
+    plan.check("a third copy lifts x1.0 to the new floor x1.5", appliedIs("three copies", 1.5))
+    plan.act(function(player) ConchBlessing.liveeye.handleHit(player) end)
+    plan.check("a hit moves from the floor that applies (x1.6)", appliedIs("hit", 1.6))
+    plan.act(function(player)
+        ConchBlessing.liveeye.setMultiplier(player, 5)
+        setCopies(player, 1)
+    end)
+    plan.wait(10)
+    plan.check("back to one copy, x5 applies as the cap x3", appliedIs("one copy", 3))
+    plan.act(function(player) setCopies(player, 3) end)
+    plan.wait(10)
+    plan.check("the third copy again brings the saved x5 back", appliedIs("three copies", 5))
+    plan.act(function(player)
+        setCopies(player, 1)
+        ConchBlessing.liveeye.setMultiplier(player, 2.0)
+    end)
+    plan.wait(10)
 
     plan.section("non-tear attack", nil)
     plan.act(function(player, ctx)
@@ -128,7 +190,16 @@ local function build(plan)
         local n = counters().misses - ctx.misses
         return not ctx.tracked and n == 0, string.format("tracked %s, misses +%d", tostring(ctx.tracked), n)
     end)
+    for copies, range in ipairs(RANGES) do
+        if copies > 1 then
+            plan.act(function(player) setCopies(player, copies) end)
+            plan.wait(20)
+            plan.check(string.format("Brimstone with %d copies: half the cap, x%s", copies, range[2] / 2),
+                appliedIs("Brimstone", range[2] / 2))
+        end
+    end
     plan.act(function(player)
+        setCopies(player, 1)
         player:RemoveCollectible(CollectibleType.COLLECTIBLE_BRIMSTONE)
     end)
     plan.wait(20)
@@ -139,18 +210,26 @@ local function build(plan)
         player:AddCollectible(CollectibleType.COLLECTIBLE_ROCK_BOTTOM, 0, false)
     end)
     plan.wait(20)
-    plan.check("Rock Bottom fixes it at x3.0", appliedIs("Rock Bottom", 3.0))
+    plan.check("Rock Bottom fixes it at the cap x3", appliedIs("Rock Bottom", 3))
+    for copies, range in ipairs(RANGES) do
+        if copies > 1 then
+            plan.act(function(player) setCopies(player, copies) end)
+            plan.wait(20)
+            plan.check(string.format("Rock Bottom with %d copies: the cap x%s", copies, range[2]),
+                appliedIs("Rock Bottom", range[2]))
+        end
+    end
     plan.act(function(player)
         player:AddCollectible(CollectibleType.COLLECTIBLE_BRIMSTONE, 0, false)
     end)
     plan.wait(20)
-    plan.check("Rock Bottom + Brimstone stays x3.0", appliedIs("Rock Bottom + Brimstone", 3.0))
+    plan.check("Rock Bottom + Brimstone stays at the cap x5", appliedIs("Rock Bottom + Brimstone", 5))
 end
 
 TestBench.register({
     command = "conch_test live_eye detail",
     tag = "LiveEyeProbe",
-    duration = "about 15 seconds",
+    duration = "about 25 seconds",
     build = build,
 })
 

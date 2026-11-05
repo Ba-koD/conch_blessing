@@ -147,6 +147,7 @@ ConchBlessing.ItemData = {
         tags = "offensive",
         cache = "damage",
         hidden = false,
+        stackable = true, -- each copy widens the multiplier range: Conch Pearl may roll it again
         shopprice = 20, -- shop price (coin)
         devilprice = 2, -- devil price (heart)
         maxcharges = 0,

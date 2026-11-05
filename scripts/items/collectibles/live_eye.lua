@@ -7,17 +7,22 @@ ConchBlessing.liveeye.data = {
     -- Where every holder's multiplier starts. The live value is that holder's
     -- own (getMultiplier), kept in the player's run save.
     startDamageMultiplier = 1.0,
+    -- The range one copy keeps the multiplier in. Every further copy raises the
+    -- floor and the cap by these steps: two copies x1-x4, three x1.5-x5.
+    minDamageMultiplier = 0.5,
     maxDamageMultiplier = 3.0,
-    minDamageMultiplier = 0.75,
+    minPerExtraCopy = 0.5,
+    maxPerExtraCopy = 1.0,
     hitMultiplierIncrease = 0.1,
-    missMultiplierDecrease = 0.15,
+    missMultiplierDecrease = 0.25,
     -- Chance that a miss leaves the multiplier alone: the base plus this much
     -- per point of luck, clamped to [0, 1] (Luck 10 forgives every miss).
     missForgiveBaseChance = 0.5,
     missForgiveLuckBonus = 0.05,
     -- Without a tear attack there is nothing to score as a hit or miss, so the
-    -- multiplier is fixed here instead (Rock Bottom still fixes it at the maximum).
-    nonTearDamageMultiplier = 1.5,
+    -- multiplier is fixed at this share of the current cap instead (x1.5 with one
+    -- copy, x2 with two). Rock Bottom fixes it at the cap itself.
+    nonTearMaxShare = 0.5,
 }
 
 local LIVE_EYE_ID = Isaac.GetItemIdByName("Live Eye")
@@ -46,23 +51,38 @@ local function getRecord(player, create)
     return record
 end
 
-local function clampMultiplier(value)
+--- The floor and cap of this player's multiplier for the copies they hold now
+--- (one copy's range while they hold none).
+local function getRange(player)
     local data = ConchBlessing.liveeye.data
-    return math.max(data.minDamageMultiplier, math.min(value, data.maxDamageMultiplier))
+    local copies = player and type(player.GetCollectibleNum) == "function" and player:GetCollectibleNum(LIVE_EYE_ID) or 0
+    local extra = math.max(1, copies) - 1
+    return data.minDamageMultiplier + data.minPerExtraCopy * extra,
+        data.maxDamageMultiplier + data.maxPerExtraCopy * extra
 end
 
---- This player's hit/miss multiplier (before Rock Bottom or a non-tear weapon fixes it).
+local function clampMultiplier(player, value)
+    local floor, cap = getRange(player)
+    return math.max(floor, math.min(value, cap))
+end
+
+-- The saved value is kept as it was and read within the current range, so
+-- losing a copy lowers the multiplier that applies and regaining the copy
+-- brings the old value back. A hit or miss moves from the value that applies.
+
+--- This player's hit/miss multiplier within the range of the copies they hold
+--- (before Rock Bottom or a non-tear weapon fixes it).
 function ConchBlessing.liveeye.getMultiplier(player)
     local record = getRecord(player, false)
-    return record and record.multiplier or ConchBlessing.liveeye.data.startDamageMultiplier
+    return clampMultiplier(player, record and record.multiplier or ConchBlessing.liveeye.data.startDamageMultiplier)
 end
 
---- Sets this player's multiplier, clamped to its range. Returns the stored
---- value, or nil when the run save is not available.
+--- Sets this player's multiplier, clamped to its current range. Returns the
+--- stored value, or nil when the run save is not available.
 function ConchBlessing.liveeye.setMultiplier(player, value)
     local record = getRecord(player, true)
     if not record or type(value) ~= "number" then return nil end
-    record.multiplier = clampMultiplier(value)
+    record.multiplier = clampMultiplier(player, value)
     return record.multiplier
 end
 
@@ -98,14 +118,15 @@ local function usesTearAttacks(player)
     return hasTears
 end
 
---- The fixed multiplier, or nil while hits and misses drive it.
+--- The fixed multiplier, or nil while hits and misses drive it. Both follow the
+--- current cap, so more copies raise them too.
 local function getFixedMultiplier(player)
-    local data = ConchBlessing.liveeye.data
+    local _, cap = getRange(player)
     if player:HasCollectible(CollectibleType.COLLECTIBLE_ROCK_BOTTOM) then
-        return data.maxDamageMultiplier
+        return cap
     end
     if not usesTearAttacks(player) then
-        return data.nonTearDamageMultiplier
+        return cap * ConchBlessing.liveeye.data.nonTearMaxShare
     end
     return nil
 end
@@ -113,11 +134,10 @@ end
 function ConchBlessing.liveeye.getEffectiveMultiplier(player)
     local fixed = getFixedMultiplier(player)
     if fixed then return fixed end
-    return clampMultiplier(ConchBlessing.liveeye.getMultiplier(player))
+    return ConchBlessing.liveeye.getMultiplier(player)
 end
 
-local function getAboveOneGlowRatio(curM)
-    local maxM = ConchBlessing.liveeye.data.maxDamageMultiplier
+local function getAboveOneGlowRatio(curM, maxM)
     if maxM <= 1.0 then
         return 0
     end
@@ -130,8 +150,7 @@ local function getAboveOneGlowRatio(curM)
     return t
 end
 
-local function getBelowOneGlowRatio(curM)
-    local minM = ConchBlessing.liveeye.data.minDamageMultiplier
+local function getBelowOneGlowRatio(curM, minM)
     if curM >= 1.0 then
         return 0
     end
@@ -174,8 +193,8 @@ local function shiftMultiplier(player, delta, label)
         ConchBlessing.printError("[Live Eye] run save unavailable; " .. label .. " not recorded")
         return
     end
-    local old = record.multiplier
-    record.multiplier = clampMultiplier(old + delta)
+    local old = clampMultiplier(player, record.multiplier)
+    record.multiplier = clampMultiplier(player, old + delta)
     if record.multiplier ~= old then
         player:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
         player:EvaluateItems()
@@ -218,8 +237,9 @@ ConchBlessing.liveeye.onFireTear = function(_, tear)
             end
 
             local mult = ConchBlessing.liveeye.getEffectiveMultiplier(player)
-            local up = getAboveOneGlowRatio(mult)
-            local down = getBelowOneGlowRatio(mult)
+            local floor, cap = getRange(player)
+            local up = getAboveOneGlowRatio(mult, cap)
+            local down = getBelowOneGlowRatio(mult, floor)
             
             if up > 0 then
                 local r = 1.0 - 0.8 * up
@@ -363,6 +383,7 @@ end
 -- Test hooks for scripts/dev/rng_probe.lua. Pure helpers, no gameplay use.
 ConchBlessing.liveeye._test = {
     getMissForgiveChance = getMissForgiveChance,
+    getRange = getRange,
     getFixedMultiplier = getFixedMultiplier,
     usesTearAttacks = usesTearAttacks,
 }
