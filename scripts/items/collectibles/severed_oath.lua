@@ -1853,6 +1853,10 @@ function M.onPostPickupUpdate(_, pickup)
         return
     end
     if type(GetPtrHash) == "function" and grantInFlight[GetPtrHash(pickup)] then return end
+    -- A Magic Conch upgrade holds this pedestal's queue while it plays; the
+    -- Oath waits until the queue is back.
+    local upgrade = ConchBlessing.upgrade
+    if upgrade and type(upgrade.isCycleFrozen) == "function" and upgrade.isCycleFrozen(pickup) then return end
 
     markPickupCycleState(pickup)
     local state = getPickupCycleState(pickup)

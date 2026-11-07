@@ -459,11 +459,12 @@ local function stageDefault(plan, flag)
     plan.act(function(_, ctx) removeFixture(ctx) end)
 end
 
--- A rotating pedestal (REPENTOGON collectible cycle) keeps turning its choices
--- while the upgrade plays. DIAG lines record what a native turn does to the
--- pickup (reference, GetData, seed, Morph callbacks); the checks require the
--- real transaction to convert only the choice on show at the answer (user
--- decision 2026-10-29), wherever it has turned to, and keep the whole circle.
+-- A rotating pedestal (REPENTOGON collectible cycle) evolves only the choice
+-- on show at the answer (user decision 2026-10-29) and holds it while the
+-- upgrade plays (user request 2026-11-07). DIAG lines record what a native turn
+-- does to the pickup (reference, GetData, seed, Morph callbacks); the checks
+-- require the held choice never to turn, the queue to come back in its order
+-- behind the evolved item, and the circle to turn again afterwards.
 local CYCLE_KEY = "LIVE_EYE" -- Dead Eye -> Live Eye, the default positive animation
 local CYCLE_PROBE_KEY = "__ConchBlessingCycleProbe"
 local morphWatch = nil -- Morph callbacks seen for the fixture: { hash, post }
@@ -491,6 +492,12 @@ local function sameCircle(a, b)
     return false
 end
 
+local function sameOrder(a, b)
+    if #a ~= #b then return false end
+    for i = 1, #a do if a[i] ~= b[i] then return false end end
+    return true
+end
+
 -- Record every native turn of the fixture: the shown choice changed without
 -- the transaction's own commit. The bench follows its own spawn wrapper.
 local function trackTurns(ctx)
@@ -502,9 +509,15 @@ local function trackTurns(ctx)
     if committed and not w.sawCommit then
         -- The commit's own Morph changed the head; start again from it.
         w.sawCommit = true
+        w.atCommit = circleOf(p)
+        w.commitFrame = Game():GetFrameCount()
         w.head, w.ptr = p.SubType, EntityPtr(p)
         p:GetData()[CYCLE_PROBE_KEY] = w.token
         return
+    end
+    if ctx.job ~= nil and not committed then
+        w.heldUpdates = (w.heldUpdates or 0) + 1
+        if p.SubType ~= w.held or #p:GetCollectibleCycle() > 0 then w.unheld = (w.unheld or 0) + 1 end
     end
     if p.SubType == w.head then return end
     local frame = Game():GetFrameCount()
@@ -516,6 +529,7 @@ local function trackTurns(ctx)
         morphs = morphWatch and morphWatch.post - w.post or 0,
         circle = sameCircle(circleOf(p), committed and w.target or w.source),
         committed = committed,
+        sinceCommit = committed and w.commitFrame and frame - w.commitFrame or nil,
         locked = not committed and ctx.job ~= nil and ConchBlessing.upgrade.isAnimatingPickup(p) or nil,
     }
     w.head, w.at, w.ptr, w.post = p.SubType, frame, EntityPtr(p), morphWatch and morphWatch.post or 0
@@ -532,7 +546,7 @@ local function stageCycle(plan)
     local key = CYCLE_KEY
     local item = ConchBlessing.ItemData[key]
     plan.section("rotating pedestal (" .. string.lower(key) .. ")",
-        "the pedestal keeps turning between Dead Eye, Sad Onion, a second Dead Eye and Inner Eye; the Dead Eye on show turns into Live Eye with the white flash while the pedestal keeps turning, and the other Dead Eye stays")
+        "the pedestal turns between Dead Eye, Sad Onion, a second Dead Eye and Inner Eye; at the answer it stops on Dead Eye, which turns into Live Eye with the white flash, then it turns again and the other Dead Eye stays")
     plan.act(function(player, ctx)
         removeFixture(ctx)
         local variant, id = Visuals.origin(item)
@@ -610,15 +624,23 @@ local function stageCycle(plan)
     end, 400, "Dead Eye shows on the pedestal")
     plan.act(function(player, ctx)
         local p = assert(ctx.wheel.entity:ToPickup(), "fixture is not a pickup")
+        -- Only the Dead Eye on show now evolves; the other copy stays, and the
+        -- queue comes back in its order behind Live Eye.
+        local target = circleOf(p)
+        target[1] = item.id
         local job, reason = ConchBlessing.upgrade.queuePickup(p, key, player)
         assert(job, "queue refused: " .. tostring(reason))
         assert(job.cyclePlan, "queued without its cycle plan")
-        -- Only the Dead Eye on show now evolves; the other copy stays.
-        local target = circleOf(p)
-        target[1] = item.id
         ctx.wheel.target = target
+        ctx.wheel.held = p.SubType
+        ctx.wheel.heldAtOnce = #p:GetCollectibleCycle() == 0 and p.SubType == ctx.sourceId
+        ctx.wheel.frozenAtOnce = ConchBlessing.upgrade.isCycleFrozen(p)
         ctx.job = job
         ctx.turnsBefore = #ctx.wheel.turns
+    end)
+    plan.check(key .. ": the answer holds the circle on Dead Eye at once", function(_, ctx)
+        local frozen = ctx.wheel.frozenAtOnce == true
+        return ctx.wheel.heldAtOnce == true and frozen, "held=" .. tostring(ctx.wheel.heldAtOnce) .. " frozen=" .. tostring(frozen)
     end)
     plan.waitUntil(function(_, ctx)
         trackTurns(ctx)
@@ -626,35 +648,38 @@ local function stageCycle(plan)
         return job.status == "complete" or job.status == "cancelled",
             "job=" .. tostring(job.status) .. " committed=" .. tostring(job.committed == true)
     end, 400, key .. ": the upgrade transaction finishes")
-    plan.check(key .. ": the upgrade commits while the pedestal turns", function(_, ctx)
+    plan.check(key .. ": the upgrade commits", function(_, ctx)
         local job = ctx.job
         return job.status == "complete" and job.committed == true,
             "end=" .. tostring(job.endReason) .. " committed=" .. tostring(job.committed == true)
     end)
-    plan.check(key .. ": the pedestal turned before the change", function(_, ctx)
-        local n = 0
-        for i = ctx.turnsBefore + 1, #ctx.wheel.turns do
-            if not ctx.wheel.turns[i].committed then n = n + 1 end
+    plan.check(key .. ": Dead Eye stayed on show, unturned, until the change", function(_, ctx)
+        local w = ctx.wheel
+        local turned = 0
+        for i = ctx.turnsBefore + 1, #w.turns do
+            if not w.turns[i].committed then turned = turned + 1 end
         end
-        if n == 0 then return nil, "no native turn before the change; inconclusive" end
-        return true, n .. " turns before the change"
+        if (w.heldUpdates or 0) < 30 then return nil, "only " .. tostring(w.heldUpdates) .. " held updates; inconclusive" end
+        return turned == 0 and (w.unheld or 0) == 0,
+            string.format("%d held updates, %d turns, %d updates off Dead Eye or with a queue", w.heldUpdates,
+                turned, w.unheld or 0)
     end)
-    plan.check(key .. ": the pedestal stayed locked through every turn before the change", function(_, ctx)
-        local open = 0
-        for i = ctx.turnsBefore + 1, #ctx.wheel.turns do
-            if ctx.wheel.turns[i].locked == false then open = open + 1 end
-        end
-        return open == 0, open .. " turns left it collectible"
-    end)
-    plan.check(key .. ": the Dead Eye on show became Live Eye and every other choice stayed, in the same circle", function(_, ctx)
-        local now = circleOf(ctx.wheel.entity)
-        return sameCircle(now, ctx.wheel.target),
-            "now " .. table.concat(now, ",") .. "; want " .. table.concat(ctx.wheel.target, ",")
+    plan.check(key .. ": Live Eye took the place of Dead Eye and the queue came back in its order", function(_, ctx)
+        local w = ctx.wheel
+        return w.atCommit ~= nil and sameOrder(w.atCommit, w.target),
+            "at the change " .. table.concat(w.atCommit or {}, ",") .. "; want " .. table.concat(w.target, ",")
     end)
     plan.waitUntil(function(_, ctx)
         trackTurns(ctx)
         return turnsWhere(ctx, function(t) return t.committed end) >= 2, "turns since the change"
-    end, 400, key .. ": the converted pedestal keeps turning")
+    end, 400, key .. ": the converted pedestal turns again")
+    plan.note(key .. ": updates from the change to each later turn", function(_, ctx)
+        local gaps = {}
+        for _, t in ipairs(ctx.wheel.turns) do
+            if t.committed then gaps[#gaps + 1] = tostring(t.sinceCommit) end
+        end
+        return "commit frame " .. tostring(ctx.wheel.commitFrame) .. "; turns at +" .. table.concat(gaps, ",+")
+    end)
     plan.check(key .. ": the converted pedestal turns through the new circle", function(_, ctx)
         local broken = turnsWhere(ctx, function(t) return t.committed and not t.circle end)
         return broken == 0, broken .. " turns after the change broke the circle; now "
@@ -664,6 +689,187 @@ local function stageCycle(plan)
         morphWatch = nil
         removeFixture(ctx)
         ctx.wheel = nil
+    end)
+end
+
+-- Leaving the room before the change keeps the answer (user decision
+-- 2026-11-07): the next visit finds both pedestals evolved, with no
+-- presentation, the rotating one with its queue back in order.
+local function findAt(seed, pos)
+    for _, entity in ipairs(Isaac.GetRoomEntities()) do
+        local p = entity:ToPickup()
+        if p and p:Exists() and p.InitSeed == seed and p.Position:Distance(pos) < 16 then return p end
+    end
+end
+
+-- What the reloaded pedestal looks like as its room loads, after the
+-- upgrade module has finished its record (registered after that module).
+local returnWatch = nil
+local LATE = CallbackPriority and CallbackPriority.LATE or 1000
+local function onLoadWatch()
+    if not returnWatch then return end
+    local ring = findAt(returnWatch.seed, returnWatch.pos)
+    if not ring then return end
+    returnWatch.atLoad = circleOf(ring)
+    returnWatch.frame = Game():GetFrameCount()
+    returnWatch.trail, returnWatch.control = {}, {}
+end
+if type(ConchBlessing.AddPriorityCallback) == "function" then
+    ConchBlessing:AddPriorityCallback(ModCallbacks.MC_POST_NEW_ROOM, LATE, onLoadWatch)
+else
+    ConchBlessing:AddCallback(ModCallbacks.MC_POST_NEW_ROOM, onLoadWatch)
+end
+ConchBlessing:AddCallback(ModCallbacks.MC_POST_UPDATE, function()
+    local trail = returnWatch and returnWatch.trail
+    if not trail or #trail >= 60 then return end
+    local ring = findAt(returnWatch.seed, returnWatch.pos)
+    trail[#trail + 1] = ring and tostring(ring.SubType) or "-"
+    local control = returnWatch.controlAt and findAt(returnWatch.controlAt.seed, returnWatch.controlAt.pos)
+    returnWatch.control[#returnWatch.control + 1] = control and tostring(control.SubType) or "-"
+end)
+
+-- Turns within the first `n` updates of a trail.
+local function earlyTurns(trail, n)
+    local turns = 0
+    for i = 2, math.min(n, #trail) do if trail[i] ~= trail[i - 1] then turns = turns + 1 end end
+    return turns
+end
+
+local function stageReturn(plan)
+    local key = CYCLE_KEY
+    local item = ConchBlessing.ItemData[key]
+    plan.section("leaving before the change (" .. string.lower(key) .. ")")
+    plan.require("REPENTOGON cycle API and a neighbouring room", function(_, ctx)
+        local room, level = Game():GetRoom(), Game():GetLevel()
+        ctx.home = level:GetCurrentRoomIndex()
+        for slot = 0, 7 do
+            local door = room:GetDoor(slot)
+            if door and door.TargetRoomIndex >= 0 then ctx.away = door.TargetRoomIndex; break end
+        end
+        return (ctx.away ~= nil and type(RoomTransition) == "table") or nil, "a door and RoomTransition required"
+    end)
+    plan.act(function(player, ctx)
+        removeFixture(ctx)
+        local _, id = Visuals.origin(item)
+        local room = Game():GetRoom()
+        player.Position = room:GetCenterPos() + Vector(0, 110)
+        local function spawn(offset)
+            local pos = room:FindFreePickupSpawnPosition(room:GetCenterPos() + offset, 0, true)
+            local p = Isaac.Spawn(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_COLLECTIBLE, id, pos, Vector(0, 0), nil):ToPickup()
+            p.Price, p.ShopItemId, p.AutoUpdatePrice, p.OptionsPickupIndex = 0, -1, false, 0
+            return p
+        end
+        ctx.ring, ctx.plain = spawn(Vector(-80, -60)), spawn(Vector(80, -60))
+        -- An untouched rotating pedestal: what any circle does as a room loads.
+        ctx.control = spawn(Vector(0, -120))
+    end)
+    plan.wait(4)
+    plan.act(function(_, ctx)
+        local ring = ctx.ring
+        ring:RemoveCollectibleCycle()
+        for _, extra in ipairs({ CollectibleType.COLLECTIBLE_SAD_ONION, CollectibleType.COLLECTIBLE_INNER_EYE }) do
+            assert(ring:AddCollectibleCycle(extra), "AddCollectibleCycle refused " .. extra)
+        end
+        ctx.ringAt = { seed = ring.InitSeed, pos = Vector(ring.Position.X, ring.Position.Y) }
+        ctx.plainAt = { seed = ctx.plain.InitSeed, pos = Vector(ctx.plain.Position.X, ctx.plain.Position.Y) }
+        local control = ctx.control
+        control:RemoveCollectibleCycle()
+        for _, extra in ipairs({ CollectibleType.COLLECTIBLE_SAD_ONION, CollectibleType.COLLECTIBLE_INNER_EYE }) do
+            assert(control:AddCollectibleCycle(extra), "AddCollectibleCycle refused " .. extra)
+        end
+        ctx.controlAt = { seed = control.InitSeed, pos = Vector(control.Position.X, control.Position.Y) }
+        ctx.ringTarget = { item.id, CollectibleType.COLLECTIBLE_SAD_ONION, CollectibleType.COLLECTIBLE_INNER_EYE }
+        returnWatch = { seed = ring.InitSeed, pos = ctx.ringAt.pos, controlAt = ctx.controlAt }
+        local jobs = ConchBlessing.upgrade._test.queueResult({ type = item.flag }, { ring, ctx.plain }) or {}
+        ctx.returnJobs = jobs
+    end)
+    plan.check("both pedestals start their upgrade", function(_, ctx)
+        return #ctx.returnJobs == 2, #ctx.returnJobs .. " jobs"
+    end)
+    plan.wait(20)
+    plan.check("neither has changed yet and the room keeps both answers", function(_, ctx)
+        local committed, n = 0, 0
+        for _, job in ipairs(ctx.returnJobs) do if job.committed then committed = committed + 1 end end
+        for _ in pairs(ConchBlessing.upgrade._test.records() or {}) do n = n + 1 end
+        return committed == 0 and n == 2, committed .. " committed, " .. n .. " room records"
+    end)
+    plan.act(function(player, ctx)
+        Game():StartRoomTransition(ctx.away, Direction.NO_DIRECTION, RoomTransitionAnim.FADE, player)
+    end)
+    plan.waitUntil(function(_, ctx)
+        return Game():GetLevel():GetCurrentRoomIndex() == ctx.away and RoomTransition.GetTransitionMode() == 0,
+            "room=" .. Game():GetLevel():GetCurrentRoomIndex()
+    end, 180, "leave the room before the change")
+    plan.check("leaving ended the presentation, not the answer", function(_, ctx)
+        local ended = 0
+        for _, job in ipairs(ctx.returnJobs) do if job.endReason == "room-change" then ended = ended + 1 end end
+        return ended == 2 and #ConchBlessing._upgradeJobs == 0, ended .. " jobs ended by the room change"
+    end)
+    plan.wait(30)
+    plan.act(function(player, ctx)
+        Game():StartRoomTransition(ctx.home, Direction.NO_DIRECTION, RoomTransitionAnim.FADE, player)
+    end)
+    plan.waitUntil(function(_, ctx)
+        local here = Game():GetLevel():GetCurrentRoomIndex() == ctx.home
+        -- The first update in the room, before the fade-in ends: the engine
+        -- turns the circle again about every 30 updates.
+        if here and not ctx.ringBack then
+            ctx.firstUpdate = Game():GetFrameCount()
+            local ring = findAt(ctx.ringAt.seed, ctx.ringAt.pos)
+            ctx.ringBack = ring and circleOf(ring) or { "gone" }
+            local plain = findAt(ctx.plainAt.seed, ctx.plainAt.pos)
+            ctx.plainBack = plain and plain.SubType or nil
+            ctx.backAnimating = (ring and ConchBlessing.upgrade.isAnimatingPickup(ring))
+                or (plain and ConchBlessing.upgrade.isAnimatingPickup(plain)) or false
+        end
+        return here and RoomTransition.GetTransitionMode() == 0, "room=" .. Game():GetLevel():GetCurrentRoomIndex()
+    end, 180, "come back")
+    plan.note("the rotating pedestal as its room loads and at the first update", function(_, ctx)
+        local w = returnWatch or {}
+        return string.format("load frame %s: %s; first update frame %s: %s", tostring(w.frame),
+            table.concat(w.atLoad or { "unseen" }, ","), tostring(ctx.firstUpdate), table.concat(ctx.ringBack, ","))
+    end)
+    plan.wait(40)
+    plan.note("the shown choice on each update after arrival", function(_, ctx)
+        local w = returnWatch or {}
+        return "from load frame " .. tostring(w.frame) .. ": evolved " .. table.concat(w.trail or {}, " ")
+            .. " | untouched " .. table.concat(w.control or {}, " ")
+    end)
+    plan.check("as the room loads the evolved circle turns like an untouched one", function()
+        local w = returnWatch or {}
+        local mine, native = earlyTurns(w.trail or {}, 10), earlyTurns(w.control or {}, 10)
+        if #(w.control or {}) < 10 then return nil, "the untouched pedestal was not seen" end
+        return mine == native, string.format("turns in the first 10 updates: evolved %d, untouched %d", mine, native)
+    end)
+    plan.check("the room loads the rotating pedestal as Live Eye with its queue back in order", function(_, ctx)
+        local atLoad = returnWatch and returnWatch.atLoad or { "unseen" }
+        return sameOrder(atLoad, ctx.ringTarget),
+            "at load " .. table.concat(atLoad, ",") .. "; want " .. table.concat(ctx.ringTarget, ",")
+    end)
+    plan.check("the rotating pedestal turns through the evolved circle", function(_, ctx)
+        return sameCircle(ctx.ringBack, ctx.ringTarget),
+            "back " .. table.concat(ctx.ringBack, ",") .. "; want " .. table.concat(ctx.ringTarget, ",")
+    end)
+    plan.check("the plain pedestal is Live Eye", function(_, ctx)
+        return ctx.plainBack == item.id, "back " .. tostring(ctx.plainBack) .. "; want " .. item.id
+    end)
+    plan.check("no presentation replays and no record is left", function(_, ctx)
+        local records = ConchBlessing.upgrade._test.records() or {}
+        return not ctx.backAnimating and next(records) == nil,
+            "animating=" .. tostring(ctx.backAnimating) .. " records=" .. tostring(next(records) ~= nil)
+    end)
+    plan.wait(70)
+    plan.check("the evolved circle turns again", function(_, ctx)
+        local ring = findAt(ctx.ringAt.seed, ctx.ringAt.pos)
+        local now = ring and circleOf(ring) or {}
+        return ring ~= nil and sameCircle(now, ctx.ringTarget) and ring.SubType ~= item.id, "now " .. table.concat(now, ",")
+    end)
+    plan.act(function(_, ctx)
+        returnWatch = nil
+        for _, at in ipairs({ ctx.ringAt, ctx.plainAt, ctx.controlAt }) do
+            local p = at and findAt(at.seed, at.pos)
+            if p then p:Remove() end
+        end
     end)
 end
 
@@ -687,10 +893,12 @@ local function build(plan, only)
         for _, flag in ipairs({ "positive", "neutral", "negative" }) do stageDefault(plan, flag) end
     end
     if not only or only == "cycle" then stageCycle(plan) end
+    if not only or only == "return" then stageReturn(plan) end
 end
 
 local function cleanup(ctx)
     morphWatch = nil
+    returnWatch = nil
     removeFixture(ctx)
 end
 
@@ -700,6 +908,8 @@ TestBench.register({ command = "conch_test morph default", tag = "MorphProbe", d
     cleanup = cleanup, build = function(plan) build(plan, "default") end })
 TestBench.register({ command = "conch_test morph cycle", tag = "MorphProbe", duration = "about 25 seconds",
     cleanup = cleanup, build = function(plan) build(plan, "cycle") end })
+TestBench.register({ command = "conch_test morph return", tag = "MorphProbe", duration = "about 15 seconds",
+    cleanup = cleanup, build = function(plan) build(plan, "return") end })
 for _, row in ipairs(Visuals.catalog) do
     if row.effect then
         TestBench.register({ command = "conch_test morph " .. string.lower(row.key), tag = "MorphProbe",
@@ -712,12 +922,14 @@ function Probe.commandFor(word)
     if not word then return "conch_test morph" end
     if word == "default" then return "conch_test morph default" end
     if word == "cycle" then return "conch_test morph cycle" end
+    if word == "return" then return "conch_test morph return" end
     local key = Visuals.resolveKey(word)
     if key and Visuals.isApplied(key) then return "conch_test morph " .. string.lower(key) end
 end
 function Probe.list()
     local lines = { "conch_test morph [all applied presentations + default flags + rotating pedestal]",
-        "conch_test morph default", "conch_test morph cycle (a rotating pedestal turning during its upgrade)" }
+        "conch_test morph default", "conch_test morph cycle (a rotating pedestal held on its evolving choice)",
+        "conch_test morph return (leaving the room before the change)" }
     for _, row in ipairs(Visuals.catalog) do
         if row.effect then lines[#lines + 1] = "conch_test morph " .. string.lower(row.key) .. " (" .. row.effect .. ")" end
     end

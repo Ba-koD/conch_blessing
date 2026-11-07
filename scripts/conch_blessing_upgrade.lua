@@ -55,6 +55,11 @@ local VALID_UPGRADE_FLAGS = {
 local PENDING_UPGRADE_DATA_KEY = "__ConchBlessingUpgradeJob"
 local PICKUP_LOCK_DATA_KEY = "__ConchBlessingUpgradePickupLock"
 local MAX_COLLECTIBLE_CYCLE_ITEMS = 8
+-- A pedestal mid-upgrade is written to its room's save, so leaving the room or
+-- the game never loses the answer: the next visit finds it already evolved
+-- (user decision 2026-11-07). Pedestals do not move, so seed and place find it.
+local PENDING_SAVE_KEY = "conchUpgrades"
+local PENDING_MATCH_DISTANCE = 16
 
 local function _callUpgradeFunction(label, fn, ...)
     if type(fn) ~= "function" then
@@ -235,6 +240,54 @@ local function _spawnEffects(list, pos)
                 end
             end
         end
+    end
+end
+
+local Pending = {}
+
+local function _saveManager()
+    local sm = ConchBlessing.SaveManager
+    if type(sm) ~= "table" or type(sm.IsLoaded) ~= "function" or type(sm.GetRoomSave) ~= "function" then
+        return nil
+    end
+    local ok, loaded = pcall(sm.IsLoaded)
+    return ok and loaded == true and sm or nil
+end
+
+-- The current room's records, keyed by id; nil without a loaded save.
+function Pending.records(create)
+    local sm = _saveManager()
+    if not sm then return nil end
+    local getter = create and sm.GetRoomSave or sm.TryGetRoomSave
+    if type(getter) ~= "function" then return nil end
+    local ok, save = pcall(getter, nil, false)
+    if not ok or type(save) ~= "table" then return nil end
+    if create and type(save[PENDING_SAVE_KEY]) ~= "table" then save[PENDING_SAVE_KEY] = {} end
+    local records = save[PENDING_SAVE_KEY]
+    return type(records) == "table" and records or nil, save
+end
+
+function Pending.flush()
+    local sm = _saveManager()
+    if sm and type(sm.Save) == "function" then pcall(sm.Save) end
+end
+
+function Pending.add(record)
+    local records, save = Pending.records(true)
+    if not records then return nil end
+    save.conchUpgradeSerial = (tonumber(save.conchUpgradeSerial) or 0) + 1
+    local id = "u" .. tostring(save.conchUpgradeSerial)
+    records[id] = record
+    Pending.flush()
+    return id
+end
+
+function Pending.remove(id)
+    if not id then return end
+    local records = Pending.records(false)
+    if records and records[id] ~= nil then
+        records[id] = nil
+        Pending.flush()
     end
 end
 
@@ -511,19 +564,45 @@ local function _clearPendingMarker(job)
     end
 end
 
+local _thawCycle -- defined with the cycle helpers below
+
 local function _removeUpgradeJob(index, job, cancelAnimation, reason)
     job.status = cancelAnimation and "cancelled" or "complete"
     job.endReason = reason or job.status
-    if cancelAnimation and _jobMatchesPickup(job, job.pickup)
+    local live = _jobMatchesPickup(job, job.pickup)
+    if cancelAnimation and live
         and ConchBlessing.template
         and type(ConchBlessing.template.cancelForPickup) == "function" then
         ConchBlessing.template.cancelForPickup(job and job.pickup or nil)
     end
+    -- A cancelled frozen circle gets its queue back, unless the pedestal became
+    -- something else: a reroll is a new pedestal with choices of its own.
+    local keepRecord = false
+    if cancelAnimation and not job.committed then
+        local thawed = job.frozenTail ~= nil and job.endReason ~= "source-changed"
+            and _thawCycle(job, job.pickup and job.pickup:ToPickup() or nil, live)
+        -- A reference lost without proof leaves the pedestal unproven; its
+        -- record finishes the upgrade when the room is entered again.
+        keepRecord = job.endReason == "expired"
+    end
+    if not keepRecord then Pending.remove(job.recordId) end
     _clearPendingMarker(job)
     table.remove(ConchBlessing._upgradeJobs, index)
 end
 
-local function _enqueueUpgradeJob(entityPickup, upgradeData, savedFields, cyclePlan)
+-- A room change or game exit ends the presentation, not the upgrade: the job's
+-- record stays and the next visit (or Continue) finds the pedestal evolved.
+local function _dropJobsAtBoundary(reason)
+    for i = #ConchBlessing._upgradeJobs, 1, -1 do
+        local job = ConchBlessing._upgradeJobs[i]
+        job.status = "cancelled"
+        job.endReason = reason
+        _clearPendingMarker(job)
+        table.remove(ConchBlessing._upgradeJobs, i)
+    end
+end
+
+local function _enqueueUpgradeJob(entityPickup, upgradeData, savedFields, cyclePlan, preview)
     if not entityPickup or _isPickupPending(entityPickup) then
         return false
     end
@@ -550,6 +629,7 @@ local function _enqueueUpgradeJob(entityPickup, upgradeData, savedFields, cycleP
         afterFrames = math.max(0, tonumber(itemData.afterFrames) or 0),
         targetVariant = targetVariant,
         cyclePlan = cyclePlan,
+        preview = preview == true,
         templateState = {},
         token = {},
         status = "queued",
@@ -578,10 +658,10 @@ local function _sourceStillMatches(job, pickup)
         return pickup.SubType == job.sourceSubType
     end
 
+    -- A frozen circle shows only the evolving choice; anything another mod
+    -- appends meanwhile is kept and goes back after the saved queue.
     local liveCycle = _readCollectibleCycle(pickup)
-    return liveCycle ~= nil
-        and liveCycle.supported
-        and _cyclesMatch(job.cyclePlan.sourceCycle, liveCycle.items)
+    return liveCycle ~= nil and liveCycle.supported and pickup.SubType == job.frozenShown
 end
 
 local function _cycleText(pickup)
@@ -702,49 +782,217 @@ local function _pickupIsShopItem(pickup)
     return ok and isShopItem == true
 end
 
-local function _commitCycleUpgrade(job, pickup)
-    local liveCycle, liveError = _readCollectibleCycle(pickup)
-    if not liveCycle
-        or not liveCycle.supported
-        or not _cyclesMatch(job.cyclePlan.sourceCycle, liveCycle.items) then
-        return false, liveError or "collectible cycle identity changed before commit"
+local function _notifyCycleRewritten(pickup, replacements)
+    local severedOath = ConchBlessing.severedoath
+    if severedOath and type(severedOath.onCollectibleCycleRewritten) == "function" then
+        local notifyOk, notifyError = pcall(severedOath.onCollectibleCycleRewritten, pickup, replacements)
+        if not notifyOk then
+            ConchBlessing.printError("[Upgrade] Collectible cycle owner notification failed: " .. tostring(notifyError))
+        end
     end
+end
 
-    local sourceAtCommit = _copySequence(liveCycle.items)
-    local position = _shownChoicePosition(job.cyclePlan.sourceCycle, sourceAtCommit)
-    if not position then
-        return false, "the evolving choice cannot be found in the circle"
+local function _appendCycle(pickup, ids)
+    for index, itemId in ipairs(ids or {}) do
+        local ok, added = pcall(pickup.AddCollectibleCycle, pickup, itemId)
+        if not ok or added == false then
+            return false, "AddCollectibleCycle failed at " .. tostring(index) .. ": " .. tostring(added)
+        end
     end
-    -- Only that one choice changes; any other copy of the same item stays.
-    local upgradeData = job.cyclePlan.primaryUpgradeData
-    local targetAtCommit = _copySequence(sourceAtCommit)
-    targetAtCommit[position] = upgradeData.upgradeId
-    local titleItemData = upgradeData.itemData
+    return true
+end
 
-    local rebuilt, rebuildError = _rebuildCollectibleCycle(pickup, targetAtCommit, job)
-    if rebuilt then
-        local severedOath = ConchBlessing.severedoath
-        if severedOath and type(severedOath.onCollectibleCycleRewritten) == "function" then
-            local notifyOk, notifyError = pcall(
-                severedOath.onCollectibleCycleRewritten,
-                pickup,
-                job.cyclePlan.replacements
-            )
-            if not notifyOk then
-                ConchBlessing.printError(
-                    "[Upgrade] Collectible cycle owner notification failed: " .. tostring(notifyError)
-                )
+local function _near(position, x, y)
+    local dx, dy = position.X - (tonumber(x) or 0), position.Y - (tonumber(y) or 0)
+    return dx * dx + dy * dy <= PENDING_MATCH_DISTANCE * PENDING_MATCH_DISTANCE
+end
+
+-- A rotating pedestal stops on the evolving choice while its upgrade plays
+-- (user request 2026-11-07). Its queue waits in the job and the room record;
+-- with an empty queue the engine has nothing to turn to.
+local function _freezeCycle(job, pickup)
+    local snapshot, readError = _readCollectibleCycle(pickup)
+    if not snapshot or not snapshot.supported then
+        return false, readError or "collectible cycle unreadable"
+    end
+    local tail = _copySequence(snapshot.queue)
+    local removed, removeError = pcall(pickup.RemoveCollectibleCycle, pickup)
+    local after = _readCollectibleCycle(pickup)
+    if removed and after and after.supported and #after.queue == 0 and pickup.SubType == snapshot.items[1] then
+        job.frozenShown = snapshot.items[1]
+        job.frozenTail = tail
+        return true
+    end
+    -- Put back what the pedestal had if the queue went missing anyway.
+    if after and after.supported and #after.queue == 0 then _appendCycle(pickup, tail) end
+    return false, "the queue could not be held: " .. tostring(removeError)
+end
+
+-- The queue goes back only onto the very pedestal the job froze. Without the
+-- live reference that needs the same native pointer, seed, place and choice.
+_thawCycle = function(job, pickup, proven)
+    if not job.frozenTail or job.committed or job.thawed then return false end
+    if not (pickup and pickup:Exists()) then return false end
+    if not proven and (GetPtrHash(pickup) ~= job.pickupHash or pickup.InitSeed ~= job.sourceInitSeed
+        or pickup.Variant ~= job.sourceVariant or pickup.SubType ~= job.frozenShown
+        or not _near(pickup.Position, job.pos.X, job.pos.Y)) then
+        return false
+    end
+    local ok, appendError = _appendCycle(pickup, job.frozenTail)
+    job.thawed = true
+    if not ok then
+        ConchBlessing.printError("[Upgrade] A held collectible cycle could not be put back: " .. tostring(appendError))
+    end
+    return ok
+end
+
+-- The evolved item takes the shown choice's place and the held queue follows
+-- in its own order; what another mod appended meanwhile goes last.
+local function _finishFrozenCycle(pickup, shown, tail, upgradeId, job)
+    local live, liveError = _readCollectibleCycle(pickup)
+    if not live or not live.supported or pickup.SubType ~= shown then
+        return false, liveError or "the held choice changed before the change"
+    end
+    local source, target, dropped = { shown }, { upgradeId }, 0
+    for _, list in ipairs({ tail or {}, live.queue }) do
+        for _, itemId in ipairs(list) do
+            if #target <= MAX_COLLECTIBLE_CYCLE_ITEMS then
+                source[#source + 1] = itemId
+                target[#target + 1] = itemId
+            else
+                dropped = dropped + 1
             end
         end
-        return true, titleItemData
     end
-
-    local rolledBack, rollbackError = _rebuildCollectibleCycle(pickup, sourceAtCommit, job)
-    _restorePickupFields(pickup, job.saved)
+    if dropped > 0 then
+        ConchBlessing.printDebug("[Upgrade] " .. dropped .. " choices added while held did not fit the circle")
+    end
+    local rebuilt, rebuildError = _rebuildCollectibleCycle(pickup, target, job)
+    if rebuilt then return true end
+    local rolledBack, rollbackError = _rebuildCollectibleCycle(pickup, source, job)
     if not rolledBack then
         return false, tostring(rebuildError) .. "; rollback failed: " .. tostring(rollbackError)
     end
     return false, tostring(rebuildError) .. "; original cycle restored"
+end
+
+local function _commitCycleUpgrade(job, pickup)
+    local upgradeData = job.cyclePlan.primaryUpgradeData
+    local ok, finishError = _finishFrozenCycle(pickup, job.frozenShown, job.frozenTail, upgradeData.upgradeId, job)
+    -- Changed or rolled back, the held queue is on the pedestal again.
+    job.thawed = true
+    if not ok then
+        _restorePickupFields(pickup, job.saved)
+        return false, finishError
+    end
+    _notifyCycleRewritten(pickup, job.cyclePlan.replacements)
+    return true, upgradeData.itemData
+end
+
+local function _recordFor(job)
+    local saved = {}
+    for key, value in pairs(job.saved or {}) do
+        if type(value) == "number" or type(value) == "boolean" then saved[key] = value end
+    end
+    return {
+        seed = job.sourceInitSeed, x = job.pos.X, y = job.pos.Y,
+        variant = job.sourceVariant, subtype = job.sourceSubType,
+        targetVariant = job.targetVariant, upgradeId = job.upgradeId, itemKey = job.itemKey,
+        saved = saved,
+        shown = job.frozenShown,
+        tail = job.frozenTail and _copySequence(job.frozenTail) or nil,
+        circle = job.cyclePlan and _copySequence(job.cyclePlan.sourceCycle) or nil,
+    }
+end
+
+-- Finish a recorded upgrade at once, with no presentation: the room was left
+-- (or the game closed) before the change. Returns true, or false and why.
+local function _completeRecord(record, pickup)
+    local itemData = record.itemKey and ConchBlessing.ItemData and ConchBlessing.ItemData[record.itemKey]
+    local isTrinket = record.targetVariant == PickupVariant.PICKUP_TRINKET
+    local config = Isaac.GetItemConfig()
+    local registered = config and (isTrinket and config:GetTrinket(record.upgradeId)
+        or not isTrinket and config:GetCollectible(record.upgradeId))
+    if type(itemData) ~= "table" or itemData.id ~= record.upgradeId or not registered then
+        return false, "the evolved item is no longer registered"
+    end
+    if type(record.tail) == "table" then
+        local live = _readCollectibleCycle(pickup)
+        if not live or not live.supported then return false, "collectible cycle unreadable" end
+        local ok, finishError
+        if pickup.SubType == record.shown then
+            ok, finishError = _finishFrozenCycle(pickup, record.shown, record.tail, record.upgradeId, nil)
+        elseif type(record.circle) == "table" and _cyclesMatch(record.circle, live.items) then
+            -- The game saved the room before the queue was held: change the
+            -- choice where the circle has it now and keep the rest.
+            local target = _copySequence(live.items)
+            target[_shownChoicePosition(record.circle, live.items)] = record.upgradeId
+            ok, finishError = _rebuildCollectibleCycle(pickup, target, nil)
+        elseif pickup.SubType == record.upgradeId then
+            return true, "already evolved"
+        else
+            return false, "the pedestal changed while nobody was there"
+        end
+        if not ok then return false, finishError end
+        _notifyCycleRewritten(pickup, { [record.shown] = record.upgradeId })
+    else
+        local morphId = record.upgradeId
+        if isTrinket and type(record.saved) == "table" and record.saved.wasGoldenTrinket then morphId = morphId + 32768 end
+        if pickup.Variant == record.targetVariant and pickup.SubType == morphId then return true, "already evolved" end
+        if pickup.Variant ~= record.variant or pickup.SubType ~= record.subtype then
+            return false, "the pedestal changed while nobody was there"
+        end
+        local morphOk, morphError = _morphUpgradePickup(nil, pickup, record.targetVariant, morphId)
+        if not morphOk or pickup.Variant ~= record.targetVariant or pickup.SubType ~= morphId then
+            return false, "Morph failed: " .. tostring(morphError)
+        end
+    end
+    _restorePickupFields(pickup, record.saved or {})
+    local showItemText = ConchBlessing.EID and ConchBlessing.EID.showItemText or nil
+    if type(showItemText) == "function" then showItemText(itemData) end
+    _callConfiguredHook(itemData.onAfterChange or itemData.onUpgrade,
+        tostring(record.itemKey) .. ".onAfterChange", pickup.Position, pickup, itemData)
+    return true
+end
+
+-- Records of the room just entered: each finds its pedestal by seed and place.
+local function _completeRoomRecords(reason)
+    local records = Pending.records(false)
+    if not records or next(records) == nil then return 0 end
+    local pickups = {}
+    for _, entity in ipairs(Isaac.GetRoomEntities()) do
+        if entity.Type == EntityType.ENTITY_PICKUP
+            and (entity.Variant == PickupVariant.PICKUP_COLLECTIBLE or entity.Variant == PickupVariant.PICKUP_TRINKET) then
+            local pickup = entity:ToPickup()
+            if pickup and pickup:Exists() then pickups[#pickups + 1] = pickup end
+        end
+    end
+    local ids = {}
+    for id in pairs(records) do ids[#ids + 1] = id end
+    table.sort(ids)
+    local finished = 0
+    for _, id in ipairs(ids) do
+        local record = records[id]
+        local match, count = nil, 0
+        for _, pickup in ipairs(pickups) do
+            if type(record) == "table" and pickup.InitSeed == record.seed and _near(pickup.Position, record.x, record.y) then
+                match, count = pickup, count + 1
+            end
+        end
+        local ok, detail = false, count == 0 and "the pedestal is gone" or "several pedestals match"
+        if count == 1 then
+            local called, result, why = pcall(_completeRecord, record, match)
+            ok, detail = called and result == true, called and why or result
+            if not called then ConchBlessing.printError("[Upgrade] Finishing a recorded upgrade failed: " .. tostring(result)) end
+        end
+        if ok then finished = finished + 1 end
+        ConchBlessing.printDebug(string.format("[Upgrade] %s: recorded upgrade %s of %s %s (%s)", tostring(reason),
+            tostring(id), tostring(type(record) == "table" and record.itemKey), ok and "finished" or "dropped",
+            tostring(detail)))
+        records[id] = nil
+    end
+    Pending.flush()
+    return finished
 end
 
 local function _processUpgradeJobs()
@@ -855,6 +1103,8 @@ local function _processUpgradeJobs()
 
                     _restorePickupFields(pickup, job.saved)
                     job.committed = true
+                    Pending.remove(job.recordId)
+                    job.recordId = nil
                     _clearPendingMarker(job)
 
                     -- A pedestal morph is not an acquisition, so the engine
@@ -1099,6 +1349,9 @@ local function queueResult(result, explicitPickups)
     local upgradeableItems = {}
     local deleteableItems = {}
     local viewer = ConchBlessing.morphViewer
+    local function ownedByViewer(entity)
+        return viewer ~= nil and type(viewer.ownsPickup) == "function" and viewer.ownsPickup(entity) == true
+    end
     
     for _, entity in ipairs(entities) do
         -- check if it's a pickup (collectible or trinket)
@@ -1107,7 +1360,7 @@ local function queueResult(result, explicitPickups)
             -- The room-wide result owns gameplay pickups only. A preview may
             -- enter this same pipeline only through its explicit target list,
             -- including before queueing and after its pending lock is released.
-            and (explicitPickups or not (viewer and viewer.ownsPickup and viewer.ownsPickup(entity)))
+            and (explicitPickups or not ownedByViewer(entity))
             and not _isPickupPending(entity:ToPickup()) then
             local pickup = entity:ToPickup()
             local cycleHandled = false
@@ -1218,7 +1471,22 @@ local function queueResult(result, explicitPickups)
                     shopId = pickup.ShopItemId,
                     state = pickup.State,
                     wasGoldenTrinket = itemInfo.wasGoldenTrinket,
-                }, itemInfo.cyclePlan)
+                }, itemInfo.cyclePlan, ownedByViewer(entity))
+
+                if queued and itemInfo.cyclePlan then
+                    local held, holdError = _freezeCycle(queued, pickup)
+                    if not held then
+                        ConchBlessing.printError("[Upgrade] A rotating pedestal could not be held for its upgrade: "
+                            .. tostring(holdError))
+                        for index, job in ipairs(ConchBlessing._upgradeJobs) do
+                            if job == queued then _removeUpgradeJob(index, job, true, "hold-failed") break end
+                        end
+                        queued = nil
+                    end
+                end
+                -- A preview fixture is removed with the viewer; only a gameplay
+                -- pedestal keeps its answer through a room change or exit.
+                if queued and not queued.preview then queued.recordId = Pending.add(_recordFor(queued)) end
 
                 if queued then
                     queuedJobs[#queuedJobs + 1] = queued
@@ -1281,6 +1549,18 @@ function ConchBlessing.upgrade.isAnimatingPickup(pickup)
     return template and template.isAnimatingPickup(pickup) or false
 end
 
+-- True while an upgrade holds this rotating pedestal on its evolving choice.
+-- Code that adds choices waits: the queue is not on the pedestal meanwhile.
+function ConchBlessing.upgrade.isCycleFrozen(pickup)
+    if not pickup or not pickup:Exists() then return false end
+    for _, job in ipairs(ConchBlessing._upgradeJobs) do
+        if job.frozenTail and not job.committed and not job.thawed and _jobMatchesPickup(job, pickup) then
+            return true
+        end
+    end
+    return false
+end
+
 function ConchBlessing.upgrade.queuePickup(pickup, itemKey, visualOwner)
     local item = ConchBlessing.ItemData[itemKey]
     if not item or not pickup or not pickup:Exists() then return nil, "missing item or pickup" end
@@ -1298,7 +1578,8 @@ function ConchBlessing.upgrade.queuePickup(pickup, itemKey, visualOwner)
 end
 
 -- Test hook: the room-wide result path limited to the given pickups.
-ConchBlessing.upgrade._test = { queueResult = queueResult }
+ConchBlessing.upgrade._test = { queueResult = queueResult, records = function() return Pending.records(false) end,
+    completeRoomRecords = function(reason) return _completeRoomRecords(reason or "test") end }
 
 function ConchBlessing.upgrade.cancel(job)
     if not job then return end
@@ -1382,9 +1663,31 @@ local function resetRegistrationAttempts()
     retryExhausted = false
 end
 
-local function clearUpgradeJobs()
+-- Records are run state: read only once this run's game start has been seen
+-- (a Continue can enter its room before SaveManager holds this run's save).
+local lifecycleOpen = false
+
+-- A reload drops this module's jobs: finish every gameplay upgrade at once so
+-- no pedestal is left held, and put a preview's queue back.
+local function finishJobsNow(reason)
     for i = #ConchBlessing._upgradeJobs, 1, -1 do
-        _removeUpgradeJob(i, ConchBlessing._upgradeJobs[i], true)
+        local job = ConchBlessing._upgradeJobs[i]
+        local pickup = job.pickup and job.pickup:ToPickup() or nil
+        if not job.committed and not job.preview and job.recordId and _jobMatchesPickup(job, pickup) then
+            local template = ConchBlessing.template
+            if template and type(template.cancelForPickup) == "function" then template.cancelForPickup(pickup) end
+            local called, finished, detail = pcall(_completeRecord, _recordFor(job), pickup)
+            if not called then ConchBlessing.printError("[Upgrade] Finishing an upgrade at unload failed: " .. tostring(finished)) end
+            if called and finished == true then job.committed = true end
+            -- A rebuild that ran (or rolled back) already put the queue back.
+            local live = _readCollectibleCycle(pickup)
+            if job.frozenTail and not (live and live.supported and #live.queue == 0 and pickup.SubType == job.frozenShown) then
+                job.thawed = true
+            end
+            ConchBlessing.printDebug("[Upgrade] " .. tostring(reason) .. ": " .. tostring(job.itemKey)
+                .. (job.committed and " finished at once" or " left as it was (" .. tostring(detail or finished) .. ")"))
+        end
+        _removeUpgradeJob(i, job, true, reason)
     end
 end
 
@@ -1417,9 +1720,11 @@ local function apiRegistrationCallback()
 end
 
 local function onGameStarted()
-    clearUpgradeJobs()
+    _dropJobsAtBoundary("game-start")
     ConchBlessing.magicConchApiRegistered = false
     resetRegistrationAttempts()
+    lifecycleOpen = true
+    _completeRoomRecords("continue")
 
     if not generateItemMaps() then
         unregisterMagicConchAPI()
@@ -1464,14 +1769,20 @@ ConchBlessing:AddCallback(
     _preventPendingUpgradePickup,
     PickupVariant.PICKUP_TRINKET
 )
-ConchBlessing:AddCallback(ModCallbacks.MC_POST_NEW_ROOM, clearUpgradeJobs)
-ConchBlessing:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, clearUpgradeJobs)
+ConchBlessing:AddCallback(ModCallbacks.MC_POST_NEW_ROOM, function()
+    _dropJobsAtBoundary("room-change")
+    if lifecycleOpen then _completeRoomRecords("room entry") end
+end)
+ConchBlessing:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, function()
+    _dropJobsAtBoundary("game-exit")
+    lifecycleOpen = false
+end)
 -- A reload (luamod) drops this module's state: restore every pedestal it was
 -- converting and let the next load register with Magic Conch afresh.
 if ModCallbacks.MC_PRE_MOD_UNLOAD then
     ConchBlessing:AddCallback(ModCallbacks.MC_PRE_MOD_UNLOAD, function(_, unloaded)
         if unloaded ~= ConchBlessing and unloaded ~= ConchBlessing.originalMod then return end
-        clearUpgradeJobs()
+        finishJobsNow("unload")
         local template = ConchBlessing.template
         if template and type(template.clearAnimations) == "function" then template.clearAnimations() end
         unregisterMagicConchAPI()

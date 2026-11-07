@@ -573,7 +573,8 @@ class MorphBenchOracleTests(unittest.TestCase):
                     check=function(label,fn) checks[label]=fn; order[#order+1]=label end},
                     {__index=function() return function() end end}))
                 local source,target=7,ConchBlessing.ItemData.LIVE_EYE.id
-                local wheel={entity={SubType=1,cycle={2,target}}, source={source,1,2}, target={target,1,2}, turns={}}
+                local wheel={entity={SubType=1,cycle={2,target}}, source={source,1,2}, target={target,1,2}, turns={},
+                    heldAtOnce=true, frozenAtOnce=true, heldUpdates=60, unheld=0, atCommit={target,1,2}}
                 function wheel.entity:GetCollectibleCycle() return self.cycle end
                 local function turn(committed, t)
                     t=t or {}
@@ -583,7 +584,7 @@ class MorphBenchOracleTests(unittest.TestCase):
                 for i=1,3 do turn(false) end
                 local ctx={wheel=wheel, turnsBefore=3, job={status='complete',committed=true,endReason='complete'},
                     offShow={jobs=0, shown=1, kept=true, now='1,2,7'}}
-                turn(false,{locked=true}); turn(true); turn(true)
+                turn(true); turn(true)
                 if mutate then mutate(ctx,wheel,turn) end
                 local failed,skipped={},{}
                 for _,label in ipairs(order) do
@@ -596,28 +597,32 @@ class MorphBenchOracleTests(unittest.TestCase):
         ''')
         failed, skipped, count = self.lua.eval('cycleRun()')
         self.assertEqual((failed, skipped), ('', ''))
-        self.assertGreaterEqual(count, 7)
+        self.assertGreaterEqual(count, 8)
         defects = {
             'native turns keep the same circle': 'function(c,w) w.turns[2].circle=false end',
             'arrives as a Morph': 'function(c,w) w.turns[1].ptr=false end',
-            'commits while the pedestal turns':
+            'holds the circle on Dead Eye at once': 'function(c,w) w.heldAtOnce=false end',
+            'the upgrade commits':
                 "function(c) c.job.status='cancelled'; c.job.committed=false; c.job.endReason='expired' end",
-            'stayed locked': 'function(c,w) w.turns[4].locked=false end',
             'another choice shows': 'function(c) c.offShow.jobs=1 end',
-            'every other choice stayed': 'function(c,w) w.entity.cycle={7,2} end',
-            'turns through the new circle': 'function(c,w) w.turns[6].circle=false end',
+            'unturned, until the change': 'function(c,w,turn) table.insert(w.turns,4,{ptr=true,data=true,seed=true,morphs=0,circle=true,committed=false}) end',
+            'came back in its order': 'function(c,w) w.atCommit={1,2,ConchBlessing.ItemData.LIVE_EYE.id} end',
+            'turns through the new circle': 'function(c,w) w.turns[5].circle=false end',
         }
         for label, mutate in defects.items():
             with self.subTest(defect=label):
                 failed, _, _ = self.lua.eval('cycleRun(%s)' % mutate)
                 self.assertIn(label, failed)
                 self.assertEqual(len(failed.split(' | ')), 1, failed)
+        # A frozen job that is not reported frozen is a failure too.
+        failed, _, _ = self.lua.eval("cycleRun(function(c,w) w.frozenAtOnce=false end)")
+        self.assertIn('holds the circle on Dead Eye at once', failed)
         # A re-initializing turn that raised the Morph callback is followable.
         failed, _, _ = self.lua.eval("cycleRun(function(c,w) w.turns[1].ptr=false; w.turns[1].data=false; w.turns[1].morphs=1 end)")
         self.assertEqual(failed, '')
-        # No native turn before the change cannot prove anything: SKIP, not PASS.
-        _, skipped, _ = self.lua.eval("cycleRun(function(c,w) table.remove(w.turns,4) end)")
-        self.assertIn('turned before the change', skipped)
+        # Too few held updates cannot prove the hold: SKIP, not PASS.
+        _, skipped, _ = self.lua.eval("cycleRun(function(c,w) w.heldUpdates=5 end)")
+        self.assertIn('unturned, until the change', skipped)
 
     def test_bench_cue_oracle_matches_the_approved_schedule(self):
         for key, effect, impact, _ in ROWS:
