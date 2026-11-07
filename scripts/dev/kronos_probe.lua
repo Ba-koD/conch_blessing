@@ -113,7 +113,7 @@ local SCENARIOS = {
         give = { { C.COLLECTIBLE_BLOODSHOT_EYE, 1 }, { C.COLLECTIBLE_MONGO_BABY, 3 }, { C.COLLECTIBLE_SUCCUBUS, 1 },
             { C.COLLECTIBLE_CENSER, 1 }, { C.COLLECTIBLE_STAR_OF_BETHLEHEM, 2 } },
         enemies = { "fatty", 2 },
-        checks = { "no Bloodshot Eye body, but it shoots from you; Censer/Succubus/Star aura visible, no body/shadow",
+        checks = { "no Bloodshot Eye body, but its shots still come from close around you; Censer/Succubus/Star aura visible, no body/shadow",
             "3 Minisaacs; after one dies, the next room refills to 3" },
     },
     {
@@ -399,6 +399,26 @@ local function spawnTarget(player, ctx)
     npc:AddEntityFlags(EntityFlag.FLAG_FREEZE)
     npc.EntityCollisionClass = EntityCollisionClass.ENTCOLL_PLAYEROBJECTS
     ctx.target = npc
+    -- The freeze wears off: the Fatty then walked up and hit the player every
+    -- second (measured 2026-11-07). Pin it where it stands for the whole bench.
+    probe._pinnedTargets = probe._pinnedTargets or {}
+    probe._pinnedTargets[#probe._pinnedTargets + 1] = { npc = npc, pos = position }
+end
+
+if ModCallbacks.MC_POST_UPDATE then
+    ConchBlessing:AddCallback(ModCallbacks.MC_POST_UPDATE, function()
+        local pinned = probe._pinnedTargets
+        if not pinned then return end
+        for i = #pinned, 1, -1 do
+            local pin = pinned[i]
+            if pin.npc:Exists() and not pin.npc:IsDead() then
+                pin.npc.Position, pin.npc.Velocity = pin.pos, Vector.Zero
+                pin.npc.EntityCollisionClass = EntityCollisionClass.ENTCOLL_PLAYEROBJECTS
+            else
+                table.remove(pinned, i)
+            end
+        end
+    end)
 end
 
 -- Self-inflicted test hits only land once the player's invincibility is over.
@@ -425,11 +445,40 @@ end
 -- 12px away and had to cross the space where the familiars left by the earlier
 -- sections stand (GB Bug's returned ones, Tonsil), came from the proc-afflicted
 -- Fatty and was fired after a fixed wait; in game it never reached the damage
--- callback. This one sits on the side away from the player's face, clear of
--- anything that catches shots in front of the player, and has no spawner, like the
--- engine's own stray bullet in Two Faced Penny's hit_kinds bench.
+-- callback. This one sits on the side away from the player's face and has no
+-- spawner, like the engine's own stray bullet in Two Faced Penny's hit_kinds
+-- bench. Sitting behind the player was not enough: the vanilla Tonsil from the
+-- Tonsil section trails right there and ate the shot (measured 2026-11-07,
+-- collided with 3.103.0, the player's damage callbacks never ran). So the
+-- player first steps to the open spot farthest from every familiar and enemy
+-- (test positioning only); followers need several updates to catch up, and
+-- the shot meets the player on the next one.
 local BARRIER_SHOT_INSET = 4
 local BARRIER_SHOT_UPDATES = 30
+local BARRIER_CLEARANCE = 60
+local BARRIER_SPOTS = { Vector(0, 0), Vector(-160, 0), Vector(160, 0), Vector(0, -100), Vector(0, 100),
+    Vector(-160, -100), Vector(160, -100), Vector(-160, 100), Vector(160, 100) }
+
+local function openSpot()
+    local room = Game():GetRoom()
+    local others = {}
+    for _, e in ipairs(Isaac.GetRoomEntities()) do
+        if (e.Type == EntityType.ENTITY_FAMILIAR or e:IsActiveEnemy(false))
+            and e.EntityCollisionClass ~= EntityCollisionClass.ENTCOLL_NONE then
+            others[#others + 1] = e.Position
+        end
+    end
+    local best, bestGap = nil, -1
+    for _, offset in ipairs(BARRIER_SPOTS) do
+        local spot = room:GetCenterPos() + offset
+        if room:IsPositionInRoom(spot, 0) and room:GetGridCollisionAtPos(spot) == GridCollisionClass.COLLISION_NONE then
+            local gap = math.huge
+            for _, pos in ipairs(others) do gap = math.min(gap, pos:Distance(spot)) end
+            if gap > bestGap then best, bestGap = spot, gap end
+        end
+    end
+    return best, bestGap
+end
 
 local function facingOf(player)
     local head = type(player.GetHeadDirection) == "function" and player:GetHeadDirection() or nil
@@ -446,6 +495,8 @@ end
 
 local function spawnBarrierShot(player, ctx)
     local effects = player:GetEffects()
+    local spot, gap = openSpot()
+    if spot then player.Position, player.Velocity = spot, Vector.Zero end
     local shot = Isaac.Spawn(EntityType.ENTITY_PROJECTILE, 0, 0, barrierShotPosition(player), Vector.Zero, nil)
     local token = ConchBlessing.EIDDynamicTokens and ConchBlessing.EIDDynamicTokens.KRONOS_BLOCK
     ctx.barrierShot = {
@@ -455,7 +506,9 @@ local function spawnBarrierShot(player, ctx)
             and effects:GetCollectibleEffectNum(C.COLLECTIBLE_HOLY_MANTLE) or nil,
         head = type(player.GetHeadDirection) == "function" and player:GetHeadDirection() or nil,
         chance = type(token) == "function" and token(player) or nil,
+        clearance = gap,
     }
+    probe._barrierShot = ctx.barrierShot
 end
 
 -- Sampled every update until the shot is ignored, disappears or the bound passes;
@@ -483,10 +536,75 @@ end
 local function describeBarrierShot(ctx)
     local s = ctx.barrierShot or {}
     return string.format("blocks=%d sparks=%d; shot alive %d updates, gone after %s, last distance %s,"
-        .. " cannot hit player=%s; at spawn: damage cooldown=%s, Holy Mantle effects=%s, head=%s, ignore chance=%s",
+        .. " cannot hit player=%s; at spawn: damage cooldown=%s, Holy Mantle effects=%s, head=%s, ignore chance=%s;"
+        .. " collided with [%s]; player damage callback first=%d last=%d; nearest familiar or enemy %s",
         delta(ctx, "projectileBlocks"), delta(ctx, "blockSparks"), s.alive or 0, tostring(s.goneAt),
         s.distance and string.format("%.1f", s.distance) or "nil", tostring(s.cantHitPlayer == true),
-        tostring(s.cooldown), tostring(s.mantles), tostring(s.head), tostring(s.chance))
+        tostring(s.cooldown), tostring(s.mantles), tostring(s.head), tostring(s.chance),
+        table.concat(s.collisions or {}, ", "), s.damageFirst or 0, s.damageLast or 0,
+        s.clearance and (s.clearance == math.huge and "none" or string.format("%.0f away", s.clearance)) or "unknown")
+end
+
+-- What the barrier shot really touched, and whether the player's damage
+-- callbacks saw it at all (first and last priority): evidence only.
+local function barrierShotState(entity)
+    for _, ctxShot in ipairs({ probe._barrierShot }) do
+        if ctxShot and entity and ctxShot.hash == GetPtrHash(entity) then return ctxShot end
+    end
+end
+if ModCallbacks.MC_PRE_PROJECTILE_COLLISION then
+    ConchBlessing:AddCallback(ModCallbacks.MC_PRE_PROJECTILE_COLLISION, function(_, projectile, collider)
+        local state = barrierShotState(projectile)
+        if not (state and collider) then return end
+        state.collisions = state.collisions or {}
+        if #state.collisions >= 6 then return end
+        local marks = {}
+        for k, v in pairs(collider:GetData()) do
+            if type(k) == "string" and k:sub(1, 8) == "__kronos" and v == true then marks[#marks + 1] = k:sub(9) end
+        end
+        state.collisions[#state.collisions + 1] = string.format("%d.%d.%d%s%s", collider.Type, collider.Variant,
+            collider.SubType, collider.Visible and "" or " hidden", #marks > 0 and (" " .. table.concat(marks, "+")) or "")
+    end)
+end
+if ModCallbacks.MC_ENTITY_TAKE_DMG then
+    local priority = rawget(_G, "CallbackPriority") or {}
+    -- Every hit the player takes while the Tonsil section waits (evidence for
+    -- a cooldown that never runs out): source, flags, amount and frame.
+    ConchBlessing:AddCallback(ModCallbacks.MC_ENTITY_TAKE_DMG, function(_, entity, amount, flags, source)
+        local hits = probe._playerHits
+        if not (hits and entity and entity:ToPlayer()) then return end
+        local e = source and source.Entity
+        local key = string.format("%.0f from %s flags %s", amount,
+            e and string.format("%d.%d.%d%s", e.Type, e.Variant, e.SubType,
+                e.SpawnerEntity and string.format(" (spawner %d.%d)", e.SpawnerEntity.Type, e.SpawnerEntity.Variant) or "")
+                or ("type " .. tostring(source and source.Type)), tostring(flags))
+        if not hits[key] then
+            hits[key] = { n = 0, first = Game():GetFrameCount(), foreign = not (e and e:ToPlayer()) }
+            hits[#hits + 1] = key
+        end
+        hits[key].n = hits[key].n + 1
+        hits[key].last = Game():GetFrameCount()
+    end)
+    function probe.playerHitSummary()
+        local hits, rows = probe._playerHits or {}, {}
+        for _, key in ipairs(hits) do
+            local h = hits[key]
+            rows[#rows + 1] = string.format("%s x%d (frames %d-%d)", key, h.n, h.first, h.last)
+        end
+        return #rows > 0 and table.concat(rows, "; ") or "none"
+    end
+    local function watchDamage(field)
+        return function(_, entity, _, _, source)
+            local state = probe._barrierShot
+            if state and entity and entity:ToPlayer() and source and source.Type == EntityType.ENTITY_PROJECTILE then
+                state[field] = (state[field] or 0) + 1
+            end
+        end
+    end
+    if type(ConchBlessing.AddPriorityCallback) == "function" then
+        ConchBlessing:AddPriorityCallback(ModCallbacks.MC_ENTITY_TAKE_DMG, priority.IMPORTANT or -200, watchDamage("damageFirst"))
+        ConchBlessing:AddPriorityCallback(ModCallbacks.MC_ENTITY_TAKE_DMG, 10000, watchDamage("damageLast"))
+    end
 end
 
 probe._test = {
@@ -497,6 +615,50 @@ probe._test = {
     BARRIER_SHOT_INSET = BARRIER_SHOT_INSET,
     BARRIER_SHOT_UPDATES = BARRIER_SHOT_UPDATES,
 }
+
+-- Evidence for a damage baseline that is not the character's own: every
+-- familiar in the room (NO_QUERY included) with its Kronos marks, the
+-- temporary effects and each StatsAPI entry that touches damage.
+function probe.statEvidence(player)
+    local fams = {}
+    for _, e in ipairs(Isaac.GetRoomEntities()) do
+        if e.Type == EntityType.ENTITY_FAMILIAR then
+            local marks = {}
+            for k, v in pairs(e:GetData()) do
+                if type(k) == "string" and k:sub(1, 8) == "__kronos" and v == true then marks[#marks + 1] = k:sub(9) end
+            end
+            table.sort(marks)
+            fams[#fams + 1] = string.format("%d.%d%s%s", e.Variant, e.SubType, e.Visible and "" or " hidden",
+                #marks > 0 and (" " .. table.concat(marks, "+")) or "")
+        end
+    end
+    local effects = {}
+    local ok, list = pcall(function() return player:GetEffects():GetEffectsList() end)
+    if ok and list then
+        for i = 0, list.Size - 1 do
+            local effect = list:Get(i)
+            if effect and effect.Item then effects[#effects + 1] = string.format("%d x%d", effect.Item.ID, effect.Count) end
+        end
+    end
+    local stats = {}
+    local state = ConchBlessing.getUnifiedMultiplierState(player, ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers)
+    for kind, entries in pairs(type(state) == "table" and state or {}) do
+        if type(entries) == "table" then
+            for id, entry in pairs(entries) do
+                local damage = type(entry) == "table" and entry.Damage
+                if type(damage) == "table" then
+                    stats[#stats + 1] = string.format("%s[%s]=%s", tostring(kind), tostring(id),
+                        tostring(damage.cumulative or damage.value or damage.multiplier))
+                elseif type(damage) == "number" then
+                    stats[#stats + 1] = string.format("%s[%s]=%s", tostring(kind), tostring(id), tostring(damage))
+                end
+            end
+        end
+    end
+    table.sort(stats)
+    return string.format("damage %.4f; familiars [%s]; temporary effects [%s]; StatsAPI damage [%s]", player.Damage,
+        table.concat(fams, ", "), table.concat(effects, ", "), table.concat(stats, ", "))
+end
 
 local function buildPlan(plan)
     local act, wait, check, section, waitUntil = plan.act, plan.wait, plan.check, plan.section, plan.waitUntil
@@ -528,6 +690,7 @@ local function buildPlan(plan)
         player:AddTrinket(TrinketType.TRINKET_TONSIL, false)
         ctx.tonsilHits = 0
         ctx.tonsilLanded = 0
+        probe._playerHits = {}
         ctx.tonsilBefore = countEntities(EntityType.ENTITY_FAMILIAR, FamiliarVariant.TONSIL)
     end)
     -- Tonsil needs 6-12 landed hits. The damage cooldown can read 0 while the
@@ -539,7 +702,14 @@ local function buildPlan(plan)
     end
     for _ = 1, 40 do
         waitUntil(function(player, ctx)
-            return tonsilDone(ctx) or player:GetDamageCooldown() == 0
+            return tonsilDone(ctx) or player:GetDamageCooldown() == 0,
+                string.format("damage cooldown %d, frame %d, player frame %d, hearts %d/%d, attempts %d, landed %d;"
+                    .. " Star aura countdown %s, Star familiars %d; %s",
+                    player:GetDamageCooldown(), Game():GetFrameCount(), player.FrameCount, player:GetHearts(),
+                    player:GetMaxHearts(), ctx.tonsilHits or 0, ctx.tonsilLanded or 0,
+                    type(player.GetHallowedGroundCountdown) == "function" and tostring(player:GetHallowedGroundCountdown()) or "n/a",
+                    countEntities(EntityType.ENTITY_FAMILIAR, FamiliarVariant.STAR_OF_BETHLEHEM), probe.statEvidence(player))
+                    .. "; player hits [" .. (probe.playerHitSummary and probe.playerHitSummary() or "?") .. "]"
         end, 180, "Tonsil damage cooldown expires")
         act(function(player, ctx)
             if tonsilDone(ctx) then return end
@@ -560,6 +730,20 @@ local function buildPlan(plan)
                 or Game():GetFrameCount() - ctx.tonsilAttemptFrame >= 45
         end, 90, "Tonsil hit registered or retry delay elapsed")
     end
+    plan.note("hits the player took in the Tonsil section, by source", function()
+        return probe.playerHitSummary and probe.playerHitSummary() or "?"
+    end)
+    -- Only the test's own hits may count toward Tonsil: the target walking up
+    -- and hitting the player kept the damage cooldown from ever running out
+    -- (measured 2026-11-07, 208.0.0 x6). A foreign hit is a broken fixture.
+    plan.require("only the test's own hits landed (nothing else touched the player)", function()
+        local hits, foreign = probe._playerHits or {}, {}
+        for _, key in ipairs(hits) do
+            if hits[key].foreign then foreign[#foreign + 1] = key .. " x" .. hits[key].n end
+        end
+        probe._playerHits = nil
+        return #foreign == 0, #foreign == 0 and "only the test's own" or table.concat(foreign, "; ")
+    end)
     check("Tonsil appears and is not absorbed", function(player, ctx)
         local tonsils = countEntities(EntityType.ENTITY_FAMILIAR, FamiliarVariant.TONSIL) - ctx.tonsilBefore
         player:TryRemoveTrinket(TrinketType.TRINKET_TONSIL)
@@ -810,10 +994,20 @@ local function buildPlan(plan)
         ctx.hearts = player:GetHearts() + player:GetSoulHearts()
         spawnBarrierShot(player, ctx)
     end)
+    -- Testable only with nothing next to the player that could catch the shot
+    -- first (user rule 2026-11-07: prove the scene from live state).
+    plan.require("the barrier shot has open space around the player", function(_, ctx)
+        local s = ctx.barrierShot
+        local gap = s and s.clearance
+        return gap ~= nil and gap >= BARRIER_CLEARANCE and s.hash ~= nil,
+            string.format("nearest familiar or enemy %s (need %d); shot spawned=%s",
+                gap == math.huge and "none" or string.format("%.0f", gap or -1), BARRIER_CLEARANCE, tostring(s and s.hash ~= nil))
+    end)
     waitUntil(function(player, ctx) return followBarrierShot(player, ctx) end, BARRIER_SHOT_UPDATES + 1,
         "the barrier shot reaches the player")
     wait(5) -- a shot ignored once must not land again
     plan.note("barrier shot", function(_, ctx) return describeBarrierShot(ctx) end)
+    act(function() probe._barrierShot = nil end)
     eqCheck("projectile hit ignored", function(_, ctx) return delta(ctx, "projectileBlocks") end, 1)
     eqCheck("ignored hit shows its spark", function(_, ctx) return delta(ctx, "blockSparks") end, 1)
     check("no health lost", function(player, ctx)
@@ -929,7 +1123,7 @@ local function buildPlan(plan)
             { C.COLLECTIBLE_SUCCUBUS, 1 }, { C.COLLECTIBLE_CENSER, 1 }, { C.COLLECTIBLE_STAR_OF_BETHLEHEM, 2 } })
     end)
     wait(60)
-    eqCheck("hidden Bloodshot Eye pinned", function()
+    eqCheck("hidden Bloodshot Eye present", function()
         return countEntities(EntityType.ENTITY_FAMILIAR, FamiliarVariant.BLOODSHOT_EYE, -1,
             function(e) return e:GetData().__kronosBloodshotEye and not e.Visible end) end, 1)
     eqCheck("3 Minisaacs from Mongo Baby", function()
@@ -1179,6 +1373,7 @@ local function buildPlan(plan)
     end)
     eqCheck("granted Aquarius taken back", function(p) return owns(p, C.COLLECTIBLE_AQUARIUS) end, 0)
     eqCheck("ledger cleared", function() return totalAbsorbed() end, 0)
+    plan.note("after losing Kronos", function(player) return probe.statEvidence(player) end)
     else
         section("setup", nil)
         act(function(_, ctx)
@@ -1209,13 +1404,39 @@ local function buildPlan(plan)
         ConchBlessing.SaveManager.GetFloorSave(player).kronosManual = nil
         ctx.starAuraAPI = type(player.GetHallowedGroundCountdown) == "function"
             and type(player.SetHallowedGroundCountdown) == "function"
+        ctx.starAuraCleared = probe.statEvidence(player)
         Isaac.ExecuteCommand("goto s.bossrush")
     end)
+    plan.note("right after clearing familiar items and effects", function(_, ctx) return ctx.starAuraCleared end)
     waitUntil(function() return Game():GetRoom():GetType() == RoomType.ROOM_BOSSRUSH end, 120)
     eqCheck("entered real Boss Rush", function() return Game():GetRoom():GetType() end, RoomType.ROOM_BOSSRUSH)
     waitUntil(function(player, ctx)
         return not ctx.starAuraAPI or player:GetHallowedGroundCountdown() <= 0
     end, 120)
+    plan.note("in Boss Rush, before Kronos", function(player) return probe.statEvidence(player) end)
+    -- The engine puts the earlier sections' floor and permanent familiar effects
+    -- (Monster Manual, Soul of Lilith, ...) back on every room entry, so the ones
+    -- cleared above return here (measured 2026-11-07: Succubus came back and its
+    -- x1.5 aura made the baseline 5.25). Clear them again inside Boss Rush, where
+    -- the section stays, and prove the baseline clean before measuring.
+    act(function(player)
+        for id in pairs(ConchBlessing.kronos._test.readTemporaryFamiliarEffects(player)) do
+            player:GetEffects():RemoveCollectibleEffect(id, -1)
+        end
+        player:AddCacheFlags(CacheFlag.CACHE_FAMILIARS | CacheFlag.CACHE_DAMAGE | CacheFlag.CACHE_FIREDELAY)
+        player:EvaluateItems()
+    end)
+    wait(10)
+    plan.require("Boss Rush baseline is clean (no familiar effects, no stat aura familiar)", function(player)
+        local effects = 0
+        for _ in pairs(ConchBlessing.kronos._test.readTemporaryFamiliarEffects(player)) do effects = effects + 1 end
+        local auras = 0
+        for _, variant in ipairs({ FamiliarVariant.SUCCUBUS, FamiliarVariant.CENSER, FamiliarVariant.STAR_OF_BETHLEHEM }) do
+            auras = auras + countEntities(EntityType.ENTITY_FAMILIAR, variant)
+        end
+        return effects == 0 and auras == 0, string.format("familiar effects %d, aura familiars %d; %s", effects, auras,
+            probe.statEvidence(player))
+    end)
     act(function(player)
         player:AddCollectible(KRONOS_ID, 0, false)
     end)
@@ -1233,8 +1454,11 @@ local function buildPlan(plan)
         player:EvaluateItems()
         ctx.starAuraBaseDamage = player.Damage
         ctx.starAuraBaseDelay = player.MaxFireDelay
+        ctx.starAuraEvidence = probe.statEvidence(player)
         player:AddCollectible(C.COLLECTIBLE_STAR_OF_BETHLEHEM, 0, false)
     end)
+    plan.note("the baseline before the Star (familiars, temporary effects, StatsAPI damage)",
+        function(_, ctx) return ctx.starAuraEvidence end)
     waitUntil(function(player, ctx)
         return absorbed(player, C.COLLECTIBLE_STAR_OF_BETHLEHEM) == 1
             and (not ctx.starAuraAPI or player:GetHallowedGroundCountdown() > 0)
@@ -1372,7 +1596,7 @@ ConchBlessing:AddCallback(ModCallbacks.MC_POST_UPDATE, function()
         probe._captionWaiting = nil
     end
 end)
-ConchBlessing:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, function() probe._captionWaiting = nil end)
+ConchBlessing:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, function() probe._captionWaiting, probe._barrierShot, probe._playerHits, probe._pinnedTargets = nil, nil, nil, nil end)
 
 ConchBlessing.kronosProbe = probe
 return probe

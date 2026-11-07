@@ -41,7 +41,20 @@ class KronosBarrierFixture(unittest.TestCase):
             Vector.Zero = Vector(0, 0)
 
             frame = 0
-            Game = function() return { GetFrameCount=function() return frame end } end
+            -- A 1x1 room: the bench steps the player to the open spot farthest
+            -- from every familiar and enemy before the shot.
+            GridCollisionClass = { COLLISION_NONE = 0 }
+            EntityCollisionClass = { ENTCOLL_NONE = 0, ENTCOLL_ALL = 4 }
+            room = { center = Vector(320, 280) }
+            function room:GetCenterPos() return self.center end
+            function room:IsPositionInRoom(pos) return pos.X >= 60 and pos.X <= 580 and pos.Y >= 140 and pos.Y <= 420 end
+            function room:GetGridCollisionAtPos() return GridCollisionClass.COLLISION_NONE end
+            Game = function() return { GetFrameCount=function() return frame end, GetRoom=function() return room end } end
+            Isaac.GetRoomEntities = function() return world.others end
+            function familiarAt(pos)
+                return { Type=EntityType.ENTITY_FAMILIAR, Position=pos, EntityCollisionClass=EntityCollisionClass.ENTCOLL_ALL,
+                    IsActiveEnemy=function() return false end }
+            end
             GetPtrHash = function(e) return e.hash end
             EntityPtr = function(e)
                 return setmetatable({}, {__index=function(_, k) if k == 'Ref' and e.alive then return e end end})
@@ -51,7 +64,7 @@ class KronosBarrierFixture(unittest.TestCase):
             -- Player one: holds Kronos; Kronos absorbs familiars on the next update.
             SWORN = CollectibleType.COLLECTIBLE_SWORN_PROTECTOR
             world = { owned = {}, cooldown = 0, head = Direction.DOWN, hearts = 12, shots = {},
-                blockers = {}, absorbDelay = 1, pending = 0 }
+                blockers = {}, absorbDelay = 1, pending = 0, others = {} }
             player = { Position = Vector(300, 200), hash = 1 }
             function player:GetCollectibleNum(id) return world.owned[id] or 0 end
             function player:AddCollectible(id) world.owned[id] = (world.owned[id] or 0) + 1; world.pending = world.absorbDelay end
@@ -235,6 +248,36 @@ class KronosBarrierFixture(unittest.TestCase):
             assert(not results['ignored hit shows its spark'].ok)
             assert(results['no health lost'].ok)
             assert(notes:find('blocks=0 sparks=0', 1, true) and notes:find('gone after 1', 1, true), notes)
+        ''')
+
+    def test_a_follower_behind_the_player_cannot_catch_the_shot(self):
+        self.run_lua('''
+            -- The vanilla Tonsil trails right behind the player, where the shot sits
+            -- (measured 2026-11-07: it ate the shot). It stays put; the player steps away.
+            local tonsil = player.Position + Vector(0, -12)
+            world.others[1] = familiarAt(tonsil)
+            world.blockers[1] = function(shot) return shot.Position:Distance(tonsil) < 13 end
+            local control = probe._test.barrierShotPosition(player)
+            assert(control:Distance(tonsil) < 13, 'control: the old spot is inside the Tonsil')
+            local results, notes = runBarrier()
+            assert(results['the barrier shot has open space around the player'].ok,
+                results['the barrier shot has open space around the player'].detail)
+            assert(results['projectile hit ignored'].ok, notes)
+            assert(player.Position:Distance(tonsil) >= 60, 'the player must step away from the follower')
+            assert(notes:find('nearest familiar or enemy', 1, true) and notes:find('away', 1, true), notes)
+        ''')
+
+    def test_a_crowded_room_stops_the_case_as_a_broken_fixture(self):
+        self.run_lua('''
+            -- Something next to every open spot: no testable place for the shot.
+            for _, offset in ipairs({ Vector(0, 0), Vector(-160, 0), Vector(160, 0), Vector(0, -100), Vector(0, 100),
+                Vector(-160, -100), Vector(160, -100), Vector(-160, 100), Vector(160, 100) }) do
+                world.others[#world.others + 1] = familiarAt(room.center + offset + Vector(10, 0))
+            end
+            local results = runBarrier()
+            local ready = results['the barrier shot has open space around the player']
+            assert(ready and not ready.ok, 'a crowded room must fail the prerequisite')
+            assert(ready.detail:find('need 60', 1, true), ready.detail)
         ''')
 
     def test_a_shot_that_cannot_hit_the_player_is_reported(self):

@@ -6,13 +6,13 @@ local H = require("scripts.dev.item_test_support")
 local Dynamic = require("scripts.dev.item_test_dynamic")
 local Isolation = require("scripts.dev.test_isolation")
 local Scenarios = require("scripts.dev.item_scenarios")
-for _, module in ipairs({"synergies","conditions","damage","kronos_synergies","kronos_batches","kronos_sources","kronos_forms","pools","real_eyes","eye_upgrades","penny"}) do
+for _, module in ipairs({"synergies","conditions","damage","kronos_synergies","kronos_batches","kronos_sources","kronos_forms","kronos_characters","kronos_bloodshot","pools","real_eyes","eye_upgrades","penny"}) do
     require("scripts.dev.item_test_" .. module)
 end
 local CycleCompare = require("scripts.dev.item_test_cycle_compare")
 local BirthrightParity = require("scripts.dev.item_test_birthright_parity")
 local contracts = {}
-for _, module in ipairs({ "stats", "combat", "special", "rat", "conch_pearl", "tiger", "ox" }) do
+for _, module in ipairs({ "stats", "combat", "special", "rat", "conch_pearl", "tiger", "ox", "kids_menu" }) do
     for key, contract in pairs(require("scripts.dev.item_test_" .. module)) do
         assert(not contracts[key], "duplicate item contract: " .. key)
         contracts[key] = contract
@@ -331,6 +331,15 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
     end
     if key == "SEVERED_OATH" and case == "birthright" then
         TestBench.startSuite("conch_test severed_oath birthright", BirthrightParity.commands); return
+    end
+    if key == "KIDS_MENU" and case == "parity" then
+        TestBench.startSuite("conch_test kids_menu parity", BirthrightParity.kidsCommands); return
+    end
+    if key == "KRONOS" and case == "characters" then
+        -- A fresh run as every selectable character, each with Kronos.
+        local ok, err = pcall(TestBench.startSuite, "conch_test kronos characters", Scenarios.commands(key, "characters"))
+        if not ok then out("FAIL suite setup: " .. tostring(err)) end
+        return
     end
     if key == "RAT" and case == "characters" then
         -- A fresh run as every selectable character, each fake against its original.

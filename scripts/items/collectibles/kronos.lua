@@ -1842,8 +1842,10 @@ function ConchBlessing.kronos._updateStarOfBethlehemAnchors(player)
     end
 end
 
---- Bloodshot Eye: pinned on the player. Its tears and lasers are separate
---- entities, so hiding the familiar entity (body and floor shadow) keeps them visible.
+--- Bloodshot Eye: hidden, with no body contact, on its own orbit. It shoots
+--- outward from the player, so pinned on the player (or at orbit radius 0) it
+--- never fires (measured 2026-11-07, conch_test kronos bloodshot_probe); its
+--- shots are separate entities and stay visible.
 local function spawnInvisibleBloodshotEye(player)
     local ent = Isaac.Spawn(EntityType.ENTITY_FAMILIAR, FamiliarVariant.BLOODSHOT_EYE, 0, player.Position, Vector.Zero, player)
     local fam = ent and ent:ToFamiliar() or nil
@@ -1888,9 +1890,7 @@ function ConchBlessing.kronos._updateBloodshotEyeAnchors(player)
     local depth = tonumber(ConchBlessing.kronos.data.anchorDepthOffset) or 0
     for _, fam in ipairs(list) do
         if fam and fam:Exists() then
-            fam.Position = player.Position
             fam.DepthOffset = depth
-            fam.Velocity = Vector.Zero
             fam.Visible = false
         end
     end
@@ -2417,18 +2417,13 @@ ConchBlessing.kronos.onFamiliarUpdate = function(_, fam)
         return
     end
     
-    -- Handle Bloodshot Eye (hidden, fixed to player position)
+    -- Handle Bloodshot Eye (hidden, on its own orbit: pinned it never fires)
     if f.Variant == FamiliarVariant.BLOODSHOT_EYE and fd.__kronosBloodshotEye then
         f.Visible = false
         f:AddEntityFlags(EntityFlag.FLAG_NO_KNOCKBACK | EntityFlag.FLAG_NO_PHYSICS_KNOCKBACK)
         f.EntityCollisionClass = EntityCollisionClass.ENTCOLL_NONE
         f.GridCollisionClass = GridCollisionClass.COLLISION_NONE
-        local player = f.Player
-        if player then
-            f.Position = player.Position
-            f.Velocity = Vector.Zero
-            f.DepthOffset = tonumber(ConchBlessing.kronos.data.anchorDepthOffset) or 0
-        end
+        f.DepthOffset = tonumber(ConchBlessing.kronos.data.anchorDepthOffset) or 0
         return
     end
 
