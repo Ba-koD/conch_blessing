@@ -632,6 +632,13 @@ return {
                 "#Does not turn into an item you already hold whose copies don't stack.",
             },
         },
+        KIDS_MENU = {
+            name = "Family Combo", description = "One more, please!",
+            eid = {
+                "Adds a familiar item to every item pedestal's cycle, switching every second and allowing you to choose one of the two items.",
+                "#{{Warning}} Requires REPENTOGON!",
+            },
+        },
 
         -- Familiars
         TIME_MONEY = {

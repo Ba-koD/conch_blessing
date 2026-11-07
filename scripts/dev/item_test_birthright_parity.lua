@@ -17,7 +17,13 @@ local M = {commands = {}}
 local function own() return CollectibleType.COLLECTIBLE_BOOK_OF_SHADOWS end
 local function spare() return CollectibleType.COLLECTIBLE_BOBS_ROTTEN_HEAD end
 local function pedestalActive() return CollectibleType.COLLECTIBLE_YUM_HEART end
-local function passive() return CollectibleType.COLLECTIBLE_BREAKFAST end
+-- Breakfast is food, which Binge Eater may treat on its own; its arm uses a
+-- plain passive and measures food pedestals in a case of their own.
+local function passive(arm)
+    return (arm == "binge" or arm == "kids") and CollectibleType.COLLECTIBLE_SAD_ONION or CollectibleType.COLLECTIBLE_BREAKFAST
+end
+
+local function kidsId() return ConchBlessing.ItemData.KIDS_MENU.id end
 
 local function oathId() return ConchBlessing.ItemData.SEVERED_OATH.id end
 
@@ -35,7 +41,26 @@ local function spawn(offset, id)
 end
 
 local ARM_LABELS = {birthright = "vanilla Birthright control: ", native = "Tainted Isaac alone: ",
-    oath = "Severed Oath: "}
+    oath = "Severed Oath: ", binge = "vanilla Binge Eater: ", kids = "Family Combo: "}
+
+-- Family Combo's choice is a familiar item somewhere in the circle (the
+-- pedestal turns, so it may be the one on show).
+local function lastIsFamiliar(p)
+    local config = Isaac.GetItemConfig()
+    local ids = p:GetCollectibleCycle()
+    ids[#ids + 1] = p.SubType
+    for _, id in ipairs(ids) do
+        local item = config:GetCollectible(id)
+        if item and item.Type == ItemType.ITEM_FAMILIAR then return true end
+    end
+    return false
+end
+
+local function ringText(p)
+    local ids = {}
+    for _, id in ipairs(p:GetCollectibleCycle()) do ids[#ids + 1] = tostring(id) end
+    return table.concat(ids, ",")
+end
 
 local function label(ctx, text)
     return (ARM_LABELS[ctx.arm] or "") .. text
@@ -47,7 +72,9 @@ local function expectChoices(plan, text, field, want)
         local p = find(ctx[field])
         if not p then return false, "pedestal at " .. tostring(ctx[field]) .. " is gone" end
         local got = #p:GetCollectibleCycle()
-        return got == want, label(ctx, string.format("item=%d extra choices=%d expected=%d", p.SubType, got, want))
+        local kind = ctx.arm ~= "kids" or want == 0 or lastIsFamiliar(p)
+        return got == want and kind, label(ctx, string.format("item=%d extra choices=%d [%s] expected=%d%s", p.SubType, got,
+            ringText(p), want, kind and "" or " (the extra choice is not a familiar)"))
     end)
 end
 
@@ -56,7 +83,8 @@ local function expectAll(plan, text, want)
         local stock, wrong = C.stock(), {}
         for _, p in ipairs(stock) do
             local got = #p:GetCollectibleCycle()
-            if got ~= want then wrong[#wrong + 1] = p.SubType .. ":" .. got end
+            local kind = ctx.arm ~= "kids" or want == 0 or lastIsFamiliar(p)
+            if got ~= want or not kind then wrong[#wrong + 1] = p.SubType .. ":" .. got .. "[" .. ringText(p) .. "]" end
         end
         if #stock == 0 then return false, "no pedestal to observe" end
         return #wrong == 0, label(ctx, string.format("%d pedestals, expected %d extra each; differing [%s]",
@@ -142,6 +170,8 @@ end
 local function hold(plan, arm, slot)
     plan.act(function(player)
         if arm == "birthright" then player:AddCollectible(CollectibleType.COLLECTIBLE_BIRTHRIGHT, 0, false)
+        elseif arm == "binge" then player:AddCollectible(CollectibleType.COLLECTIBLE_BINGE_EATER, 0, false)
+        elseif arm == "kids" then player:AddCollectible(kidsId(), 0, false)
         else player:AddCollectible(oathId(), 0, false, slot or ActiveSlot.SLOT_PRIMARY) end
     end)
     if arm == "oath" then pinOrdinary(plan) end
@@ -168,7 +198,7 @@ cases.seen_room = function(plan, arm)
     hold(plan, arm)
     travel(plan, "treasure", "come back holding it")
     expectAll(plan, "seen stock stays as it was", 0)
-    plan.act(function(_, ctx) ctx.new = spawn(Vector(0, -80), passive()) end)
+    plan.act(function(_, ctx) ctx.new = spawn(Vector(0, -80), passive(arm)) end)
     plan.wait(8)
     expectChoices(plan, "a pedestal created now gains one", "new", 1)
 end
@@ -179,7 +209,7 @@ end
 cases.mid_room = function(plan, arm)
     plan.act(function(player, ctx)
         player:AddCollectible(own(), 0, false, ActiveSlot.SLOT_PRIMARY)
-        ctx.existing = spawn(Vector(-120, 0), passive())
+        ctx.existing = spawn(Vector(-120, 0), passive(arm))
         ctx.swap = spawn(Vector(120, 0), arm == "oath" and oathId() or pedestalActive())
     end)
     plan.wait(8)
@@ -194,7 +224,7 @@ cases.mid_room = function(plan, arm)
     end
     expectChoices(plan, "the old active dropped onto the pedestal gains nothing", "swap", 0)
     expectChoices(plan, "a pedestal that existed before stays as it was", "existing", 0)
-    plan.act(function(_, ctx) ctx.new = spawn(Vector(0, -80), passive()) end)
+    plan.act(function(_, ctx) ctx.new = spawn(Vector(0, -80), passive(arm)) end)
     plan.wait(8)
     expectChoices(plan, "a pedestal created afterwards gains one", "new", 1)
 end
@@ -205,7 +235,7 @@ cases.swap_while_held = function(plan, arm)
     plan.act(function(player)
         player:AddCollectible(CollectibleType.COLLECTIBLE_SCHOOLBAG, 0, false)
         player:AddCollectible(own(), 0, false, ActiveSlot.SLOT_PRIMARY)
-        if arm == "birthright" then player:AddCollectible(spare(), 0, false, ActiveSlot.SLOT_SECONDARY) end
+        if arm ~= "oath" then player:AddCollectible(spare(), 0, false, ActiveSlot.SLOT_SECONDARY) end
     end)
     hold(plan, arm, ActiveSlot.SLOT_SECONDARY)
     plan.require("both active slots are full", function(player)
@@ -238,7 +268,7 @@ end
 -- A reroll makes a new pedestal, which gains one again.
 cases.dice = function(plan, arm)
     hold(plan, arm)
-    plan.act(function(_, ctx) ctx.new = spawn(Vector(0, -80), passive()) end)
+    plan.act(function(_, ctx) ctx.new = spawn(Vector(0, -80), passive(arm)) end)
     plan.wait(8)
     expectChoices(plan, "a pedestal created while held gains one", "new", 1)
     for roll = 1, 2 do
@@ -251,7 +281,7 @@ end
 -- A Diplopia copy is a new pedestal of its own.
 cases.copy = function(plan, arm)
     hold(plan, arm)
-    plan.act(function(_, ctx) ctx.new = spawn(Vector(0, -80), passive()) end)
+    plan.act(function(_, ctx) ctx.new = spawn(Vector(0, -80), passive(arm)) end)
     plan.wait(8)
     expectChoices(plan, "a pedestal created while held gains one", "new", 1)
     plan.act(function(player, ctx)
@@ -338,7 +368,7 @@ local function taintedIsaac(plan, arm)
     expectAll(plan, "a revisit adds nothing more", 1 + extra)
     plan.act(function(_, ctx)
         for _, p in ipairs(C.stock()) do p:Remove() end
-        ctx.new = spawn(Vector(0, -80), passive())
+        ctx.new = spawn(Vector(0, -80), passive(arm))
     end)
     plan.wait(8)
     expectChoices(plan, "a pedestal created now", "new", 1 + extra)
@@ -423,7 +453,7 @@ cases.golden_binge = function(plan, arm)
     plan.act(function(player) player:AddCollectible(CollectibleType.COLLECTIBLE_BINGE_EATER, 0, false) end)
     hold(plan, arm)
     plan.act(function(_, ctx)
-        ctx.new = spawn(Vector(0, -80), passive())
+        ctx.new = spawn(Vector(0, -80), passive(arm))
         GoldenItems.Pickup.GOLDEN_ITEM:TurnItemGold(find(ctx.new), false)
     end)
     for second = 1, 3 do
@@ -438,12 +468,132 @@ cases.golden_binge = function(plan, arm)
     end
 end
 
+-- Losing the item: what it already gave stays, and nothing new gains.
+local function drop(plan, arm)
+    plan.act(function(player)
+        if arm == "birthright" then player:RemoveCollectible(CollectibleType.COLLECTIBLE_BIRTHRIGHT)
+        elseif arm == "binge" then player:RemoveCollectible(CollectibleType.COLLECTIBLE_BINGE_EATER)
+        elseif arm == "kids" then player:RemoveCollectible(kidsId())
+        else player:RemoveCollectible(oathId(), true, ActiveSlot.SLOT_PRIMARY) end
+    end)
+    plan.wait(30)
+end
+
+cases.removal = function(plan, arm)
+    hold(plan, arm)
+    plan.act(function(_, ctx) ctx.new = spawn(Vector(0, -80), passive(arm)) end)
+    plan.wait(8)
+    expectChoices(plan, "a pedestal created while held gains one", "new", 1)
+    drop(plan, arm)
+    expectChoices(plan, "it keeps its choice after the item is lost", "new", 1)
+    travel(plan, "treasure", "first visit to the treasure room without the item")
+    expectAll(plan, "stock created without the item has no extra choice", 0)
+    travel(plan, "origin", "come back to the earlier pedestal")
+    expectChoices(plan, "a revisit after the loss keeps the choice", "new", 1)
+    plan.act(function(_, ctx) ctx.later = spawn(Vector(0, 80), passive(arm)) end)
+    plan.wait(8)
+    expectChoices(plan, "a pedestal created after the loss gains nothing", "later", 0)
+end
+
+-- Food and quest pedestals: Binge Eater gave each one food (measured
+-- 2026-11-07, the Polaroid and Key Piece 1 included), so each gains one.
+cases.special_items = function(plan, arm)
+    hold(plan, arm)
+    plan.act(function(_, ctx)
+        ctx.food = spawn(Vector(-120, 0), CollectibleType.COLLECTIBLE_BREAKFAST)
+        ctx.quest = spawn(Vector(120, 0), CollectibleType.COLLECTIBLE_POLAROID)
+        ctx.key = spawn(Vector(0, -80), CollectibleType.COLLECTIBLE_KEY_PIECE_1)
+        ctx.plain = spawn(Vector(0, 80), CollectibleType.COLLECTIBLE_SAD_ONION)
+    end)
+    plan.wait(8)
+    for _, field in ipairs({"food", "quest", "key", "plain"}) do
+        expectChoices(plan, "a new " .. field .. " pedestal gains one", field, 1)
+    end
+    plan.wait(64)
+    plan.note("the same pedestals two turns later", function(_, ctx)
+        local rows = {}
+        for _, field in ipairs({"food", "quest", "key", "plain"}) do
+            local p = find(ctx[field])
+            rows[#rows + 1] = p and string.format("%s=%d[%s]", field, p.SubType, ringText(p)) or field .. "=gone"
+        end
+        return table.concat(rows, " ")
+    end)
+end
+
+-- Two copies held: still one choice per pedestal (Binge Eater is the control).
+cases.stack = function(plan, arm)
+    hold(plan, arm)
+    hold(plan, arm)
+    plan.act(function(_, ctx) ctx.new = spawn(Vector(0, -80), passive(arm)) end)
+    plan.wait(8)
+    expectChoices(plan, "a pedestal created with two copies held gains one", "new", 1)
+end
+
+-- A Magic Conch upgrade of a pedestal that already has its extra choice: the
+-- choice stays through the held queue and nothing is added again.
+cases.upgrade_held = function(plan, arm)
+    hold(plan, arm)
+    plan.act(function(_, ctx) ctx.new = spawn(Vector(0, -80), CollectibleType.COLLECTIBLE_DEAD_EYE) end)
+    plan.wait(8)
+    expectChoices(plan, "a Dead Eye pedestal created while held gains one", "new", 1)
+    plan.act(function(_, ctx)
+        local p = assert(find(ctx.new), "pedestal gone")
+        ctx.extra = p:GetCollectibleCycle()[1]
+    end)
+    -- Only the choice on show evolves: wait for Dead Eye.
+    plan.waitUntil(function(_, ctx)
+        local p = find(ctx.new)
+        return p ~= nil and p.SubType == CollectibleType.COLLECTIBLE_DEAD_EYE, "showing " .. tostring(p and p.SubType)
+    end, 120, "Dead Eye on show")
+    plan.act(function(player, ctx)
+        local p = assert(find(ctx.new), "pedestal gone")
+        ctx.job = assert(ConchBlessing.upgrade.queuePickup(p, "LIVE_EYE", player), "the upgrade was refused")
+        ctx.heldAtOnce = #p:GetCollectibleCycle() == 0
+    end)
+    plan.check("the upgrade holds the pedestal on Dead Eye", function(_, ctx)
+        return ctx.heldAtOnce, "queue emptied at the answer=" .. tostring(ctx.heldAtOnce)
+    end)
+    plan.waitUntil(function(_, ctx)
+        return ctx.job.status == "complete" or ctx.job.status == "cancelled", "job " .. tostring(ctx.job.status)
+    end, 400, "the upgrade finishes")
+    plan.wait(4)
+    plan.check("Live Eye keeps the same extra choice, given once", function(_, ctx)
+        local p = find(ctx.new)
+        if not p then return false, "pedestal gone" end
+        local ids = { p.SubType }
+        for _, id in ipairs(p:GetCollectibleCycle()) do ids[#ids + 1] = id end
+        local live, extra = 0, 0
+        for _, id in ipairs(ids) do
+            if id == ConchBlessing.ItemData.LIVE_EYE.id then live = live + 1 end
+            if id == ctx.extra then extra = extra + 1 end
+        end
+        return ctx.job.committed == true and #ids == 2 and live == 1 and extra == 1,
+            label(ctx, "circle [" .. table.concat(ids, ",") .. "] extra " .. tostring(ctx.extra))
+    end)
+end
+
 local order = {"first_visit", "seen_room", "mid_room", "swap_while_held", "dice", "copy", "death_certificate",
-    "damocles", "golden_binge"}
+    "damocles", "removal", "golden_binge"}
 for _, case in ipairs(order) do
     for _, arm in ipairs({"birthright", "oath"}) do
         M.commands[#M.commands + 1] = S.add("SEVERED_OATH", "birthright_" .. case .. "_" .. arm,
             {conditions = true, birthright_parity = true}, function(plan)
+                setup(plan, case, arm)
+                cases[case](plan, arm)
+            end)
+    end
+end
+
+-- Family Combo against vanilla Binge Eater (user request 2026-11-07: it must
+-- work the way Binge Eater does, which measured exactly like Birthright).
+-- Every case runs once with Binge Eater (the control) and once with Family
+-- Combo, each on a fresh run (conch_test kids_menu parity).
+M.kidsCommands = {}
+for _, case in ipairs({"first_visit", "seen_room", "mid_room", "swap_while_held", "dice", "copy",
+    "death_certificate", "damocles", "removal", "special_items", "stack", "upgrade_held"}) do
+    for _, arm in ipairs({"binge", "kids"}) do
+        M.kidsCommands[#M.kidsCommands + 1] = S.add("KIDS_MENU", "parity_" .. case .. "_" .. arm,
+            {conditions = true, binge_parity = true}, function(plan)
                 setup(plan, case, arm)
                 cases[case](plan, arm)
             end)

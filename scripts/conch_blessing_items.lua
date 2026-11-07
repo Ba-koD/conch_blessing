@@ -891,6 +891,30 @@ ConchBlessing.ItemData = {
         },
     },
 
+    KIDS_MENU = {
+        -- The Magic Conch's Binge Eater: a pedestal made while it is held cycles
+        -- through a familiar item instead of food (user design 2026-11-07), a
+        -- high ceiling beside Kronos rather than a synergy with it.
+        type = "passive",
+        id = Isaac.GetItemIdByName("Family Combo"),
+        gfx = "kids_menu.png",
+        pool = { RoomType.ROOM_SECRET },
+        quality = 4,
+        hidden = false,
+        shopprice = 20,
+        devilprice = 2,
+        origin = { id = CollectibleType.COLLECTIBLE_BINGE_EATER, type = "collectible" },
+        flag = "positive",
+        script = "scripts/items/collectibles/kids_menu",
+        callbacks = {
+            gameStarted = "kidsmenu.onGameStarted",
+            postNewRoom = "kidsmenu.onNewRoom",
+            postPickupInit = "kidsmenu.onPickupInit",
+            postPickupUpdate = "kidsmenu.onPickupUpdate",
+            preGameExit = "kidsmenu.onGameExit",
+        },
+    },
+
     -- The twelve zodiac items (십이지) close the collectible group in their own
     -- order, 자 … 해, followed by the familiars and trinkets.
     RAT = {

@@ -44,4 +44,5 @@ return {
     { key = "CONCH_PEARL" },
     { key = "TIGER" },
     { key = "OX" },
+    { key = "KIDS_MENU" },
 }

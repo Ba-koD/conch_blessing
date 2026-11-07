@@ -34,6 +34,9 @@ function M.scenario(key,name)
     if key=="SEVERED_OATH" and name:match("^birthright_") then
         return false,"Birthright/Oath comparison visits rooms and consumes pools; each arm requires a fresh run"
     end
+    if key=="KIDS_MENU" and name:match("^parity_") then
+        return false,"Binge Eater/Family Combo comparison visits rooms and changes pedestals; each arm requires a fresh run"
+    end
     if key=="KRONOS" and name:match("^transformation_") then
         return false,"transformation progress is native player state that removing items cannot restore"
     end

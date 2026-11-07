@@ -178,7 +178,8 @@ class CycleCompareTests(unittest.TestCase):
         self.load_plans()
         self.lua.execute('ActiveSlot={SLOT_PRIMARY=0,SLOT_SECONDARY=1}')
         parity = self.lua.execute((ROOT / "scripts/dev/item_test_birthright_parity.lua").read_text(encoding="utf-8"))
-        self.assertEqual(len(parity.commands), 20)
+        self.assertEqual(len(parity.commands), 22)
+        self.assertEqual(len(parity.kidsCommands), 24)
         self.lua.execute('''
             local arms={}
             for _,row in ipairs(S.rows) do
@@ -193,7 +194,7 @@ class CycleCompareTests(unittest.TestCase):
                 end
             end
             for _,case in ipairs({'first_visit','seen_room','mid_room','swap_while_held','dice','copy','death_certificate',
-                    'damocles','golden_binge'}) do
+                    'damocles','removal','golden_binge'}) do
                 assert(arms[case]=='birthright;oath;',case..' lacks its Birthright control or Oath arm')
             end
             -- Tainted Isaac's own cycle is the control for the Oath stacking on it.
