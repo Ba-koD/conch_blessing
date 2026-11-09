@@ -1,0 +1,41 @@
+mode	direction	step	size	cell_x	cell_y	frame	slot1_x	slot1_bottom	slot1_scale	slot1_min_top	slot2_x	slot2_bottom	slot2_scale	slot2_min_top
+shell-base	front	0	32	0	0	1								
+shell-base	front	1	32	48	0	2								
+shell-base	front	2	32	96	0	3								
+shell-base	front	3	32	144	0	4								
+shell-base	front	4	32	192	0	5								
+shell-base	front	5	32	240	0	6								
+shell-base	front	6	32	288	0	7								
+shell-base	front	7	32	336	0	8								
+carry-one	front	0	32	0	48	9	16	28	0.5625	20				
+carry-one	front	1	32	48	48	10	16	28	0.5625	20				
+carry-one	front	2	32	96	48	11	16	27	0.5625	19				
+carry-one	front	3	32	144	48	12	16	28	0.5625	20				
+carry-one	front	4	32	192	48	13	16	28	0.5625	20				
+carry-one	front	5	32	240	48	14	16	28	0.5625	20				
+carry-one	front	6	32	288	48	15	16	27	0.5625	19				
+carry-one	front	7	32	336	48	16	16	28	0.5625	20				
+bffs-empty	front	0	48	0	96	17								
+bffs-empty	front	1	48	48	96	18								
+bffs-empty	front	2	48	96	96	19								
+bffs-empty	front	3	48	144	96	20								
+bffs-empty	front	4	48	192	96	21								
+bffs-empty	front	5	48	240	96	22								
+bffs-empty	front	6	48	288	96	23								
+bffs-empty	front	7	48	336	96	24								
+bffs-one	front	0	48	0	144	25	7	19.5	0.75					
+bffs-one	front	1	48	48	144	26	7	19.5	0.75					
+bffs-one	front	2	48	96	144	27	7	18.5	0.75					
+bffs-one	front	3	48	144	144	28	7	19.5	0.75					
+bffs-one	front	4	48	192	144	29	7	19.5	0.75					
+bffs-one	front	5	48	240	144	30	7	19.5	0.75					
+bffs-one	front	6	48	288	144	31	7	18.5	0.75					
+bffs-one	front	7	48	336	144	32	7	19.5	0.75					
+bffs-claws	front	0	48	0	192	33	7	19.5	0.75		40.5	19.5	0.75	
+bffs-claws	front	1	48	48	192	34	7	19.5	0.75		40.5	19.5	0.75	
+bffs-claws	front	2	48	96	192	35	7	18.5	0.75		40.5	18.5	0.75	
+bffs-claws	front	3	48	144	192	36	7	19.5	0.75		40.5	19.5	0.75	
+bffs-claws	front	4	48	192	192	37	7	19.5	0.75		40.5	19.5	0.75	
+bffs-claws	front	5	48	240	192	38	7	19.5	0.75		40.5	19.5	0.75	
+bffs-claws	front	6	48	288	192	39	7	18.5	0.75		40.5	18.5	0.75	
+bffs-claws	front	7	48	336	192	40	7	19.5	0.75		40.5	19.5	0.75	

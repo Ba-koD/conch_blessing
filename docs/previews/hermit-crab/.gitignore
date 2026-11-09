@@ -1,0 +1,8 @@
+# Review sheets composite vanilla trinket icons, and the Aseprite file keeps them
+# as hidden reference cels: keep them out of the repository (AGENTS: comparison
+# sheets stay outside). author.lua and preview.py rebuild them locally.
+comparison.png
+bffs-comparison.png
+trinket-check.png
+walking-preview.gif
+hermit_crab_proposals.aseprite

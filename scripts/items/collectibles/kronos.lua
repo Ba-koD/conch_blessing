@@ -697,6 +697,15 @@ local function getFamiliarCollectibleIds()
             ids[#ids + 1] = id
         end
     end
+    -- Modded familiars sit above NUM_COLLECTIBLES; only this mod's own rows that
+    -- opt in (`kronosAbsorb = true`, the Hermit Crab) join them, never another
+    -- mod's familiars.
+    for _, row in pairs(ConchBlessing.ItemData or {}) do
+        if type(row) == "table" and row.kronosAbsorb == true and type(row.id) == "number" and row.id > 0 then
+            ids[#ids + 1] = row.id
+        end
+    end
+    table.sort(ids)
 
     ConchBlessing.kronos._familiarCollectibleIds = ids
     return ids

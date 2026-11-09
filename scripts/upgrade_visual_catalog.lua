@@ -45,4 +45,5 @@ return {
     { key = "TIGER" },
     { key = "OX" },
     { key = "KIDS_MENU" },
+    { key = "HERMIT_CRAB" },
 }

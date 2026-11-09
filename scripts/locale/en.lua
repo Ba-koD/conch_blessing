@@ -672,6 +672,22 @@ return {
             },
         },
 
+        HERMIT_CRAB = {
+            name = "Hermit Crab",
+            description = "Let me carry that",
+            eid = {
+                "A hermit crab roams the room and picks up the trinkets you put down",
+                "#It won't pick one up while you are within 2 tiles of it",
+                "#You get the effects of the trinkets it holds",
+                "#With its claws full, it puts down the trinket it has held longest and takes the new one",
+                "#{{Warning}} Requires REPENTOGON!",
+            },
+            synergies = {
+                bffs = "Holds up to 2 trinkets",
+                kronos = "When absorbed, the trinkets it held are smelted for good, and as many trinkets as it could hold are smelted as soon as you get them",
+            },
+        },
+
         -- Trinkets
         TIME_POWER = {
             name = "Time = Power",

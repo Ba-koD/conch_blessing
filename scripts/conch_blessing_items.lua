@@ -1162,6 +1162,41 @@ ConchBlessing.ItemData = {
             gameStarted = "azureDragon.onGameStarted"
         },
     },
+    HERMIT_CRAB = {
+        -- 소라게: the Magic Conch's Mom's Purse. A crab in a Magic Conch-coloured
+        -- conch holds the trinkets its owner puts down (user design 2026-11-09).
+        type = "familiar",
+        id = Isaac.GetItemIdByName("Hermit Crab"),
+        stackable = true, -- every crab holds one more trinket
+        gfx = "hermit_crab.png",
+        anm2 = "hermit_crab.anm2",
+        entity = { variant = 779, collisiondamage = 0, collisionmass = 3, collisionradius = 7, friction = 1, numgridcollisionpoints = 6, shadowsize = 14, tags = "cansacrifice", customtags = "" },
+        gibs = { amount = 0, blood = 0, bone = 0, eye = 0, gut = 0, large = 0 },
+        pool = { RoomType.ROOM_SHOP }, -- Mom's Purse's shop pool
+        quality = 3,
+        tags = "summonable",
+        cache = "familiars",
+        shopprice = 20,
+        devilprice = 2,
+        kronosAbsorb = true, -- Kronos and Thurisaz may absorb it like a vanilla familiar
+        origin = { id = CollectibleType.COLLECTIBLE_MOMS_PURSE, type = "collectible" },
+        flag = "positive",
+        script = "scripts/items/familiars/hermit_crab",
+        synergies = {
+            [{ id = CollectibleType.COLLECTIBLE_BFFS, type = "collectible" }] = "bffs",
+            [{ id = Isaac.GetItemIdByName("Kronos"), type = "collectible" }] = "kronos",
+        },
+        callbacks = {
+            familiarInit = "hermitcrab.onFamiliarInit",
+            familiarUpdate = "hermitcrab.onFamiliarUpdate",
+            postFamiliarRender = "hermitcrab.onFamiliarRender",
+            evaluateCache = "hermitcrab.onEvaluateCache",
+            postUpdate = "hermitcrab.onUpdate",
+            postNewRoom = "hermitcrab.onNewRoom",
+            gameStarted = "hermitcrab.onGameStarted",
+            preGameExit = "hermitcrab.onGameExit",
+        },
+    },
 
     -- Trinkets
     TIME_POWER = {

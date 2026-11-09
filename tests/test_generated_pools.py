@@ -92,12 +92,14 @@ class GeneratedIdOrderTests(unittest.TestCase):
         p = names.index('Two Faced Penny')
         self.assertEqual(names[p + 1], 'Severed Oath', 'a console item no longer sits between released items')
         i = names.index('Rat')
-        self.assertEqual(names[i:i + 5], ['Rat', 'Ox', 'Tiger', 'Dragon', 'Time = Money'])
-        self.assertEqual(names[i + 5:i + 7], ['Inf D6', 'Azure Dragon'], 'console items follow the finished ones')
+        # The released familiars (Time = Money, then the Hermit Crab appended on
+        # 2026-11-09) come right after the released zodiac.
+        self.assertEqual(names[i:i + 6], ['Rat', 'Ox', 'Tiger', 'Dragon', 'Time = Money', 'Hermit Crab'])
+        self.assertEqual(names[i + 6:i + 8], ['Inf D6', 'Azure Dragon'], 'console items follow the finished ones')
         wip = ['Rabbit (WIP)', 'Snake (WIP)', 'Horse (WIP)', 'Goat (WIP)',
                'Monkey (WIP)', 'Chicken (WIP)', 'Dog (WIP)', 'Pig (WIP)']
-        self.assertEqual(names[i + 7:i + 15], wip)
-        self.assertEqual(rows[i + 15][0], 'trinket')
+        self.assertEqual(names[i + 8:i + 16], wip)
+        self.assertEqual(rows[i + 16][0], 'trinket')
         self.assertTrue(all(tag != 'trinket' for tag, _ in rows[:i + 15]))
         self.assertEqual([info.get('name') for info in registry.values()], names)
 

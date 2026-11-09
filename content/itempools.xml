@@ -58,6 +58,7 @@
         <Item Name="Severed Oath" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="AR Glasses" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Time = Money" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Hermit Crab" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
     <Pool Name="curse">
         <Item Name="Oral Steroids" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
