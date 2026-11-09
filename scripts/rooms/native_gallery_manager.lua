@@ -3,6 +3,7 @@ local NativeReturnDoor = require("scripts.rooms.native_return_door")
 local isc = require("scripts.lib.isaacscript-common")
 local NativeGalleryRooms = require("scripts.rooms.death_certificate_gallery_rooms")
 local GalleryExitDoor = require("scripts.rooms.gallery_exit_door")
+local Sound = require("scripts.lib.sound_volume")
 
 -- CallbackPriority is an engine/REPENTOGON global. The vendored IsaacScript
 -- Common root does not re-export this enum even though its internal modules
@@ -25,6 +26,25 @@ local MODE_APPRAISAL = "appraisal_trinkets_death_certificate"
 local DC_DIMENSION = 2
 local GOLDEN_TRINKET_FLAG = 32768
 local RETURN_TRANSITION = RoomTransitionAnim.FADE
+-- After a trinket is taken, the way home looks like vanilla Death Certificate's
+-- after an item (user request 2026-11-10: the screen shakes, Isaac lies down,
+-- then the fade): the engine's own DEATH_CERTIFICATE room transition. The
+-- return door and the failure paths keep the plain fade.
+local REWARD_RETURN_TRANSITION = RoomTransitionAnim.DEATH_CERTIFICATE or RETURN_TRANSITION
+local REWARD_RETURN_REASONS = { choice_complete = true, choice_complete_external = true }
+-- Vanilla Death Certificate answers a taken item with a choir and a screen
+-- that keeps shaking for about three seconds, until Isaac lies down for the
+-- trip home (measured 2026-11-10 with conch_test appraisal_certificate
+-- dc_vanilla: CHOIR_UNLOCK at 0.5 as the item is taken, the shake countdown
+-- held at 10 from then on and still 10 as the DEATH_CERTIFICATE transition
+-- starts 90 updates later).
+-- Appraisal does the same when its pickup is accepted. The wait is cosmetic
+-- pacing, counted from the accepted pickup in this process only (a Continue
+-- goes home at once), and the rooms' doors stay shut meanwhile as before.
+local TAKEN_SOUND = type(SoundEffect) == "table" and SoundEffect.SOUND_CHOIR_UNLOCK or nil
+local TAKEN_SOUND_VOLUME = 0.5
+local TAKEN_SHAKE_FRAMES = 10
+local REWARD_RETURN_DELAY = 90
 local GALLERY_MUSIC = type(Music) == "table" and Music.MUSIC_DARK_CLOSET or nil
 local SMELTER_SWALLOW_SOUND = type(SoundEffect) == "table"
     and SoundEffect.SOUND_SMELTER_SWALLOW
@@ -37,6 +57,7 @@ M._durableChoiceClosures = M._durableChoiceClosures or {}
 M._durableSmeltAttempts = M._durableSmeltAttempts or {}
 M._removedChoiceStock = M._removedChoiceStock or {}
 M._returnTransitionIssued = M._returnTransitionIssued or {}
+M._takenAt = M._takenAt or {} -- [pending.token] = game frame the pickup was accepted (cosmetic pacing)
 -- Diagnostic-only state is process-local and may be discarded on Lua reload;
 -- it must never become part of the gallery transaction.
 M._debugStockAudit = nil
@@ -1722,7 +1743,7 @@ local function transitionToOrigin(session)
         Game():StartRoomTransition(
             target,
             Direction.NO_DIRECTION,
-            RETURN_TRANSITION,
+            REWARD_RETURN_REASONS[session.returnReason] and REWARD_RETURN_TRANSITION or RETURN_TRANSITION,
             player,
             dimension
         )
@@ -2263,6 +2284,7 @@ local function finishChoiceSuccess(session)
         and session.floorEnded ~= true
         and getCurrentGalleryContext(session) ~= nil
     if stayInGallery then
+        M._takenAt[pending.token] = nil
         local completedPending = pending
         session.pendingChoice = nil
         session.heldAbsorptionJournal = nil
@@ -2282,6 +2304,13 @@ local function finishChoiceSuccess(session)
         setAllGalleryDoorsOpen(true)
         return true
     end
+
+    -- Isaac stands with his reward a while before lying down, as in vanilla.
+    local takenAt = M._takenAt[pending.token]
+    local frame = Game():GetFrameCount()
+    if takenAt and frame >= takenAt and frame - takenAt < REWARD_RETURN_DELAY then return false end
+    M._takenAt[pending.token] = nil
+    if takenAt then pcall(function() Game():ShakeScreen(TAKEN_SHAKE_FRAMES) end) end -- still shaking as he lies down
 
     session.pendingChoice = nil
     session.heldAbsorptionJournal = nil
@@ -2351,6 +2380,8 @@ end
 local function resolveChoice(session, context)
     local pending = session.pendingChoice
     if type(pending) ~= "table" then return end
+    -- the screen keeps shaking from the taken pickup until Isaac lies down
+    if M._takenAt[pending.token] then pcall(function() Game():ShakeScreen(TAKEN_SHAKE_FRAMES) end) end
     if pending.phase == "prepared" then
         resolvePreparedChoice(session, context)
         pending = session.pendingChoice
@@ -2622,6 +2653,12 @@ function M.onPostPickupCollision(_, pickup, collider)
 
     pending.collisionWindowOpen = false
     pending.collisionCompleted = true
+    -- the vanilla Death Certificate answer to a taken item
+    M._takenAt[pending.token] = Game():GetFrameCount()
+    if TAKEN_SOUND and type(SFXManager) == "function" then
+        pcall(function() SFXManager():Play(TAKEN_SOUND, Sound.volume(TAKEN_SOUND_VOLUME)) end)
+    end
+    pcall(function() Game():ShakeScreen(TAKEN_SHAKE_FRAMES) end)
     pending.nativeAddWindowOpen = true
     pending.phase = "closing"
     pending.roomClosed = true
