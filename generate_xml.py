@@ -595,6 +595,13 @@ def parse_lua_file(file_path):
         if initcharge_match:
             item_info['initcharge'] = int(initcharge_match.group(1))
             print(f"  InitCharge: {item_info['initcharge']}")
+
+        # extract cooldown: the frames between uses of a zero-charge active
+        # (vanilla How to Jump has cooldown="14"); zero is a real value too.
+        cooldown_match = re.search(r'\bcooldown\s*=\s*(\d+)', item_data)
+        if cooldown_match:
+            item_info['cooldown'] = int(cooldown_match.group(1))
+            print(f"  Cooldown: {item_info['cooldown']}")
         
         # extract hearts
         hearts_match = re.search(r'hearts\s*=\s*(-?\d+)', item_data)
@@ -866,7 +873,10 @@ def create_items_xml(items, output_path):
         
         if item_type == 'active' and item_info.get('maxcharges') is not None:
             item_elem.set("maxcharges", str(item_info['maxcharges']))
-        
+
+        if item_type == 'active' and item_info.get('cooldown') is not None:
+            item_elem.set("cooldown", str(item_info['cooldown']))
+
         if item_info.get('chargetype'):
             item_elem.set("chargetype", item_info['chargetype'])
         
