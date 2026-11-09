@@ -732,6 +732,7 @@ class MorphVisualTests(unittest.TestCase):
                 return p
             end
             require('scripts.conch_blessing_upgrade')
+            require('scripts.dev.morph_viewer') -- dev tooling, loaded by scripts/dev/init.lua in game
             W=ConchBlessing.morphViewer
         ''')
 

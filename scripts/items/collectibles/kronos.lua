@@ -399,6 +399,47 @@ function Rune.ready()
     return not (sm and type(sm.IsLoaded) == "function") or sm.IsLoaded() == true
 end
 
+-- A run save (the player's own, or the global one for nil). SaveManager works
+-- out a player's save key on every call (the room's list index, the player's
+-- collectible RNG seed as a string), and every absorbed-ability count asked it
+-- three times: about 19 us a count, 0.7 ms an update for one holder (measured
+-- 2026-11-10 with conch_test perf). The table it returns is kept for the rest
+-- of the game frame, as Rune.total keeps its total; a new room (every new
+-- level brings one), game start, a save load and a Glowing Hourglass reset
+-- drop it at once.
+Rune.saves = {}
+function Rune.runSave(entity)
+    local sm = ConchBlessing.SaveManager
+    if not (sm and type(sm.GetRunSave) == "function") then return nil end
+    local frame = Game():GetFrameCount()
+    if Rune.saves.frame ~= frame then Rune.saves = { frame = frame } end
+    local key = entity and GetPtrHash(entity) or "global"
+    local kind = entity and type(entity.GetPlayerType) == "function" and entity:GetPlayerType() or -1
+    local hit = Rune.saves[key]
+    if hit and hit.kind == kind then return hit.save end
+    local save = sm.GetRunSave(entity)
+    if type(save) == "table" then Rune.saves[key] = { kind = kind, save = save } end
+    return save
+end
+
+function Rune.dropSaves()
+    Rune.saves = {}
+end
+
+function Rune.registerSaveDrops()
+    for _, id in ipairs({ ModCallbacks.MC_POST_NEW_ROOM, ModCallbacks.MC_POST_GAME_STARTED }) do
+        ConchBlessing:AddCallback(id, Rune.dropSaves)
+    end
+    local sm, mod = ConchBlessing.SaveManager, ConchBlessing.originalMod
+    local ids = sm and sm.SaveCallbacks
+    if mod and type(ids) == "table" then
+        for _, name in ipairs({ "POST_DATA_LOAD", "PRE_GLOWING_HOURGLASS_RESET", "POST_GLOWING_HOURGLASS_RESET" }) do
+            if ids[name] then mod:AddCallback(ids[name], Rune.dropSaves) end
+        end
+    end
+end
+Rune.registerSaveDrops()
+
 -- The Soul is a sub-player of The Forgotten: its own entity with the same
 -- inventory, so it reads and writes its parent's ledger.
 function Rune.parentOf(player)
@@ -471,7 +512,7 @@ end
 -- handed back on Continue (onGameStarted).
 function Rune.adoptGlobal()
     local sm = ConchBlessing.SaveManager
-    local globalSave = sm and sm.GetRunSave(nil)
+    local globalSave = sm and Rune.runSave(nil)
     if type(globalSave) ~= "table" then return end
     adoptLegacy(globalSave, "kronos", LEGACY.RUN)
     local old = globalSave.kronos
@@ -479,7 +520,7 @@ function Rune.adoptGlobal()
     local target = Rune.firstPlayer(Rune.isLiveHolder)
         or Rune.firstPlayer(function(player) return Rune.total(player) > 0 end)
         or Isaac.GetPlayer(0)
-    local save = target and sm.GetRunSave(target)
+    local save = target and Rune.runSave(target)
     if type(save) ~= "table" then return end
     globalSave.kronos = nil
     if type(old) == "table" then
@@ -497,7 +538,7 @@ local function getRunSave(player, peek)
     -- The shared ledger of an older save moves only once the run is loaded:
     -- before MC_POST_GAME_STARTED SaveManager can still hold the previous run.
     if Rune.ready() then Rune.adoptGlobal() end
-    local save = sm.GetRunSave(Rune.parentOf(player))
+    local save = Rune.runSave(Rune.parentOf(player))
     if type(save) ~= "table" then return nil end
     -- The oldest saves kept the ledger per player, always under the first name.
     local legacy = save[LEGACY.PER_PLAYER]
@@ -542,7 +583,7 @@ end
 function Rune.ledger(player, create)
     local sm = ConchBlessing.SaveManager
     if not (player and sm and type(sm.GetRunSave) == "function") then return nil end
-    local save = sm.GetRunSave(player)
+    local save = Rune.runSave(player)
     if type(save) ~= "table" then return nil end
     if create and type(save.thurisaz) ~= "table" then
         save.thurisaz = { absorbed = {}, generic = 0, grants = {} }

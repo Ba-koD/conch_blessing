@@ -4,12 +4,31 @@
 import argparse
 import re
 import shutil
+import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from release_lua import strip_dev_code  # noqa: E402
 
 APP_ID = "250900"
 INCLUDE_DIRS = ("content", "resources", "scripts")
 INCLUDE_FILES = ("main.lua", "metadata.xml", "Thumbnail.png")
+# Only what the mod runs goes to the Workshop. Left out: the dev tooling, which
+# the released mod never loads (core loads scripts/dev/init.lua only where it is
+# present: the conch_test benches and probes, the conch_morph viewer, the
+# profiler and the save-file command queue); modules nothing loads (an
+# unregistered item, an unused helper, the retired custom-room Appraisal
+# backend kept in the repository as a reference); and art kept for later.
+EXCLUDE_PATHS = (
+    "scripts/dev",
+    "scripts/items/collectibles/magic_mold.lua",
+    "scripts/items/collectibles/notused",
+    "scripts/lib/damage_utils.lua",
+    "scripts/lib/weapon_fire.lua",
+    "scripts/rooms/native_gallery_rooms.lua",
+    "resources/gfx/items/collectibles/notused",
+)
 DEFAULT_LANGUAGES = ("english", "koreana")
 WORKSHOP_LOCALIZATIONS = {
     "english": {
@@ -86,10 +105,19 @@ def parse_languages(value):
     return languages
 
 
-def copy_tree(src, dst):
+def copy_tree(src, dst, repo_root=None):
     if dst.exists():
         shutil.rmtree(dst)
-    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    caches = shutil.ignore_patterns("__pycache__", "*.pyc")
+    excluded = {(repo_root / path).resolve() for path in EXCLUDE_PATHS} if repo_root else set()
+
+    def ignore(directory, names):
+        skipped = set(caches(directory, names))
+        base = Path(directory).resolve()
+        skipped.update(name for name in names if (base / name).resolve() in excluded)
+        return skipped
+
+    shutil.copytree(src, dst, ignore=ignore)
 
 
 def prepare_content(repo_root, output_dir, directory_name):
@@ -99,13 +127,14 @@ def prepare_content(repo_root, output_dir, directory_name):
     content_dir.mkdir(parents=True, exist_ok=True)
 
     for dirname in INCLUDE_DIRS:
-        copy_tree(repo_root / dirname, content_dir / dirname)
+        copy_tree(repo_root / dirname, content_dir / dirname, repo_root)
 
     for filename in INCLUDE_FILES:
         src = repo_root / filename
         if src.exists():
             shutil.copy2(src, content_dir / filename)
 
+    strip_dev_code(content_dir)
     return content_dir
 
 

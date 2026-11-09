@@ -47,6 +47,8 @@ SOFLAM 지연·상태 이상 지속 시간과 기존 상세 벤치의 캡션 렌
 | `conch_test damage` | 실제 적 HP 감소·범위·상태 이상·공격력 변화 검사 |
 | `conch_test conditions` | 피격·미피격·클리어·층 이동·보유 상태·시간 조건 검사 |
 | `conch_test synergies` | 설명에 등록된 시너지 147개를 연결한 검사 |
+| `conch_test perf` | 측정만 하는 검사(이름으로만 실행). 우리 아이템 없음 / 무해한 적에게 사격 / 출시된 패시브·패밀리어·장신구 전부(적 있음·없음) 네 구간에서 이 모드가 업데이트마다 쓰는 ms와 가장 무거운 콜백, 그다음 크로노스·진·반쪽 무시·Real Eyes 함수별 시간을 DIAG로 남김 |
+| `conch_test appraisal_certificate dc_vanilla` · `appraisal_return` | 측정만 하는 검사(이름으로만 실행). 진짜 사망증명서에서 아이템을 집거나 감정서에서 장신구를 집은 뒤 원래 방에 돌아올 때까지 차원·방·전환 모드·아이작 애니메이션·화면 흔들림·효과음을 업데이트와 렌더 프레임마다 바뀔 때 DIAG로 남김(감정서 귀환을 바닐라에 맞출 때 비교용) |
 | `conch_test time_money` | 지정한 ItemData 키 검사; 대소문자 무관 |
 | `conch_test realeyes` | Real Eyes 전체 검사 (`real_eyes`도 가능) |
 | `conch_test real_eyes prediction` | 예측과 실제 소라고둥 답변 비교; 테스트 런 필요 |

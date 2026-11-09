@@ -1800,5 +1800,5 @@ if ModCallbacks.MC_PRE_PICKUP_MORPH and ModCallbacks.MC_POST_PICKUP_MORPH then
     ConchBlessing:AddCallback(ModCallbacks.MC_POST_PICKUP_MORPH, _onPostPickupMorph)
 end
 
--- Console viewer uses a real, viewer-owned pickup and the transaction above.
-require("scripts.dev.morph_viewer")
+-- The conch_morph console viewer (scripts/dev/morph_viewer.lua, dev tooling)
+-- drives a real, viewer-owned pickup through the transaction above.

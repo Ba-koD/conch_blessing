@@ -63,7 +63,13 @@ function P.start()
                             where = tostring(info.short_src):match("([^/\\]+)$") .. ":" .. tostring(info.linedefined)
                         end
                     end
-                    local label = (named[original] or where or ("#" .. index)) .. " @" .. callbackName(id)
+                    local origins = rawget(_G, "ConchBlessingCallbackOrigins")
+                    local origin = type(origins) == "table" and origins[original]
+                    local label = (named[original] or where or ((origin and origin .. " " or "") .. "#" .. index
+                        .. (origin and "" or string.format(" (unrecorded: %s mod, priority %s, param %s)",
+                            entry.Mod == ConchBlessing and "upgraded" or "raw", tostring(entry.Priority),
+                            tostring(entry.Param)))))
+                        .. " @" .. callbackName(id)
                     entry.Function = function(...)
                         local t0 = clock()
                         local a, b, c = original(...)
@@ -82,8 +88,39 @@ function P.start()
 end
 
 function P.stop()
-    for _, row in ipairs(wrapped or {}) do row.entry.Function = row.original end
+    for _, row in ipairs(wrapped or {}) do
+        if row.entry then row.entry.Function = row.original else row.table[row.key] = row.original end
+    end
     wrapped = nil
+end
+
+--- Time the function fields of some namespace tables instead of callbacks:
+--- { [prefix] = table, ... }. Calls made through the table (as
+--- ConchBlessing.kronos._x(...) is) are timed, inclusive of what they call;
+--- calls through a local reference are not. stop() puts every field back.
+function P.startTables(tables)
+    P.stop()
+    wrapped, totals = {}, {}
+    for prefix, tbl in pairs(tables) do
+        if type(tbl) == "table" then
+            for key, original in pairs(tbl) do
+                if type(original) == "function" then
+                    local label = prefix .. "." .. tostring(key)
+                    tbl[key] = function(...)
+                        local t0 = clock()
+                        local a, b, c = original(...)
+                        local row = totals[label]
+                        if not row then row = { time = 0, calls = 0 }; totals[label] = row end
+                        row.time = row.time + (clock() - t0)
+                        row.calls = row.calls + 1
+                        return a, b, c
+                    end
+                    wrapped[#wrapped + 1] = { table = tbl, key = key, original = original }
+                end
+            end
+        end
+    end
+    return #wrapped
 end
 
 -- The heaviest handlers first: { label, ms, calls }.
