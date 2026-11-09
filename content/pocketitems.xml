@@ -2,4 +2,5 @@
 <pocketitems>
     <rune type="rune" name="Thurisaz" description="Devour" hud="Thurisaz" pickup="7781" mimiccharge="6"/>
     <card type="tarot" name="Conch Ticket" description="Reserved" hud="Conch Ticket" pickup="7782" mimiccharge="4"/>
+    <rune type="rune" name="Uruz" description="Strength" hud="Uruz" pickup="7783" mimiccharge="4"/>
 </pocketitems>

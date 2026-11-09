@@ -11,6 +11,7 @@ ConchBlessing.PocketData = {}
 for key, definition in pairs(require("scripts.items.cards.definitions")) do
     local data = {}
     for field, value in pairs(definition) do data[field] = value end
+    data.key = key
     ConchBlessing.PocketData[key] = data
 end
 

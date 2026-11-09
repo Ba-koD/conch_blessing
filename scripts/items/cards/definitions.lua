@@ -39,4 +39,15 @@ return {
         mimiccharge = 4,
         script = "scripts.items.cards.conch_ticket",
     },
+    URUZ = {
+        -- Tyrfing's rune (user design 2026-11-09): kills in the room it is used
+        -- in give Tyrfing's +0.05 damage for good.
+        type = "rune",
+        pickup = 7783,
+        hud = "Uruz",
+        anm2 = "005.300_uruz.anm2",
+        gfx = "items/pick ups/pickup_uruz.png",
+        mimiccharge = 4,
+        script = "scripts.items.cards.uruz",
+    },
 }

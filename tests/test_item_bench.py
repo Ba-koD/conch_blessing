@@ -528,6 +528,36 @@ class BenchTests(unittest.TestCase):
             assert(output():find('conch_test thurisaz drop',1,true) and output():find('give [N]',1,true))
         """)
 
+    def test_uruz_cases_and_helpers_route_through_conch_test(self):
+        self.load_item_probe()
+        self.run_lua("""
+            local enum=function() return setmetatable({}, {__index=function(_, k) return #k end}) end
+            CollectibleType, FamiliarVariant, EntityType, PickupVariant = enum(), enum(), enum(), enum()
+            UseFlag={USE_NOANIM=1,USE_NOANNOUNCER=2}
+            local Rune=require('scripts.dev.uruz_probe')
+            local names={'kills','stack','room_ends','hit_keeps','clear_rune','card'}
+            assert(#Rune.commands()==#names)
+            for i,name in ipairs(names) do
+                local command='conch_test uruz '..name
+                assert(Rune.commands()[i]==command and Rune.commandFor(name)==command)
+                local def=bench.get(command); assert(def and def.restartCommand=='restart 0', command)
+                local ops=0
+                local plan=setmetatable({}, {__index=function() return function() ops=ops+1 end end})
+                def.build(plan); assert(ops>5, command..' built no steps')
+            end
+            local started,suiteName,suiteList,helped
+            bench.start=function(name) started=name end
+            bench.startSuite=function(name,list) suiteName=name; suiteList=list end
+            Rune.helper=function(name,words) helped=name..':'..table.concat(words,' ') end
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','uruz')
+            assert(suiteName=='conch_test uruz' and #suiteList==#names)
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','uruz stack'); assert(started=='conch_test uruz stack')
+            started=nil
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','uruz typo')
+            assert(started==nil and helped==nil and output():find('Unknown case: typo',1,true))
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','uruz earned'); assert(helped=='earned:uruz earned')
+        """)
+
     def test_conch_ticket_cases_helpers_and_alias_route_through_conch_test(self):
         self.load_item_probe()
         self.run_lua("""

@@ -72,6 +72,26 @@ class EIDLanguageTests(unittest.TestCase):
     def load(self):
         self.lua.execute(self.source)
 
+    def test_each_card_registers_its_own_eid_icon_once(self):
+        self.lua.execute('''
+            package.loaded['scripts.items.cards.eid_icons']={URUZ={width=10,height=9,left=4,top=7}}
+            loads={}
+            function Sprite() local s={}; function s:Load(path) loads[#loads+1]=path end; return s end
+            icons={}
+            function EID:addIcon(name,anim,frame,w,h,l,t,sprite) icons[name]={anim,frame,w,h,l,t,sprite} end
+            function EID:addCard() end
+            local card={key='URUZ',anm2='005.300_uruz.anm2',type='rune',mimiccharge=4,
+                name={en='Uruz',kr='우루즈',urimal='우루즈'},eid={en={'x'},kr={'x'},urimal={'x'}}}
+            ConchBlessing.EID.addOptLangCard(77,card)
+            local icon=icons.Card77
+            assert(icon and icon[1]=='HUDSmall' and icon[2]==0 and icon[3]==10 and icon[4]==9
+                and icon[5]==4 and icon[6]==7 and loads[1]=='gfx/005.300_uruz.anm2', 'Card77 icon')
+            ConchBlessing.EID.addOptLangCard(77,card)
+            assert(#loads==1,'one sprite per card')
+            ConchBlessing.EID.addOptLangCard(78,{key='MISSING',anm2='x.anm2',name=card.name,eid=card.eid})
+            assert(icons.Card78==nil and #errors==1,'a card without a measured placement reports once')
+        ''')
+
     def test_holiday_overlay_changes_only_our_rows_and_golden_effects(self):
         self.lua.execute('''
             effective='urimal';callbacks[3]() -- also refresh while paused

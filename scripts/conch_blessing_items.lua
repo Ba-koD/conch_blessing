@@ -2109,7 +2109,7 @@ do
 end
 
 -- Dev tooling: registers the conch_test thurisaz and conch_ticket benches. Safe to remove.
-for _, probe in ipairs({ "thurisaz_probe", "conch_ticket_probe" }) do
+for _, probe in ipairs({ "thurisaz_probe", "conch_ticket_probe", "uruz_probe" }) do
     local ok, err = pcall(require, "scripts.dev." .. probe)
     if not ok then
         ConchBlessing.printError("[" .. probe .. "] load failed: " .. tostring(err))

@@ -226,7 +226,8 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
         TestBench.start("conch_test locale",true); return
     end
     -- Cards and runes: their own case suites and manual helpers.
-    local pocketBenches = { thurisaz = "scripts.dev.thurisaz_probe", conch_ticket = "scripts.dev.conch_ticket_probe" }
+    local pocketBenches = { thurisaz = "scripts.dev.thurisaz_probe", conch_ticket = "scripts.dev.conch_ticket_probe",
+        uruz = "scripts.dev.uruz_probe" }
     if action == "ticket" then action = "conch_ticket" end
     if pocketBenches[action] then
         local loaded, Pocket = pcall(require, pocketBenches[action])
@@ -319,7 +320,8 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
         out("For individual cases: conch_test ITEM list (example: conch_test kronos list).")
         out("Short names: conch_test appraisal, conch_test belt. Shared checks: conch_test locale, conch_test morph [ITEM | default | cycle | list], conch_test evolution, conch_test rng [samples] [luck N].")
         out("Pocket items: conch_test thurisaz [CASE | list | give [N] | spawn | familiars | ledger] (the Kronos rune),")
-        out("  conch_test conch_ticket [CASE | list | give [N] | spawn | queue | clear] (the Conch Ticket; short name: ticket).")
+        out("  conch_test conch_ticket [CASE | list | give [N] | spawn | queue | clear] (the Conch Ticket; short name: ticket),")
+        out("  conch_test uruz [CASE | list | give [N] | spawn | earned] (the Tyrfing rune).")
         out("Stat math: conch_test rounding [multiplier | sweep [stacks]] [pN].")
         return
     end

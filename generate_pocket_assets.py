@@ -1,7 +1,8 @@
 """Generate the runtime art of Conch Blessing's cards and runes.
 
 Thurisaz (the Kronos rune) is a charcoal stone shard with the Saturn sign
-inlaid in gold and a dim crimson glow under it. The Conch Ticket is a cream
+inlaid in gold and a dim crimson glow under it. Uruz (the Tyrfing rune) is the
+same shard with the rune ᚢ inlaid and an amber glow. The Conch Ticket is a cream
 claim ticket tilted like the vanilla floor cards, with a red stub behind a
 perforation and the Magic Conch's lavender spiral shell printed on it. Both
 are drawn on the native 32x32 grid from plain geometry with no randomness, so
@@ -14,8 +15,14 @@ holds the body at x=0, a glow at x=32 (empty for cards) and the pocket-slot art
 at x=64, each 32x32; the pocket slot reads that third frame through
 content/gfx/ui_cardfronts.anm2, which generate_xml.py writes from the registry.
     resources/gfx/items/pick ups/pickup_thurisaz.png, resources/gfx/005.300_thurisaz.anm2
+    resources/gfx/items/pick ups/pickup_uruz.png, resources/gfx/005.300_uruz.anm2
     resources/gfx/items/pick ups/pickup_conch_ticket.png, resources/gfx/005.300_conch_ticket.anm2
 Each floor pickup has Idle, Appear, Collect, Sparkle, HUD and HUDSmall.
+
+It also writes scripts/items/cards/eid_icons.lua: where EID draws each card's
+HUDSmall frame inside a line of text. EID has icons only for the vanilla cards
+and shows a blank card for a modded one that registers none, which is what
+EID's descriptions, Inventory Descriptions and Item Pool Manager showed for ours.
 """
 import math
 import xml.etree.ElementTree as ET
@@ -25,9 +32,13 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parent
 GFX = ROOT / 'resources/gfx'
+EID_ICONS = ROOT / 'scripts/items/cards/eid_icons.lua'
+EID_ICON_HEIGHT = 9  # the line box EID reserves, like the vanilla card icons (8) and AstroItems' cards (9)
 THURISAZ_SHEET = 'items/pick ups/pickup_thurisaz.png'
 THURISAZ_ANM2 = '005.300_thurisaz.anm2'
 TICKET_SHEET = 'items/pick ups/pickup_conch_ticket.png'
+URUZ_SHEET = 'items/pick ups/pickup_uruz.png'
+URUZ_ANM2 = '005.300_uruz.anm2'
 TICKET_ANM2 = '005.300_conch_ticket.anm2'
 FRAME = 32
 BODY_X, GLOW_X, HUD_X = 0, 32, 64
@@ -43,6 +54,7 @@ GOLD_DARK = (120, 78, 24, 255)
 GOLD = (214, 160, 52, 255)
 GOLD_LIGHT = (255, 224, 116, 255)
 GLOW = (214, 52, 46)
+URUZ_GLOW = (232, 132, 40)
 HUD_SHADOW = (0, 0, 0, 96)
 
 # The shard leans a little like the vanilla runes; hand-placed vertices.
@@ -69,6 +81,23 @@ GLYPH = [
 ]
 GLYPH_AT = (12, 9)
 
+# Uruz (ᚢ): the stem on the left, from its top a stroke over and down to the
+# right leg; 2px strokes like the Saturn sign.
+URUZ_GLYPH = [
+    "####...",
+    "#####..",
+    "##.###.",
+    "##..###",
+    "##...##",
+    "##...##",
+    "##...##",
+    "##...##",
+    "##...##",
+    "##...##",
+    "##...##",
+]
+URUZ_GLYPH_AT = (12, 9)
+
 NEIGHBOURS = ((1, 0), (-1, 0), (0, 1), (0, -1))
 
 
@@ -84,7 +113,7 @@ def side(a, b, p):
     return (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])
 
 
-def stone():
+def stone(glyph=GLYPH, at=GLYPH_AT):
     img = Image.new('RGBA', (FRAME, FRAME), (0, 0, 0, 0))
     px = img.load()
     fill = {(x, y) for y in range(FRAME) for x in range(FRAME) if inside(SHARD, x + 0.5, y + 0.5)}
@@ -109,8 +138,8 @@ def stone():
             px[x, y] = O
     # The inlaid sign: a dark groove round it so it stands clear of the stone,
     # then gold lit from the top left with a darker lower-right edge.
-    gx, gy = GLYPH_AT
-    marks = {(gx + c, gy + r) for r, row in enumerate(GLYPH) for c, ch in enumerate(row) if ch == '#'}
+    gx, gy = at
+    marks = {(gx + c, gy + r) for r, row in enumerate(glyph) for c, ch in enumerate(row) if ch == '#'}
     for x, y in marks:
         for dx, dy in NEIGHBOURS + ((1, 1),):
             q = (x + dx, y + dy)
@@ -126,14 +155,14 @@ def stone():
     return img
 
 
-def glow():
-    """A soft crimson disc under the stone; the anm2 pulses its size and alpha."""
+def glow(color=GLOW):
+    """A soft disc under the stone (crimson by default); the anm2 pulses its size and alpha."""
     img = Image.new('RGBA', (FRAME, FRAME), (0, 0, 0, 0))
     for y in range(FRAME):
         for x in range(FRAME):
             d = math.hypot((x + 0.5 - 16.5) / 15, (y + 0.5 - 16) / 15)
             if d < 1:
-                img.putpixel((x, y), GLOW + (round(255 * (1 - d) ** 1.15),))
+                img.putpixel((x, y), color + (round(255 * (1 - d) ** 1.15),))
     return img
 
 
@@ -399,6 +428,8 @@ def write_anm2(path, sheet, animations):
 POCKETS = {
     'THURISAZ': (THURISAZ_SHEET, THURISAZ_ANM2, stone, glow, THURISAZ_ANIMATIONS),
     'CONCH_TICKET': (TICKET_SHEET, TICKET_ANM2, ticket, None, TICKET_ANIMATIONS),
+    'URUZ': (URUZ_SHEET, URUZ_ANM2, lambda: stone(URUZ_GLYPH, URUZ_GLYPH_AT), lambda: glow(URUZ_GLOW),
+             THURISAZ_ANIMATIONS),
 }
 
 
@@ -409,17 +440,42 @@ def write(key):
     sheet.alpha_composite(body, (BODY_X, 0))
     if draw_glow:
         sheet.alpha_composite(draw_glow(), (GLOW_X, 0))
-    sheet.alpha_composite(pocket(body), (HUD_X, 0))
+    hud = pocket(body)
+    sheet.alpha_composite(hud, (HUD_X, 0))
     out = GFX / sheet_path
     out.parent.mkdir(parents=True, exist_ok=True)
     sheet.save(out)
     write_anm2(GFX / anm2, sheet_path, animations)
     print('wrote', out.relative_to(ROOT), 'and', (GFX / anm2).relative_to(ROOT))
+    return eid_icon(hud)
+
+
+def eid_icon(hud):
+    """Where EID draws HUDSmall: the pocket art at half size, centred on its
+    (16, 16) pivot. Like the vanilla card icons, the art starts at the text
+    cursor and just under the line top, and the next letter follows a pixel
+    after it. EID places the sprite at the cursor plus (left, top)."""
+    l, t, r, b = hud.getchannel('A').getbbox()
+    half = [(v - 16) / 2 for v in (l, t, r, b)]
+    left, top = math.ceil(-half[0]), math.ceil(-half[1])
+    width = math.ceil(half[2] - half[0]) + 1
+    return {'width': width, 'height': EID_ICON_HEIGHT, 'left': left, 'top': top}
+
+
+def write_eid_icons(icons):
+    lines = ['-- Generated by generate_pocket_assets.py from each card\'s pocket-slot art:',
+             '-- where EID draws its HUDSmall frame in a line of text (EID:addIcon width,',
+             '-- height, left and top offsets). Do not hand-edit.',
+             'return {']
+    for key, g in icons.items():
+        lines.append(f"    {key} = {{ width = {g['width']}, height = {g['height']}, left = {g['left']}, top = {g['top']} }},")
+    lines += ['}', '']
+    EID_ICONS.write_text('\n'.join(lines), encoding='utf-8')
+    print('wrote', EID_ICONS.relative_to(ROOT))
 
 
 def main():
-    for key in POCKETS:
-        write(key)
+    write_eid_icons({key: write(key) for key in POCKETS})
 
 
 if __name__ == '__main__':

@@ -234,7 +234,7 @@ class ThurisazTests(unittest.TestCase):
 class ThurisazContentTests(unittest.TestCase):
     def test_registry_text_and_art_agree(self):
         pockets = generate_xml.load_pockets()
-        self.assertEqual(list(pockets), ['THURISAZ', 'CONCH_TICKET'])
+        self.assertEqual(list(pockets), ['THURISAZ', 'CONCH_TICKET', 'URUZ'])
         rune = pockets['THURISAZ']
         self.assertEqual((rune['name'], rune['type'], rune['hud']), ('Thurisaz', 'rune', 'Thurisaz'))
         for lang in ('en', 'kr', 'urimal'):

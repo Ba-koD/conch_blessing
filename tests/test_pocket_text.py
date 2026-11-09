@@ -20,6 +20,7 @@ class PocketTextTests(unittest.TestCase):
             package.path = root .. '/?.lua;' .. package.path
             package.loaded['scripts.items.cards.thurisaz'] = true
             package.loaded['scripts.items.cards.conch_ticket'] = true
+            package.loaded['scripts.items.cards.uruz'] = true
             lang = 'kr'
             package.loaded['scripts.conch_blessing_config'] = { GetCurrentLanguage = function() return lang end }
             ModCallbacks = { MC_PRE_ITEM_TEXT_DISPLAY = 1484 }
@@ -29,6 +30,8 @@ class PocketTextTests(unittest.TestCase):
                              description = { en = 'Devour', kr = '포식', urimal = '집어삼킴' } },
                 CONCH_TICKET = { name = { en = 'Conch Ticket', kr = '소라 예약권', urimal = '소라 예약권' },
                                  description = { en = 'Reserved', kr = '예약됨', urimal = '미리 잡아 둠' } },
+                URUZ = { name = { en = 'Uruz', kr = '우루즈', urimal = '우루즈' },
+                         description = { en = 'Strength', kr = '힘', urimal = '굳센 힘' } },
             }
             ConchBlessing = {
                 Locale = { applyPocketData = function(data)
@@ -37,7 +40,9 @@ class PocketTextTests(unittest.TestCase):
                 printError = function(message) errors[#errors + 1] = message end,
             }
             function ConchBlessing:AddCallback(id, fn) callbacks[id] = fn end
-            Isaac = { GetCardIdByName = function(name) return name == 'Thurisaz' and 98 or 99 end }
+            Isaac = { GetCardIdByName = function(name)
+                return name == 'Thurisaz' and 98 or name == 'Uruz' and 100 or 99
+            end }
             hud = {}
             function hud:ShowItemText(name, description)
                 -- The engine raises the callback again for our own banner.

@@ -169,6 +169,28 @@ ConchBlessing.EID.addOptLangCard = function(cardId, cardData)
     if type(EID.addCardMetadata) == "function" and cardData.mimiccharge then
         EID:addCardMetadata(cardId, cardData.mimiccharge, cardData.type == "rune")
     end
+    ConchBlessing.EID.addCardIcon(cardId, cardData)
+end
+
+-- EID has icons only for the vanilla cards; a modded card without a "Card<id>"
+-- icon shows a blank card in EID's descriptions, Inventory Descriptions' lists
+-- and Item Pool Manager. Ours draw their pocket-slot art at half size (the
+-- floor pickup's HUDSmall animation), placed in the line where
+-- generate_pocket_assets.py measured it (scripts/items/cards/eid_icons.lua).
+local cardIconSprites = {}
+ConchBlessing.EID.addCardIcon = function(cardId, cardData)
+    if not EID or type(EID.addIcon) ~= "function" or not cardData or not cardData.anm2 then return end
+    if cardIconSprites[cardId] then return end
+    local okIcons, icons = pcall(require, "scripts.items.cards.eid_icons")
+    local geometry = okIcons and type(icons) == "table" and icons[cardData.key] or nil
+    if not geometry then
+        ConchBlessing.printError("[EID] no icon placement for card " .. tostring(cardData.key))
+        return
+    end
+    local sprite = Sprite()
+    sprite:Load("gfx/" .. cardData.anm2, true)
+    EID:addIcon("Card" .. cardId, "HUDSmall", 0, geometry.width, geometry.height, geometry.left, geometry.top, sprite)
+    cardIconSprites[cardId] = sprite
 end
 
 ConchBlessing.EID.AddEIDCollectible = function(id, name, description, eidDescription)

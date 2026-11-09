@@ -814,6 +814,13 @@ return {
                 "#Several tickets reserve their answers in the order chosen",
             },
         },
+        URUZ = {
+            name = "Uruz",
+            description = "Strength",
+            eid = {
+                "For the current room, every enemy killed permanently grants {{Damage}} +0.05 damage",
+            },
+        },
     },
     ui = {
         real_eyes = {
