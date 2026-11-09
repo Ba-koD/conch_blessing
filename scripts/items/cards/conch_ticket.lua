@@ -3,9 +3,11 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 --
 -- Using the card spends it and opens a picker over the user's head: the
 -- shooting keys move between positive, neutral and negative and the card key
--- confirms. Confirmed answers queue in the run save and stay reserved through
--- rooms, floors and quit/Continue until ordinary Conch activations take them in
--- order. An unconfirmed picker is saved as well and reopens after Continue.
+-- confirms. AR Glasses opens the same picker from its active use and confirms
+-- with the active-item key instead (M.open). Confirmed answers queue in the run
+-- save and stay reserved through rooms, floors and quit/Continue until ordinary
+-- Conch activations take them in order. An unconfirmed picker is saved as well
+-- and reopens after Continue.
 --
 -- The provider's reservation (MagicConch.API.ReserveNextResult) is runtime only:
 -- one global slot, wiped by the provider on every new room, floor, game start
@@ -25,14 +27,25 @@ local SHOWN = 3            -- queued answers listed in the HUD before "+n"
 local HEAD_OFFSET = 58     -- screen pixels from the player's feet up to the picker
 local DIM = 0.45           -- colour scale of the answers not selected
 
+-- What opens a picker and the key that confirms it. Each source counts its own
+-- unconfirmed pickers in the player's saved picker (`field`); the shooting keys
+-- and the selection are shared.
+local SOURCES = {
+    { name = "card", field = "open", action = ButtonAction.ACTION_PILLCARD, label = "ui.conch_ticket.confirm_card" },
+    { name = "glasses", field = "glasses", action = ButtonAction.ACTION_ITEM, label = "ui.conch_ticket.confirm_glasses" },
+}
+local SOURCE = {}          -- [name] = source
+local CONFIRM = {}         -- [ButtonAction] = source name
+for _, source in ipairs(SOURCES) do SOURCE[source.name], CONFIRM[source.action] = source, source.name end
+
 local callbackPriority = rawget(_G, "CallbackPriority")
 local LATE = type(callbackPriority) == "table" and tonumber(callbackPriority.LATE) or 100
 
 local ready = false        -- closed until game start; pre-start callbacks see the previous run's save
 local armed = nil          -- the provider reservation held: { token, kind, usage, room }
-local pickers = {}         -- [GetPtrHash(player)] = unconfirmed tickets, mirrored for the input hook
-local latches = {}         -- [GetPtrHash(player)] = { left, right, confirm } as last read
-local releaseLock = {}     -- [GetPtrHash(player)] = true until the confirming card key is let go
+local pickers = {}         -- [GetPtrHash(player)] = { [source name] = unconfirmed pickers }, mirrored for the input hook
+local latches = {}         -- [GetPtrHash(player)] = { left, right, [source name] } as last read
+local releaseLock = {}     -- [GetPtrHash(player)] = { [source name] = true } until that confirming key is let go
 local controllers = {}     -- [GetPtrHash(player)] = ControllerIndex while that player picks or holds releaseLock
 local pickRefs = {}        -- [GetPtrHash(player)] = that player's saved picker, to settle it if they leave
 local reading = false      -- our own reads pass the input hook untouched
@@ -63,17 +76,33 @@ end
 
 function M.hasQueue() return ready and #M.queue() > 0 end
 
--- Each player's own picker: { open = unconfirmed tickets, index = 1..3 }.
+-- Each player's own picker: { open = unconfirmed tickets, glasses = unconfirmed
+-- AR Glasses uses, index = 1..3 }.
 local function pickSave(player, create)
     local run = ConchBlessing.SaveManager.GetRunSave(player)
     if type(run) ~= "table" then return nil end
-    if create and type(run.conchTicketPick) ~= "table" then run.conchTicketPick = { open = 0, index = 2 } end
+    if create and type(run.conchTicketPick) ~= "table" then run.conchTicketPick = { open = 0, glasses = 0, index = 2 } end
     local pick = run.conchTicketPick
     if type(pick) ~= "table" then return nil end
-    pick.open = math.max(0, math.floor(tonumber(pick.open) or 0))
+    for _, source in ipairs(SOURCES) do
+        pick[source.field] = math.max(0, math.floor(tonumber(pick[source.field]) or 0))
+    end
     local index = math.floor(tonumber(pick.index) or 2)
     pick.index = (index >= 1 and index <= #KINDS) and index or 2
     return pick
+end
+
+-- The open pickers by source name (nil when none is open) and their total.
+local function openCounts(pick)
+    local counts, total = nil, 0
+    for _, source in ipairs(SOURCES) do
+        local n = pick[source.field]
+        if n > 0 then
+            counts = counts or {}
+            counts[source.name], total = n, total + n
+        end
+    end
+    return counts, total
 end
 
 function M.picking(player)
@@ -98,9 +127,10 @@ local function refreshPickers()
     for i = 0, game:GetNumPlayers() - 1 do
         local player = game:GetPlayer(i)
         local pick = player and pickSave(player, false)
-        if pick and pick.open > 0 then
+        local counts = pick and openCounts(pick)
+        if counts then
             local key = GetPtrHash(player)
-            pickers[key] = pick.open
+            pickers[key] = counts
             track(player, key, pick)
         end
     end
@@ -131,10 +161,6 @@ local function release(a)
 end
 
 local function arm(a, kind)
-    -- AR Glasses keeps its choice in the same provider slot under its own owner;
-    -- a ticket the player paid for wins over it.
-    local ar = ConchBlessing.arglasses
-    if ar and type(ar.cancel) == "function" then pcall(ar.cancel) end
     local ok, accepted, token = pcall(a.ReserveNextResult, OWNER, { type = kind },
         function() return ready and M.queue()[1] == kind end)
     if not ok or accepted ~= true then
@@ -185,11 +211,12 @@ local function pressed(player, action)
 end
 
 local function readInputs(player)
-    return {
+    local now = {
         left = pressed(player, ButtonAction.ACTION_SHOOTLEFT),
         right = pressed(player, ButtonAction.ACTION_SHOOTRIGHT),
-        confirm = pressed(player, ButtonAction.ACTION_PILLCARD),
     }
+    for _, source in ipairs(SOURCES) do now[source.name] = pressed(player, source.action) end
+    return now
 end
 
 local function sfx(id, volume)
@@ -204,18 +231,33 @@ local function step(player)
     local now = readInputs(player)
     local last = latches[key] or now
     latches[key] = now
-    if releaseLock[key] and not now.confirm then releaseLock[key] = nil end
+    local locks = releaseLock[key]
+    if locks then
+        for name in pairs(locks) do if not now[name] then locks[name] = nil end end
+        if next(locks) == nil then releaseLock[key] = nil end
+    end
     track(player, key)
     if not pickers[key] or Game():IsPaused() then return end
     local pick = pickSave(player, false)
-    if not pick or pick.open <= 0 then pickers[key] = nil; track(player, key); return end
+    local counts = pick and openCounts(pick)
+    if not counts then pickers[key] = nil; track(player, key); return end
+    pickers[key] = counts
     track(player, key, pick)
-    if now.confirm and not last.confirm then
-        local ticket = runTicket(true)
-        ticket.queue[#ticket.queue + 1] = KINDS[pick.index]
-        pick.open = pick.open - 1
-        pickers[key] = pick.open > 0 and pick.open or nil
-        releaseLock[key] = true
+    -- Each source confirms only with its own key: the card key a ticket, the
+    -- active-item key an AR Glasses use.
+    local confirmed = false
+    for _, source in ipairs(SOURCES) do
+        if counts[source.name] and now[source.name] and not last[source.name] then
+            local ticket = runTicket(true)
+            ticket.queue[#ticket.queue + 1] = KINDS[pick.index]
+            pick[source.field] = pick[source.field] - 1
+            releaseLock[key] = releaseLock[key] or {}
+            releaseLock[key][source.name] = true
+            confirmed = true
+        end
+    end
+    if confirmed then
+        pickers[key] = openCounts(pick)
         track(player, key)
         save()
         sfx(SoundEffect.SOUND_PAPER_IN, 0.9)
@@ -231,30 +273,36 @@ local function step(player)
     end
 end
 
--- While a player is choosing, their shooting keys and card key belong to the
--- picker; the card key stays theirs until let go, so the confirming press
--- cannot also use the next pocket item. The same keys drive every player on
--- that controller (a second player added on the picker's controller), so the
--- game is denied them for all of those players for the same window.
-local BLOCKED = {
+-- While a player is choosing, their shooting keys and the confirming key of
+-- each open source belong to the picker; a confirming key stays theirs until
+-- let go, so the confirming press cannot also use the next pocket item or the
+-- active item. The same keys drive every player on that controller (a second
+-- player added on the picker's controller), so the game is denied them for all
+-- of those players for the same window.
+local SHOOTING = {
     [ButtonAction.ACTION_SHOOTLEFT] = true, [ButtonAction.ACTION_SHOOTRIGHT] = true,
     [ButtonAction.ACTION_SHOOTUP] = true, [ButtonAction.ACTION_SHOOTDOWN] = true,
-    [ButtonAction.ACTION_PILLCARD] = true,
 }
 
+local function holds(key, action)
+    local open = pickers[key]
+    if open and SHOOTING[action] then return true end
+    local name = CONFIRM[action]
+    if not name then return false end
+    local locks = releaseLock[key]
+    return (open ~= nil and open[name] ~= nil) or (locks ~= nil and locks[name] == true)
+end
+
 local function withheld(key, controller, action)
-    if pickers[key] or (action == ButtonAction.ACTION_PILLCARD and releaseLock[key]) then return true end
+    if holds(key, action) then return true end
     for other, owner in pairs(controllers) do
-        if owner == controller
-            and (pickers[other] or (action == ButtonAction.ACTION_PILLCARD and releaseLock[other])) then
-            return true
-        end
+        if owner == controller and holds(other, action) then return true end
     end
     return false
 end
 
 function M.onInputAction(_, entity, hook, action)
-    if reading or not ready or not BLOCKED[action] or next(controllers) == nil then return end
+    if reading or not ready or not (SHOOTING[action] or CONFIRM[action]) or next(controllers) == nil then return end
     local player = entity and entity:ToPlayer()
     if not player then return end
     if not withheld(GetPtrHash(player), player.ControllerIndex, action) then return end
@@ -263,7 +311,7 @@ function M.onInputAction(_, entity, hook, action)
 end
 
 -- ---------------------------------------------------------------- drawing
-local function drawPicker(player, count)
+local function drawPicker(player, counts)
     local pick = pickSave(player, false)
     if not pick then return end
     local foot = Isaac.WorldToScreen(player.Position)
@@ -281,7 +329,14 @@ local function drawPicker(player, count)
         View.drawAt(labels[i], x, y, scale, i == pick.index and c or { c[1] * DIM, c[2] * DIM, c[3] * DIM })
         x = x + widths[i] + gap
     end
-    local hint = View.text("ui.conch_ticket.hint")
+    local keys, count = {}, 0
+    for _, source in ipairs(SOURCES) do
+        if counts[source.name] then
+            keys[#keys + 1] = View.text(source.label)
+            count = count + counts[source.name]
+        end
+    end
+    local hint = View.text("ui.conch_ticket.hint", table.concat(keys, "/"))
     if count > 1 then hint = hint .. "   " .. View.text("ui.conch_ticket.waiting", count) end
     View.drawAt(hint, foot.X - View.width(hint, 0.5) / 2, y + 12, 0.5, { 0.95, 0.92, 0.85 })
 end
@@ -297,22 +352,35 @@ local function drawQueue()
 end
 
 -- ---------------------------------------------------------------- callbacks
+--- Open one picker over the player's head for a source: "card" (the Conch
+--- Ticket, confirmed with the card key) or "glasses" (AR Glasses, confirmed
+--- with the active-item key). Returns true, or false and a reason when nothing
+--- can be reserved; the caller then gives back what opened it.
+function M.open(player, sourceName)
+    local source = SOURCE[sourceName]
+    if not source then return false, "UNKNOWN_SOURCE" end
+    if not player or not ready then return false, "NOT_READY" end
+    local a, reason = api()
+    if not a then return false, reason end
+    local pick = pickSave(player, true)
+    if not pick then return false, "NO_SAVE" end
+    pick[source.field] = pick[source.field] + 1
+    save()
+    local key = GetPtrHash(player)
+    pickers[key] = openCounts(pick)
+    track(player, key, pick)
+    latches[key] = readInputs(player) -- the key that used it is still down
+    return true
+end
+
 function M.onUseCard(_, card, player)
     if card ~= CARD or not player or not ready then return end
-    if not api() then
+    local opened, reason = M.open(player, "card")
+    if not opened and (reason == "API_UNAVAILABLE" or reason == "API_NOT_READY") then
         -- Without the Magic Conch there is nothing to reserve: hand the ticket back.
         player:AddCard(CARD)
         View.warn("TICKET_REFUNDED", "the Magic Conch API is unavailable; the ticket was given back")
-        return
     end
-    local pick = pickSave(player, true)
-    if not pick then return end
-    pick.open = pick.open + 1
-    save()
-    local key = GetPtrHash(player)
-    pickers[key] = pick.open
-    track(player, key, pick)
-    latches[key] = readInputs(player) -- the key that used the card is still down
 end
 
 local function live(player)
@@ -321,30 +389,43 @@ end
 
 -- A picking player can leave the run before confirming (a co-op drop-out, a
 -- removed extra player). Their saved picker leaves with them, so each open
--- ticket goes back to a remaining live player, one on the same controller
--- first, and that player's saved picker is closed so it cannot reopen and
--- count twice if they return. Their locks go too, freeing that controller.
+-- picker goes to a remaining live player, one on the same controller first: a
+-- ticket goes back as a card, and an AR Glasses use, already paid for in
+-- charge, opens on that player to confirm with their own active-item key. The
+-- departed player's saved picker is closed so it cannot reopen and count twice
+-- if they return. Their locks go too, freeing that controller.
 local function settleDeparted(present, players)
+    local departed = {}
     for key, controller in pairs(controllers) do
-        if not present[key] then
-            local count, pick = pickers[key], pickRefs[key]
-            pickers[key], latches[key], releaseLock[key] = nil, nil, nil
-            controllers[key], pickRefs[key] = nil, nil
-            if count and count > 0 then
-                local heir
-                for _, player in ipairs(players) do
-                    if player.ControllerIndex == controller then heir = player; break end
-                end
-                heir = heir or players[1]
-                if pick then pick.open = 0 end
-                if heir then
-                    for _ = 1, count do heir:AddCard(CARD) end
-                    ConchBlessing.printDebug(string.format(
-                        "[ConchTicket] %d unconfirmed ticket(s) of a player who left went back to controller %s",
-                        count, tostring(heir.ControllerIndex)))
-                end
-                save()
+        if not present[key] then departed[#departed + 1] = { key = key, controller = controller } end
+    end
+    for _, gone in ipairs(departed) do
+        local key = gone.key
+        local counts, pick = pickers[key], pickRefs[key]
+        pickers[key], latches[key], releaseLock[key] = nil, nil, nil
+        controllers[key], pickRefs[key] = nil, nil
+        if counts then
+            local heir
+            for _, player in ipairs(players) do
+                if player.ControllerIndex == gone.controller then heir = player; break end
             end
+            heir = heir or players[1]
+            if pick then for _, source in ipairs(SOURCES) do pick[source.field] = 0 end end
+            if heir then
+                for _ = 1, counts.card or 0 do heir:AddCard(CARD) end
+                local heirPick = counts.glasses and pickSave(heir, true)
+                if heirPick then
+                    heirPick.glasses = heirPick.glasses + counts.glasses
+                    local heirKey = GetPtrHash(heir)
+                    pickers[heirKey] = openCounts(heirPick)
+                    track(heir, heirKey, heirPick)
+                    latches[heirKey] = readInputs(heir)
+                end
+                ConchBlessing.printDebug(string.format(
+                    "[ConchTicket] %d ticket(s) and %d AR Glasses picker(s) of a player who left went to controller %s",
+                    counts.card or 0, counts.glasses or 0, tostring(heir.ControllerIndex)))
+            end
+            save()
         end
     end
 end
@@ -375,8 +456,8 @@ function M.onRender()
             local player = game:GetPlayer(i)
             if player then
                 step(player)
-                local count = pickers[GetPtrHash(player)]
-                if count and visible then drawPicker(player, count) end
+                local counts = pickers[GetPtrHash(player)]
+                if counts and visible then drawPicker(player, counts) end
             end
         end
         drawQueue()
@@ -421,6 +502,21 @@ M._test = {
     pickers = function() return pickers end,
     hold = function(action, down) testKeys[action] = down and true or nil end,
     releaseAll = function() for key in pairs(testKeys) do testKeys[key] = nil end end,
+    -- Bench cleanup: close every open picker and drop the queued answers.
+    clearAll = function()
+        for key in pairs(testKeys) do testKeys[key] = nil end
+        local ticket = runTicket(false)
+        if ticket then ticket.queue = {} end
+        local game = Game()
+        for i = 0, game:GetNumPlayers() - 1 do
+            local pick = pickSave(game:GetPlayer(i), false)
+            if pick then for _, source in ipairs(SOURCES) do pick[source.field] = 0 end end
+        end
+        pickers, latches, releaseLock = {}, {}, {}
+        controllers, pickRefs = {}, {}
+        save()
+        M.sync()
+    end,
 }
 
 ConchBlessing:AddCallback(ModCallbacks.MC_USE_CARD, M.onUseCard, CARD)

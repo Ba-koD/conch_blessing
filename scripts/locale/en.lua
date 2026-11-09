@@ -617,7 +617,11 @@ return {
 
         AR_GLASSES = {
             name = "AR Glasses", description = "Expand your world.",
-            eid = { "Press C to cycle Positive → Negative → Neutral. The chosen outcome applies to your next normal Magic Conch use." },
+            eid = {
+                "Use to choose the Magic Conch's next answer: positive, neutral or negative",
+                "#Pick with the shooting keys and press the active item key (Space) again to confirm",
+                "#The answer stays reserved until the next Magic Conch use, even after changing rooms or quitting and continuing",
+            },
         },
         HEMISPATIAL_NEGLECT = {
             name = "Hemispatial Neglect", description = "              am I seeing?",
@@ -790,10 +794,8 @@ return {
             numbered = "Prediction #%s: %s",
         },
         conch_ticket = {
-            hint = "< > choose   Q confirm", waiting = "x%s", reserved = "Reserved: %s", separator = ", ",
-        },
-        ar_glasses = {
-            title = "Next: %s", open = "C: change next answer", controls = "C: change next answer", rejected = "Could not reserve answer",
+            hint = "< > choose   %s confirm", confirm_card = "Q", confirm_glasses = "Space",
+            waiting = "x%s", reserved = "Reserved: %s", separator = ", ",
         },
         morph = {
             applied = "APPLIED",

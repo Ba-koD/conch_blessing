@@ -1,160 +1,26 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
+-- AR Glasses: a 12-charge active that starts half full (user design 2026-11-09).
+-- Using it opens the Conch Ticket's picker over the user's head: the shooting
+-- keys choose positive, neutral or negative and the active-item key confirms.
+-- The confirmed answer joins the ticket's queue, so it is reserved the same way
+-- (kept through rooms and Continue until a Magic Conch use takes it).
 local M = {}
 ConchBlessing.arglasses = M
 local View = require("scripts.lib.conch_answer_view")
 local ID = Isaac.GetItemIdByName("AR Glasses")
-local OWNER = "ConchBlessing AR Glasses"
-local kinds = { "positive", "negative", "neutral" }
-local selected, wasPressed, boundAPI, token = 0, false, nil, nil
 
-function M.hasOwner()
-    if ID <= 0 then return false end
-    for i = 0, Game():GetNumPlayers()-1 do
-        local p = Isaac.GetPlayer(i)
-        if p and p:HasCollectible(ID) then return true end
-    end
-    return false
-end
-
-local function api()
-    local p = rawget(_G, "MagicConch")
-    if not M.hasOwner() then return nil, "NO_OWNER" end
-    if not p or not p.Config or not p.Config.enabled then return nil, "DISABLED" end
-    local a = p.API
-    if not a or type(a.IsReady) ~= "function" or type(a.PreviewResult) ~= "function"
-        or type(a.ReserveNextResult) ~= "function" or type(a.GetNextResultReservation) ~= "function"
-        or type(a.ClearNextResultReservation) ~= "function" then
-        View.warn("CHOICE_API_UNAVAILABLE", "update Magic Conch for the next-result reservation API")
-        return nil, "API_UNAVAILABLE"
-    end
-    local ok, ready = pcall(a.IsReady)
-    if not ok or not ready then return nil, "API_NOT_READY" end
-    return a
-end
-
--- C is a keyboard key, and the keyboard is controller index 0. While a player
--- plays on the keyboard, C counts only if that player owns AR Glasses, so a
--- keyboard player without them cannot change the party's choice. When nobody
--- plays on the keyboard (a solo or all-gamepad run), the key is free and counts
--- for any owner, as it always did. No pad button is bound, because every free
--- one is shooting, drop or active-switch input that must stay the game's.
-local KEYBOARD = 0
-
-local function pressed()
-    return Input and type(Input.IsButtonPressed) == "function"
-        and Input.IsButtonPressed(Keyboard.KEY_C, KEYBOARD) == true
-end
-
-local function keyboardOwner()
-    if ID <= 0 then return false end
-    local keyboardPlayer, anyOwner = false, false
-    for i = 0, Game():GetNumPlayers()-1 do
-        local p = Isaac.GetPlayer(i)
-        if p then
-            local owns = p:HasCollectible(ID)
-            if p.ControllerIndex == KEYBOARD then
-                if owns then return true end
-                keyboardPlayer = true
-            elseif owns then
-                anyOwner = true
-            end
-        end
-    end
-    return anyOwner and not keyboardPlayer
-end
-
-function M.cancel()
-    if boundAPI then
-        local ok, err = pcall(boundAPI.ClearNextResultReservation, OWNER)
-        if not ok then View.warn("CHOICE_CLEAR_FAILED", err) end
-    end
-    boundAPI, token = nil, nil
-end
-
-function M.reset()
-    M.cancel()
-    selected, wasPressed = 0, pressed()
-end
-
-local function validOwner()
-    return ConchBlessing.arglasses == M and M.hasOwner()
-end
-
-local function ticketWaiting()
+-- An ItemData `use` handler receives the mod first: (_, id, rng, player, flags, slot, varData).
+function M.onUseItem(_, id, _, player)
+    if id ~= ID or not player then return end
     local ticket = ConchBlessing.conchTicket
-    return ticket ~= nil and ticket.hasQueue()
-end
-
-local function reserve(index)
-    -- A Conch Ticket's answer holds the same provider slot and wins over a choice.
-    if ticketWaiting() then return false, "TICKET_RESERVED" end
-    local a, reason = api()
-    if not a then return false, reason end
-    if boundAPI and boundAPI ~= a then M.cancel() end
-    local ok, accepted, result = pcall(a.ReserveNextResult, OWNER, {type=kinds[index]}, validOwner)
-    if not ok or accepted ~= true then
-        View.warn("CHOICE_RESERVE_FAILED", ok and result or accepted)
-        return false, ok and result or "API_FAILED"
+    local opened, reason = false, "TICKET_UNAVAILABLE"
+    if ticket and type(ticket.open) == "function" then opened, reason = ticket.open(player, "glasses") end
+    if not opened then
+        -- Nothing can be reserved (no Magic Conch API): keep the charge.
+        View.warn("GLASSES_REFUSED", tostring(reason) .. "; the charge was kept")
+        return { Discharge = false, Remove = false, ShowAnim = false }
     end
-    selected, boundAPI, token = index, a, result
-    return true
-end
-
-function M.cycle()
-    -- No activation here. The provider applies this to its next successful
-    -- ordinary activation, including its OWN hotkey and third-party API calls.
-    return reserve(selected % #kinds + 1)
-end
-
-function M.getSelection()
-    local a, reason = api()
-    if not a then return nil, reason end
-    if a ~= boundAPI or not token then return nil end
-    local ok, reserved = pcall(a.GetNextResultReservation, OWNER)
-    if not ok then View.warn("CHOICE_READ_FAILED", reserved); return nil end
-    if not reserved or reserved.token ~= token then return nil end
-    local previewOK, result = pcall(a.PreviewResult, 0)
-    if not previewOK or type(result) ~= "table" or result.type ~= kinds[selected] or result.forced ~= true then
-        View.warn("CHOICE_PREVIEW_FAILED", previewOK and "reservation/preview mismatch" or result)
-        return nil
-    end
-    local usage = View.usage(a, result)
-    return {type=result.type, text=result.text, id=result.id, useNumber=usage and usage+1 or result.useNumber}
-end
-
-function M.isOpen() return M.getSelection() ~= nil end
-
-function M.onUpdate()
-    -- Like Magic Conch, track IsButtonPressed's rising edge. Also polled from
-    -- render so a short C tap between 30 Hz game updates is not lost.
-    local down = pressed()
-    local rising = down and not wasPressed
-    wasPressed = down
-    if not M.hasOwner() then M.reset(); return end
-    local p = rawget(_G, "MagicConch")
-    if not p or not p.Config or not p.Config.enabled then M.reset(); return end
-    if Game():IsPaused() then return end
-    if rising and keyboardOwner() then M.cycle() end
-end
-
-function M.onRender()
-    M.onUpdate()
-    if not M.hasOwner() or ticketWaiting() then return end
-    local ok, err = pcall(function()
-        local prediction = M.getSelection()
-        if not prediction then
-            if ConchBlessing.realeyes and ConchBlessing.realeyes.hasOwner() then return end
-            View.render({{text=View.text("ui.ar_glasses.open"), icon="ar_glasses"}})
-            return
-        end
-        local label = View.text("ui.conch_mode.flags." .. prediction.type)
-        View.render({{text=View.text("ui.ar_glasses.title", label), kind=prediction.type, icon="ar_glasses"}})
-    end)
-    if not ok then View.warn("CHOICE_RENDER_FAILED", err) end
-end
-
-function M.onUnload(_, mod)
-    if mod == ConchBlessing or mod == ConchBlessing.originalMod then M.reset() end
+    return { Discharge = true, Remove = false, ShowAnim = true }
 end
 
 return M

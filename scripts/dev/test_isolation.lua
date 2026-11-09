@@ -4,7 +4,9 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 local H = require("scripts.dev.item_test_support")
 local M = {}
 local eligible = { MONEY_TEAR=true, ORAL_STEROIDS=true, CEIL=true, ROUND=true, FLOOR=true,
-    F_MINUS=true, C_MINUS=true, B_MINUS=true, KRONOS=true, UTILITY_BELT=true, REAL_EYES=true, AR_GLASSES=true, HEMISPATIAL_NEGLECT=true }
+    F_MINUS=true, C_MINUS=true, B_MINUS=true, KRONOS=true, UTILITY_BELT=true, REAL_EYES=true, HEMISPATIAL_NEGLECT=true }
+-- AR Glasses left this list when it became an active (2026-11-09): its lifecycle
+-- picks up a real pedestal and swaps the starting active, so each bench restarts.
 function M.supports(key) return eligible[key] == true end
 function M.group(key)
     if key=="KRONOS" then return "kronos_reversible" end

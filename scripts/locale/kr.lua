@@ -602,7 +602,11 @@ return {
 
         AR_GLASSES = {
             name = "AR 안경", description = "안에 사람들이 있잖아!",
-            eid = { "C를 누를 때마다 긍정 → 부정 → 중립 순서로 선택합니다. 다음 소라고둥 사용 시 선택한 결과가 적용됩니다." },
+            eid = {
+                "사용 시 다음 소라고둥의 대답을 긍정·중립·부정 중에서 고릅니다",
+                "#공격 키로 고르고 액티브 사용 키(Space)를 다시 눌러 확정합니다",
+                "#방을 옮기거나 게임을 껐다 켜도 다음 소라고둥 사용 때까지 예약이 유지됩니다",
+            },
         },
         HEMISPATIAL_NEGLECT = {
             name = "편측 무시", description = "              게 보이는 거지?",
@@ -775,10 +779,8 @@ return {
             numbered = "예측 #%s: %s",
         },
         conch_ticket = {
-            hint = "< > 고르기   Q 확정", waiting = "x%s", reserved = "예약: %s", separator = ", ",
-        },
-        ar_glasses = {
-            title = "다음: %s", open = "C: 다음 답변 변경", controls = "C: 다음 답변 변경", rejected = "답변 예약 불가",
+            hint = "< > 고르기   %s 확정", confirm_card = "Q", confirm_glasses = "Space",
+            waiting = "x%s", reserved = "예약: %s", separator = ", ",
         },
         morph = {
             applied = "인게임 적용",

@@ -55,19 +55,16 @@ function M.getPrediction()
 end
 
 local function render()
-    -- A waiting Conch Ticket shows the answer the next use will give in this spot.
+    -- A waiting Conch Ticket or AR Glasses answer shows the answer the next use
+    -- will give in this spot.
     local ticket = ConchBlessing.conchTicket
     if ticket and ticket.hasQueue() then return end
-    local ar = ConchBlessing.arglasses
-    if ar and ar.isOpen() then return end
     local prediction = M.getPrediction()
     if not prediction then return end
     local kind = View.text("ui.conch_mode.flags." .. prediction.type)
     local text = prediction.useNumber and View.text("ui.real_eyes.numbered", prediction.useNumber, kind)
         or View.text("ui.real_eyes.prediction", kind)
-    local rows = {{text=text, kind=prediction.type, icon="real_eyes"}}
-    if ar and ar.hasOwner() then rows[#rows+1] = {text=View.text("ui.ar_glasses.open"), icon="ar_glasses"} end
-    View.render(rows)
+    View.render({{text=text, kind=prediction.type, icon="real_eyes"}})
 end
 
 function M.onRender()

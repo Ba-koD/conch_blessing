@@ -251,13 +251,68 @@ S.add("HEMISPATIAL_NEGLECT", "right_eye", {conditions=true,damage=true}, functio
     end
 end)
 
-S.add("AR_GLASSES", "choice", {conditions=true}, function(plan,id)
-    plan.require("next-use answer reservation API",function()
+-- AR Glasses is a 12-charge active. Using it opens the Conch Ticket's picker
+-- over the head; the shooting keys choose and the active-item key confirms, and
+-- the answer is reserved like a ticket answer. The picker reads its keys with
+-- Input.IsActionPressed, which MC_INPUT_ACTION cannot fake (measured 2026-10-12),
+-- so the choice and the confirming press go through the ticket's test-only key
+-- source. The engine's own use of the item does ask MC_INPUT_ACTION for the
+-- player, so `active_key` holds the engine's active-item key here and the engine
+-- uses the item from its slot. LATE runs after the picker's own hook, so a key
+-- the picker withholds stays withheld.
+local LATE = type(callbackPriority) == "table" and tonumber(callbackPriority.LATE) or 1000
+local glassesKey = nil      -- player hash while the bench holds the engine's active-item key
+local glassesUses = 0       -- AR Glasses uses the engine reported
+local glassesHook = false
+local function glassesId()
+    local row = ConchBlessing.ItemData and ConchBlessing.ItemData.AR_GLASSES
+    return row and row.id or -1
+end
+if type(ConchBlessing.AddPriorityCallback) == "function" and ButtonAction and ModCallbacks.MC_INPUT_ACTION
+    and ModCallbacks.MC_USE_ITEM then
+    ConchBlessing:AddPriorityCallback(ModCallbacks.MC_INPUT_ACTION, LATE, function(_, entity, hook, action)
+        if not glassesKey or action ~= ButtonAction.ACTION_ITEM or not entity or GetPtrHash(entity) ~= glassesKey then return end
+        if hook == InputHook.GET_ACTION_VALUE then return 1.0 end
+        return true
+    end)
+    -- Before the item's own handler, whose returned table ends the chain.
+    ConchBlessing:AddPriorityCallback(ModCallbacks.MC_USE_ITEM, OBSERVE_PRIORITY, function(_, id)
+        if id ~= glassesId() then return end
+        glassesUses = glassesUses + 1
+        glassesKey = nil
+    end)
+    glassesHook = true
+end
+
+local function ticket() return ConchBlessing.conchTicket end
+local function glassesPick(player) return ConchBlessing.SaveManager.GetRunSave(player).conchTicketPick or {} end
+local function reservedKind()
+    local r = MagicConch.API.GetNextResultReservation(ticket()._test.owner)
+    return r and r.options and r.options.type
+end
+local function pickText(player)
+    local pick = glassesPick(player)
+    local queue = ticket().queue()
+    return string.format("picking=%s glasses=%s open=%s index=%s queue={%s} reserved=%s",
+        tostring(ticket().picking(player)), tostring(pick.glasses), tostring(pick.open), tostring(pick.index),
+        table.concat(queue, ","), tostring(reservedKind()))
+end
+-- The action is named, not passed: plans are built before a run, and the
+-- ButtonAction enum is resolved when the step runs.
+local function tapKey(plan, name)
+    plan.act(function() ticket()._test.hold(ButtonAction[name], true) end)
+    plan.wait(3)
+    plan.act(function() ticket()._test.hold(ButtonAction[name], false) end)
+    plan.wait(3)
+end
+
+local function glassesSetup(plan, id)
+    plan.require("next-use answer reservation API and the ticket's picker", function()
         local api=MagicConch and MagicConch.API
-        return api and type(api.PreviewResult)=="function" and type(api.TriggerMagicConch)=="function"
-            and type(api.GetLastResult)=="function" and type(api.GetState)=="function"
-            and type(api.ReserveNextResult)=="function" and type(api.GetNextResultReservation)=="function"
-            and type(api.ClearNextResultReservation)=="function" or nil,
+        return api and type(api.TriggerMagicConch)=="function" and type(api.GetLastResult)=="function"
+            and type(api.GetState)=="function" and type(api.ReserveNextResult)=="function"
+            and type(api.GetNextResultReservation)=="function" and type(api.ClearNextResultReservation)=="function"
+            and ticket()~=nil and type(ticket().open)=="function" or nil,
             "current Magic Conch provider required"
     end)
     plan.act(function(player,ctx)
@@ -267,42 +322,119 @@ S.add("AR_GLASSES", "choice", {conditions=true}, function(plan,id)
         ctx.forced=c.forcedReply
         ctx.cleanupFns=ctx.cleanupFns or {}
         ctx.cleanupFns[#ctx.cleanupFns+1]=function()
+            glassesKey=nil
             c.enabled,c.timing,c.attemptsPerRoom=enabled,timing,attempts
-            ConchBlessing.arglasses.reset()
+            ticket()._test.clearAll()
         end
         c.enabled,c.attemptsPerRoom=true,0
         c.timing={shake=1,wait=1,display=1,cooldown=0}
-        ConchBlessing.arglasses.reset()
+        ticket()._test.clearAll()
     end)
-    for _,kind in ipairs({"positive","negative","neutral"}) do
+    plan.wait(2)
+    plan.require("AR Glasses sits in the primary active slot",function(player)
+        return player:GetActiveItem(ActiveSlot.SLOT_PRIMARY)==id,"primary="..player:GetActiveItem(ActiveSlot.SLOT_PRIMARY)
+    end)
+end
+
+S.add("AR_GLASSES", "choice", {conditions=true}, function(plan,id)
+    glassesSetup(plan,id)
+    -- The picker opens on neutral, then on the last choice, so one step right
+    -- each time picks negative, then positive, then neutral.
+    for round,row in ipairs({{kind="negative",start=2},{kind="positive",start=3},{kind="neutral",start=1}}) do
+        local kind=row.kind
         plan.waitUntil(function() return MagicConch.API.GetState()=="idle" end,180,"Conch idle")
-        plan.wait(12)
-        plan.act(function(_,ctx)
+        plan.wait(6)
+        plan.act(function(player,ctx)
             ctx.before=MagicConch:GetCurrentRoomUsage()
-            ctx.reserved=ConchBlessing.arglasses.cycle()
-            ctx.preview=ConchBlessing.arglasses.getSelection()
-            ctx.afterSelection=MagicConch:GetCurrentRoomUsage()
+            H.use(player,id)
         end)
-        plan.require("C choice reserves without activating or consuming a use",function(_,ctx)
-            return ctx.reserved and ctx.preview and ctx.preview.type==kind
-                and ctx.afterSelection==ctx.before and MagicConch.API.GetState()=="idle",
-                "selected="..kind.." usage before="..ctx.before.." after="..ctx.afterSelection
+        plan.waitUntil(function(player) return ticket().picking(player),"no picker" end,10,"the picker opens over the head")
+        plan.require((round==1 and "a use opens one picker on neutral" or "the next use opens on the last choice")
+            .." and reserves or uses nothing yet",function(player,ctx)
+            local pick=glassesPick(player)
+            return pick.glasses==1 and (pick.open or 0)==0 and pick.index==row.start and #ticket().queue()==0
+                and reservedKind()==nil and MagicConch:GetCurrentRoomUsage()==ctx.before, pickText(player)
+        end)
+        tapKey(plan,"ACTION_SHOOTRIGHT")
+        tapKey(plan,"ACTION_PILLCARD")
+        plan.check("the card key does not confirm an AR Glasses picker",function(player)
+            return ticket().picking(player) and #ticket().queue()==0, pickText(player)
+        end)
+        tapKey(plan,"ACTION_ITEM")
+        plan.require("the active-item key confirms "..kind..", reserved like a ticket answer",function(player,ctx)
+            local queue=ticket().queue()
+            return not ticket().picking(player) and #queue==1 and queue[1]==kind and reservedKind()==kind
+                and MagicConch:GetCurrentRoomUsage()==ctx.before, pickText(player)
         end)
         plan.act(function(_,ctx)
             ctx.result=MagicConch.API.TriggerMagicConch("ConchBlessing ordinary-use test")
-            ctx.success=ctx.result and ctx.result.success
         end)
-        plan.require("selected answer accepted exactly once",function(_,ctx)
-            return ctx.success and ctx.preview and ctx.preview.type==kind
-                and MagicConch:GetCurrentRoomUsage()==ctx.before+1,
-                "selected="..kind.." result="..tostring(ctx.result and ctx.result.reason)
+        plan.require("the Conch accepts the next ordinary use",function(_,ctx)
+            return ctx.result and ctx.result.success and MagicConch:GetCurrentRoomUsage()==ctx.before+1,
+                "reason="..tostring(ctx.result and ctx.result.reason)
         end)
         plan.waitUntil(function() return MagicConch.API.GetState()=="idle" end,180,"actual answer completes")
-        plan.check("actual answer equals selection; persistent forced setting unchanged",function(_,ctx)
+        plan.wait(2)
+        plan.check("the Conch says "..kind.." once; the persistent forced setting is unchanged",function(player,ctx)
             local result=MagicConch.API.GetLastResult()
-            return result and result.type==kind and result.text==ctx.preview.text
-                and MagicConch.Config.forcedReply==ctx.forced, "actual="..tostring(result and result.text)
+            return result and result.type==kind and #ticket().queue()==0 and reservedKind()==nil
+                and MagicConch.Config.forcedReply==ctx.forced, "actual="..tostring(result and result.type).." "..pickText(player)
         end)
     end
+end)
+
+S.add("AR_GLASSES", "active_key", {conditions=true}, function(plan,id)
+    glassesSetup(plan,id)
+    plan.require("the bench can hold the engine's active-item key",function()
+        return (glassesHook and glassesId()==id) or nil,"MC_INPUT_ACTION/MC_USE_ITEM priority callbacks and the AR Glasses ID required"
+    end)
+    plan.act(function(player,ctx)
+        player:FullCharge(ActiveSlot.SLOT_PRIMARY,true)
+        ctx.uses=glassesUses
+        ctx.before=MagicConch:GetCurrentRoomUsage()
+    end)
+    plan.wait(2)
+    plan.require("AR Glasses holds its full twelve charges",function(player)
+        return H.expect(player:GetActiveCharge(ActiveSlot.SLOT_PRIMARY),12)
+    end)
+    plan.act(function(player) glassesKey=GetPtrHash(player) end)
+    plan.waitUntil(function(_,ctx) return glassesUses>ctx.uses,"no use yet" end,30,"the engine uses AR Glasses from its slot")
+    plan.act(function() glassesKey=nil end)
+    plan.wait(3)
+    plan.section("AR_GLASSES active_key: the picker",
+        "over the head: positive  [neutral]  negative, and below it '< > choose   Space confirm'; with real keys the shooting keys move it, no tears come out, and Space confirms without using an active item")
+    plan.check("one press is one use: the whole charge is spent and one picker opens",function(player,ctx)
+        return glassesUses==ctx.uses+1 and player:GetActiveCharge(ActiveSlot.SLOT_PRIMARY)==0
+            and glassesPick(player).glasses==1, string.format("uses=%d charge=%d %s",glassesUses-ctx.uses,
+                player:GetActiveCharge(ActiveSlot.SLOT_PRIMARY),pickText(player))
+    end)
+    plan.check("the picker withholds shooting and the active-item key, not the card key",function(player)
+        local hook,trig=ticket().onInputAction,InputHook.IS_ACTION_TRIGGERED
+        local item,shoot,card=hook(nil,player,trig,ButtonAction.ACTION_ITEM),hook(nil,player,trig,ButtonAction.ACTION_SHOOTRIGHT),
+            hook(nil,player,trig,ButtonAction.ACTION_PILLCARD)
+        return item==false and shoot==false and card==nil,
+            "item="..tostring(item).." shoot="..tostring(shoot).." card="..tostring(card)
+    end)
+    -- Recharged, the engine's active-item key is held again while the picker is
+    -- open: the picker keeps it, so the engine uses nothing.
+    plan.act(function(player,ctx)
+        player:FullCharge(ActiveSlot.SLOT_PRIMARY,true)
+        ctx.uses=glassesUses
+        glassesKey=GetPtrHash(player)
+    end)
+    plan.wait(15)
+    plan.act(function() glassesKey=nil end)
+    plan.check("while the picker is open the active-item key uses nothing",function(player,ctx)
+        return glassesUses==ctx.uses and player:GetActiveCharge(ActiveSlot.SLOT_PRIMARY)==12,
+            string.format("uses=%d charge=%d",glassesUses-ctx.uses,player:GetActiveCharge(ActiveSlot.SLOT_PRIMARY))
+    end)
+    tapKey(plan,"ACTION_ITEM")
+    plan.check("the active-item key confirms the preselected neutral; no Conch use yet",function(player,ctx)
+        local queue=ticket().queue()
+        return not ticket().picking(player) and #queue==1 and queue[1]=="neutral" and reservedKind()=="neutral"
+            and MagicConch:GetCurrentRoomUsage()==ctx.before, pickText(player)
+    end)
+    plan.section("AR_GLASSES active_key: the reminder","'Reserved: neutral' sits just above the Magic Conch counter")
+    plan.wait(30)
 end)
 return S

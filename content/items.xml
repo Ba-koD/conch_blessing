@@ -21,7 +21,7 @@
     <passive id="18" name="Round" gfx="round.png" quality="3" tags="offensive stars" cache="speed firedelay damage range shotspeed luck" shopprice="15" devilprice="2"/>
     <passive id="19" name="Floor" gfx="floor.png" quality="2" tags="offensive stars" cache="speed firedelay damage range shotspeed luck" shopprice="15" devilprice="1"/>
     <passive id="20" name="Real Eyes" gfx="real_eyes.png" quality="3" shopprice="20" devilprice="2"/>
-    <passive id="21" name="AR Glasses" gfx="ar_glasses.png" quality="4" shopprice="30" devilprice="2"/>
+    <active id="21" name="AR Glasses" gfx="ar_glasses.png" quality="4" shopprice="30" devilprice="2" maxcharges="12" chargetype="normal" initcharge="6"/>
     <passive id="22" name="Hemispatial Neglect" gfx="hemispatial_neglect.png" quality="2" cache="damage" shopprice="15" devilprice="1"/>
     <passive id="23" name="Conch Pearl" gfx="conch_pearl.png" quality="4" tags="summonable offensive nocantrip angel" shopprice="30" devilprice="2"/>
     <passive id="24" name="Family Combo" gfx="kids_menu.png" quality="4" shopprice="20" devilprice="2"/>

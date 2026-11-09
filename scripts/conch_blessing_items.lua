@@ -820,17 +820,17 @@ ConchBlessing.ItemData = {
     },
 
     AR_GLASSES = {
-        type = "passive",
+        type = "active",
         id = Isaac.GetItemIdByName("AR Glasses"),
         pool = { RoomType.ROOM_SHOP, RoomType.ROOM_SECRET },
         quality = 4, hidden = false, shopprice = 30, devilprice = 2,
+        maxcharges = 12,
+        chargetype = "normal",
+        initcharge = 6,
         origin = { id = CollectibleType.COLLECTIBLE_GUPPYS_EYE, type = "collectible" },
         flag = "neutral",
         script = "scripts/items/collectibles/ar_glasses",
-        callbacks = { postUpdate = "arglasses.onUpdate", postRender = "arglasses.onRender",
-            postNewRoom = "arglasses.reset",
-            postGameStarted = "arglasses.reset", preGameExit = "arglasses.reset",
-            preModUnload = "arglasses.onUnload" },
+        callbacks = { use = "arglasses.onUseItem" },
     },
 
     HEMISPATIAL_NEGLECT = {

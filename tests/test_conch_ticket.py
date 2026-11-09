@@ -1,10 +1,12 @@
-"""Conch Ticket: production Lua with engine and Magic Conch provider doubles.
+"""Conch Ticket and AR Glasses: production Lua with engine and Magic Conch provider doubles.
 
 The provider double mirrors Magic Conch 1.14's reservation contract
 (magic_conch_api.lua): one global owner-scoped slot, wiped by every room,
 floor, game start and exit, and consumed by an accepted activation, which
 records the room use first. These checks do not prove the picker's look, the
 engine's input path or a real save and Continue; the in-game bench covers those.
+AR Glasses opens the same picker from its active use and confirms with the
+active-item key, so its cases run on this harness too.
 """
 from pathlib import Path
 import unittest
@@ -23,7 +25,7 @@ class ConchTicketTests(unittest.TestCase):
             local function enum(names) local t = {} for i, n in ipairs(names) do t[n] = i end return t end
             ModCallbacks = enum({'MC_USE_CARD','MC_POST_UPDATE','MC_POST_RENDER','MC_INPUT_ACTION','MC_POST_GAME_STARTED',
                 'MC_POST_NEW_ROOM','MC_POST_NEW_LEVEL','MC_PRE_GAME_EXIT','MC_PRE_MOD_UNLOAD'})
-            ButtonAction = enum({'ACTION_SHOOTLEFT','ACTION_SHOOTRIGHT','ACTION_SHOOTUP','ACTION_SHOOTDOWN','ACTION_PILLCARD','ACTION_LEFT'})
+            ButtonAction = enum({'ACTION_SHOOTLEFT','ACTION_SHOOTRIGHT','ACTION_SHOOTUP','ACTION_SHOOTDOWN','ACTION_PILLCARD','ACTION_LEFT','ACTION_ITEM'})
             InputHook = { IS_ACTION_PRESSED = 0, IS_ACTION_TRIGGERED = 1, GET_ACTION_VALUE = 2 }
             SoundEffect = { SOUND_PAPER_IN = 17, SOUND_MENU_FLIP_LIGHT = 569 }
             CallbackPriority = { LATE = 1000 }
@@ -41,6 +43,7 @@ class ConchTicketTests(unittest.TestCase):
                 GetTextWidth = function(s) return #s * 5 end,
                 RenderText = function(s) drawn[#drawn + 1] = s end,
                 GetScreenWidth = function() return 480 end, GetScreenHeight = function() return 270 end,
+                GetItemIdByName = function(name) return name == 'AR Glasses' and 901 or -1 end,
             }
             keys = {}
             Input = { IsActionPressed = function(action, controller) return keys[controller .. ':' .. action] == true end }
@@ -113,7 +116,6 @@ class ConchTicketTests(unittest.TestCase):
                 },
                 printDebug = function() end,
                 printError = function(message) errors[#errors + 1] = message end,
-                arglasses = { cancelled = 0, cancel = function() ConchBlessing.arglasses.cancelled = ConchBlessing.arglasses.cancelled + 1 end },
             }
             ConchBlessing.Locale.text = function(key, ...) return ConchBlessing.Locale.textIn('en', key, ...) end
             errors = {}
@@ -121,7 +123,14 @@ class ConchTicketTests(unittest.TestCase):
             function ConchBlessing:AddPriorityCallback(id, priority, fn) callbacks[id] = { fn = fn, priority = priority } end
             function fire(id, ...) return callbacks[id].fn(nil, ...) end
             T = require('scripts.items.cards.conch_ticket')
+            AR = require('scripts.items.collectibles.ar_glasses')
             P1 = players[1]
+            -- The engine uses AR Glasses with the active-item key, which is still down.
+            function useGlasses(player)
+                press(player or P1, ButtonAction.ACTION_ITEM, true)
+                return AR.onUseItem(nil, 901, nil, player or P1, 0, 0, 0)
+            end
+            function pick(player) return playerSaves[(player or P1).hash].conchTicketPick end
             function useTicket(player)
                 press(player, ButtonAction.ACTION_PILLCARD, true) -- the card key that used it is still down
                 fire(ModCallbacks.MC_USE_CARD, 88, player or P1)
@@ -261,7 +270,7 @@ class ConchTicketTests(unittest.TestCase):
             assert(provider.slot == nil, 'an empty queue holds nothing')
         """)
 
-    def test_ar_glasses_step_aside_and_another_mods_slot_is_respected(self):
+    def test_another_mods_slot_is_respected(self):
         self.run_lua("""
             start()
             provider.slot = { owner = 'Some Other Mod', options = { type = 'positive' }, token = 99 }
@@ -272,7 +281,6 @@ class ConchTicketTests(unittest.TestCase):
             fire(ModCallbacks.MC_POST_UPDATE); assert(#errors == 1)
             provider.slot = nil; fire(ModCallbacks.MC_POST_UPDATE)
             assert(reserved() == 'neutral', 'reserved as soon as the slot is free')
-            assert(ConchBlessing.arglasses.cancelled > 0, 'AR Glasses gives up its own choice')
         """)
 
     def test_without_the_conch_the_ticket_is_given_back(self):
@@ -390,6 +398,149 @@ class ConchTicketTests(unittest.TestCase):
             for _, message in ipairs(errors) do
                 assert(message:find('FONT_FALLBACK', 1, true), message) -- the harness has no font
             end
+        """)
+
+    # ---------------------------------------------------------------- AR Glasses
+    def test_ar_glasses_use_opens_the_picker_and_the_active_key_confirms(self):
+        self.run_lua("""
+            start()
+            local result = useGlasses(P1)
+            assert(result.Discharge == true and result.Remove == false, 'a use that opens the picker spends the charge')
+            assert(T.picking(P1) and pick().glasses == 1 and pick().open == 0, 'an AR Glasses picker opens')
+            fire(ModCallbacks.MC_POST_UPDATE)
+            assert(T.picking(P1) and #T.queue() == 0, 'the key that used the glasses does not confirm them')
+            press(P1, ButtonAction.ACTION_ITEM, false); fire(ModCallbacks.MC_POST_UPDATE)
+            assert(pick().index == 2, 'neutral is preselected')
+            tap(P1, ButtonAction.ACTION_SHOOTRIGHT)
+            assert(pick().index == 3)
+            tap(P1, ButtonAction.ACTION_PILLCARD)
+            assert(T.picking(P1) and #T.queue() == 0, 'the card key does not confirm an AR Glasses picker')
+            press(P1, ButtonAction.ACTION_ITEM, true); fire(ModCallbacks.MC_POST_UPDATE)
+            assert(not T.picking(P1), 'the active-item key confirms')
+            assert(#T.queue() == 1 and T.queue()[1] == 'negative' and pick().glasses == 0)
+            assert(reserved() == 'negative', 'the next Conch answer is reserved like a ticket answer')
+        """)
+
+    def test_ar_glasses_picker_owns_shooting_and_the_active_key_until_released(self):
+        self.run_lua("""
+            start()
+            local function blocked(action, hook)
+                return fire(ModCallbacks.MC_INPUT_ACTION, P1, hook or InputHook.IS_ACTION_TRIGGERED, action)
+            end
+            assert(blocked(ButtonAction.ACTION_ITEM) == nil, 'nothing is blocked before a use')
+            useGlasses(P1)
+            for _, action in ipairs({ButtonAction.ACTION_SHOOTLEFT, ButtonAction.ACTION_SHOOTRIGHT,
+                ButtonAction.ACTION_SHOOTUP, ButtonAction.ACTION_SHOOTDOWN, ButtonAction.ACTION_ITEM}) do
+                assert(blocked(action) == false and blocked(action, InputHook.IS_ACTION_PRESSED) == false)
+                assert(blocked(action, InputHook.GET_ACTION_VALUE) == 0)
+            end
+            assert(blocked(ButtonAction.ACTION_PILLCARD) == nil, 'the card key stays with the game')
+            assert(blocked(ButtonAction.ACTION_LEFT) == nil, 'walking stays free')
+            press(P1, ButtonAction.ACTION_ITEM, false); fire(ModCallbacks.MC_POST_UPDATE)
+            press(P1, ButtonAction.ACTION_ITEM, true); fire(ModCallbacks.MC_POST_UPDATE)
+            assert(not T.picking(P1))
+            assert(blocked(ButtonAction.ACTION_ITEM) == false, 'the confirming press cannot use the active item')
+            assert(blocked(ButtonAction.ACTION_SHOOTRIGHT) == nil, 'shooting is back at once')
+            press(P1, ButtonAction.ACTION_ITEM, false); fire(ModCallbacks.MC_POST_UPDATE)
+            assert(blocked(ButtonAction.ACTION_ITEM) == nil, 'released, the active-item key is free again')
+        """)
+
+    def test_ar_glasses_answer_outlives_rooms_and_continue_and_is_used_once(self):
+        self.run_lua("""
+            start(); useGlasses(P1); press(P1, ButtonAction.ACTION_ITEM, false); fire(ModCallbacks.MC_POST_UPDATE)
+            tap(P1, ButtonAction.ACTION_SHOOTLEFT); tap(P1, ButtonAction.ACTION_ITEM)
+            assert(reserved() == 'positive')
+            newRoom(85); assert(reserved() == 'positive', 'a new room')
+            fire(ModCallbacks.MC_PRE_GAME_EXIT); provider.reset()
+            start(); assert(reserved() == 'positive', 'quitting and continuing')
+            assert(provider.activate() == 'positive'); fire(ModCallbacks.MC_POST_UPDATE)
+            assert(#T.queue() == 0 and reserved() == nil, 'used once')
+            assert(provider.activate() == 'random')
+        """)
+
+    def test_an_unconfirmed_ar_glasses_picker_reopens_after_continue(self):
+        self.run_lua("""
+            start(); useGlasses(P1); press(P1, ButtonAction.ACTION_ITEM, false); fire(ModCallbacks.MC_POST_UPDATE)
+            fire(ModCallbacks.MC_PRE_GAME_EXIT)
+            start()
+            assert(T.picking(P1) and pick().glasses == 1, 'the paid-for picker reopens')
+            assert(fire(ModCallbacks.MC_INPUT_ACTION, P1, InputHook.IS_ACTION_TRIGGERED, ButtonAction.ACTION_ITEM) == false)
+            fire(ModCallbacks.MC_POST_UPDATE)
+            tap(P1, ButtonAction.ACTION_ITEM)
+            assert(not T.picking(P1) and T.queue()[1] == 'neutral')
+        """)
+
+    def test_ar_glasses_keeps_its_charge_when_nothing_can_be_reserved(self):
+        self.run_lua("""
+            start(); provider.ready = false
+            local result = useGlasses(P1)
+            assert(result.Discharge == false and result.ShowAnim == false, 'the charge is kept')
+            assert(not T.picking(P1) and #P1.cards == 0, 'no picker and no ticket handed out')
+            assert(#errors == 1 and errors[1]:find('GLASSES_REFUSED', 1, true), tostring(errors[1]))
+            useGlasses(P1); assert(#errors == 1, 'reported once')
+            provider.ready = true
+            local saved = ConchBlessing.conchTicket; ConchBlessing.conchTicket = nil
+            assert(useGlasses(P1).Discharge == false, 'without the ticket module too')
+            ConchBlessing.conchTicket = saved
+            assert(AR.onUseItem(nil, 77, nil, P1) == nil, 'another item passes')
+        """)
+
+    def test_nothing_opens_before_the_game_has_started(self):
+        self.run_lua("""
+            local result = useGlasses(P1)
+            assert(result.Discharge == false and not T.picking(P1) and playerSaves[1] == nil)
+        """)
+
+    def test_a_ticket_and_the_glasses_each_confirm_with_their_own_key(self):
+        self.run_lua("""
+            start(); useTicket(P1); press(P1, ButtonAction.ACTION_PILLCARD, false)
+            useGlasses(P1); press(P1, ButtonAction.ACTION_ITEM, false); fire(ModCallbacks.MC_POST_UPDATE)
+            assert(pick().open == 1 and pick().glasses == 1)
+            drawn = {}; fire(ModCallbacks.MC_POST_RENDER)
+            local text = table.concat(drawn, '|')
+            assert(text:find('ui.conch_ticket.hint:ui.conch_ticket.confirm_card/ui.conch_ticket.confirm_glasses', 1, true), text)
+            assert(text:find('ui.conch_ticket.waiting:2', 1, true), text)
+            tap(P1, ButtonAction.ACTION_SHOOTLEFT)
+            press(P1, ButtonAction.ACTION_PILLCARD, true); fire(ModCallbacks.MC_POST_UPDATE)
+            assert(pick().open == 0 and pick().glasses == 1 and T.queue()[1] == 'positive')
+            assert(fire(ModCallbacks.MC_INPUT_ACTION, P1, InputHook.IS_ACTION_TRIGGERED, ButtonAction.ACTION_PILLCARD) == false,
+                'the card key stays withheld until it is let go')
+            press(P1, ButtonAction.ACTION_PILLCARD, false); fire(ModCallbacks.MC_POST_UPDATE)
+            assert(fire(ModCallbacks.MC_INPUT_ACTION, P1, InputHook.IS_ACTION_TRIGGERED, ButtonAction.ACTION_PILLCARD) == nil,
+                'released, while only the glasses picker is open')
+            drawn = {}; fire(ModCallbacks.MC_POST_RENDER)
+            text = table.concat(drawn, '|')
+            assert(text:find('ui.conch_ticket.hint:ui.conch_ticket.confirm_glasses', 1, true)
+                and not text:find('confirm_card', 1, true), text)
+            tap(P1, ButtonAction.ACTION_ITEM)
+            assert(not T.picking(P1) and T.queue()[2] == 'positive', 'the glasses confirm the same choice')
+        """)
+
+    def test_a_departed_ar_glasses_picker_opens_on_the_heir(self):
+        self.run_lua("""
+            players[2] = { hash = 2, ControllerIndex = 1, Position = Vector(0, 0), cards = {}, ToPlayer = function(s) return s end }
+            players[3] = { hash = 3, ControllerIndex = 0, Position = Vector(0, 0), cards = {}, ToPlayer = function(s) return s end }
+            P2, P3 = players[2], players[3]
+            start(); useGlasses(P3); press(P3, ButtonAction.ACTION_ITEM, false)
+            table.remove(players, 3); fire(ModCallbacks.MC_POST_UPDATE)
+            assert(not T.picking(P3) and pick(P3).glasses == 0, 'the departed picker is closed')
+            assert(T.picking(P1) and pick(P1).glasses == 1 and #P1.cards == 0,
+                'the paid-for use opens on the player on the same controller, not as a card')
+            assert(not T.picking(P2))
+            tap(P1, ButtonAction.ACTION_ITEM)
+            assert(not T.picking(P1) and T.queue()[1] == 'neutral')
+            fire(ModCallbacks.MC_POST_UPDATE); assert(#T.queue() == 1, 'counted once')
+        """)
+
+    def test_the_bench_clears_every_picker_and_answer(self):
+        self.run_lua("""
+            start(); useTicket(P1); useGlasses(P1); fire(ModCallbacks.MC_POST_UPDATE)
+            runSave.conchTicket = { queue = { 'negative' } }; fire(ModCallbacks.MC_POST_UPDATE)
+            assert(reserved() == 'negative')
+            T._test.clearAll()
+            assert(not T.picking(P1) and #T.queue() == 0 and provider.slot == nil)
+            assert(pick().open == 0 and pick().glasses == 0)
+            assert(fire(ModCallbacks.MC_INPUT_ACTION, P1, InputHook.IS_ACTION_TRIGGERED, ButtonAction.ACTION_ITEM) == nil)
         """)
 
 

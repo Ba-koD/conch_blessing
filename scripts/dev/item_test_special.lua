@@ -1,28 +1,46 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 local H = require("scripts.dev.item_test_support")
+local Edge = require("scripts.dev.item_test_edge_cases")
 local C = {}
 local used = {}
 
-C.AR_GLASSES = { stage = function(plan, _, n)
+-- AR Glasses is a 12-charge active that starts half full (checked on a real
+-- pedestal pickup). Each stage holding a copy uses it once: the Conch Ticket's
+-- picker opens over the head and nothing is reserved or used until the
+-- active-item key confirms, so the bench closes it again before the next stage.
+-- Confirming and the Magic Conch's real answer are the `choice` and
+-- `active_key` scenarios.
+C.AR_GLASSES = { prepare = Edge.initialCharge, stage = function(plan, id, n)
+    local function ticket() return ConchBlessing.conchTicket end
     plan.require("next-use Conch reservation API available", function()
         local api=MagicConch and MagicConch.API
-        return api and type(api.PreviewResult)=="function"
-            and type(api.ReserveNextResult)=="function" and type(api.GetNextResultReservation)=="function"
-            and type(api.ClearNextResultReservation)=="function" or nil,
+        return api and type(api.ReserveNextResult)=="function" and type(api.GetNextResultReservation)=="function"
+            and type(api.ClearNextResultReservation)=="function" and ticket()~=nil or nil,
             "requires current Magic Conch API"
     end)
-    plan.check("chooser ownership follows copies and final removal", function()
-        return ConchBlessing.arglasses.hasOwner()==(n>0), "copies="..n
-    end)
-    plan.check("cycling/cancelling a choice does not use Conch", function()
-        local before=MagicConch:GetCurrentRoomUsage()
-        local ar=ConchBlessing.arglasses
-        ar.reset()
-        local opened=ar.cycle()
-        local prediction=ar.getSelection()
-        ar.reset()
-        return opened==(n>0) and (prediction~=nil)==(n>0)
-            and before==MagicConch:GetCurrentRoomUsage(), "no use consumed"
+    if n > 0 then
+        plan.act(function(player, ctx)
+            if not ctx.glassesCleanup then
+                ctx.glassesCleanup=true
+                ctx.cleanupFns=ctx.cleanupFns or {}
+                ctx.cleanupFns[#ctx.cleanupFns+1]=function() ticket()._test.clearAll() end
+            end
+            ctx.glassesUsage=MagicConch:GetCurrentRoomUsage()
+            H.use(player, id)
+        end)
+        plan.wait(2)
+        plan.check("a use opens one AR Glasses picker and uses no Conch answer", function(player, ctx)
+            local pick=ConchBlessing.SaveManager.GetRunSave(player).conchTicketPick or {}
+            return ticket().picking(player) and pick.glasses==1 and (pick.open or 0)==0 and #ticket().queue()==0
+                and MagicConch:GetCurrentRoomUsage()==ctx.glassesUsage,
+                string.format("picking=%s glasses=%s open=%s queue=%d usage %s -> %s", tostring(ticket().picking(player)),
+                    tostring(pick.glasses), tostring(pick.open), #ticket().queue(), tostring(ctx.glassesUsage),
+                    tostring(MagicConch:GetCurrentRoomUsage()))
+        end)
+        plan.act(function() ticket()._test.clearAll() end)
+    end
+    plan.check("no picker stays open between stages", function(player)
+        return not ticket().picking(player) and #ticket().queue()==0, "copies="..n
     end)
 end }
 
