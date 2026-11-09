@@ -766,6 +766,17 @@ return {
                 },
             },
         },
+        WRONG_ANSWER_NOTE = {
+            name = "Wrong Answer Note",
+            description = "Never the same mistake twice",
+            eid = {
+                "Each hit writes down the kind of enemy that dealt it, and you deal 50% more damage to that kind (stacks)",
+                "#Moving to the next floor without being hit raises your damage against all enemies by 25% (stacks)",
+                "#{{Warning}} Requires REPENTOGON!",
+            },
+            -- numbers in order: golden, Mom's Box, both
+            specials = { normal = { 100, 50 }, moms_box = { 100, 50 }, both = { 150, 75 } },
+        },
         ANGELS_CROWN = {
             name = "Angel's Crown",
             description = "Heavenly bargain",

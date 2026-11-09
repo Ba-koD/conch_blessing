@@ -751,6 +751,18 @@ return {
                 },
             },
         },
+        WRONG_ANSWER_NOTE = {
+            name = "틀린 답 공책",
+            description = "같은 잘못은 두 번 하지 않는다",
+            eid = {
+                "맞을 때마다 때린 적의 갈래를 적어 두고, 그 갈래의 적에게 주는 피해가 5할 늘어납니다 (쌓임)",
+                "#맞지 않고 다음 층으로 가면 모든 적에게 주는 피해가 5할의 절반만큼 늘어납니다 (쌓임)",
+                "#{{Warning}} 덧붙임 도우미(REPENTOGON)가 있어야 합니다!",
+            },
+            -- 2할 5푼 would take two numbers, so the no-hit step is "half of 5할";
+            -- in order: golden, Mom's Box, both
+            specials = { normal = { 10, 10 }, moms_box = { 10, 10 }, both = { 15, 15 } },
+        },
         ANGELS_CROWN = {
             name = "천사의 머리테",
             description = "하늘에서 값을 치르다",

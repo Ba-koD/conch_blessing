@@ -751,6 +751,17 @@ return {
                 },
             },
         },
+        WRONG_ANSWER_NOTE = {
+            name = "오답노트",
+            description = "같은 실수는 두 번 하지 않는다",
+            eid = {
+                "피격당할 때마다 공격한 적의 종류를 기록하고, 그 종류의 적에게 주는 피해가 50% 증가합니다 (누적)",
+                "#피격 없이 다음 층으로 이동 시 모든 적에게 주는 피해가 25% 증가합니다 (누적)",
+                "#{{Warning}} REPENTOGON이 필요합니다!",
+            },
+            -- numbers in order: golden, Mom's Box, both
+            specials = { normal = { 100, 50 }, moms_box = { 100, 50 }, both = { 150, 75 } },
+        },
         ANGELS_CROWN = {
             name = "천사의 왕관",
             description = "천상의 거래",

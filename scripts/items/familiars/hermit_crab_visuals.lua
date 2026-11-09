@@ -256,5 +256,6 @@ return {
         ["trinket_187_brokenglasses.png"] = { 15, 9, 28 },
         ["trinket_188_icecube.png"] = { 16, 9, 28 },
         ["trinket_189_sigilofbaphomet.png"] = { 15.5, 10, 28 },
+        ["wrong_answer_note.png"] = { 17.5, 5, 29 },
     },
 }

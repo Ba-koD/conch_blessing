@@ -1368,6 +1368,33 @@ ConchBlessing.ItemData = {
         synergies = {
         }
     },
+    WRONG_ANSWER_NOTE = {
+        -- 오답노트: the Magic Conch's neutral Perfection. Every hit writes down the
+        -- kind of enemy that dealt it, and the holder hits that kind harder; a
+        -- no-hit floor raises the damage against all enemies (user design 2026-11-09).
+        type = "trinket",
+        id = Isaac.GetTrinketIdByName("Wrong Answer Note"),
+        stackable = true, -- the trinket multiplier (golden, Mom's Box, more copies) scales both steps
+        gfx = "wrong_answer_note.png",
+        tags = "offensive",
+        hidden = false,
+        origin = { id = TrinketType.TRINKET_PERFECTION, type = "trinket" },
+        flag = "neutral",
+        shopprice = 15,
+        script = "scripts/items/trinkets/wrong_answer_note",
+        -- golden or Mom's Box doubles both steps, both together triples them
+        specials = { normal = { 100, 50 }, moms_box = { 100, 50 }, both = { 150, 75 } },
+        callbacks = {
+            gameStarted = "wronganswernote.onGameStarted",
+            preGameExit = "wronganswernote.onGameExit",
+            postNewRoom = "wronganswernote.onNewRoom",
+            postNewLevel = "wronganswernote.onNewLevel",
+            postNPCInit = "wronganswernote.onNpcInit",
+            postRender = "wronganswernote.onRender",
+        },
+        synergies = {
+        }
+    },
 
 }
 

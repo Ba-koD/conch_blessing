@@ -50,4 +50,5 @@
     <trinket id="47" name="A -" gfx="a_minus.png" tags="offensive" cache="luck damage firedelay" hidden="true" shopprice="15"/>
     <trinket id="48" name="Atropos" gfx="atropos.png" tags="utility" shopprice="15"/>
     <trinket id="49" name="Angel's Crown" gfx="angels_crown.png" tags="utility" shopprice="15"/>
+    <trinket id="50" name="Wrong Answer Note" gfx="wrong_answer_note.png" tags="offensive" shopprice="15"/>
 </items>
