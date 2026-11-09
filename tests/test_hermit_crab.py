@@ -306,14 +306,135 @@ class HermitCrabTests(unittest.TestCase):
             assert(p.slots[1]==0 and p.smelted[7]==1 and data.kept==2 and T.evidence().smeltedAtOnce==1)
         ''')
 
-    def test_each_crab_draws_its_own_share_in_seed_order(self):
+    def test_a_bffs_crab_fills_both_claws_before_the_next_one_sets_out(self):
         self.run_lua(r'''
             local p=newPlayer(2); p.bffs=1; players={p}; M.onGameStarted()
             local late=newCrab(p,20); local early=newCrab(p,10)
             drop(p,5); drop(p,6); drop(p,7)
             local layout=T.layout()
-            assert(table.concat(layout[early.hash],',')=='5,6' and table.concat(layout[late.hash],',')=='7')
+            local first,second=late,early
+            if T.slot(early)<T.slot(late) then first,second=early,late end
+            assert(table.concat(layout[first.hash],',')=='5,6' and table.concat(layout[second.hash],',')=='7')
         ''')
+
+    def test_crabs_sharing_one_initseed_are_told_apart_and_stroll_apart(self):
+        # the engine gives every crab of one owner the same InitSeed (measured 2026-11-10)
+        self.run_lua(r'''
+            local p=newPlayer(2); players={p}; M.onGameStarted()
+            local a=newCrab(p,801113125); local b=newCrab(p,801113125)
+            M.onFamiliarInit(nil,a); M.onFamiliarInit(nil,b)
+            assert(T.slot(a)==1 and T.slot(b)==2, 'numbered '..tostring(T.slot(a))..','..tostring(T.slot(b)))
+            a.Position=Vector(300,200); b.Position=Vector(300,200)
+            local apart=0
+            for _=1,600 do step(); apart=math.max(apart,(a.Position-b.Position):Length()) end
+            assert(apart>60, 'they stroll their own ways: '..apart)
+            -- one picks up a trinket: only that one draws it
+            for _,f in ipairs({a,b}) do f.Velocity=Vector.Zero end
+            b.Position=Vector(140,100); a.Position=Vector(560,360); p.Position=Vector(20,380)
+            local pk=newPickup(5,p); pk.Position=Vector(100,100)
+            M.onPickupInit(nil,pk); M.onUpdate(); stepsUntil(pk,600); M.onUpdate()
+            assert(table.concat(T.layout()[b.hash],',')=='5' and #T.layout()[a.hash]==0)
+            assert(table.concat(p.save.hermitCrab.crabs,',')=='2')
+        ''')
+
+    # Three crabs, the first holding one: the third crab's catch is drawn in its
+    # own claws, not handed to the second (user report 2026-11-10).
+    THREE_CRABS = r"""
+        p=newPlayer(3); players={p}; M.onGameStarted()
+        A=newCrab(p,10); B=newCrab(p,20); C=newCrab(p,30)
+        for _,f in ipairs({A,B,C}) do M.onFamiliarInit(nil,f) end
+        -- the crab at `near` stands by the trinket, the others far off; the owner walked away
+        function fetchWith(near,id,at)
+            for _,f in ipairs({A,B,C}) do f.Position=(f==near) and (at+Vector(40,0)) or Vector(300,380); f.Velocity=Vector.Zero end
+            p.Position=Vector(20,380)
+            local pk=newPickup(id,p); pk.Position=at
+            M.onPickupInit(nil,pk); M.onUpdate()
+            local claimed=T.walkState(near).claim
+            stepsUntil(pk,600)
+            return pk,claimed
+        end
+        function drawn(f) return table.concat(T.layout()[f.hash] or {},',') end
+    """
+
+    def test_the_crab_that_takes_a_trinket_draws_it(self):
+        self.run_lua(self.THREE_CRABS + r"""
+            fetchWith(A,5,Vector(100,100))
+            local pk,claimed=fetchWith(C,6,Vector(500,60))
+            assert(claimed and not pk.exists and T.evidence().fetchCrab==C.hash, 'the third crab fetched it')
+            M.onUpdate()
+            assert(drawn(A)=='5' and drawn(B)=='' and drawn(C)=='6', 'A='..drawn(A)..' B='..drawn(B)..' C='..drawn(C))
+            assert(table.concat(p.save.hermitCrab.crabs,',')=='1,3')
+            for _=1,200 do step() end -- strolling about changes nothing
+            assert(drawn(A)=='5' and drawn(B)=='' and drawn(C)=='6')
+        """)
+
+    def test_a_crab_with_a_free_claw_goes_before_a_nearer_full_one(self):
+        self.run_lua(self.THREE_CRABS + r"""
+            fetchWith(A,5,Vector(100,100))
+            for _,f in ipairs({A,B,C}) do f.Velocity=Vector.Zero end
+            A.Position=Vector(140,100); B.Position=Vector(300,380); C.Position=Vector(560,40)
+            p.Position=Vector(20,380)
+            local pk=newPickup(6,p); pk.Position=Vector(100,100)
+            M.onPickupInit(nil,pk); M.onUpdate()
+            assert(not T.walkState(A).claim and T.walkState(B).claim, 'the nearest crab with room sets out')
+            stepsUntil(pk,600); M.onUpdate()
+            assert(drawn(A)=='5' and drawn(B)=='6' and drawn(C)=='' and held(p)=='5,6')
+        """)
+
+    def test_a_full_crab_swaps_its_own_trinket_and_leaves_the_others(self):
+        self.run_lua(self.THREE_CRABS + r"""
+            fetchWith(B,5,Vector(100,100)); fetchWith(A,6,Vector(300,100)); fetchWith(C,7,Vector(500,100))
+            T.resetEvidence()
+            local pk=fetchWith(A,8,Vector(300,200))
+            M.onUpdate()
+            assert(not pk.exists and T.evidence().fetchCrab==A.hash and T.evidence().putDown==1)
+            assert(onFloor(6)==1 and onFloor(5)==0 and held(p)=='5,7,8', 'A put its own 6 down: '..held(p))
+            assert(drawn(A)=='8' and drawn(B)=='5' and drawn(C)=='7', 'A='..drawn(A)..' B='..drawn(B)..' C='..drawn(C))
+        """)
+
+    def test_a_crab_that_leaves_lets_go_of_its_own_trinket(self):
+        self.run_lua(self.THREE_CRABS + r"""
+            fetchWith(B,5,Vector(100,100)); fetchWith(A,6,Vector(300,100)); fetchWith(C,7,Vector(500,100))
+            -- one copy goes and the engine removes crab B
+            p.copies=2; B.exists=false; M.onUpdate()
+            assert(held(p)=='6,7' and onFloor(5)==1 and p.innate[5]==0, held(p))
+            assert(drawn(A)=='6' and drawn(C)=='7')
+        """)
+
+    def test_losing_bffs_each_crab_keeps_its_own_first(self):
+        self.run_lua(self.THREE_CRABS + r"""
+            p.copies=2; C.exists=false; p.bffs=1
+            fetchWith(A,5,Vector(100,100)); fetchWith(A,6,Vector(100,200))
+            fetchWith(B,7,Vector(400,100)); fetchWith(B,8,Vector(400,200))
+            M.onUpdate()
+            assert(drawn(A)=='5,6' and drawn(B)=='7,8', 'A='..drawn(A)..' B='..drawn(B))
+            p.bffs=0; M.onUpdate()
+            assert(held(p)=='5,7' and onFloor(6)==1 and onFloor(8)==1, held(p))
+            assert(drawn(A)=='5' and drawn(B)=='7')
+        """)
+
+    def test_an_older_ledger_without_crabs_is_split_once_and_then_kept(self):
+        self.run_lua(r"""
+            local p=newPlayer(2); players={p}
+            p.save.hermitCrab={held={5,6},kept=0,innate=true}; p.innate={[5]=1,[6]=1}
+            M.onGameStarted()
+            local a=newCrab(p,10); local b=newCrab(p,20)
+            M.onUpdate()
+            assert(table.concat(T.layout()[a.hash],',')=='5' and table.concat(T.layout()[b.hash],',')=='6')
+            assert(table.concat(p.save.hermitCrab.crabs,',')=='1,2', 'the split is written down')
+        """)
+
+    def test_a_crab_from_before_a_continue_hands_its_trinket_to_a_crab_with_room(self):
+        self.run_lua(r"""
+            local p=newPlayer(2); players={p}
+            -- crab 3 is gone; crab 1 is back
+            p.save.hermitCrab={held={5,6},crabs={3,1},kept=0,innate=true}; p.innate={[5]=1,[6]=1}
+            M.onGameStarted()
+            local a=newCrab(p,10); local b=newCrab(p,20)
+            M.onUpdate()
+            assert(table.concat(T.layout()[a.hash],',')=='6' and table.concat(T.layout()[b.hash],',')=='5')
+            assert(table.concat(p.save.hermitCrab.crabs,',')=='2,1')
+        """)
 
     def test_it_wanders_the_room_on_its_own_and_never_follows(self):
         self.run_lua(r"""

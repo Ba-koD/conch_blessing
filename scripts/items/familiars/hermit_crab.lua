@@ -27,12 +27,21 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- `SpawnerEntity` from its first frame, while chests, rooms and shops spawn
 -- theirs without a player. So the crab ignores every trinket the floor offers
 -- and reacts only to its owner's own drops (the drop key, or a trinket pushed
--- out of a full hand by a new one). With every claw full, the crab puts its
--- oldest trinket down where the new one landed and takes the new one; a trinket
--- the crab puts down is spawned without a spawner, so it is never taken again.
+-- out of a full hand by a new one). A crab with a free claw sets out before a
+-- nearer one whose claws are full. Each trinket stays with the crab that took
+-- it (the ledger keeps that crab's number beside it; user report 2026-11-10:
+-- with three crabs, the third one's catch showed up in the second one's
+-- claws). A crab's number is its place among its owner's crabs (1, 2, ...),
+-- kept on the crab: the engine gives every crab of one owner the same InitSeed
+-- (measured in game 2026-11-10), so a seed tells them apart no better than it
+-- kept their strolls apart. A crab whose claws are full puts its own oldest trinket down where
+-- the new one landed and takes the new one; a trinket the crab puts down is
+-- spawned without a spawner, so it is never taken again.
 --
--- Losing crabs (or BFFS) lets go of the newest trinkets first, back on the
--- floor. When Kronos (or Thurisaz) absorbs a crab, the trinkets it held are
+-- Losing crabs (or BFFS) lets go of trinkets back on the floor: first those of
+-- a crab that left, or beyond what a crab can hold now, then the newest. A
+-- trinket whose crab is gone (or from a ledger that never named one) moves to a
+-- crab with room and stays there. When Kronos (or Thurisaz) absorbs a crab, the trinkets it held are
 -- smelted for good, and as long as the absorbed crabs have room left, every
 -- trinket the owner gets in hand is smelted at once (user decision 2026-11-09:
 -- "크로노스 흡수시 장신구를 얻자마자 흡수").
@@ -76,7 +85,7 @@ local reported = {}
 local evidence
 local function resetEvidence()
     evidence = { taken = 0, putDown = 0, released = 0, kept = 0, smeltedAtOnce = 0, ignored = 0,
-        fetchFrom = -1, fetchAt = -1, waitedNear = 0, waitedUpgrade = 0, vanished = 0 }
+        fetchFrom = -1, fetchAt = -1, fetchCrab = -1, waitedNear = 0, waitedUpgrade = 0, vanished = 0 }
 end
 resetEvidence()
 
@@ -128,8 +137,24 @@ local function ledger(player)
         save[SAVE_KEY] = data
     end
     data.held = type(data.held) == "table" and data.held or {}
+    -- the number of the crab holding each one (0: not known yet, as in an
+    -- older ledger); it draws that trinket
+    data.crabs = type(data.crabs) == "table" and data.crabs or {}
+    for i = 1, #data.held do data.crabs[i] = tonumber(data.crabs[i]) or 0 end
+    while #data.crabs > #data.held do data.crabs[#data.crabs] = nil end
     data.kept = tonumber(data.kept) or 0
     return data
+end
+
+local function addHeld(data, id, slot)
+    local i = #data.held + 1
+    data.held[i], data.crabs[i] = id, slot or 0
+end
+
+local function removeHeld(data, i)
+    local id = table.remove(data.held, i)
+    table.remove(data.crabs, i)
+    return id
 end
 
 local function perCrab(player)
@@ -189,8 +214,8 @@ local function release(player, id, position)
     return true
 end
 
---- The crab takes a trinket its owner put down.
-local function take(player, data, pickup)
+--- The crab (by its number) takes a trinket its owner put down.
+local function take(player, data, pickup, slot)
     local id = pickup.SubType
     if id <= 0 then return end
     local capacity = M.capacity(player)
@@ -205,12 +230,20 @@ local function take(player, data, pickup)
     local where = pickup.Position
     pickup:Remove()
     Isaac.Spawn(EntityType.ENTITY_EFFECT, EffectVariant.POOF01, 0, where, Vector.Zero, nil)
-    data.held[#data.held + 1] = id
+    slot = slot or 0
+    local own = {}
+    for i, crab in ipairs(data.crabs) do
+        if crab == slot and slot ~= 0 then own[#own + 1] = i end
+    end
+    addHeld(data, id, slot)
     evidence.taken = evidence.taken + 1
-    -- every claw was full: the oldest goes down where the new one landed
+    -- its own claws were full: its own oldest goes down where the new one landed
+    if #own >= perCrab(player) then
+        if release(player, removeHeld(data, own[1]), where) then evidence.putDown = evidence.putDown + 1 end
+    end
+    -- still more than every claw together (a crab Box of Friends lent): the oldest
     while #data.held > capacity do
-        local oldest = table.remove(data.held, 1)
-        if release(player, oldest, where) then evidence.putDown = evidence.putDown + 1 end
+        if release(player, removeHeld(data, 1), where) then evidence.putDown = evidence.putDown + 1 end
     end
     SFXManager():Play(SoundEffect.SOUND_SCAMPER, Sound.volume(M.data.takeVolume), 0, false, 1.2)
 end
@@ -232,7 +265,7 @@ local function syncGroup(data, player)
         for i = #data.held, 1, -1 do
             if excess <= 0 then break end
             if data.held[i] == id then
-                table.remove(data.held, i) -- the newest copy of it
+                removeHeld(data, i) -- the newest copy of it
                 excess = excess - 1
                 evidence.vanished = evidence.vanished + 1
             end
@@ -265,12 +298,28 @@ local function restoreGroup(data, player)
     end
 end
 
+-- Which trinket goes when there are fewer claws: the newest of those whose crab
+-- left (`live` holds the numbers of the owner's crabs still in the room) or
+-- that a crab now holds beyond its claws (BFFS lost), else the newest.
+local function letGoIndex(data, per, live)
+    if live then
+        local count, spare = {}, nil
+        for i = 1, #data.held do
+            local slot = data.crabs[i]
+            count[slot] = (count[slot] or 0) + 1
+            if not live[slot] or count[slot] > per then spare = i end
+        end
+        if spare then return spare end
+    end
+    return #data.held
+end
+
 -- Fewer claws than trinkets: absorbed crabs keep theirs, smelted for good,
--- while their allowance lasts; the rest go back on the floor, newest first.
-local function reconcile(player, data)
+-- while their allowance lasts; the rest go back on the floor.
+local function reconcile(player, data, live)
     local capacity = M.capacity(player)
     while #data.held > capacity do
-        local id = table.remove(data.held)
+        local id = removeHeld(data, letGoIndex(data, perCrab(player), live))
         if data.kept < M.keptAllowance(player) and canSmelt(player) then
             player:RemoveInnateTrinket(id, 1, GROUP)
             player:AddSmeltedTrinket(id, false)
@@ -297,7 +346,31 @@ local function smeltInHand(player, data)
     end
 end
 
--- Every live crab in the room, by owner, in InitSeed order.
+local SLOT_KEY = "__ConchBlessingHermitCrabSlot"
+
+-- The crab's number among its owner's crabs: the lowest one no other crab of
+-- that owner has, kept on the crab (GetData follows a familiar from room to
+-- room). Crabs made again by a Continue are numbered again from 1, so each
+-- held trinket goes back to a crab of the same number.
+local function crabSlot(familiar)
+    local data = familiar:GetData()
+    if data[SLOT_KEY] then return data[SLOT_KEY] end
+    local owner = familiar.Player
+    if not owner then return nil end
+    local used, hash = {}, GetPtrHash(owner)
+    for _, entity in ipairs(Isaac.FindByType(EntityType.ENTITY_FAMILIAR, familiar.Variant)) do
+        local other = entity:ToFamiliar()
+        local slot = other and other:Exists() and other.Player and GetPtrHash(other.Player) == hash
+            and other:GetData()[SLOT_KEY]
+        if slot then used[slot] = true end
+    end
+    local slot = 1
+    while used[slot] do slot = slot + 1 end
+    data[SLOT_KEY] = slot
+    return slot
+end
+
+-- Every live crab in the room, by owner, in number order.
 local function crabGroups()
     local groups = {}
     local v = variant()
@@ -306,19 +379,21 @@ local function crabGroups()
         local crab = entity:ToFamiliar()
         local owner = crab and crab:Exists() and crab.Player
         if owner then
+            crabSlot(crab) -- numbered in the room's order, before any sorting
             local key = GetPtrHash(owner)
             groups[key] = groups[key] or { owner = owner, crabs = {} }
             table.insert(groups[key].crabs, crab)
         end
     end
     for _, group in pairs(groups) do
-        table.sort(group.crabs, function(a, b) return a.InitSeed < b.InitSeed end)
+        table.sort(group.crabs, function(a, b) return (crabSlot(a) or 0) < (crabSlot(b) or 0) end)
     end
     return groups
 end
 
 -- Walking: runtime only, kept on the crab under a key no other mod uses. The
--- crab rolls its strolls on its own RNG seeded from its InitSeed, never on
+-- crab rolls its strolls on its own RNG seeded from its InitSeed and its
+-- number (the crabs of one owner share an InitSeed and would stroll alike), never on
 -- gameplay RNG, and forgets its goal on every new room.
 local WALK_KEY = "__ConchBlessingHermitCrabWalk"
 
@@ -329,11 +404,14 @@ end
 local function walkState(familiar)
     local data = familiar:GetData()
     local state = data[WALK_KEY]
+    local slot = crabSlot(familiar) or 0
     if not state then
-        local rng = RNG()
-        rng:SetSeed(math.max(1, familiar.InitSeed or 1), 35)
-        state = { rng = rng, pause = 0 }
+        state = { rng = RNG(), pause = 0 }
         data[WALK_KEY] = state
+    end
+    if state.slot ~= slot then -- seeded again once the crab has its number
+        state.slot = slot
+        state.rng:SetSeed(math.max(1, ((familiar.InitSeed or 1) + slot * 0x9E3779B1) % 0x100000000), 35)
     end
     if state.serial ~= roomSerial then
         state.serial = roomSerial
@@ -385,18 +463,21 @@ local function strollSpot(rng, from)
     return nil
 end
 
--- A spot from which both legs, there and on to the goal, are straight walks;
--- the shortest of a few tries. Only planned when the straight way is blocked.
+-- A spot from which both legs, there and on to the goal, are straight walks:
+-- of a couple dozen random free spots, the one making the shortest way whose
+-- legs are clear (lines are checked shortest first, so most plans check few).
+-- Only planned when the straight way is blocked.
 local function waypoint(rng, from, to)
-    local best, bestLength
-    for _ = 1, 12 do
+    local spots = {}
+    for _ = 1, 24 do
         local spot = randomSpot(rng)
-        if spot and clearLine(from, spot) and clearLine(spot, to) then
-            local length = (spot - from):Length() + (to - spot):Length()
-            if not bestLength or length < bestLength then best, bestLength = spot, length end
-        end
+        if spot then spots[#spots + 1] = { spot = spot, length = (spot - from):Length() + (to - spot):Length() } end
     end
-    return best
+    table.sort(spots, function(a, b) return a.length < b.length end)
+    for _, candidate in ipairs(spots) do
+        if clearLine(from, candidate.spot) and clearLine(candidate.spot, to) then return candidate.spot end
+    end
+    return nil
 end
 
 -- Steer toward a goal. Returns the distance and whether it made no progress
@@ -473,7 +554,8 @@ local function arrive(familiar, state, claim, pickup)
     if not data then return end
     evidence.fetchFrom = claim.from or -1
     evidence.fetchAt = (pickup.Position - familiar.Position):Length()
-    take(owner, data, pickup)
+    evidence.fetchCrab = GetPtrHash(familiar)
+    take(owner, data, pickup, crabSlot(familiar))
 end
 
 local function fetch(familiar, state, claim, pickup)
@@ -510,7 +592,9 @@ local function fetch(familiar, state, claim, pickup)
 end
 
 -- Hand each dropped trinket to its owner's nearest crab that has nothing to
--- fetch; forget the ones that are gone or whose owner can no longer hold them.
+-- fetch, one with a free claw before one whose claws are full (that one would
+-- have to put its own down); forget the ones that are gone or whose owner can
+-- no longer hold them. Free claws are read from this update's layout.
 local function assignClaims(groups)
     local holder = {}
     for _, group in pairs(groups) do
@@ -531,11 +615,16 @@ local function assignClaims(groups)
             if why then countWait(why) end
             local group = not claim.crab and not why and groups[GetPtrHash(owner)]
             if group then
-                local best, bestDist
+                local per = perCrab(owner)
+                local best, bestDist, bestRoom
                 for _, crab in ipairs(group.crabs) do
                     if not walkState(crab).claim then
                         local d = (crab.Position - pickup.Position):Length()
-                        if not bestDist or d < bestDist then best, bestDist = crab, d end
+                        local list = layout[GetPtrHash(crab)]
+                        local room = not list or #list < per
+                        if not best or (room and not bestRoom) or (room == bestRoom and d < bestDist) then
+                            best, bestDist, bestRoom = crab, d, room
+                        end
                     end
                 end
                 if best then
@@ -560,21 +649,55 @@ local function claimedAlready(pickup)
     return false
 end
 
--- The trinkets each crab draws, split in order across the owner's crabs.
+-- The trinkets each crab draws: each on the crab that took it; one whose crab
+-- is gone (or never named) goes to the first crab with room, which keeps it.
 local function relayout(groups)
     layout = {}
     for _, group in pairs(groups) do
         local data = ledger(group.owner)
         local per = perCrab(group.owner)
+        local lists, bySlot = {}, {}
         for i, crab in ipairs(group.crabs) do
-            local list = {}
-            for j = 1, per do
-                local id = data and data.held[(i - 1) * per + j]
-                if id then list[#list + 1] = id end
+            lists[i] = {}
+            layout[GetPtrHash(crab)] = lists[i]
+            local slot = crabSlot(crab)
+            if slot then bySlot[slot] = bySlot[slot] or lists[i] end
+        end
+        if data then
+            local placed = {}
+            for i, id in ipairs(data.held) do
+                local list = bySlot[data.crabs[i]]
+                if list and #list < per then
+                    list[#list + 1] = id
+                    placed[i] = true
+                end
             end
-            layout[GetPtrHash(crab)] = list
+            for i, id in ipairs(data.held) do
+                if not placed[i] then
+                    for k, crab in ipairs(group.crabs) do
+                        local list = lists[k]
+                        if #list < per then
+                            list[#list + 1] = id
+                            data.crabs[i] = crabSlot(crab) or 0
+                            break
+                        end
+                    end
+                end
+            end
         end
     end
+end
+
+-- The numbers of the owner's crabs in the room, or nil when none is.
+local function liveSlots(groups, player)
+    local group = groups[GetPtrHash(player)]
+    if not group or #group.crabs == 0 then return nil end
+    local live = {}
+    for _, crab in ipairs(group.crabs) do
+        local slot = crabSlot(crab)
+        if slot then live[slot] = true end
+    end
+    return live
 end
 
 -- MC_POST_PICKUP_INIT: remember trinkets a crab owner puts down.
@@ -604,6 +727,7 @@ function M.onUpdate()
             end
         end
     end
+    local groups = crabGroups()
     local sm = ConchBlessing.SaveManager
     for _, player in ipairs(players()) do
         -- only players who have or had a crab, or whose absorbed crabs still have room
@@ -615,15 +739,14 @@ function M.onUpdate()
             if restorePending then restoreGroup(data, player) end
             if #data.held > 0 then
                 syncGroup(data, player)
-                reconcile(player, data)
+                reconcile(player, data, liveSlots(groups, player))
             end
             if alive(player) and canSmelt(player) then smeltInHand(player, data) end
         end
     end
     restorePending = false
-    local groups = crabGroups()
-    assignClaims(groups)
     relayout(groups)
+    assignClaims(groups)
 end
 
 function M.onNewRoom()
@@ -834,6 +957,7 @@ M._test = {
     queue = function() return queue end,
     claims = function() return claims end,
     walkState = walkState,
+    slot = crabSlot,
     layout = function() return layout end,
     itemId = function() return ITEM_ID end,
     variant = variant,

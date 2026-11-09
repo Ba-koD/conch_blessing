@@ -431,6 +431,119 @@ S.add("HERMIT_CRAB", "swap", {}, function(plan, id)
     end)
 end)
 
+-- Three crabs: each trinket stays in the claws of the crab that took it (user
+-- report 2026-11-10: the third crab's catch was drawn on the second), a crab
+-- with a free claw goes before a nearer full one, and a full crab swaps only
+-- its own trinket.
+-- The owner's crabs by their number (the engine gives them all one InitSeed).
+local function crabsByNumber(player)
+    local list = crabs(player)
+    table.sort(list, function(a, b) return (T().slot(a) or 0) < (T().slot(b) or 0) end)
+    return list
+end
+
+local function drawn(fam)
+    return fam and table.concat(T().layout()[GetPtrHash(fam)] or {}, ",") or "missing"
+end
+
+local function drawings(player)
+    local parts = {}
+    for i, fam in ipairs(crabsByNumber(player)) do parts[#parts + 1] = string.format("crab%d={%s}", i, drawn(fam)) end
+    return table.concat(parts, " ")
+end
+
+-- Drop a trinket and walk off; then crab number `near` stands by
+-- it and the others stand by Isaac, so `near` is the nearest (a fixture move).
+local function fetchWith(plan, near, trinket, label)
+    putInHandAndDrop(plan, trinket)
+    plan.wait(2)
+    walkAway(plan)
+    plan.act(function(player, ctx)
+        local pickup = droppedPickup(ctx.dropped)
+        local room = Game():GetRoom()
+        local list = crabsByNumber(player)
+        for i, fam in ipairs(list) do
+            local beside = pickup and room:GetClampedPosition(pickup.Position + Vector(50, 0), 10)
+            local at = i == near and beside or player.Position
+            fam.Position = at
+            fam.Velocity = Vector.Zero
+        end
+        ctx.nearCrab = list[near] and GetPtrHash(list[near]) or -1
+    end)
+    plan.waitUntil(function(_, ctx) return evidence().taken > ctx.takenBefore and true or false,
+        "taken=" .. evidence().taken end, 300, label)
+    plan.wait(2)
+end
+
+S.add("HERMIT_CRAB", "many", {}, function(plan, id)
+    requireModule(plan)
+    plan.act(function(player)
+        T().resetEvidence()
+        give(player, id, 3)
+    end)
+    plan.waitUntil(function(player) return #crabs(player) == 3, "crabs=" .. #crabs(player) end, 30, "three crabs appear")
+    -- they share one InitSeed (measured 2026-11-10); each strolls its own way
+    plan.act(function(player, ctx)
+        ctx.start = {}
+        for i, fam in ipairs(crabsByNumber(player)) do ctx.start[i] = fam.Position end
+        ctx.spread = 0
+    end)
+    plan.waitUntil(function(player, ctx)
+        local list = crabsByNumber(player)
+        for i = 1, #list do
+            for j = i + 1, #list do
+                local now = list[i].Position:Distance(list[j].Position)
+                local before = ctx.start[i] and ctx.start[j] and ctx.start[i]:Distance(ctx.start[j]) or now
+                ctx.spread = math.max(ctx.spread, now - before)
+            end
+        end
+        return ctx.spread >= 48, string.format("spread %.0f", ctx.spread)
+    end, 450, "two crabs born together drift apart")
+    plan.check("the three crabs are numbered 1, 2 and 3", function(player)
+        local list, numbers = crabsByNumber(player), {}
+        for i, fam in ipairs(list) do numbers[i] = tostring(T().slot(fam)) end
+        return table.concat(numbers, ",") == "1,2,3", "numbers " .. table.concat(numbers, ",")
+    end)
+    plan.act(function(_, ctx)
+        ctx.penny, ctx.pin = penny(), pin()
+        ctx.poop, ctx.clip = TrinketType.TRINKET_PETRIFIED_POOP, TrinketType.TRINKET_PAPER_CLIP
+    end)
+    fetchWith(plan, 1, penny, "the first crab takes the penny")
+    fetchWith(plan, 3, pin, "the third crab takes the pin")
+    plan.check("the third crab's catch is in its own claws, not the second's", function(player, ctx)
+        local list = crabsByNumber(player)
+        return evidence().fetchCrab == ctx.nearCrab and drawn(list[1]) == tostring(ctx.penny)
+            and drawn(list[2]) == "" and drawn(list[3]) == tostring(ctx.pin),
+            drawings(player) .. string.format(" fetched by the third crab: %s", tostring(evidence().fetchCrab == ctx.nearCrab))
+    end)
+    plan.wait(60)
+    plan.check("strolling about keeps each trinket with its crab", function(player, ctx)
+        local list = crabsByNumber(player)
+        return drawn(list[1]) == tostring(ctx.penny) and drawn(list[2]) == "" and drawn(list[3]) == tostring(ctx.pin),
+            drawings(player)
+    end)
+    -- the first crab (full) stands by the drop, the second (free) by Isaac:
+    -- the free one sets out
+    fetchWith(plan, 1, function() return TrinketType.TRINKET_PETRIFIED_POOP end, "a crab takes the poop")
+    plan.check("a crab with a free claw went, not the nearer full one", function(player, ctx)
+        local list = crabsByNumber(player)
+        return evidence().fetchCrab == GetPtrHash(list[2]) and drawn(list[1]) == tostring(ctx.penny)
+            and drawn(list[2]) == tostring(ctx.poop) and drawn(list[3]) == tostring(ctx.pin)
+            and floorCount(ctx.penny) == 0, drawings(player)
+    end)
+    plan.act(function() T().resetEvidence() end)
+    fetchWith(plan, 1, function() return TrinketType.TRINKET_PAPER_CLIP end, "the first crab takes the paper clip")
+    plan.check("every claw was full: the first crab put its own penny down and the others kept theirs", function(player, ctx)
+        local list = crabsByNumber(player)
+        return evidence().fetchCrab == GetPtrHash(list[1]) and evidence().putDown == 1
+            and drawn(list[1]) == tostring(ctx.clip) and drawn(list[2]) == tostring(ctx.poop)
+            and drawn(list[3]) == tostring(ctx.pin) and floorCount(ctx.penny) == 1 and innate(player, ctx.penny) == 0
+            and innate(player, ctx.clip) == 1,
+            drawings(player) .. " " .. describe(player, { ctx.penny, ctx.clip })
+    end)
+    plan.section("HERMIT_CRAB / many", "each of the three crabs draws the trinket it walked over to")
+end)
+
 -- A golden trinket stays golden while held.
 S.add("HERMIT_CRAB", "golden", {}, function(plan, id)
     requireModule(plan)
