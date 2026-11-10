@@ -121,10 +121,18 @@ return {
             },
         },
         RABBIT = {
-            name = "Rabbit (WIP)",
-            description = "Work in progress",
+            name = "Rabbit",
+            description = "Left its liver on a rock",
             eid = {
-                "No gameplay effect yet.",
+                "Each floor, an obstacle with rabbit tracks lies 4 rooms from the start",
+                "#Breaking it opens a ladder to the Black Market, which always sells a {c:RAW_LIVER} Raw Liver",
+                "#Each {c:RAW_LIVER} Raw Liver gives a liver (up to 4)",
+                "#On death, a liver revives you in place with half a heart",
+                "#{{Warning}} Requires REPENTOGON!",
+            },
+            synergies = {
+                raw_liver = "Gives a liver (up to 4)",
+                dragon = "With 4 livers, each further {c:RAW_LIVER} Raw Liver adds 0.4 to your {{Damage}} damage multiplier for the floor",
             },
         },
         DRAGON = {
@@ -643,6 +651,19 @@ return {
                 "#{{Warning}} Requires REPENTOGON!",
             },
         },
+        JANGSEUNG = {
+            name = "Jangseung",
+            description = "Great General of Heaven, Lady General of the Earth",
+            eid = {
+                "A pair of jangseung stands on either side of every door into a special room or a secret room.",
+                "#They also stand at the wall a Red Key opens toward the Ultra Secret Room.",
+                "#Enemies other than bosses cannot come within 2 tiles in front of them and flee in fear, and enemy shots vanish there.",
+                "#{{Warning}} REPENTOGON recommended",
+            },
+            synergies = {
+                trinket_door_stop = "A pair also stands at the door you came in by, in every room",
+            },
+        },
 
         -- Familiars
         TIME_MONEY = {
@@ -677,7 +698,7 @@ return {
             description = "Let me carry that",
             eid = {
                 "A hermit crab roams the room and picks up the trinkets you put down",
-                "#It won't pick one up while you are within 2 tiles of it",
+                "#It won't pick up a trinket within 2 tiles of the player",
                 "#You get the effects of the trinkets it holds",
                 "#With its claws full, it puts down the trinket it has held longest and takes the new one",
                 "#{{Warning}} Requires REPENTOGON!",
@@ -768,7 +789,7 @@ return {
         },
         WRONG_ANSWER_NOTE = {
             name = "Wrong Answer Note",
-            description = "Never the same mistake twice",
+            description = "Never making the same mistake again!",
             eid = {
                 "Each hit writes down the kind of enemy that dealt it, and you deal 50% more damage to that kind (stacks)",
                 "#Moving to the next floor without being hit raises your damage against all enemies by 25% (stacks)",
@@ -868,6 +889,10 @@ return {
         },
         tyrfing = {
             accumulated_damage = "#{{Damage}} Accumulated damage: +%s",
+        },
+        rabbit = {
+            revive = "I left my liver hidden on land!",
+            offering = "An offering to the Dragon King! Damage x%s",
         },
         utility_belt = {
             pocket_full = "#{{ColorRed}}Pocket slot already in use - cannot move{{CR}}",

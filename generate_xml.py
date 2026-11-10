@@ -549,11 +549,21 @@ def parse_lua_file(file_path):
             item_info['quality'] = int(quality_match.group(1))
             print(f"  Quality: {item_info['quality']}")
         
-        # extract tags
-        tags_match = re.search(r'tags\s*=\s*"([^"]+)"', item_data)
+        # extract tags (a whole word: not the tail of `customtags`)
+        tags_match = re.search(r'\btags\s*=\s*"([^"]+)"', item_data)
         if tags_match:
             item_info['tags'] = tags_match.group(1)
             print(f"  Tags: {item_info['tags']}")
+
+        # REPENTOGON custom tags and TemporaryEffect persistence of the item
+        # itself (an `entity = { ... }` block keeps its own customtags).
+        item_level = re.sub(r'entity\s*=\s*\{[^{}]*\}', '', item_data)
+        customtags_match = re.search(r'\bcustomtags\s*=\s*"([^"]+)"', item_level)
+        if customtags_match:
+            item_info['customtags'] = customtags_match.group(1)
+            print(f"  CustomTags: {item_info['customtags']}")
+        if re.search(r'\bpersistent\s*=\s*true', item_level):
+            item_info['persistent'] = True
         
         # extract cache
         cache_match = re.search(r'cache\s*=\s*"([^"]+)"', item_data)
@@ -864,6 +874,12 @@ def create_items_xml(items, output_path):
         
         if item_info.get('hidden'):
             item_elem.set("hidden", "true")
+
+        if item_info.get('customtags'):
+            item_elem.set("customtags", item_info['customtags'])
+
+        if item_info.get('persistent'):
+            item_elem.set("persistent", "true")
         
         if item_info.get('price'):
             item_elem.set("shopprice", str(item_info['price']))

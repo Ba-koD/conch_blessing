@@ -113,7 +113,7 @@ class WorkshopPackageTests(unittest.TestCase):
         for gone in ('scripts/dev', 'scripts/items/collectibles/magic_mold.lua',
                      'scripts/items/collectibles/notused', 'scripts/lib/damage_utils.lua',
                      'scripts/lib/weapon_fire.lua', 'scripts/rooms/native_gallery_rooms.lua',
-                     'resources/gfx/items/collectibles/notused'):
+                     'resources/gfx/items/collectibles/notused', 'resources/gfx/effects/notused'):
             self.assertFalse((self.content / gone).exists(), gone)
         for kept in ('main.lua', 'metadata.xml', 'scripts/conch_blessing_core.lua',
                      'scripts/items/familiars/hermit_crab.lua', 'scripts/lib/save_manager.lua',

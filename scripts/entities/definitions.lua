@@ -31,4 +31,26 @@ return {
         collisionDamage = 0, collisionMass = 0, collisionRadius = 0,
         friction = 1, numGridCollisionPoints = 0, shadowSize = 0,
     },
+    -- 장승's statues (subtype 0 a special room's pair, 1 the red-room route's
+    -- pair, which wears a red cloth). They only stand and draw.
+    JANGSEUNG = {
+        name = "Conch Blessing Jangseung", id = 1000, variant = 7786,
+        anm2path = "effects/conch_jangseung.anm2",
+        collisionDamage = 0, collisionMass = 0, collisionRadius = 0,
+        friction = 1, numGridCollisionPoints = 0, shadowSize = 12,
+    },
+    -- The trodden earth in front of a pair, drawn into the floor.
+    JANGSEUNG_GROUND = {
+        name = "Conch Blessing Jangseung Ground", id = 1000, variant = 7787,
+        anm2path = "effects/conch_jangseung_ground.anm2",
+        collisionDamage = 0, collisionMass = 0, collisionRadius = 0,
+        friction = 1, numGridCollisionPoints = 0, shadowSize = 0,
+    },
+    -- 묘's rabbit tracks leading into its hidden rock, drawn into the floor.
+    RABBIT_TRACKS = {
+        name = "Conch Blessing Rabbit Tracks", id = 1000, variant = 7788,
+        anm2path = "effects/conch_rabbit_tracks.anm2",
+        collisionDamage = 0, collisionMass = 0, collisionRadius = 0,
+        friction = 1, numGridCollisionPoints = 0, shadowSize = 0,
+    },
 }

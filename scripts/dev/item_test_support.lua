@@ -598,6 +598,88 @@ if ModCallbacks.MC_POST_TRIGGER_WEAPON_FIRED then
     end)
 end
 
+-- A door of this room into an ordinary room, open, or nil.
+function H.ordinaryDoor()
+    local room, level = Game():GetRoom(), Game():GetLevel()
+    for slot = 0, 7 do
+        local door = room:GetDoor(slot)
+        if door and door.TargetRoomType == RoomType.ROOM_DEFAULT and door:IsOpen() then
+            local target = level:GetRoomByIdx(door.TargetRoomIndex)
+            if target and target.Data and target.Data.Type == RoomType.ROOM_DEFAULT then return slot end
+        end
+    end
+    return nil
+end
+
+-- The door the player came in by, read independently of any item: the door of
+-- this room back to room `from`, nearest where the player arrived.
+function H.cameInBy(from, at)
+    local room = Game():GetRoom()
+    local best, bestDistance
+    for slot = 0, 7 do
+        local door = room:GetDoor(slot)
+        if door and door.TargetRoomIndex == from then
+            local distance = room:GetDoorSlotPosition(slot):Distance(at)
+            if not best or distance < bestDistance then best, bestDistance = slot, distance end
+        end
+    end
+    return best
+end
+
+-- Walks the player through a real door (pick(ctx) chooses its slot) into the
+-- room behind it, clears that room's enemies (the fixture's, not an item's)
+-- and records the door come in by as ctx.entry (and the engine's EnterDoor as
+-- ctx.enterDoor). `before(ctx)` runs just before the walk starts.
+function H.walkThroughDoor(plan, label, pick, before)
+    plan.require(label .. ": an open door to walk through", function(_, ctx)
+        ctx.walkSlot = pick(ctx)
+        if ctx.walkSlot ~= nil then return true, "slot " .. ctx.walkSlot end
+        local room, level, parts = Game():GetRoom(), Game():GetLevel(), {}
+        for slot = 0, 7 do
+            local door = room:GetDoor(slot)
+            if door then
+                local target = level:GetRoomByIdx(door.TargetRoomIndex)
+                parts[#parts + 1] = string.format("%d->%d type=%d open=%s data=%s", slot, door.TargetRoomIndex,
+                    door.TargetRoomType, tostring(door:IsOpen()),
+                    tostring(target and target.Data and target.Data.Type))
+            end
+        end
+        return nil, "no open door into an ordinary room here: " .. table.concat(parts, "; ")
+    end)
+    plan.act(function(player, ctx)
+        local room = Game():GetRoom()
+        ctx.from = Game():GetLevel():GetCurrentRoomIndex()
+        local side = ctx.walkSlot % 4
+        ctx.walkIn = side == 0 and Vector(1, 0) or side == 1 and Vector(0, 1) or side == 2 and Vector(-1, 0)
+            or Vector(0, -1)
+        player.Position = room:GetDoorSlotPosition(ctx.walkSlot) + ctx.walkIn * 40
+        player.Velocity = Vector.Zero
+        if before then before(ctx) end
+    end)
+    plan.waitUntil(function(player, ctx)
+        if Game():GetLevel():GetCurrentRoomIndex() ~= ctx.from then
+            if RoomTransition.GetTransitionMode() ~= 0 then return false, "transition still running" end
+            ctx.arrived = ctx.arrived or Vector(player.Position.X, player.Position.Y)
+            return true
+        end
+        player.Velocity = ctx.walkIn * -6
+        return false, "still in the room left"
+    end, 240, label)
+    plan.act(function(_, ctx)
+        ctx.entry = H.cameInBy(ctx.from, ctx.arrived)
+        ctx.enterDoor = Game():GetLevel().EnterDoor
+        ctx.arrived = nil
+        for _, entity in ipairs(Isaac.GetRoomEntities()) do
+            local npc = entity:ToNPC()
+            if npc and npc:IsActiveEnemy(false) then npc:Remove() end
+        end
+    end)
+    plan.waitUntil(function()
+        return Game():GetRoom():IsClear(), "the room did not clear after its enemies were removed"
+    end, 120, label .. ": the room clears")
+    plan.wait(4)
+end
+
 function H.cleanup(ctx)
     local failure
     for _,name in ipairs(ctx.bundleRemaining or {}) do

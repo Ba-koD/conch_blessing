@@ -915,6 +915,37 @@ ConchBlessing.ItemData = {
         },
     },
 
+    JANGSEUNG = {
+        -- 장승: a pair of village guardians at every door into a special room, a
+        -- hidden secret room's wall and the Red Key's way to the ultra secret room;
+        -- in front of them no common enemy or enemy shot comes in.
+        type = "passive",
+        id = Isaac.GetItemIdByName("Jangseung"),
+        gfx = "jangseung.png",
+        pool = {
+            RoomType.ROOM_ANGEL,
+            RoomType.ROOM_TREASURE
+        },
+        quality = 3,
+        hidden = false,
+        shopprice = 15,
+        devilprice = 2,
+        origin = { id = CollectibleType.COLLECTIBLE_GUARDIAN_ANGEL, type = "collectible" },
+        flag = "positive",
+        synergies = {
+            -- With Door Stop: the door the player came in by gets a pair in every room.
+            [{ id = TrinketType.TRINKET_DOOR_STOP, type = "trinket" }] = "trinket_door_stop",
+        },
+        script = "scripts/items/collectibles/jangseung",
+        callbacks = {
+            postUpdate = "jangseung.onUpdate",
+            postNewRoom = "jangseung.onNewRoom",
+            gameStarted = "jangseung.onGameStarted",
+            preGameExit = "jangseung.onGameExit",
+            preModUnload = "jangseung.onModUnload"
+        },
+    },
+
     -- The twelve zodiac items (십이지) close the collectible group in their own
     -- order, 자 … 해, followed by the familiars and trinkets.
     RAT = {
@@ -1012,11 +1043,40 @@ ConchBlessing.ItemData = {
         },
     },
     RABBIT = {
-        WorkingNow = true,
-        hidden = true,
+        -- 묘, the rabbit who hid its liver: a hidden rock on every floor opens
+        -- the way to the black market, which always sells a Raw Liver; each Raw
+        -- Liver taken is a liver (up to four) that revives its holder.
         type = "passive",
+        id = Isaac.GetItemIdByName("Rabbit"),
         gfx = "rabbit.png",
-        id = Isaac.GetItemIdByName("Rabbit (WIP)"),
+        pool = {
+            RoomType.ROOM_TREASURE,
+            RoomType.ROOM_PLANETARIUM
+        },
+        quality = 4,
+        -- REPENTOGON: each available liver is this item's TemporaryEffect,
+        -- counted as an extra life (keeps the run save through the death).
+        customtags = "reviveeffect",
+        persistent = true,
+        hidden = false,
+        shopprice = 20,
+        devilprice = 2,
+        origin = { id = CollectibleType.COLLECTIBLE_ARIES, type = "collectible" },
+        flag = "positive",
+        synergies = {
+            -- Raw Liver: each one taken while holding Rabbit is a liver.
+            [{ id = CollectibleType.COLLECTIBLE_RAW_LIVER, type = "collectible" }] = "raw_liver",
+            -- 진: a Raw Liver past four livers is offered to the Dragon King, damage x1.4 for the floor.
+            [{ type = "collectible", name = "Dragon" }] = "dragon",
+        },
+        script = "scripts/items/collectibles/rabbit",
+        callbacks = {
+            postUpdate = "rabbit.onUpdate",
+            postNewRoom = "rabbit.onNewRoom",
+            postNewLevel = "rabbit.onNewLevel",
+            gameStarted = "rabbit.onGameStarted",
+            preGameExit = "rabbit.onGameExit"
+        },
     },
     DRAGON = {
         -- 진, God of Weather: fifth of the zodiac block (user order, 2026-10-24).

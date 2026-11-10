@@ -32,6 +32,7 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- then removed by the engine (measured 2026-10-31), so each quarter is
 -- stamped once a visit; stamped again it would only darken.
 local SaveManager = require("scripts.lib.save_manager")
+local LevelRooms = require("scripts.lib.level_rooms")
 local definitions = require("scripts.entities.definitions")
 local definition, furrowDefinition, riceDefinition = definitions.OX, definitions.OX_FURROW, definitions.OX_RICE
 
@@ -101,12 +102,7 @@ local function resetEvidence()
 end
 resetEvidence()
 
-local function member(object, key)
-    if object == nil then return nil end
-    local ok, value = pcall(function() return object[key] end)
-    if ok then return value end
-    return nil
-end
+local member = LevelRooms.member
 
 local function isActingPlayer(player)
     if not player then return false end
@@ -127,28 +123,7 @@ end
 
 -- ------------------------------------------------------------------ pure rules
 
--- Breadth-first route over rooms from `from` to `to`, passing only through
--- rooms `through` allows (the goal itself may be any room).
-local function route(from, to, neighbors, through)
-    if from == to then return { from } end
-    local previous, queue, head = { [from] = from }, { from }, 1
-    while head <= #queue do
-        local node = queue[head]
-        head = head + 1
-        for _, nextNode in ipairs(neighbors(node)) do
-            if previous[nextNode] == nil and (nextNode == to or through(nextNode)) then
-                previous[nextNode] = node
-                if nextNode == to then
-                    local path = { to }
-                    while path[1] ~= from do table.insert(path, 1, previous[path[1]]) end
-                    return path
-                end
-                queue[#queue + 1] = nextNode
-            end
-        end
-    end
-    return nil
-end
+local route = LevelRooms.route
 
 -- The cheapest four-way path over a room grid `width` cells wide and `size`
 -- cells long from `start` to `goal`. `cost(cell)` is the cost of stepping on
@@ -384,99 +359,8 @@ local function pieceFrame(color, piece, cell)
 end
 
 -- ------------------------------------------------------------------ the level
-local function roomAt(level, index)
-    if index == nil or index < 0 then return nil end
-    local ok, desc = pcall(level.GetRoomByIdx, level, index, 0)
-    if ok and desc and desc.Data and desc.GridIndex >= 0 then return desc end
-    return nil
-end
-
-local function mainRoom(level)
-    local desc = level:GetCurrentRoomDesc()
-    if not desc or not desc.Data or desc.GridIndex < 0 then return nil end
-    if type(level.GetDimension) == "function" then
-        local ok, dimension = pcall(level.GetDimension, level)
-        if ok and dimension ~= 0 then return nil end
-    end
-    local main = roomAt(level, desc.SafeGridIndex)
-    if not main or main.ListIndex ~= desc.ListIndex then return nil end
-    return desc
-end
-
--- Each room shape's door slots and the level cell beyond each, from the
--- room's safe grid index (the engine's own layout, 13 cells to a row).
-local L, U, R, D = -1, -13, 1, 13
-local DOOR_CELLS = {
-    [RoomShape.ROOMSHAPE_1x1] = { [0] = L, [1] = U, [2] = R, [3] = D },
-    [RoomShape.ROOMSHAPE_IH] = { [0] = L, [2] = R },
-    [RoomShape.ROOMSHAPE_IV] = { [1] = U, [3] = D },
-    [RoomShape.ROOMSHAPE_1x2] = { [0] = L, [1] = U, [2] = R, [3] = D + D, [4] = D + L, [6] = D + R },
-    [RoomShape.ROOMSHAPE_IIV] = { [1] = U, [3] = D + D },
-    [RoomShape.ROOMSHAPE_2x1] = { [0] = L, [1] = U, [2] = R + R, [3] = D, [5] = R + U, [7] = R + D },
-    [RoomShape.ROOMSHAPE_IIH] = { [0] = L, [2] = R + R },
-    [RoomShape.ROOMSHAPE_2x2] = { [0] = L, [1] = U, [2] = R + R, [3] = D + D, [4] = D + L, [5] = R + U,
-        [6] = R + D + R, [7] = R + D + D },
-    [RoomShape.ROOMSHAPE_LTL] = { [0] = L, [1] = D + L + U, [2] = R, [3] = D + L + D, [4] = D + L + L, [5] = U,
-        [6] = D + R, [7] = D + D },
-    [RoomShape.ROOMSHAPE_LTR] = { [0] = L, [1] = U, [2] = R, [3] = D + D, [4] = D + L, [5] = D + R + U,
-        [6] = D + R + R, [7] = D + R + D },
-    [RoomShape.ROOMSHAPE_LBL] = { [0] = L, [1] = U, [2] = R + R, [3] = D, [4] = R + D + L, [5] = R + U,
-        [6] = R + D + R, [7] = R + D + D },
-    [RoomShape.ROOMSHAPE_LBR] = { [0] = L, [1] = U, [2] = R + R, [3] = D + D, [4] = D + L, [5] = R + U,
-        [6] = D + R, [7] = R + D },
-}
-
-local SECRET = { [RoomType.ROOM_SECRET] = true, [RoomType.ROOM_SUPERSECRET] = true, [RoomType.ROOM_ULTRASECRET] = true }
-
--- The rooms a room's door cells touch, by safe grid index in door-slot order.
-local function touching(level, desc, index)
-    local list = {}
-    local cells = DOOR_CELLS[desc.Data.Shape] or {}
-    local doors = tonumber(desc.Data.Doors) or 0
-    local column = index % 13
-    for slot = 0, 7 do
-        local delta = cells[slot]
-        if delta and doors & (1 << slot) ~= 0 then
-            local cell = index + delta
-            if cell >= 0 and cell < 169 and math.abs(cell % 13 - column) <= 2 then
-                local other = roomAt(level, cell)
-                if other and other.SafeGridIndex ~= index then list[#list + 1] = other end
-            end
-        end
-    end
-    return list
-end
-
--- The rooms a room's doors lead to, by safe grid index in door-slot order.
--- REPENTOGON names the engine's own doors; the shape's door cells add the
--- secret rooms behind hidden walls and stand in for everything without it.
-local function neighborsOf(level, index)
-    local desc = roomAt(level, index)
-    local list, seen = {}, {}
-    if not desc then return list end
-    local function add(safe)
-        if safe and safe >= 0 and safe ~= index and not seen[safe] then
-            seen[safe] = true
-            list[#list + 1] = safe
-        end
-    end
-    local exact = member(desc, "GetNeighboringRooms")
-    local found
-    if type(exact) == "function" then
-        local ok, result = pcall(exact, desc)
-        if ok and type(result) == "table" then found = result end
-    end
-    if found then
-        for slot = 0, 7 do
-            local other = found[slot]
-            if other then add(member(other, "SafeGridIndex")) end
-        end
-    end
-    for _, other in ipairs(touching(level, desc, index)) do
-        if not found or SECRET[other.Data.Type] then add(other.SafeGridIndex) end
-    end
-    return list
-end
+local roomAt, mainRoom, neighborsOf = LevelRooms.roomAt, LevelRooms.mainRoom, LevelRooms.neighborsOf
+local DOOR_CELLS, SECRET = LevelRooms.DOOR_CELLS, LevelRooms.SECRET
 
 -- Oxen walk through ordinary rooms; special rooms are normally dead ends,
 -- and only a route that needs one (another mod's layout) passes through it.
@@ -834,99 +718,15 @@ local function arrive(ox, state, level, desc, color, seen)
 end
 
 -- ------------------------------------------------------------------ red rooms
--- The ultra secret room, which only red rooms reach.
-local function ultraRoom(level)
-    local rooms = level:GetRooms()
-    for i = 0, rooms.Size - 1 do
-        local desc = rooms:Get(i)
-        if desc and desc.Data and desc.GridIndex >= 0 and desc.Data.Type == RoomType.ROOM_ULTRASECRET then
-            return desc.SafeGridIndex
-        end
-    end
-    return nil
-end
-
-local RED_CELLS = { [0] = L, [1] = U, [2] = R, [3] = D } -- a red room is 1x1
-local DIG = 1000 -- a red room door outweighs any number of rooms walked
+local ultraRoom = LevelRooms.ultraRoom
 
 -- The first step toward the jealous black ox's goal (the ultra secret room),
--- like a Red Key: through a door a room already has, or through a red room
--- door it digs into an empty cell or an ordinary room. Returns the room (or
--- the empty cell its red room will fill) and the slot to dig, nil for an
--- existing door; false when it is there, nil when there is no way.
+-- like a Red Key (LevelRooms.redStep): returns the room (or the empty cell its
+-- red room will fill) and the slot to dig, nil for an existing door; false
+-- when it is there, nil when there is no way.
 local function planRed(ox, level, index)
-    local goal = ox.goals[ox.gi]
-    if index == goal then return false end
-    local blocked = ox.blocked or {}
-    local function edges(key)
-        local list, base, cells, connected, doors = {}, tonumber(key:sub(2)), RED_CELLS, {}, {}
-        if key:sub(1, 1) == "r" then
-            local desc = roomAt(level, base)
-            if not desc then return list end
-            cells = DOOR_CELLS[desc.Data.Shape] or {}
-            for _, other in ipairs(neighborsOf(level, base)) do connected[other] = true end
-            -- The ultra secret room has a door only where the engine says so;
-            -- the room shape's door cells would guess one into every hidden room.
-            local exact = member(desc, "GetNeighboringRooms")
-            local ok, found = false, nil
-            if type(exact) == "function" then ok, found = pcall(exact, desc) end
-            for slot = 0, 7 do
-                local other = ok and type(found) == "table" and found[slot]
-                if other then doors[member(other, "SafeGridIndex") or -1] = true end
-            end
-        end
-        for slot = 0, 7 do
-            local delta = cells[slot]
-            local cell = delta and base + delta
-            if cell and cell >= 0 and cell < 169 and math.abs(cell % 13 - base % 13) <= 2
-                and not blocked[key .. ":" .. slot] then
-                local other = roomAt(level, cell)
-                -- A red room door is a Red Key used, which the floor is laid out to
-                -- need only once (user decision 2026-10-31): a dig weighs more than
-                -- any walk, so the ox walks the rooms a player can reach as far as
-                -- they take it and digs as few doors as it can; with as many digs,
-                -- the fewest rooms.
-                if not other then
-                    list[#list + 1] = { "c" .. cell, slot, true, DIG }
-                else
-                    local safe = other.SafeGridIndex
-                    if safe == goal then
-                        list[#list + 1] = { "r" .. safe, slot, not doors[safe], doors[safe] and 1 or DIG }
-                    elseif connected[safe] and passable(level, true)(safe) then
-                        -- Through a boss room only when nothing else is near as short.
-                        local boss = other.Data.Type == RoomType.ROOM_BOSS
-                        list[#list + 1] = { "r" .. safe, slot, false, boss and 6 or 1 }
-                    elseif other.Data.Type == RoomType.ROOM_DEFAULT then
-                        list[#list + 1] = { "r" .. safe, slot, true, DIG }
-                    end
-                end
-            end
-        end
-        return list
-    end
-    local start, target = "r" .. index, "r" .. goal
-    local cost, came, open, closed = { [start] = 0 }, {}, { start }, {}
-    while #open > 0 do
-        local best, at = nil, 1
-        for i, key in ipairs(open) do
-            if not best or cost[key] < cost[best] then best, at = key, i end
-        end
-        table.remove(open, at)
-        if best == target then break end
-        closed[best] = true
-        for _, edge in ipairs(edges(best)) do
-            local key, total = edge[1], cost[best] + edge[4]
-            if not closed[key] and (cost[key] == nil or total < cost[key]) then
-                if cost[key] == nil then open[#open + 1] = key end
-                cost[key], came[key] = total, { best, edge[2], edge[3] }
-            end
-        end
-    end
-    if not came[target] then return nil end
-    local key = target
-    while came[key][1] ~= start do key = came[key][1] end
-    local hop = came[key]
-    return tonumber(key:sub(2)), hop[3] and hop[2] or nil
+    local nextRoom, slot = LevelRooms.redStep(level, index, ox.goals[ox.gi], ox.blocked)
+    return nextRoom, slot
 end
 
 -- Digs the red room door the ox planned from room `index`; the room behind

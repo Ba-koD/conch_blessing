@@ -28,6 +28,7 @@ EXCLUDE_PATHS = (
     "scripts/lib/weapon_fire.lua",
     "scripts/rooms/native_gallery_rooms.lua",
     "resources/gfx/items/collectibles/notused",
+    "resources/gfx/effects/notused",
 )
 DEFAULT_LANGUAGES = ("english", "koreana")
 WORKSHOP_LOCALIZATIONS = {

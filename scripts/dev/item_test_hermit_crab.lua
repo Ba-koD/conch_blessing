@@ -665,4 +665,119 @@ S.add("HERMIT_CRAB", "kronos", {}, function(plan, id)
     end)
 end, { "kronos" })
 
+-- Every trinket a synergy names works from the crab's claws as from a hand
+-- (user goal 2026-11-10): each synergy check reads HasTrinket, which counts the
+-- crab's innate copy. Each such trinket is checked in the crab in turn; Door
+-- Stop really raises 장승 at the door come in by, and Atropos really unlinks a
+-- choice.
+local function synergyTrinkets()
+    local list, seen = {}, {}
+    local function add(id)
+        if type(id) == "number" and id > 0 and not seen[id] then seen[id], list[#list + 1] = true, id end
+    end
+    for _, item in pairs(ConchBlessing.ItemData) do
+        if item.type == "trinket" and next(item.synergies or {}) ~= nil then add(item.id) end
+        for target in pairs(item.synergies or {}) do
+            if type(target) == "table" and target.type == "trinket" then
+                add(target.id or (target.name and Isaac.GetTrinketIdByName(target.name)))
+            end
+        end
+    end
+    table.sort(list)
+    return list
+end
+
+local function inSlots(player, id)
+    for slot = 0, 1 do
+        if (player:GetTrinket(slot) & ~TrinketType.TRINKET_GOLDEN_FLAG) == id then return true end
+    end
+    return false
+end
+
+-- Takes a trinket the crab put down off the floor so nobody picks it up by walking.
+local function clearFloor(id)
+    for _, entity in ipairs(Isaac.GetRoomEntities()) do
+        if entity.Type == EntityType.ENTITY_PICKUP and entity.Variant == PickupVariant.PICKUP_TRINKET
+            and (entity.SubType & ~TrinketType.TRINKET_GOLDEN_FLAG) == id then entity:Remove() end
+    end
+end
+
+S.add("HERMIT_CRAB", "partner_trinkets", {}, function(plan, id)
+    requireModule(plan)
+    local items = ConchBlessing.ItemData
+    local jangseungId = items.JANGSEUNG and items.JANGSEUNG.id or -1
+    local atroposId = items.ATROPOS and items.ATROPOS.id or -1
+    local trinkets = synergyTrinkets()
+    plan.require("the trinkets synergies name, 장승 and Atropos", function()
+        return #trinkets >= 3 and jangseungId > 0 and atroposId > 0 and ConchBlessing.jangseung ~= nil or nil,
+            "trinkets={" .. table.concat(trinkets, ",") .. "}"
+    end)
+    plan.act(function(player)
+        T().resetEvidence()
+        give(player, id)
+        player:AddCollectible(jangseungId, 0, false)
+    end)
+    plan.waitUntil(function(player) return #crabs(player) == 1 end, 30, "the crab appears")
+    for index, trinket in ipairs(trinkets) do
+        local previous = trinkets[index - 1]
+        plan.act(function() T().resetEvidence() end)
+        drop(plan, function() return trinket end, "the crab takes " .. trinket)
+        plan.act(function() if previous then clearFloor(previous) end end)
+        plan.check(trinket .. ": Isaac has it only through the crab, and HasTrinket sees it", function(player)
+            return held(player)[1] == trinket and innate(player, trinket) == 1 and not inSlots(player, trinket)
+                and player:HasTrinket(trinket), describe(player, { trinket })
+        end)
+        if trinket == TrinketType.TRINKET_DOOR_STOP then
+            plan.check("장승 sees the crab's Door Stop", function()
+                local seen = ConchBlessing.jangseung._test.doorStop()
+                return seen, "doorStop()=" .. tostring(seen)
+            end)
+            H.walkThroughDoor(plan, "through a door with the crab's Door Stop", H.ordinaryDoor,
+                function() ConchBlessing.jangseung._test.resetEvidence() end)
+            plan.check("a pair stands at the door come in by", function(_, ctx)
+                local found = false
+                for _, marker in ipairs(ConchBlessing.jangseung.markers()) do
+                    if marker.slot == ctx.entry and marker.entry then found = true end
+                end
+                return ctx.entry ~= nil and found,
+                    string.format("entry=%s EnterDoor=%s", tostring(ctx.entry), tostring(ctx.enterDoor))
+            end)
+        elseif trinket == atroposId then
+            plan.act(function(player, ctx)
+                local room = Game():GetRoom()
+                local center = room:GetCenterPos()
+                ctx.choices = {}
+                for i, dx in ipairs({ -60, 60 }) do
+                    local at = room:FindFreePickupSpawnPosition(center + Vector(dx, -60), 0, true)
+                    local pickup = Isaac.Spawn(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_COLLECTIBLE,
+                        CollectibleType.COLLECTIBLE_BREAKFAST, at, Vector.Zero, nil):ToPickup()
+                    pickup.OptionsPickupIndex = 77
+                    ctx.choices[i] = EntityPtr(pickup)
+                end
+                ctx.cleanupFns = ctx.cleanupFns or {}
+                table.insert(ctx.cleanupFns, function()
+                    for _, ref in ipairs(ctx.choices or {}) do
+                        if ref.Ref and ref.Ref:Exists() then ref.Ref:Remove() end
+                    end
+                end)
+            end)
+            plan.wait(4)
+            plan.check("Atropos, held by the crab, unlinks the choice", function(_, ctx)
+                local indexes = {}
+                local unlinked = true
+                for i, ref in ipairs(ctx.choices) do
+                    local pickup = ref.Ref and ref.Ref:ToPickup()
+                    indexes[i] = pickup and tostring(pickup.OptionsPickupIndex) or "gone"
+                    if not pickup or pickup.OptionsPickupIndex ~= 0 then unlinked = false end
+                end
+                return unlinked, "OptionsPickupIndex=" .. table.concat(indexes, ",")
+            end)
+            plan.act(function(_, ctx)
+                for _, ref in ipairs(ctx.choices) do if ref.Ref and ref.Ref:Exists() then ref.Ref:Remove() end end
+                ctx.choices = {}
+            end)
+        end
+    end
+end)
+
 return C
