@@ -7,9 +7,18 @@
 -- ConchBlessingRequire. include runs the file again, and the cache below lasts
 -- one load only, so a reload runs every module once more. Modules that are not
 -- this mod's (the game's json) still come from the game's require.
+--
+-- Every module must load during startup. include finds files relative to the
+-- mod that is loading, and once startup is over that is whichever mod the game
+-- loaded last: a module first required from a callback is searched for in that
+-- other mod's folder and is not found (measured 2026-11-11 on the Workshop
+-- install, where a neutral upgrade first required scripts.lib.upgrade_visuals).
+-- The dev checkout hid it, because its dev tooling loads more modules at
+-- startup; tests/test_workshop_package.py checks the shipped files instead.
 local gameRequire = require
 local modules = {}
 local LOADING = {}
+local startupDone = false
 
 function ConchBlessingRequire(name)
     if type(name) ~= "string" or not name:find("^scripts[%./]") then
@@ -33,6 +42,10 @@ function ConchBlessingRequire(name)
     -- returns the search's "no file" list instead (measured 2026-10-18).
     if ok and type(result) == "string" and result:find("no file '", 1, true) then
         ok, result = false, "module '" .. name .. "' not found:" .. result
+        if startupDone then
+            result = result .. "\n(first required after startup, so include searched another mod's folder;"
+                .. " require it when its file loads)"
+        end
     end
     if not ok then
         modules[key] = nil
@@ -58,6 +71,7 @@ end
 -- dev-only:end
 
 ConchBlessingRequire("scripts.conch_blessing_core")
+startupDone = true
 -----------------------------------------------------------
 ----=         Conch's Blessing Mod               =----
 ----=    Enhanced Items for Isaac           =----

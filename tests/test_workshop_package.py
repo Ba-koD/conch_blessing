@@ -63,6 +63,51 @@ def without_comments(source):
     return ''.join(out)
 
 
+TOKEN = re.compile(r'''
+    (?P<lstr>\[(?P<leq>=*)\[.*?\](?P=leq)\])
+  | (?P<str>"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')
+  | (?P<word>[A-Za-z_][A-Za-z0-9_]*)
+  | (?P<sym>[^\sA-Za-z_])
+''', re.S | re.X)
+REQUIRES = ('require', 'ConchBlessingRequire', 'ConchBlessingOptionalRequire')
+
+
+def startup_requires(code):
+    """(module, deferred, line) for each literal require of a scripts.* module
+    in comment-free Lua source. `deferred` means it sits inside a function that
+    does not run while the file loads; a function handed straight to pcall runs
+    then, as do loops and branches at the top level."""
+    tokens = [m for m in TOKEN.finditer(code)]
+    stack, waiting_do, out = [], 0, []
+    for i, m in enumerate(tokens):
+        word = m.group('word')
+        if not word:
+            continue
+        if word == 'function':
+            prev = [t.group('word') or t.group('sym') for t in tokens[max(0, i - 2):i]]
+            stack.append('now' if prev == ['pcall', '('] else 'later')
+        elif word in ('if', 'repeat'):
+            stack.append(word)
+        elif word in ('for', 'while'):
+            stack.append(word)
+            waiting_do += 1
+        elif word == 'do':
+            if waiting_do:
+                waiting_do -= 1
+            else:
+                stack.append('do')
+        elif word in ('end', 'until') and stack:
+            stack.pop()
+        elif word in REQUIRES:
+            j = i + 1
+            while j < len(tokens) and tokens[j].group('sym') in ('(', ','):
+                j += 1
+            literal = j < len(tokens) and tokens[j].group('str')
+            if literal and re.match(r'scripts[./]', literal[1:-1]):
+                out.append((literal[1:-1], 'later' in stack, code.count('\n', 0, m.start()) + 1))
+    return out
+
+
 class StripTests(unittest.TestCase):
     def test_hook_tables_and_marked_lines_go_and_everything_else_stays(self):
         source = '\r\n'.join([
@@ -165,6 +210,50 @@ class WorkshopPackageTests(unittest.TestCase):
             if module == 'scripts/locale/init':  # loads scripts.locale.<lang> by name
                 stack.extend(f for f in files if f.startswith('scripts/locale/'))
         self.assertEqual(sorted(files - seen), [], 'staged Lua files nothing loads')
+
+    def test_every_staged_module_loads_at_startup(self):
+        # Once startup is over, include searches whichever mod loaded last, so a
+        # module first required from a callback is not found (2026-11-11: a
+        # neutral upgrade on the Workshop install first required
+        # scripts.lib.upgrade_visuals). Follow only the requires that run while
+        # the mod loads: those at a file's top level, inside a function passed
+        # straight to pcall there, and the loaders' `script = ...`/`path = ...`
+        # fields. Every staged module must be reached that way.
+        files = {p.relative_to(self.content).with_suffix('').as_posix() for p in self.lua_files}
+        fields = re.compile(r'''\b(?:script|path)\s*=\s*["'](scripts[./][^"']+)["']''')
+        seen, stack, late = set(), ['main'], []
+        while stack:
+            module = stack.pop()
+            if module in seen or module not in files:
+                continue
+            seen.add(module)
+            code = without_comments(self.source(self.content / (module + '.lua')))
+            for name, deferred, line in startup_requires(code):
+                target = name.replace('.', '/')
+                if deferred:
+                    late.append((target, f'{module}.lua:{line}'))
+                else:
+                    stack.append(target)
+            stack.extend(m.replace('.', '/') for m in fields.findall(code))
+            if module == 'scripts/locale/init':  # loads scripts.locale.<lang> by name at startup
+                stack.extend(f for f in files if f.startswith('scripts/locale/'))
+        self.assertEqual(sorted(files - seen), [], 'staged modules that do not load at startup')
+        self.assertEqual(sorted(w for t, w in late if t in files and t not in seen), [],
+                         'requires inside functions of modules nothing loads at startup')
+
+    def test_the_startup_scan_tells_load_time_from_later(self):
+        code = without_comments('''
+            local A = require("scripts.a")
+            local ok = pcall(require, "scripts.b")
+            pcall(function() require("scripts.c") end)
+            local function later() return require("scripts.d") end
+            for i = 1, 2 do local x = require("scripts.e") end
+            M.f = function() if x then pcall(function() require("scripts.g") end) end end
+            local s = "require('scripts.h')" -- a string, not a call
+        ''')
+        found = {name: deferred for name, deferred, _ in startup_requires(code)}
+        self.assertEqual(found, {'scripts.a': False, 'scripts.b': False, 'scripts.c': False,
+                                 'scripts.d': True, 'scripts.e': False, 'scripts.g': True})
 
     def test_optional_require_returns_nil_only_for_that_missing_module(self):
         lua = LuaRuntime(unpack_returned_tuples=True)

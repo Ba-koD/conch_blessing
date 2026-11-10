@@ -178,10 +178,12 @@ end
 -- floor pickup's HUDSmall animation), placed in the line where
 -- generate_pocket_assets.py measured it (scripts/items/cards/eid_icons.lua).
 local cardIconSprites = {}
+-- Loaded at startup: a module first required later is searched for in another
+-- mod's folder and is not found (see main.lua).
+local okIcons, icons = pcall(require, "scripts.items.cards.eid_icons")
 ConchBlessing.EID.addCardIcon = function(cardId, cardData)
     if not EID or type(EID.addIcon) ~= "function" or not cardData or not cardData.anm2 then return end
     if cardIconSprites[cardId] then return end
-    local okIcons, icons = pcall(require, "scripts.items.cards.eid_icons")
     local geometry = okIcons and type(icons) == "table" and icons[cardData.key] or nil
     if not geometry then
         ConchBlessing.printError("[EID] no icon placement for card " .. tostring(cardData.key))

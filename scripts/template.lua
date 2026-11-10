@@ -4,7 +4,10 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- Supports positive, neutral, and negative upgrade types
 
 local Template = {}
-local MorphVisuals -- Loaded lazily, after ItemData initialization.
+-- Loaded with this file, at startup: a module first required after startup is
+-- searched for in another mod's folder and is not found (see main.lua). It
+-- reads ItemData only inside its functions, so it needs nothing built yet.
+local MorphVisuals = require("scripts.lib.upgrade_visuals")
 local PickupVisual = require("scripts.lib.upgrade_pickup_visual")
 local Sound = require("scripts.lib.sound_volume")
 Template._activeAnimations = Template._activeAnimations or {}
@@ -637,7 +640,6 @@ end
 -- Only explicitly approved profiles replace the flag template. Per-pedestal
 -- state belongs to the upgrade transaction, never the shared ItemData row.
 Template.forItem = function(key, flag)
-    MorphVisuals = MorphVisuals or require("scripts.lib.upgrade_visuals")
     if not MorphVisuals.isApplied(key) then return Template[flag] end
     local function begin(phase, pos, pickup, state)
         local scene = state.morphScene
