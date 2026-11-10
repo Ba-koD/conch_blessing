@@ -19,9 +19,29 @@ package=nil
 RoomShape={ROOMSHAPE_1x1=1,ROOMSHAPE_IH=2,ROOMSHAPE_IV=3,ROOMSHAPE_1x2=4,ROOMSHAPE_IIV=5,ROOMSHAPE_2x1=6,
     ROOMSHAPE_IIH=7,ROOMSHAPE_2x2=8,ROOMSHAPE_LTL=9,ROOMSHAPE_LTR=10,ROOMSHAPE_LBL=11,ROOMSHAPE_LBR=12}
 TrinketType={TRINKET_DOOR_STOP=124}
+ModCallbacks={}
+DamageFlag={DAMAGE_SPIKES=16,DAMAGE_RED_HEARTS=32,DAMAGE_IV_BAG=2048,DAMAGE_CURSED_DOOR=131072,DAMAGE_FAKE=2097152,
+    DAMAGE_DEVIL=8388608,DAMAGE_NO_PENALTIES=268435456}
+SoundEffect={SOUND_PAPER_OUT=18}
+played=0
+SFXManager=function() return {Play=function() played=played+1 end} end
+frame=0
+players={}
+Game=function() return {GetNumPlayers=function() return #players end,GetFrameCount=function() return frame end} end
+GetPtrHash=function(e) return e.hash end
+function Vec(x,y) return {X=x,Y=y} end
+function newPlayer(hash,x,y,held)
+    local p={hash=hash,Position=Vec(x,y),held=held}
+    p.ToPlayer=function(self) return self end
+    p.HasCollectible=function(self,id) return self.held and id==961 end
+    p.Exists=function() return true end
+    p.IsDead=function() return false end
+    return p
+end
 RoomType={ROOM_DEFAULT=1,ROOM_SHOP=2,ROOM_TREASURE=4,ROOM_BOSS=5,ROOM_SECRET=7,ROOM_SUPERSECRET=8,ROOM_ULTRASECRET=29}
 errors={}
-Isaac={GetItemIdByName=function(name) return name=='Jangseung' and 961 or -1 end,
+Isaac={GetPlayer=function(i) return players[i+1] end,
+    GetItemIdByName=function(name) return name=='Jangseung' and 961 or -1 end,
     GetEntityTypeByName=function() return 1000 end,
     GetEntityVariantByName=function(name) return ({['Conch Blessing Jangseung']=7786,
         ['Conch Blessing Jangseung Ground']=7787})[name] or -1 end}
@@ -159,6 +179,72 @@ class JangseungTests(unittest.TestCase):
             assert(nextRoom==41 and slot==nil,'from 40 walk to 41 first')
             assert(LR.redStep(L,43,43,nil)==false,'already there')
         """)
+
+    def test_a_player_inside_a_village_takes_no_damage_but_self_damage(self):
+        # user request 2026-11-10: invincible inside the half circle, a boss's
+        # hits included; what the player does to themselves still costs
+        self.run_lua("""
+            local isaac=newPlayer(1,0,40,true)
+            players={isaac}
+            M.onGameStarted()
+            M.markers()[1]={slot=1,center=Vec(0,0),inward=Vec(0,1)}
+            T.resetEvidence()
+            assert(M.onPlayerDamage(nil,isaac,1,0)==false,'an enemy hit inside is cancelled')
+            assert(M.onPlayerDamage(nil,isaac,1,DamageFlag.DAMAGE_SPIKES)==false,'spikes too')
+            assert(T.evidence().blocked==2 and played==1,'one rustle for two hits in the same update')
+            local ward=T.ward(isaac)
+            assert(ward.alpha==M.data.wardFade and ward.flash==M.data.wardFlash,'the 금줄 shows and flashes at once')
+            for _,flag in ipairs({'DAMAGE_RED_HEARTS','DAMAGE_IV_BAG','DAMAGE_CURSED_DOOR','DAMAGE_DEVIL',
+                    'DAMAGE_NO_PENALTIES','DAMAGE_FAKE'}) do
+                assert(M.onPlayerDamage(nil,isaac,1,DamageFlag[flag])==nil,flag..' is self-damage and lands')
+            end
+            frame=M.data.wardSoundGap-1; M.onPlayerDamage(nil,isaac,1,0)
+            assert(played==1,'the rustle waits a few updates')
+            frame=M.data.wardSoundGap; M.onPlayerDamage(nil,isaac,1,0)
+            assert(played==2)
+            isaac.Position=Vec(0,120)
+            assert(M.onPlayerDamage(nil,isaac,1,0)==nil,'beyond two tiles it lands')
+            isaac.Position=Vec(0,-30)
+            assert(M.onPlayerDamage(nil,isaac,1,0)==nil,'behind the wall is outside')
+            local partner=newPlayer(2,10,30,false)
+            players={isaac,partner}
+            assert(M.onPlayerDamage(nil,partner,1,0)==false,'a partner inside is sheltered while the holder lives')
+            isaac.held=false
+            assert(M.onPlayerDamage(nil,partner,1,0)==nil,'no living holder, no shelter')
+            assert(M.onPlayerDamage(nil,{ToPlayer=function() return nil end},1,0)==nil,'only players')
+            M.onGameExit()
+            isaac.held=true
+            assert(M.onPlayerDamage(nil,partner,1,0)==nil,'nothing before game start')
+        """)
+
+    def test_the_geumjul_fades_in_inside_and_out_after_leaving(self):
+        self.run_lua("""
+            local isaac=newPlayer(1,0,40,true)
+            players={isaac}
+            M.onGameStarted()
+            M.markers()[1]={slot=1,center=Vec(0,0),inward=Vec(0,1)}
+            for i=1,M.data.wardFade+3 do T.tendWards(true) end
+            assert(T.ward(isaac).alpha==M.data.wardFade,'fully shown after the fade')
+            isaac.Position=Vec(200,200)
+            T.tendWards(true)
+            assert(T.ward(isaac).alpha==M.data.wardFade-1,'starts fading once outside')
+            for i=1,M.data.wardFade do T.tendWards(true) end
+            assert(T.ward(isaac)==nil,'gone once faded')
+            isaac.Position=Vec(0,40)
+            T.tendWards(true)
+            assert(T.ward(isaac).alpha==1)
+            T.tendWards(false)
+            assert(T.ward(isaac)==nil,'fades without a holder')
+            T.tendWards(true)
+            assert(T.ward(isaac).alpha==1)
+            isaac.held=false -- (so the new room raises no pairs in this double)
+            M.onNewRoom()
+            assert(next(T.wards())==nil,'a new room clears it')
+        """)
+        anm2 = (ROOT / 'resources/gfx/effects/conch_jangseung_ward.anm2').read_text(encoding='utf-8')
+        self.assertIn('Animation Name="Idle"', anm2)
+        self.assertIn('Path="conch_jangseung_ward.png"', anm2)
+        self.assertTrue((ROOT / 'resources/gfx/effects/conch_jangseung_ward.png').exists())
 
 
 if __name__ == '__main__':

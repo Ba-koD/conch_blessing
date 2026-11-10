@@ -655,9 +655,9 @@ return {
             name = "Jangseung",
             description = "Great General of Heaven, Lady General of the Earth",
             eid = {
-                "A pair of jangseung stands on either side of every door into a special room or a secret room.",
-                "#They also stand at the wall a Red Key opens toward the Ultra Secret Room.",
-                "#Enemies other than bosses cannot come within 2 tiles in front of them and flee in fear, and enemy shots vanish there.",
+                "A pair of jangseung stands on either side of every door into a special room.",
+                "#A door that can lead to the Ultra Secret Room gets a red cord",
+                "#Within 2 tiles in front of them you are invincible, and enemies other than bosses flee in fear",
                 "#{{Warning}} REPENTOGON recommended",
             },
             synergies = {

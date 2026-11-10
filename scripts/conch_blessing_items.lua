@@ -918,7 +918,8 @@ ConchBlessing.ItemData = {
     JANGSEUNG = {
         -- 장승: a pair of village guardians at every door into a special room, a
         -- hidden secret room's wall and the Red Key's way to the ultra secret room;
-        -- in front of them no common enemy or enemy shot comes in.
+        -- in front of them no common enemy or enemy shot comes in, and a player
+        -- standing there takes no damage.
         type = "passive",
         id = Isaac.GetItemIdByName("Jangseung"),
         gfx = "jangseung.png",

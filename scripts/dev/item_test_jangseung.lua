@@ -265,6 +265,112 @@ S.add("JANGSEUNG", "guard", { conditions = true }, function(plan, id)
     end)
 end)
 
+-- A player inside the half circle takes no damage but self-damage, and a 금줄
+-- lies round their feet while they stand there (user request 2026-11-10).
+-- Hits come from a frozen enemy far off (a direct hit with it as source) and
+-- from real enemy creep under the player, the engine's own damage; the same
+-- creep outside the village is the control that it hurts at all.
+local function health(player) return player:GetHearts() + player:GetSoulHearts() end
+
+S.add("JANGSEUNG", "shelter", { conditions = true }, function(plan, id)
+    setup(plan, id, true)
+    goTo(plan, "the room beside the treasure room", besideType("ROOM_TREASURE"))
+    plan.require("a pair to stand in front of, and a spot outside every village", function(_, ctx)
+        local markers, radius = jangseung().markers(), jangseung().data.radius
+        local center = Game():GetRoom():GetCenterPos()
+        ctx.outside = center
+        return #markers > 0 and T().sheltered(markers, center.X, center.Y, radius) == nil or nil,
+            string.format("markers=%d centre sheltered=%s", #markers,
+                tostring(T().sheltered(markers, center.X, center.Y, radius) ~= nil))
+    end)
+    plan.act(function(player, ctx)
+        local m = jangseung().markers()[1]
+        local npc = Isaac.Spawn(EntityType.ENTITY_GAPER, 0, 0, ctx.outside + Vector(0, 60), Vector.Zero, nil):ToNPC()
+        npc:AddEntityFlags(EntityFlag.FLAG_FREEZE)
+        ctx.npc, ctx.creeps = npc, {}
+        ctx.cleanupFns = ctx.cleanupFns or {}
+        table.insert(ctx.cleanupFns, function()
+            if ctx.npc and ctx.npc:Exists() then ctx.npc:Remove() end
+            for _, creep in ipairs(ctx.creeps) do if creep:Exists() then creep:Remove() end end
+        end)
+        player.Position, player.Velocity = m.center + m.inward * 30, Vector.Zero
+        ctx.start = health(player)
+    end)
+    plan.wait(10) -- longer than the 금줄's fade (wardFade, 8 updates)
+    plan.check("standing in front of the pair, the 금줄 lies round the player's feet", function(player)
+        local ward = T().ward(player)
+        return jangseung().shelters(player) and ward ~= nil and ward.alpha == jangseung().data.wardFade,
+            string.format("sheltered=%s alpha=%s", tostring(jangseung().shelters(player)), tostring(ward and ward.alpha))
+    end)
+    plan.act(function(player, ctx)
+        T().resetEvidence()
+        ctx.before = health(player)
+        player:TakeDamage(1, 0, EntityRef(ctx.npc), 30)
+    end)
+    plan.wait(3)
+    plan.check("an enemy's hit is turned away", function(player, ctx)
+        local e = T().evidence()
+        return health(player) == ctx.before and e.blocked == 1 and player:GetDamageCooldown() == 0,
+            string.format("health %d -> %d blocked=%d cooldown=%d", ctx.before, health(player), e.blocked,
+                player:GetDamageCooldown())
+    end)
+    local function creepUnder(player, ctx)
+        local creep = Isaac.Spawn(EntityType.ENTITY_EFFECT, EffectVariant.CREEP_RED, 0, player.Position, Vector.Zero,
+            ctx.npc)
+        creep = creep and creep:ToEffect()
+        if creep and type(creep.SetTimeout) == "function" then creep:SetTimeout(90) end
+        ctx.creeps[#ctx.creeps + 1] = creep
+    end
+    plan.act(function(player, ctx)
+        T().resetEvidence()
+        ctx.before = health(player)
+        creepUnder(player, ctx)
+    end)
+    plan.wait(30)
+    plan.check("enemy creep under the player hurts nothing", function(player, ctx)
+        local e = T().evidence()
+        return health(player) == ctx.before and e.blocked > 0,
+            string.format("health %d -> %d blocked=%d", ctx.before, health(player), e.blocked)
+    end)
+    plan.act(function(player, ctx)
+        for _, creep in ipairs(ctx.creeps) do if creep:Exists() then creep:Remove() end end
+        T().resetEvidence()
+        ctx.before = health(player)
+        player:TakeDamage(1, DamageFlag.DAMAGE_RED_HEARTS, EntityRef(player), 30)
+    end)
+    plan.wait(3)
+    plan.check("self-damage still costs inside", function(player, ctx)
+        return health(player) == ctx.before - 1 and T().evidence().blocked == 0,
+            string.format("health %d -> %d blocked=%d", ctx.before, health(player), T().evidence().blocked)
+    end)
+    plan.waitUntil(function(player) return player:GetDamageCooldown() == 0 end, 120, "the hit's invincibility to end")
+    plan.act(function(player, ctx)
+        player.Position, player.Velocity = ctx.outside, Vector.Zero
+        T().resetEvidence()
+        ctx.before = health(player)
+        creepUnder(player, ctx)
+    end)
+    plan.wait(30)
+    plan.check("outside the village the same creep hurts", function(player, ctx)
+        return not jangseung().shelters(player) and health(player) < ctx.before and T().evidence().blocked == 0,
+            string.format("sheltered=%s health %d -> %d blocked=%d", tostring(jangseung().shelters(player)), ctx.before,
+                health(player), T().evidence().blocked)
+    end)
+    plan.wait(10)
+    plan.check("the 금줄 is gone once the player has left", function(player)
+        return T().ward(player) == nil, "ward alpha=" .. tostring(T().ward(player) and T().ward(player).alpha)
+    end)
+    plan.act(function(player, ctx)
+        for _, creep in ipairs(ctx.creeps) do if creep:Exists() then creep:Remove() end end
+        local lost = ctx.start - health(player)
+        if lost > 0 then player:AddHearts(lost) end
+    end)
+    plan.note("LOOK", function()
+        return "a 금줄 (straw rope with red peppers, charcoal and paper) round Isaac's feet in front of the pair, "
+            .. "flashing and swelling when a hit is turned away, fading as he walks off"
+    end)
+end)
+
 -- With Door Stop the door the player came in by gets a pair in every room;
 -- without it that ordinary door stays bare (user request 2026-11-10).
 S.add("JANGSEUNG", "door_stop", { conditions = true, synergies = true }, function(plan, id)
