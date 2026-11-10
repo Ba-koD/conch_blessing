@@ -31,10 +31,6 @@ Adds a polished "Conch’s Blessing" upgrade system. Depending on the Magic Conc
 
 링크와 의존성 (Links and Dependencies)
 --------------------------------------------------
-- 필수 모드 (Required): [Magic Conch](https://steamcommunity.com/sharedfiles/filedetails/?id=3540206030)
-- 필수 모드 (Required): [StatsAPI](https://steamcommunity.com/sharedfiles/filedetails/?id=3679589576)
-- 필수 모드 (Required): [StageAPI](https://steamcommunity.com/sharedfiles/filedetails/?id=1348031964)
-- 필수 모드 (Required): [MiniMAPI](https://steamcommunity.com/sharedfiles/filedetails/?id=1978904635)
-- 강력 추천 (Strongly recommended): REPENTOGON — 일부 아이템은 REPENTOGON이 있어야 작동하며, 각 아이템의 EID에 "REPENTOGON이 필요합니다!" 또는 "REPENTOGON 권장"으로 표시됩니다 (Some items need it; each item's EID says "Requires REPENTOGON!" or "REPENTOGON recommended")
-- 선택 (Optional): External Item Descriptions (EID), Mod Config Menu
+- 필수 모드 (Required): [Magic Conch](https://steamcommunity.com/sharedfiles/filedetails/?id=3540206030), [StatsAPI](https://steamcommunity.com/sharedfiles/filedetails/?id=3679589576), [StageAPI](https://steamcommunity.com/sharedfiles/filedetails/?id=1348031964), [MiniMAPI](https://steamcommunity.com/sharedfiles/filedetails/?id=1978904635)
+- 선택 (Optional): [External Item Descriptions (EID)](https://steamcommunity.com/sharedfiles/filedetails/?id=836319872), [Mod Config Menu](https://steamcommunity.com/sharedfiles/filedetails/?id=3701683951)
 - 영감 (Inspiration): [Lazy MattPack [RGON]](https://steamcommunity.com/sharedfiles/filedetails/?id=3408993906)
