@@ -124,15 +124,14 @@ return {
             name = "Rabbit",
             description = "Left its liver on a rock",
             eid = {
-                "Each floor, an obstacle with rabbit tracks lies 4 rooms from the start",
-                "#Breaking it opens a ladder to the Black Market, which always sells a {c:RAW_LIVER} Raw Liver",
-                "#Each {c:RAW_LIVER} Raw Liver gives a liver (up to 4)",
-                "#On death, a liver revives you in place with half a heart",
+                "Each floor, an obstacle with rabbit tracks appears in the 4th room from the starting room.",
+                "#Breaking that obstacle reveals a ladder to the Black Market, and a {c:RAW_LIVER} Raw Liver appears in the Black Market.",
+                "#Each {c:RAW_LIVER} Raw Liver you get gives you a revive (up to 4)",
                 "#{{Warning}} Requires REPENTOGON!",
             },
             synergies = {
                 raw_liver = "Gives a liver (up to 4)",
-                dragon = "With 4 livers, each further {c:RAW_LIVER} Raw Liver adds 0.4 to your {{Damage}} damage multiplier for the floor",
+                dragon = "With 4 livers, getting another {c:RAW_LIVER} Raw Liver raises your damage multiplier by 0.4 for that floor.",
             },
         },
         DRAGON = {
