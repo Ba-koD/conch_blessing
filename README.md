@@ -3,7 +3,7 @@
 - 창작마당 (Steam Workshop): [Conch's Blessing](https://steamcommunity.com/sharedfiles/filedetails/?id=3545334858)
 - 아이템 설명 가이드 (Item Description Guide): [tboi.rnen.kr](https://tboi.rnen.kr)
 
-![Version](https://img.shields.io/badge/version-1.0.126-2ea44f)
+![Version](https://img.shields.io/badge/dynamic/xml?url=https%3A%2F%2Fraw.githubusercontent.com%2FBa-koD%2Fconch_blessing%2Fmain%2Fmetadata.xml&query=%2Fmetadata%2Fversion&label=version&color=2ea44f)
 ![Languages](https://img.shields.io/badge/lang-KR%20%2F%20EN%20%2F%20%EC%9A%B0%EB%A6%AC%EB%A7%90-blue)
 ![Isaac](https://img.shields.io/badge/Game-The%20Binding%20of%20Isaac%3A%20Repentance%2B-8a2be2)
 
