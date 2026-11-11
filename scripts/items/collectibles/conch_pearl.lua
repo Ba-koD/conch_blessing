@@ -415,6 +415,7 @@ local function renderEffect(effect)
             local cx = base.X + (k - (count + 1) / 2) * DUST.PITCH
             icon.sprite.Scale = Vector(scale, scale)
             icon.sprite.Color = Color(1, 1, 1, a, 0, 0, 0)
+            if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(icon.sprite) end
             icon.sprite:Render(Vector(cx, cy + 8 * scale + bob))
         end
         return
@@ -438,6 +439,7 @@ local function renderEffect(effect)
                     local glow = 0.3 + 0.5 * p + (grain.sparkle and 0.4 or 0)
                     sprite.Color = Color(1, 1, 1, (1 - p) ^ 1.5, glow * 0.6, glow * 0.5, glow * 0.55)
                 end
+                if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(sprite) end
                 sprite:Render(Vector(x - grain.ox, y - grain.oy), grain.topLeft, grain.bottomRight)
             end
         end

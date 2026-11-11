@@ -1,0 +1,432 @@
+[
+  {
+    "source": "gfx/characters/costumes/conch_neglect_toggle.png",
+    "status": "preserved",
+    "detail": "transparent wardrobe control"
+  },
+  {
+    "source": "gfx/effects/conch_dragon_lightning.png",
+    "status": "modelled",
+    "detail": "gfx/effects/conch_dragon_lightning_af3d.png"
+  },
+  {
+    "source": "gfx/effects/conch_jangseung.png",
+    "status": "modelled",
+    "detail": "gfx/effects/conch_jangseung_af3d.png"
+  },
+  {
+    "source": "gfx/effects/conch_jangseung_ground.png",
+    "status": "modelled",
+    "detail": "gfx/effects/conch_jangseung_ground_af3d.png"
+  },
+  {
+    "source": "gfx/effects/conch_jangseung_ward.png",
+    "status": "modelled",
+    "detail": "gfx/effects/conch_jangseung_ward_af3d.png"
+  },
+  {
+    "source": "gfx/effects/conch_ox.png",
+    "status": "preserved",
+    "detail": "retired sheet; runtime conch_ox.anm2 uses directions/equipped sleep"
+  },
+  {
+    "source": "gfx/effects/conch_ox_directions.png",
+    "status": "modelled",
+    "detail": "gfx/effects/conch_ox_directions_af3d.png"
+  },
+  {
+    "source": "gfx/effects/conch_ox_furrow.png",
+    "status": "modelled",
+    "detail": "gfx/effects/conch_ox_furrow_af3d.png"
+  },
+  {
+    "source": "gfx/effects/conch_ox_rice.png",
+    "status": "modelled",
+    "detail": "gfx/effects/conch_ox_rice_af3d.png"
+  },
+  {
+    "source": "gfx/effects/conch_ox_sleep.png",
+    "status": "preserved",
+    "detail": "retired sheet; runtime uses conch_ox_sleep_equipped"
+  },
+  {
+    "source": "gfx/effects/conch_ox_sleep_equipped.png",
+    "status": "modelled",
+    "detail": "gfx/effects/conch_ox_sleep_equipped_af3d.png"
+  },
+  {
+    "source": "gfx/effects/conch_rabbit_tracks.png",
+    "status": "modelled",
+    "detail": "gfx/effects/conch_rabbit_tracks_af3d.png"
+  },
+  {
+    "source": "gfx/effects/conch_rat_run.png",
+    "status": "modelled",
+    "detail": "gfx/effects/conch_rat_run_af3d.png"
+  },
+  {
+    "source": "gfx/effects/conch_upgrade_clock.png",
+    "status": "modelled",
+    "detail": "gfx/effects/conch_upgrade_clock_af3d.png"
+  },
+  {
+    "source": "gfx/effects/conch_upgrade_pixel.png",
+    "status": "preserved",
+    "detail": "1px drawing primitive, tint/scale supplied by renderer"
+  },
+  {
+    "source": "gfx/effects/conch_upgrade_spotlight.png",
+    "status": "preserved",
+    "detail": "light falloff, not a physical object"
+  },
+  {
+    "source": "gfx/effects/flame.png",
+    "status": "modelled",
+    "detail": "gfx/effects/flame_af3d.png"
+  },
+  {
+    "source": "gfx/familiar/familiar_dragon.png",
+    "status": "modelled",
+    "detail": "gfx/familiar/familiar_dragon_af3d.png"
+  },
+  {
+    "source": "gfx/familiar/familiar_hermit_crab.png",
+    "status": "modelled",
+    "detail": "gfx/familiar/familiar_hermit_crab_af3d.png"
+  },
+  {
+    "source": "gfx/familiar/familiar_hermit_crab_grip.png",
+    "status": "modelled",
+    "detail": "gfx/familiar/familiar_hermit_crab_grip_af3d.png"
+  },
+  {
+    "source": "gfx/familiar/familiar_time_money.png",
+    "status": "modelled",
+    "detail": "gfx/familiar/familiar_time_money_af3d.png"
+  },
+  {
+    "source": "gfx/font/Kkubulim_0.png",
+    "status": "preserved",
+    "detail": "font atlas; preserve text readability"
+  },
+  {
+    "source": "gfx/grid/door_01x_ghostexit_green.png",
+    "status": "modelled",
+    "detail": "gfx/grid/door_01x_ghostexit_green_af3d.png"
+  },
+  {
+    "source": "gfx/grid/door_02_treasureroomdoor_angel.png",
+    "status": "modelled",
+    "detail": "gfx/grid/door_02_treasureroomdoor_angel_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/appraisal_certificate.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/appraisal_certificate_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/ar_glasses.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/ar_glasses_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/azure_dragon.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/azure_dragon_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/ceil.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/ceil_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/chicken.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/chicken_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/conch_certificate.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/conch_certificate_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/conch_pearl.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/conch_pearl_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/dog.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/dog_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/dragon.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/dragon_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/eternal_flame.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/eternal_flame_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/fire_breath.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/fire_breath_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/floor.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/floor_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/goat.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/goat_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/hemispatial_neglect.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/hemispatial_neglect_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/hermit_crab.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/hermit_crab_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/horse.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/horse_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/ice_breath.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/ice_breath_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/inf_d6.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/inf_d6_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/injectable_steroids.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/injectable_steroids_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/jangseung.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/jangseung_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/kids_menu.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/kids_menu_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/kronos.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/kronos_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/live_eye.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/live_eye_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/money_tear.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/money_tear_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/monkey.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/monkey_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/oral_steroids.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/oral_steroids_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/ox.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/ox_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/pig.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/pig_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/polycoria.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/polycoria_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/power_training.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/power_training_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/rabbit.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/rabbit_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/rat.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/rat_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/real_eyes.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/real_eyes_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/round.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/round_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/sealed_demon_sword.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/sealed_demon_sword_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/severed_oath.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/severed_oath_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/snake.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/snake_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/soflam.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/soflam_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/tiger.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/tiger_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/time_money.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/time_money_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/tmp.png",
+    "status": "preserved",
+    "detail": "unused template"
+  },
+  {
+    "source": "gfx/items/collectibles/two_faced_penny.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/two_faced_penny_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/tyrfing.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/tyrfing_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/utility_belt.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/utility_belt_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/void_dagger.png",
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/void_dagger_af3d.png"
+  },
+  {
+    "source": "gfx/items/pick ups/pickup_conch_ticket.png",
+    "status": "modelled",
+    "detail": "gfx/items/pick ups/pickup_conch_ticket_af3d.png"
+  },
+  {
+    "source": "gfx/items/pick ups/pickup_thurisaz.png",
+    "status": "modelled",
+    "detail": "gfx/items/pick ups/pickup_thurisaz_af3d.png"
+  },
+  {
+    "source": "gfx/items/pick ups/pickup_uruz.png",
+    "status": "modelled",
+    "detail": "gfx/items/pick ups/pickup_uruz_af3d.png"
+  },
+  {
+    "source": "gfx/items/trinkets/a_minus.png",
+    "status": "modelled",
+    "detail": "gfx/items/trinkets/a_minus_af3d.png"
+  },
+  {
+    "source": "gfx/items/trinkets/angels_crown.png",
+    "status": "modelled",
+    "detail": "gfx/items/trinkets/angels_crown_af3d.png"
+  },
+  {
+    "source": "gfx/items/trinkets/atropos.png",
+    "status": "modelled",
+    "detail": "gfx/items/trinkets/atropos_af3d.png"
+  },
+  {
+    "source": "gfx/items/trinkets/b_minus.png",
+    "status": "modelled",
+    "detail": "gfx/items/trinkets/b_minus_af3d.png"
+  },
+  {
+    "source": "gfx/items/trinkets/c_minus.png",
+    "status": "modelled",
+    "detail": "gfx/items/trinkets/c_minus_af3d.png"
+  },
+  {
+    "source": "gfx/items/trinkets/f_minus.png",
+    "status": "modelled",
+    "detail": "gfx/items/trinkets/f_minus_af3d.png"
+  },
+  {
+    "source": "gfx/items/trinkets/time_luck.png",
+    "status": "modelled",
+    "detail": "gfx/items/trinkets/time_luck_af3d.png"
+  },
+  {
+    "source": "gfx/items/trinkets/time_power.png",
+    "status": "modelled",
+    "detail": "gfx/items/trinkets/time_power_af3d.png"
+  },
+  {
+    "source": "gfx/items/trinkets/time_tear.png",
+    "status": "modelled",
+    "detail": "gfx/items/trinkets/time_tear_af3d.png"
+  },
+  {
+    "source": "gfx/items/trinkets/time_template.png",
+    "status": "preserved",
+    "detail": "unused template"
+  },
+  {
+    "source": "gfx/items/trinkets/tmp.png",
+    "status": "preserved",
+    "detail": "unused template"
+  },
+  {
+    "source": "gfx/items/trinkets/wrong_answer_note.png",
+    "status": "modelled",
+    "detail": "gfx/items/trinkets/wrong_answer_note_af3d.png"
+  },
+  {
+    "source": "gfx/ui/MagicConch.png",
+    "status": "modelled",
+    "detail": "gfx/ui/MagicConch_af3d.png"
+  },
+  {
+    "source": "gfx/ui/null.png",
+    "status": "preserved",
+    "detail": "transparent UI control"
+  }
+]

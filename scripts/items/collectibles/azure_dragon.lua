@@ -791,6 +791,7 @@ ConchBlessing.azureDragon.onFamiliarRender = function(_, familiar, offset)
         if i % 2 == 1 or i == n then
             local size = scale * partTaper(i, n)
             shadow.Scale = Vector(size, size)
+            if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(shadow) end
             shadow:Render(screen[i])
         end
     end
@@ -807,6 +808,7 @@ ConchBlessing.azureDragon.onFamiliarRender = function(_, familiar, offset)
             legs:SetFrame("Legs", partFrame(i, clock, n))
             legs.Scale = size
             orient(legs, angle, state.flips[i])
+            if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(legs) end
             legs:Render(at)
         end
         local name = partName(i, n)
@@ -814,6 +816,7 @@ ConchBlessing.azureDragon.onFamiliarRender = function(_, familiar, offset)
         sprite:SetFrame(name, name == "Tail" and partFrame(i, clock, n) or 0)
         sprite.Scale = size
         orient(sprite, angle, state.flips[i])
+        if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(sprite) end
         sprite:Render(at)
     end
     -- Sparks of current crackle on top of the body.
@@ -827,6 +830,7 @@ ConchBlessing.azureDragon.onFamiliarRender = function(_, familiar, offset)
             spark:SetFrame("Spark", item.age // d.sparkFrameTicks)
             spark.Rotation = item.angle
             spark.Scale = Vector(size, size)
+            if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(spark) end
             spark:Render(screen[i] - Vector(0, partLift(i, time)) + aside)
         end
     end
@@ -878,6 +882,7 @@ ConchBlessing.azureDragon.onRender = function()
             local shape = item.shape or 1
             lightningSprite:SetFrame(shape == 1 and "Strike" or "Strike" .. shape, frame)
             lightningSprite.FlipX = item.flip == true
+            if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(lightningSprite) end
             lightningSprite:Render(Isaac.WorldToScreen(item.position))
         end
     end

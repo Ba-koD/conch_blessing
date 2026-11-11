@@ -420,6 +420,7 @@ function M.onPlayerRender(_, player)
     sprite.Color = Color(1, 1, 1, M.data.wardAlpha * shown, glow, glow * 0.85, glow * 0.5)
     local swell = 1 + 0.12 * math.sin(math.pi * flash) -- swells once and settles
     sprite.Scale = Vector(swell * player.SpriteScale.X, swell * player.SpriteScale.Y)
+    if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(sprite) end
     sprite:Render(Isaac.WorldToScreen(player.Position))
 end
 

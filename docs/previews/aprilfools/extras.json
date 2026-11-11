@@ -1,0 +1,42 @@
+[
+  {
+    "source": "gfx/effects/conch_upgrade_clock.png",
+    "still": "gfx/effects/conch_upgrade_clock_af3d.png"
+  },
+  {
+    "source": "gfx/effects/conch_upgrade_clock.png",
+    "still": "gfx/effects/conch_upgrade_clock_af3d.png"
+  },
+  {
+    "source": "gfx/effects/conch_upgrade_clock.png",
+    "still": "gfx/effects/conch_upgrade_clock_af3d.png"
+  },
+  {
+    "source": "gfx/effects/conch_ox_furrow.png",
+    "still": "gfx/effects/conch_ox_furrow_af3d.png"
+  },
+  {
+    "source": "gfx/effects/conch_jangseung_ground.png",
+    "still": "gfx/effects/conch_jangseung_ground_af3d.png"
+  },
+  {
+    "source": "gfx/effects/conch_dragon_lightning.png",
+    "still": "gfx/effects/conch_dragon_lightning_af3d.png"
+  },
+  {
+    "source": "gfx/effects/flame.png",
+    "still": "gfx/effects/flame_af3d.png"
+  },
+  {
+    "source": "gfx/grid/door_01x_ghostexit_green.png",
+    "still": "gfx/grid/door_01x_ghostexit_green_af3d.png"
+  },
+  {
+    "source": "gfx/grid/door_02_treasureroomdoor_angel.png",
+    "still": "gfx/grid/door_02_treasureroomdoor_angel_af3d.png"
+  },
+  {
+    "source": "gfx/ui/MagicConch.png",
+    "still": "gfx/ui/MagicConch_af3d.png"
+  }
+]

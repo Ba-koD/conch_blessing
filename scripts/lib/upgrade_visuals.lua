@@ -57,6 +57,7 @@ local function draw(s, x, y, sx, sy, c, rotation)
     s.Scale = point(sx or 1, sy or sx or 1)
     s.Color = c or color(1, 1, 1, 1)
     s.Rotation = rotation or 0
+    if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(s) end
     s:Render(point(x, y))
 end
 local function line(scene, x1, y1, x2, y2, rgb, alpha, width)

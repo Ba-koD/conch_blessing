@@ -202,6 +202,7 @@ local function rect(s, x, y, w, h, color)
     s.Scale = Vector(w, h)
     s.Rotation = 0
     s.Color = color
+    if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(s) end
     s:Render(Vector(x, y))
 end
 
@@ -293,12 +294,17 @@ function Preview.render(layout, x, y, t, clock)
             sprite.Scale = Vector(icon.scale * scale, icon.scale * scale)
             -- A flat answer-coloured silhouette one pixel around the item.
             sprite.Color = Color(0, 0, 0, alpha, icon.rgb[1], icon.rgb[2], icon.rgb[3])
+            if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(sprite) end
             sprite:Render(Vector(cx + 1, cy))
+            if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(sprite) end
             sprite:Render(Vector(cx - 1, cy))
+            if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(sprite) end
             sprite:Render(Vector(cx, cy + 1))
+            if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(sprite) end
             sprite:Render(Vector(cx, cy - 1))
             local flash = pop and pop.flash or 0
             sprite.Color = Color(1, 1, 1, alpha, flash, flash, flash)
+            if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(sprite) end
             sprite:Render(Vector(cx, cy))
             drawn.icons = drawn.icons + 1
             if pop then drawn.pops = 1 end

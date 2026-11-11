@@ -536,6 +536,7 @@ local function drawVeil()
     pixel.Scale = Vector(width, height)
     pixel.Rotation = 0
     pixel.Color = Color(0.04, 0.05, 0.1, veilAlpha(ConchBlessing.dragon._sky.flash))
+    if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(pixel) end
     pixel:Render(Vector(0, 0))
 end
 
@@ -563,11 +564,13 @@ local function drawRain()
             pixel.Scale = Vector(1, 8)
             pixel.Rotation = d.rainSlant
             pixel.Color = Color(RAIN[1], RAIN[2], RAIN[3], d.rainAlpha)
+            if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(pixel) end
             pixel:Render(head - along * 8)
         elseif ripple then
             ripple:SetFrame("Poof", math.min(13, math.floor((p - 0.7) * period * 30)))
             ripple.Scale = Vector(0.22, 0.22)
             ripple.Color = Color(1, 1, 1, d.rainAlpha * 0.8)
+            if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(ripple) end
             ripple:Render(at)
         end
     end
@@ -582,6 +585,7 @@ local function drawStrikes()
         for _, item in ipairs(scorches) do
             lightning:SetFrame("Scorch", math.min(2, item.age // 10))
             lightning.Color = Color(1, 1, 1, math.min(1, 2 * (1 - item.age / d.scorchTicks)))
+            if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(lightning) end
             lightning:Render(Isaac.WorldToScreen(item.position))
         end
         lightning.Color = Color(1, 1, 1, 1)
@@ -592,6 +596,7 @@ local function drawStrikes()
         if pillar then
             for _, twister in ipairs(twisters) do
                 pillar:SetFrame(twisterFrame(twister))
+                if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(pillar) end
                 pillar:Render(Isaac.WorldToScreen(twister.position))
             end
         end
@@ -604,6 +609,7 @@ local function drawStrikes()
                 lightning:SetFrame(shape == 1 and "Strike" or "Strike" .. shape, frame)
                 lightning.FlipX = item.flip == true
                 lightning.Scale = Vector(item.scale or 1, item.scale or 1)
+                if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(lightning) end
                 lightning:Render(Isaac.WorldToScreen(item.position))
             end
         end

@@ -6,6 +6,7 @@ ConchBlessing_Config.Version = Version
 
 local DefaultConfig = {
     language = "auto", -- saved preference; calendar overrides are never persisted
+    aprilFools3D = "auto", -- local April 1; explicit on/off overrides the calendar
     debugMode = false,
     spawnCollectibles = false, -- allow collectibles to spawn naturally (default: false)
     spawnTrinkets = false,     -- allow trinkets to spawn naturally (default: false)
@@ -13,6 +14,24 @@ local DefaultConfig = {
     rainVolume = 10,           -- 진's rain loop on top of that, in 10% steps
     previewRange = 128,        -- evolution preview opening distance (twice the original 64)
 }
+
+ConchBlessing_Config.APRIL_FOOLS_CHOICES = { "auto", "on", "off" }
+
+function ConchBlessing_Config.GetAprilFoolsMode(mod)
+    mod = mod or ConchBlessing
+    local value = mod and mod.Config and mod.Config.aprilFools3D
+    return (value == "on" or value == "off") and value or "auto"
+end
+
+function ConchBlessing_Config.IsAprilFools3D(mod)
+    local mode = ConchBlessing_Config.GetAprilFoolsMode(mod)
+    if mode ~= "auto" then return mode == "on" end
+    if type(os) == "table" and type(os.date) == "function" then
+        local ok, date = pcall(os.date, "*t")
+        return ok and type(date) == "table" and date.month == 4 and date.day == 1
+    end
+    return false
+end
 
 -- The evolution preview opens within `previewRange` world units of a player (a
 -- grid tile is 40) and closes a quarter further out, so standing at the edge

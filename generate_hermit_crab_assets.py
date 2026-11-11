@@ -53,6 +53,10 @@ def trinket_bounds():
     for folder in TRINKET_ICONS:
         assert folder.is_dir(), f'missing trinket icons (re-extract the game resources): {folder}'
         for png in sorted(folder.glob('*.png')):
+            # April Fools renders are alternate sheets, not new trinket configs.
+            # Attachment geometry stays keyed to the canonical inventory icon.
+            if "_af3d" in png.stem:
+                continue
             with Image.open(png) as im:
                 if im.size != (32, 32):
                     continue

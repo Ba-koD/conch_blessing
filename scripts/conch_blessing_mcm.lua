@@ -90,6 +90,28 @@ function ConchBlessing_MCM.Setup(mod)
         Info = lines("language_info")
     })
 
+    local aprilChoices = ConchBlessing_Config.APRIL_FOOLS_CHOICES
+    ModConfigMenu.AddSetting(category, GENERAL, {
+        Type = ModConfigMenu.OptionType.NUMBER,
+        Minimum = 1,
+        Maximum = #aprilChoices,
+        CurrentSetting = function()
+            local selected = ConchBlessing_Config.GetAprilFoolsMode(mod)
+            for index, value in ipairs(aprilChoices) do if selected == value then return index end end
+            return 1
+        end,
+        Display = function()
+            return text("april_fools", text("april_fools_" .. ConchBlessing_Config.GetAprilFoolsMode(mod)))
+        end,
+        OnChange = function(index)
+            if not aprilChoices[index] then return end
+            mod.Config.aprilFools3D = aprilChoices[index]
+            ConchBlessing_MCM.saveConfigToSaveManager(mod)
+            if mod.AprilFools then mod.AprilFools.Refresh() end
+        end,
+        Info = lines("april_fools_info"),
+    })
+
     -- Debug mode toggle
     ModConfigMenu.AddSetting(category, GENERAL, {
         Type = ModConfigMenu.OptionType.BOOLEAN,

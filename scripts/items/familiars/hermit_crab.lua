@@ -918,6 +918,7 @@ function M.onFamiliarRender(_, familiar, offset)
                 bottom = math.max(bottom, slot.minTop + (bounds.bottom - bounds.top) * slot.scale)
             end
             sprite.Scale = Vector(slot.scale * scale, slot.scale * scale)
+            if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(sprite) end
             sprite:Render(base + Vector(slot.x - bounds.center * slot.scale,
                 bottom - bounds.bottom * slot.scale) * scale)
         end
@@ -926,6 +927,7 @@ function M.onFamiliarRender(_, familiar, offset)
     claws:SetFrame("Grip" .. state.animation, timelineFrame)
     claws.Scale = Vector(scale, scale)
     claws.Color = familiar.Color
+    if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(claws) end
     claws:Render(base)
 end
 

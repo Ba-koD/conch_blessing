@@ -191,6 +191,7 @@ ConchBlessing.EID.addCardIcon = function(cardId, cardData)
     end
     local sprite = Sprite()
     sprite:Load("gfx/" .. cardData.anm2, true)
+    if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Watch(sprite) end
     EID:addIcon("Card" .. cardId, "HUDSmall", 0, geometry.width, geometry.height, geometry.left, geometry.top, sprite)
     cardIconSprites[cardId] = sprite
 end

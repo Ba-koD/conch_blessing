@@ -579,6 +579,7 @@ local function renderHudPulse()
         0.85 * pulse
     )
     sprite.Color = color
+    if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(sprite) end
     sprite:Render(pos)
 end
 

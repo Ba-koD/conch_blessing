@@ -560,6 +560,10 @@ if not roomsSuccess then
     ConchBlessing.printError("Room system load failed: " .. tostring(roomsErr))
 end
 
+-- Appearance module loads before item renderers; all its dependencies load at
+-- startup, including in the Workshop package without dev tooling.
+require("scripts.lib.april_fools")
+
 -- load items and management
 local itemsSuccess, itemsErr = pcall(function()
     require("scripts/conch_blessing_items")

@@ -1,0 +1,72 @@
+[
+  {
+    "source": "gfx/familiar/familiar_hermit_crab.png",
+    "still": "gfx/familiar/familiar_hermit_crab_af3d.png",
+    "anm2": "gfx/hermit_crab.anm2"
+  },
+  {
+    "source": "gfx/familiar/familiar_hermit_crab_grip.png",
+    "still": "gfx/familiar/familiar_hermit_crab_grip_af3d.png",
+    "anm2": "gfx/hermit_crab.anm2"
+  },
+  {
+    "source": "gfx/familiar/familiar_dragon.png",
+    "still": "gfx/familiar/familiar_dragon_af3d.png",
+    "anm2": "gfx/dragon.anm2"
+  },
+  {
+    "source": "gfx/familiar/familiar_time_money.png",
+    "still": "gfx/familiar/familiar_time_money_af3d.png",
+    "anm2": "gfx/time_money.anm2"
+  },
+  {
+    "source": "gfx/effects/conch_ox_directions.png",
+    "still": "gfx/effects/conch_ox_directions_af3d.png",
+    "anm2": "gfx/effects/conch_ox.anm2"
+  },
+  {
+    "source": "gfx/effects/conch_ox_sleep_equipped.png",
+    "still": "gfx/effects/conch_ox_sleep_equipped_af3d.png",
+    "anm2": "gfx/effects/conch_ox.anm2"
+  },
+  {
+    "source": "gfx/effects/conch_ox_rice.png",
+    "still": "gfx/effects/conch_ox_rice_af3d.png",
+    "anm2": "gfx/effects/conch_ox_rice.anm2"
+  },
+  {
+    "source": "gfx/effects/conch_rat_run.png",
+    "still": "gfx/effects/conch_rat_run_af3d.png",
+    "anm2": "gfx/effects/conch_rat_run.anm2"
+  },
+  {
+    "source": "gfx/effects/conch_jangseung_ward.png",
+    "still": "gfx/effects/conch_jangseung_ward_af3d.png",
+    "anm2": "gfx/effects/conch_jangseung_ward.anm2"
+  },
+  {
+    "source": "gfx/effects/conch_rabbit_tracks.png",
+    "still": "gfx/effects/conch_rabbit_tracks_af3d.png",
+    "anm2": "gfx/effects/conch_rabbit_tracks.anm2"
+  },
+  {
+    "source": "gfx/items/pick ups/pickup_conch_ticket.png",
+    "still": "gfx/items/pick ups/pickup_conch_ticket_af3d.png",
+    "anm2": "gfx/005.300_conch_ticket.anm2"
+  },
+  {
+    "source": "gfx/items/pick ups/pickup_thurisaz.png",
+    "still": "gfx/items/pick ups/pickup_thurisaz_af3d.png",
+    "anm2": "gfx/005.300_thurisaz.anm2"
+  },
+  {
+    "source": "gfx/items/pick ups/pickup_uruz.png",
+    "still": "gfx/items/pick ups/pickup_uruz_af3d.png",
+    "anm2": "gfx/005.300_uruz.anm2"
+  },
+  {
+    "source": "gfx/effects/conch_jangseung.png",
+    "still": "gfx/effects/conch_jangseung_af3d.png",
+    "anm2": "gfx/effects/conch_jangseung.anm2"
+  }
+]

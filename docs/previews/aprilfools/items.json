@@ -1,0 +1,1616 @@
+[
+  {
+    "key": "appraisal_certificate",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/appraisal_certificate.png",
+    "still": "gfx/items/collectibles/appraisal_certificate_af3d.png",
+    "spin": "gfx/items/collectibles/appraisal_certificate_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 2124,
+    "parts": 3,
+    "sourceScale": 1,
+    "rotationAxis": [
+      -0.5,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "thin paper with a real reverse and edge",
+        "start": 0,
+        "end": 2
+      }
+    ]
+  },
+  {
+    "key": "ar_glasses",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/ar_glasses.png",
+    "still": "gfx/items/collectibles/ar_glasses_af3d.png",
+    "spin": "gfx/items/collectibles/ar_glasses_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 896,
+    "parts": 15,
+    "sourceScale": 0.91269,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 13,
+    "construction": []
+  },
+  {
+    "key": "azure_dragon",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/azure_dragon.png",
+    "still": "gfx/items/collectibles/azure_dragon_af3d.png",
+    "spin": "gfx/items/collectibles/azure_dragon_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 4948,
+    "parts": 51,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "skull and rear cranium",
+        "start": 0,
+        "end": 1
+      }
+    ]
+  },
+  {
+    "key": "ceil",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/ceil.png",
+    "still": "gfx/items/collectibles/ceil_af3d.png",
+    "spin": "gfx/items/collectibles/ceil_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 288,
+    "parts": 18,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "authored all-around construction",
+        "start": 0,
+        "end": 18
+      }
+    ]
+  },
+  {
+    "key": "chicken",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/chicken.png",
+    "still": "gfx/items/collectibles/chicken_af3d.png",
+    "spin": "gfx/items/collectibles/chicken_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 4584,
+    "parts": 18,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "authored all-around construction",
+        "start": 0,
+        "end": 18
+      }
+    ]
+  },
+  {
+    "key": "conch_certificate",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/conch_certificate.png",
+    "still": "gfx/items/collectibles/conch_certificate_af3d.png",
+    "spin": "gfx/items/collectibles/conch_certificate_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 3676,
+    "parts": 7,
+    "sourceScale": 1,
+    "rotationAxis": [
+      1.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "thin paper with a real reverse and edge",
+        "start": 0,
+        "end": 2
+      }
+    ]
+  },
+  {
+    "key": "conch_pearl",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/conch_pearl.png",
+    "still": "gfx/items/collectibles/conch_pearl_af3d.png",
+    "spin": "gfx/items/collectibles/conch_pearl_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 1920,
+    "parts": 1,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "authored all-around construction",
+        "start": 0,
+        "end": 1
+      }
+    ]
+  },
+  {
+    "key": "dog",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/dog.png",
+    "still": "gfx/items/collectibles/dog_af3d.png",
+    "spin": "gfx/items/collectibles/dog_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 5784,
+    "parts": 16,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "skull and rear cranium",
+        "start": 0,
+        "end": 1
+      },
+      {
+        "name": "tapered cheeks",
+        "start": 1,
+        "end": 2
+      },
+      {
+        "name": "forward muzzle",
+        "start": 2,
+        "end": 3
+      },
+      {
+        "name": "upright ear",
+        "start": 3,
+        "end": 8
+      },
+      {
+        "name": "upright ear",
+        "start": 8,
+        "end": 13
+      }
+    ]
+  },
+  {
+    "key": "dragon",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/dragon.png",
+    "still": "gfx/items/collectibles/dragon_af3d.png",
+    "spin": "gfx/items/collectibles/dragon_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 3320,
+    "parts": 30,
+    "sourceScale": 0.94817,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "skull and rear cranium",
+        "start": 0,
+        "end": 1
+      },
+      {
+        "name": "branched antler",
+        "start": 2,
+        "end": 8
+      },
+      {
+        "name": "branched antler",
+        "start": 11,
+        "end": 17
+      }
+    ]
+  },
+  {
+    "key": "eternal_flame",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/eternal_flame.png",
+    "still": "gfx/items/collectibles/eternal_flame_af3d.png",
+    "spin": "gfx/items/collectibles/eternal_flame_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 312,
+    "parts": 9,
+    "sourceScale": 1,
+    "rotationAxis": [
+      -0.5,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "ivory outer flame and warm core",
+        "start": 0,
+        "end": 9
+      }
+    ]
+  },
+  {
+    "key": "fire_breath",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/fire_breath.png",
+    "still": "gfx/items/collectibles/fire_breath_af3d.png",
+    "spin": "gfx/items/collectibles/fire_breath_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 312,
+    "parts": 9,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "authored all-around construction",
+        "start": 0,
+        "end": 9
+      }
+    ]
+  },
+  {
+    "key": "floor",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/floor.png",
+    "still": "gfx/items/collectibles/floor_af3d.png",
+    "spin": "gfx/items/collectibles/floor_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 288,
+    "parts": 18,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "authored all-around construction",
+        "start": 0,
+        "end": 18
+      }
+    ]
+  },
+  {
+    "key": "goat",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/goat.png",
+    "still": "gfx/items/collectibles/goat_af3d.png",
+    "spin": "gfx/items/collectibles/goat_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 13104,
+    "parts": 24,
+    "sourceScale": 0.93089,
+    "rotationAxis": [
+      0.5,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "continuous softly tufted wool coat",
+        "start": 0,
+        "end": 1
+      },
+      {
+        "name": "head and muzzle",
+        "start": 4,
+        "end": 6
+      }
+    ]
+  },
+  {
+    "key": "hemispatial_neglect",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/hemispatial_neglect.png",
+    "still": "gfx/items/collectibles/hemispatial_neglect_af3d.png",
+    "spin": "gfx/items/collectibles/hemispatial_neglect_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 1902,
+    "parts": 3,
+    "sourceScale": 0.55709,
+    "rotationAxis": [
+      7.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "closed half cranium and planar cut",
+        "start": 0,
+        "end": 1
+      }
+    ]
+  },
+  {
+    "key": "hermit_crab",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/hermit_crab.png",
+    "still": "gfx/items/collectibles/hermit_crab_af3d.png",
+    "spin": "gfx/items/collectibles/hermit_crab_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 43778,
+    "parts": 52,
+    "sourceScale": 0.97333,
+    "rotationAxis": [
+      0.5,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "continuous spiral shell",
+        "start": 0,
+        "end": 1
+      }
+    ]
+  },
+  {
+    "key": "horse",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/horse.png",
+    "still": "gfx/items/collectibles/horse_af3d.png",
+    "spin": "gfx/items/collectibles/horse_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 5412,
+    "parts": 30,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "neck",
+        "start": 0,
+        "end": 1
+      },
+      {
+        "name": "skull",
+        "start": 1,
+        "end": 2
+      },
+      {
+        "name": "long sloping muzzle",
+        "start": 2,
+        "end": 5
+      },
+      {
+        "name": "ear",
+        "start": 9,
+        "end": 14
+      },
+      {
+        "name": "ear",
+        "start": 14,
+        "end": 19
+      },
+      {
+        "name": "continuous flowing mane",
+        "start": 19,
+        "end": 21
+      }
+    ]
+  },
+  {
+    "key": "ice_breath",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/ice_breath.png",
+    "still": "gfx/items/collectibles/ice_breath_af3d.png",
+    "spin": "gfx/items/collectibles/ice_breath_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 312,
+    "parts": 9,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "authored all-around construction",
+        "start": 0,
+        "end": 9
+      }
+    ]
+  },
+  {
+    "key": "inf_d6",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/inf_d6.png",
+    "still": "gfx/items/collectibles/inf_d6_af3d.png",
+    "spin": "gfx/items/collectibles/inf_d6_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 15340,
+    "parts": 23,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.5,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "authored all-around construction",
+        "start": 0,
+        "end": 23
+      }
+    ]
+  },
+  {
+    "key": "injectable_steroids",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/injectable_steroids.png",
+    "still": "gfx/items/collectibles/injectable_steroids_af3d.png",
+    "spin": "gfx/items/collectibles/injectable_steroids_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 1048,
+    "parts": 24,
+    "sourceScale": 1,
+    "rotationAxis": [
+      1.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "authored all-around construction",
+        "start": 0,
+        "end": 24
+      }
+    ]
+  },
+  {
+    "key": "jangseung",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/jangseung.png",
+    "still": "gfx/items/collectibles/jangseung_af3d.png",
+    "spin": "gfx/items/collectibles/jangseung_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 14112,
+    "parts": 38,
+    "sourceScale": 0.88581,
+    "rotationAxis": [
+      -1.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "authored all-around construction",
+        "start": 0,
+        "end": 36
+      }
+    ]
+  },
+  {
+    "key": "kids_menu",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/kids_menu.png",
+    "still": "gfx/items/collectibles/kids_menu_af3d.png",
+    "spin": "gfx/items/collectibles/kids_menu_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 17364,
+    "parts": 16,
+    "sourceScale": 0.90181,
+    "rotationAxis": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "cameraPitch": 22,
+    "construction": [
+      {
+        "name": "shallow ceramic plate with underside and foot",
+        "start": 0,
+        "end": 1
+      },
+      {
+        "name": "ghost familiar with complete back",
+        "start": 2,
+        "end": 5
+      },
+      {
+        "name": "blue familiar with complete back",
+        "start": 5,
+        "end": 7
+      },
+      {
+        "name": "green familiar with complete back",
+        "start": 7,
+        "end": 12
+      },
+      {
+        "name": "red familiar with complete back",
+        "start": 12,
+        "end": 13
+      },
+      {
+        "name": "pink familiar with complete back",
+        "start": 13,
+        "end": 14
+      }
+    ]
+  },
+  {
+    "key": "kronos",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/kronos.png",
+    "still": "gfx/items/collectibles/kronos_af3d.png",
+    "spin": "gfx/items/collectibles/kronos_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 456,
+    "parts": 13,
+    "sourceScale": 1,
+    "rotationAxis": [
+      -0.5,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "crescent blade",
+        "start": 0,
+        "end": 1
+      },
+      {
+        "name": "crossed grip",
+        "start": 1,
+        "end": 4
+      }
+    ]
+  },
+  {
+    "key": "live_eye",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/live_eye.png",
+    "still": "gfx/items/collectibles/live_eye_af3d.png",
+    "spin": "gfx/items/collectibles/live_eye_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 2280,
+    "parts": 9,
+    "sourceScale": 1,
+    "rotationAxis": [
+      -0.5,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "eyeball sclera, cornea and iris",
+        "start": 0,
+        "end": 6
+      }
+    ]
+  },
+  {
+    "key": "money_tear",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/money_tear.png",
+    "still": "gfx/items/collectibles/money_tear_af3d.png",
+    "spin": "gfx/items/collectibles/money_tear_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 5680,
+    "parts": 11,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.5,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "pouch with radial cloth folds",
+        "start": 0,
+        "end": 1
+      }
+    ]
+  },
+  {
+    "key": "monkey",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/monkey.png",
+    "still": "gfx/items/collectibles/monkey_af3d.png",
+    "spin": "gfx/items/collectibles/monkey_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 9040,
+    "parts": 21,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "torso",
+        "start": 0,
+        "end": 1
+      },
+      {
+        "name": "head",
+        "start": 1,
+        "end": 2
+      }
+    ]
+  },
+  {
+    "key": "oral_steroids",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/oral_steroids.png",
+    "still": "gfx/items/collectibles/oral_steroids_af3d.png",
+    "spin": "gfx/items/collectibles/oral_steroids_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 11728,
+    "parts": 71,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "individual scored tablet",
+        "start": 0,
+        "end": 4
+      },
+      {
+        "name": "individual scored tablet",
+        "start": 4,
+        "end": 8
+      },
+      {
+        "name": "individual scored tablet",
+        "start": 8,
+        "end": 12
+      },
+      {
+        "name": "individual scored tablet",
+        "start": 12,
+        "end": 16
+      },
+      {
+        "name": "individual scored tablet",
+        "start": 16,
+        "end": 20
+      },
+      {
+        "name": "individual scored tablet",
+        "start": 20,
+        "end": 24
+      },
+      {
+        "name": "individual scored tablet",
+        "start": 24,
+        "end": 28
+      },
+      {
+        "name": "individual scored tablet",
+        "start": 28,
+        "end": 32
+      },
+      {
+        "name": "individual scored tablet",
+        "start": 32,
+        "end": 36
+      },
+      {
+        "name": "individual scored tablet",
+        "start": 36,
+        "end": 40
+      },
+      {
+        "name": "individual scored tablet",
+        "start": 40,
+        "end": 44
+      },
+      {
+        "name": "individual scored tablet",
+        "start": 44,
+        "end": 48
+      },
+      {
+        "name": "creased translucent film panel",
+        "start": 48,
+        "end": 49
+      },
+      {
+        "name": "creased translucent film panel",
+        "start": 49,
+        "end": 50
+      }
+    ]
+  },
+  {
+    "key": "ox",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/ox.png",
+    "still": "gfx/items/collectibles/ox_af3d.png",
+    "spin": "gfx/items/collectibles/ox_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 5136,
+    "parts": 12,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "skull and rear cranium",
+        "start": 0,
+        "end": 1
+      },
+      {
+        "name": "protruding muzzle",
+        "start": 1,
+        "end": 2
+      },
+      {
+        "name": "horn",
+        "start": 2,
+        "end": 5
+      },
+      {
+        "name": "ear",
+        "start": 5,
+        "end": 6
+      },
+      {
+        "name": "horn",
+        "start": 6,
+        "end": 9
+      },
+      {
+        "name": "ear",
+        "start": 9,
+        "end": 10
+      }
+    ]
+  },
+  {
+    "key": "pig",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/pig.png",
+    "still": "gfx/items/collectibles/pig_af3d.png",
+    "spin": "gfx/items/collectibles/pig_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 4536,
+    "parts": 10,
+    "sourceScale": 1,
+    "rotationAxis": [
+      -0.5,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "skull and rear cranium",
+        "start": 0,
+        "end": 1
+      },
+      {
+        "name": "folded ear",
+        "start": 2,
+        "end": 5
+      },
+      {
+        "name": "folded ear",
+        "start": 5,
+        "end": 8
+      }
+    ]
+  },
+  {
+    "key": "polycoria",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/polycoria.png",
+    "still": "gfx/items/collectibles/polycoria_af3d.png",
+    "spin": "gfx/items/collectibles/polycoria_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 5328,
+    "parts": 48,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.5,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "eyeball sclera, cornea and iris",
+        "start": 0,
+        "end": 24
+      }
+    ]
+  },
+  {
+    "key": "power_training",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/power_training.png",
+    "still": "gfx/items/collectibles/power_training_af3d.png",
+    "spin": "gfx/items/collectibles/power_training_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 4368,
+    "parts": 9,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "authored all-around construction",
+        "start": 0,
+        "end": 9
+      }
+    ]
+  },
+  {
+    "key": "rabbit",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/rabbit.png",
+    "still": "gfx/items/collectibles/rabbit_af3d.png",
+    "spin": "gfx/items/collectibles/rabbit_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 9950,
+    "parts": 14,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "body and haunches",
+        "start": 0,
+        "end": 1
+      },
+      {
+        "name": "head",
+        "start": 1,
+        "end": 2
+      },
+      {
+        "name": "long ear",
+        "start": 2,
+        "end": 4
+      },
+      {
+        "name": "long ear",
+        "start": 6,
+        "end": 8
+      }
+    ]
+  },
+  {
+    "key": "rat",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/rat.png",
+    "still": "gfx/items/collectibles/rat_af3d.png",
+    "spin": "gfx/items/collectibles/rat_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 8208,
+    "parts": 26,
+    "sourceScale": 0.93915,
+    "rotationAxis": [
+      -0.5,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "authored all-around construction",
+        "start": 0,
+        "end": 26
+      }
+    ]
+  },
+  {
+    "key": "real_eyes",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/real_eyes.png",
+    "still": "gfx/items/collectibles/real_eyes_af3d.png",
+    "spin": "gfx/items/collectibles/real_eyes_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 2232,
+    "parts": 4,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "authored all-around construction",
+        "start": 0,
+        "end": 4
+      }
+    ]
+  },
+  {
+    "key": "round",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/round.png",
+    "still": "gfx/items/collectibles/round_af3d.png",
+    "spin": "gfx/items/collectibles/round_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 384,
+    "parts": 24,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "authored all-around construction",
+        "start": 0,
+        "end": 24
+      }
+    ]
+  },
+  {
+    "key": "sealed_demon_sword",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/sealed_demon_sword.png",
+    "still": "gfx/items/collectibles/sealed_demon_sword_af3d.png",
+    "spin": "gfx/items/collectibles/sealed_demon_sword_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 10452,
+    "parts": 24,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "bevelled blade with a separate cutting edge",
+        "start": 0,
+        "end": 1
+      },
+      {
+        "name": "leather grip",
+        "start": 4,
+        "end": 7
+      }
+    ]
+  },
+  {
+    "key": "severed_oath",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/severed_oath.png",
+    "still": "gfx/items/collectibles/severed_oath_af3d.png",
+    "spin": "gfx/items/collectibles/severed_oath_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 3264,
+    "parts": 13,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.5,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "authored all-around construction",
+        "start": 0,
+        "end": 13
+      }
+    ]
+  },
+  {
+    "key": "snake",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/snake.png",
+    "still": "gfx/items/collectibles/snake_af3d.png",
+    "spin": "gfx/items/collectibles/snake_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 3312,
+    "parts": 11,
+    "sourceScale": 1,
+    "rotationAxis": [
+      -0.5,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "authored all-around construction",
+        "start": 0,
+        "end": 11
+      }
+    ]
+  },
+  {
+    "key": "soflam",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/soflam.png",
+    "still": "gfx/items/collectibles/soflam_af3d.png",
+    "spin": "gfx/items/collectibles/soflam_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 5988,
+    "parts": 28,
+    "sourceScale": 0.85173,
+    "rotationAxis": [
+      1.0,
+      0,
+      0
+    ],
+    "cameraPitch": 22,
+    "construction": [
+      {
+        "name": "machined optical housing",
+        "start": 0,
+        "end": 2
+      },
+      {
+        "name": "separate objective barrel",
+        "start": 2,
+        "end": 5
+      },
+      {
+        "name": "separate objective barrel",
+        "start": 9,
+        "end": 12
+      },
+      {
+        "name": "top panel",
+        "start": 16,
+        "end": 18
+      }
+    ]
+  },
+  {
+    "key": "tiger",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/tiger.png",
+    "still": "gfx/items/collectibles/tiger_af3d.png",
+    "spin": "gfx/items/collectibles/tiger_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 8824,
+    "parts": 35,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "skull and rear cranium",
+        "start": 0,
+        "end": 1
+      },
+      {
+        "name": "rounded ear",
+        "start": 2,
+        "end": 4
+      },
+      {
+        "name": "rounded ear",
+        "start": 14,
+        "end": 16
+      }
+    ]
+  },
+  {
+    "key": "time_money",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/time_money.png",
+    "still": "gfx/items/collectibles/time_money_af3d.png",
+    "spin": "gfx/items/collectibles/time_money_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 2080,
+    "parts": 8,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "pouch with radial cloth folds",
+        "start": 0,
+        "end": 1
+      }
+    ]
+  },
+  {
+    "key": "two_faced_penny",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/two_faced_penny.png",
+    "still": "gfx/items/collectibles/two_faced_penny_af3d.png",
+    "spin": "gfx/items/collectibles/two_faced_penny_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 15296,
+    "parts": 197,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "bevelled coin blank",
+        "start": 0,
+        "end": 1
+      }
+    ]
+  },
+  {
+    "key": "tyrfing",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/tyrfing.png",
+    "still": "gfx/items/collectibles/tyrfing_af3d.png",
+    "spin": "gfx/items/collectibles/tyrfing_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 9410,
+    "parts": 25,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.5,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "bevelled blade with a separate cutting edge",
+        "start": 0,
+        "end": 1
+      },
+      {
+        "name": "leather grip",
+        "start": 4,
+        "end": 7
+      }
+    ]
+  },
+  {
+    "key": "utility_belt",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/utility_belt.png",
+    "still": "gfx/items/collectibles/utility_belt_af3d.png",
+    "spin": "gfx/items/collectibles/utility_belt_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 9800,
+    "parts": 27,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 24,
+    "construction": [
+      {
+        "name": "continuous leather belt",
+        "start": 0,
+        "end": 1
+      },
+      {
+        "name": "stitched tool pouch and flap",
+        "start": 1,
+        "end": 6
+      },
+      {
+        "name": "stitched tool pouch and flap",
+        "start": 6,
+        "end": 11
+      }
+    ]
+  },
+  {
+    "key": "void_dagger",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/void_dagger.png",
+    "still": "gfx/items/collectibles/void_dagger_af3d.png",
+    "spin": "gfx/items/collectibles/void_dagger_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 11562,
+    "parts": 22,
+    "sourceScale": 1,
+    "rotationAxis": [
+      -0.5,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "wrapped grip",
+        "start": 0,
+        "end": 3
+      },
+      {
+        "name": "short pointed blade",
+        "start": 15,
+        "end": 16
+      }
+    ]
+  },
+  {
+    "key": "a_minus",
+    "kind": "trinkets",
+    "source": "gfx/items/trinkets/a_minus.png",
+    "still": "gfx/items/trinkets/a_minus_af3d.png",
+    "spin": "gfx/items/trinkets/a_minus_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 2380,
+    "parts": 3,
+    "sourceScale": 1,
+    "rotationAxis": [
+      -0.5,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "thin paper with a real reverse and edge",
+        "start": 0,
+        "end": 2
+      }
+    ]
+  },
+  {
+    "key": "angels_crown",
+    "kind": "trinkets",
+    "source": "gfx/items/trinkets/angels_crown.png",
+    "still": "gfx/items/trinkets/angels_crown_af3d.png",
+    "spin": "gfx/items/trinkets/angels_crown_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 8704,
+    "parts": 42,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.5,
+      0,
+      0
+    ],
+    "cameraPitch": 14,
+    "construction": [
+      {
+        "name": "continuous hollow crown band",
+        "start": 0,
+        "end": 1
+      },
+      {
+        "name": "blue enamel band",
+        "start": 1,
+        "end": 2
+      }
+    ]
+  },
+  {
+    "key": "atropos",
+    "kind": "trinkets",
+    "source": "gfx/items/trinkets/atropos.png",
+    "still": "gfx/items/trinkets/atropos_af3d.png",
+    "spin": "gfx/items/trinkets/atropos_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 3096,
+    "parts": 7,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "authored all-around construction",
+        "start": 0,
+        "end": 7
+      }
+    ]
+  },
+  {
+    "key": "b_minus",
+    "kind": "trinkets",
+    "source": "gfx/items/trinkets/b_minus.png",
+    "still": "gfx/items/trinkets/b_minus_af3d.png",
+    "spin": "gfx/items/trinkets/b_minus_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 2380,
+    "parts": 3,
+    "sourceScale": 1,
+    "rotationAxis": [
+      -0.5,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "thin paper with a real reverse and edge",
+        "start": 0,
+        "end": 2
+      }
+    ]
+  },
+  {
+    "key": "c_minus",
+    "kind": "trinkets",
+    "source": "gfx/items/trinkets/c_minus.png",
+    "still": "gfx/items/trinkets/c_minus_af3d.png",
+    "spin": "gfx/items/trinkets/c_minus_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 2252,
+    "parts": 3,
+    "sourceScale": 1,
+    "rotationAxis": [
+      -0.5,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "thin paper with a real reverse and edge",
+        "start": 0,
+        "end": 2
+      }
+    ]
+  },
+  {
+    "key": "f_minus",
+    "kind": "trinkets",
+    "source": "gfx/items/trinkets/f_minus.png",
+    "still": "gfx/items/trinkets/f_minus_af3d.png",
+    "spin": "gfx/items/trinkets/f_minus_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 2316,
+    "parts": 3,
+    "sourceScale": 1,
+    "rotationAxis": [
+      -0.5,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "thin paper with a real reverse and edge",
+        "start": 0,
+        "end": 2
+      }
+    ]
+  },
+  {
+    "key": "time_luck",
+    "kind": "trinkets",
+    "source": "gfx/items/trinkets/time_luck.png",
+    "still": "gfx/items/trinkets/time_luck_af3d.png",
+    "spin": "gfx/items/trinkets/time_luck_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 3456,
+    "parts": 18,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "authored all-around construction",
+        "start": 0,
+        "end": 18
+      }
+    ]
+  },
+  {
+    "key": "time_power",
+    "kind": "trinkets",
+    "source": "gfx/items/trinkets/time_power.png",
+    "still": "gfx/items/trinkets/time_power_af3d.png",
+    "spin": "gfx/items/trinkets/time_power_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 3456,
+    "parts": 18,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "authored all-around construction",
+        "start": 0,
+        "end": 18
+      }
+    ]
+  },
+  {
+    "key": "time_tear",
+    "kind": "trinkets",
+    "source": "gfx/items/trinkets/time_tear.png",
+    "still": "gfx/items/trinkets/time_tear_af3d.png",
+    "spin": "gfx/items/trinkets/time_tear_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 3456,
+    "parts": 18,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.5,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "authored all-around construction",
+        "start": 0,
+        "end": 18
+      }
+    ]
+  },
+  {
+    "key": "wrong_answer_note",
+    "kind": "trinkets",
+    "source": "gfx/items/trinkets/wrong_answer_note.png",
+    "still": "gfx/items/trinkets/wrong_answer_note_af3d.png",
+    "spin": "gfx/items/trinkets/wrong_answer_note_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 8796,
+    "parts": 32,
+    "sourceScale": 1,
+    "rotationAxis": [
+      1.5,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "page block",
+        "start": 0,
+        "end": 2
+      },
+      {
+        "name": "rounded bound spine",
+        "start": 6,
+        "end": 8
+      }
+    ]
+  }
+]
