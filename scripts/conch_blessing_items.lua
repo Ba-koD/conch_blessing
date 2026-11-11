@@ -946,6 +946,29 @@ ConchBlessing.ItemData = {
             preModUnload = "jangseung.onModUnload"
         },
     },
+    CONCH_CERTIFICATE = {
+        -- 소라 증명서: console only, like Inf D6 (hidden, in no pool, numbered
+        -- with the console items). The real Death Certificate opens its rooms,
+        -- whose pedestals then hold only this mod's collectibles and trinkets,
+        -- in ID order from the first slot (user design 2026-11-11).
+        type = "active",
+        id = Isaac.GetItemIdByName("Conch Certificate"),
+        gfx = "conch_certificate.png",
+        tags = "utility",
+        hidden = true,
+        console = true,
+        shopprice = 999,
+        maxcharges = 0,
+        quality = 0,
+        script = "scripts/items/collectibles/conch_certificate",
+        callbacks = {
+            preUseItem = "conchCertificate.onPreUseItem",
+            use = "conchCertificate.onUseItem",
+            gameStarted = "conchCertificate.onGameStarted",
+            preGameExit = "conchCertificate.onPreGameExit",
+            postNewLevel = "conchCertificate.onPostNewLevel",
+        },
+    },
 
     -- The twelve zodiac items (십이지) close the collectible group in their own
     -- order, 자 … 해, followed by the familiars and trinkets.

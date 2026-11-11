@@ -663,6 +663,17 @@ return {
                 trinket_door_stop = "A pair also stands at the door you came in by, in every room",
             },
         },
+        CONCH_CERTIFICATE = {
+            name = "Conch Certificate",
+            description = "Certified by the Conch",
+            eid = {
+                "On use, takes you to the {c:DEATH_CERTIFICATE} Death Certificate area.",
+                "#From the first pedestal on, this mod's items and then its trinkets take the pedestals in order, and the remaining pedestals disappear.",
+                "#Choosing an item returns you to the room you came from.",
+                "#Can be used again; on the same floor, items you took do not come back.",
+                "#{{Warning}} Requires REPENTOGON!",
+            },
+        },
 
         -- Familiars
         TIME_MONEY = {
