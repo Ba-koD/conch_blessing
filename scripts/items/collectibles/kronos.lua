@@ -533,6 +533,7 @@ function Rune.adoptGlobal()
     globalSave.kronos = nil
     if type(old) == "table" then
         if type(save.kronos) == "table" then Rune.mergeLedger(save.kronos, old) else save.kronos = old end
+        Rune.changed() -- a ledger arrived: every count built from it is stale
     end
     dbg("Moved the run's shared ledger to its player's own run save")
     sm.Save()
@@ -553,6 +554,7 @@ local function getRunSave(player, peek)
     if type(legacy) == "table" and (legacy.absorbed or legacy.totalAbsorbed) then
         save[LEGACY.PER_PLAYER] = nil
         if type(save.kronos) == "table" then Rune.mergeLedger(save.kronos, legacy) else save.kronos = legacy end
+        Rune.changed()
         dbg("Adopted the oldest per-player ledger")
         sm.Save()
     end
