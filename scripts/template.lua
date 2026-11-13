@@ -36,10 +36,15 @@ local function ensureCentralUpdater()
         ConchBlessing:AddCallback(ModCallbacks.MC_POST_RENDER, function()
             Template.renderAllAnimations()
         end)
-        -- RenderWater is the per-frame floor pass. pre_render_walls instead
-        -- rebuilds backdrop textures and cannot host a running animation.
-        if ModCallbacks.MC_PRE_BACKDROP_RENDER_WATER then
-            ConchBlessing:AddCallback(ModCallbacks.MC_PRE_BACKDROP_RENDER_WATER, function()
+        -- The floor pass: REPENTOGON calls PRE_BACKDROP_RENDER_WALLS every
+        -- render frame right after the floor is drawn and before the walls and
+        -- entities, so the overlay lies on the floor (measured 2026-11-13 with
+        -- `conch_test morph floor_hooks`: RENDER_FLOOR > RENDER_WALLS > POST_RENDER
+        -- each frame). RENDER_WATER runs only in a room with water, never in
+        -- an ordinary one, and POST_BACKDROP_PRE_RENDER_WALLS only rebuilds the
+        -- backdrop texture; neither can host a running animation.
+        if ModCallbacks.MC_PRE_BACKDROP_RENDER_WALLS then
+            ConchBlessing:AddCallback(ModCallbacks.MC_PRE_BACKDROP_RENDER_WALLS, function()
                 for _, anim in ipairs(Template._activeAnimations) do
                     if anim.morphScene and livePickup(anim) then
                         MorphVisuals.safe(MorphVisuals.renderFloor, anim.morphScene)
@@ -91,9 +96,9 @@ local function finishAnimation(anim, sprite)
         sprite = nil
     end
     if anim and debugOn() then
-        ConchBlessing.printDebug(string.format("[Upgrade] RESTORE type=%s phase=%s framesLeft=%s color=%s",
+        ConchBlessing.printDebug("[Upgrade] RESTORE type=%s phase=%s framesLeft=%s color=%s",
             tostring(anim.type), tostring(anim.phase), tostring(anim.frames),
-            sprite and colorText((anim and anim.originalColor) or Color(1, 1, 1, 1, 0, 0, 0)) or "pickup-gone"))
+            sprite and colorText((anim and anim.originalColor) or Color(1, 1, 1, 1, 0, 0, 0)) or "pickup-gone")
     end
     if anim then
         PickupVisual.restore(anim.pickupVisual)
@@ -249,8 +254,8 @@ end
 local function debugSound(kind, sfx, id, volume)
     if not (ConchBlessing and ConchBlessing.Config and ConchBlessing.Config.debugMode) then return end
     local playing = type(sfx.IsPlaying) == "function" and tostring(sfx:IsPlaying(id)) or "unknown"
-    ConchBlessing.printDebug(string.format("[Upgrade] SOUND %s id=%s volume=%.2f playing=%s",
-        kind, tostring(id), volume, playing))
+    ConchBlessing.printDebug("[Upgrade] SOUND %s id=%s volume=%.2f playing=%s",
+        kind, tostring(id), volume, playing)
 end
 
 Template.positive.onBeforeChange = function(upgradePos, pickup, itemData, soundId)
@@ -445,8 +450,8 @@ Template._legacyItemLocalUpdate = function(itemData)
         
         -- Debug: print animation progress
         if ConchBlessing and ConchBlessing.printDebug then
-            ConchBlessing.printDebug(string.format("Template: %s phase, frames=%d, progress=%.2f", 
-                anim.phase, anim.frames, progress))
+            ConchBlessing.printDebug("Template: %s phase, frames=%d, progress=%.2f", 
+                anim.phase, anim.frames, progress)
         end
         
         if sprite then
@@ -499,7 +504,7 @@ Template._legacyItemLocalUpdate = function(itemData)
         if anim.frames <= 0 then
             -- Debug: print animation completion
             if ConchBlessing and ConchBlessing.printDebug then
-                ConchBlessing.printDebug(string.format("Template: %s phase animation completed", anim.phase))
+                ConchBlessing.printDebug("Template: %s phase animation completed", anim.phase)
             end
             
             -- 색상을 자연스럽게 복원 (강제 설정하지 않음)
@@ -584,8 +589,8 @@ local function updateAnimation(anim)
     local strength = Template.defaultStrength(anim.phase, progress)
 
     if ConchBlessing and ConchBlessing.printDebug then
-        ConchBlessing.printDebug(string.format("Template: %s %s phase, frames=%d, progress=%.2f, tint=%.2f",
-            tostring(anim.type), anim.phase, anim.frames, progress, strength))
+        ConchBlessing.printDebug("Template: %s %s phase, frames=%d, progress=%.2f, tint=%.2f",
+            tostring(anim.type), anim.phase, anim.frames, progress, strength)
     end
 
     applyDefaultTint(anim, sprite, strength)
@@ -596,7 +601,7 @@ local function updateAnimation(anim)
         -- bound only matters if no commit, cancel or room change ever comes.
         if anim.phase == "before" and anim.frames > -90 then return false end
         if ConchBlessing and ConchBlessing.printDebug then
-            ConchBlessing.printDebug(string.format("Template: %s phase animation completed", anim.phase))
+            ConchBlessing.printDebug("Template: %s phase animation completed", anim.phase)
         end
         return finishAnimation(anim, sprite)
     end
@@ -700,9 +705,9 @@ Template.forItem = function(key, flag)
             PickupVisual.hide(pickupVisual)
         end
         if debugOn() then
-            ConchBlessing.printDebug(string.format("[ConchMorph] %s %s frame=%d frames=%d pickup=%s:%s renderer=%s original=%s",
+            ConchBlessing.printDebug("[ConchMorph] %s %s frame=%d frames=%d pickup=%s:%s renderer=%s original=%s",
                 phase == "before" and "BEGIN" or "COMMIT", key, scene.frame, frames, tostring(pickup.Variant),
-                tostring(pickup.SubType), pickupVisual.released and "native" or "layer", colorText(anim.originalColor)))
+                tostring(pickup.SubType), pickupVisual.released and "native" or "layer", colorText(anim.originalColor))
         end
         return frames
     end

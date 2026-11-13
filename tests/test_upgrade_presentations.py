@@ -76,7 +76,7 @@ class UpgradePresentationTests(unittest.TestCase):
             -- two renders per update like the 60 Hz render loop.
             function runFull(key, debug, each)
                 logs={}
-                ConchBlessing.printDebug=function(t) logs[#logs+1]=t end
+                ConchBlessing.printDebug=function(t,...) if select('#',...)>0 then t=string.format(t,...) end logs[#logs+1]=t end
                 ConchBlessing.Config={debugMode=debug==true}
                 local p=pickup(); local state={}
                 local custom=T.forItem(key,'positive')
@@ -84,7 +84,7 @@ class UpgradePresentationTests(unittest.TestCase):
                 local scene=state.morphScene
                 local function tick()
                     updates=updates+1; T.updateAllAnimations()
-                    for _,floor in ipairs(callbacks[ModCallbacks.MC_PRE_BACKDROP_RENDER_WATER] or {}) do floor() end
+                    for _,floor in ipairs(callbacks[ModCallbacks.MC_PRE_BACKDROP_RENDER_WALLS] or {}) do floor() end
                     T.renderAllAnimations(); T.renderAllAnimations()
                     if each then each(scene,p) end
                 end
@@ -472,7 +472,7 @@ class UpgradePresentationTests(unittest.TestCase):
 
     def test_cancel_and_render_failure_each_write_one_summary(self):
         self.lua.execute('''
-            logs={}; ConchBlessing.printDebug=function(t) logs[#logs+1]=t end
+            logs={}; ConchBlessing.printDebug=function(t,...) if select('#',...)>0 then t=string.format(t,...) end logs[#logs+1]=t end
             ConchBlessing.Config={debugMode=true}
             local p=pickup(); local state={}; local custom=T.forItem('DRAGON','positive')
             custom.onBeforeChange(p.Position,p,state)
@@ -494,7 +494,7 @@ class UpgradePresentationTests(unittest.TestCase):
         # The queue retires the before phase at its commit; the scene continues.
         morph_harness.MorphVisualTests.viewer(self)
         self.lua.execute('''
-            logs={}; ConchBlessing.printDebug=function(t) logs[#logs+1]=t end
+            logs={}; ConchBlessing.printDebug=function(t,...) if select('#',...)>0 then t=string.format(t,...) end logs[#logs+1]=t end
             ConchBlessing.Config={debugMode=true}
             event(6,'conch_morph','void_dagger')
             for tick=1,200 do event(1); event(2) end

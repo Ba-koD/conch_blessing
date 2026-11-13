@@ -85,8 +85,8 @@ end
 local function debugOn() return ConchBlessing.Config and ConchBlessing.Config.debugMode end
 local function trace(scene, event, detail)
     if not debugOn() then return end
-    ConchBlessing.printDebug(string.format("[ConchMorph] %s %s frame=%d/%d%s", event, tostring(scene.key),
-        scene.frame, scene.duration, detail and detail ~= "" and " " .. detail or ""))
+    ConchBlessing.printDebug("[ConchMorph] %s %s frame=%d/%d%s", event, tostring(scene.key),
+        scene.frame, scene.duration, detail and detail ~= "" and " " .. detail or "")
 end
 Visuals.trace = trace
 -- One value per scene frame, e.g. Kronos's black strength or the storm's darkness.
@@ -191,7 +191,7 @@ function Visuals.create(key, pos, sourceVariant, sourceId, startFrame, owner)
             tostring(targetVariant), tostring(item.id),
             scene.pets and string.format(" pets=%d(%s)", #scene.pets, tostring(scene.petSource)) or "",
             scene.drops and string.format(" floorCells=%d drops=%d floorHook=%s", #scene.floorCells, #scene.drops,
-                tostring(ModCallbacks.MC_PRE_BACKDROP_RENDER_WATER ~= nil)) or ""))
+                tostring(ModCallbacks.MC_PRE_BACKDROP_RENDER_WALLS ~= nil)) or ""))
     end
     return scene
 end

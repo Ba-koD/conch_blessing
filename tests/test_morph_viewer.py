@@ -29,7 +29,7 @@ class MorphVisualTests(unittest.TestCase):
             soundNames={['Conch Upgrade Thunder Strike']=901,['Conch Upgrade Rain']=902,['Conch Upgrade Clock Tick']=903,['Conch Upgrade Clock Tock']=904,['Conch Upgrade Clock Bell']=905}
             ModCallbacks={MC_POST_UPDATE=1,MC_POST_RENDER=2,MC_POST_NEW_ROOM=3,MC_POST_GAME_STARTED=4,
                 MC_PRE_GAME_EXIT=5,MC_EXECUTE_CMD=6,MC_INPUT_ACTION=7,MC_PRE_BACKDROP_RENDER_WATER=8,
-                MC_POST_BACKDROP_PRE_RENDER_WALLS=9}
+                MC_POST_BACKDROP_PRE_RENDER_WALLS=9,MC_PRE_BACKDROP_RENDER_WALLS=10}
             InputHook={GET_ACTION_VALUE=2,IS_ACTION_PRESSED=0,IS_ACTION_TRIGGERED=1}
             ButtonAction={ACTION_RESTART=16,ACTION_SHOOTLEFT=4,ACTION_SHOOTRIGHT=5,
                 ACTION_LEFT=0,ACTION_RIGHT=1,ACTION_UP=2,ACTION_DOWN=3,ACTION_SHOOTUP=6,ACTION_SHOOTDOWN=7}
@@ -788,7 +788,7 @@ class MorphVisualTests(unittest.TestCase):
         ''')
 
     def test_no_repentogon_floor_hook_still_runs(self):
-        self.lua.execute('ModCallbacks.MC_PRE_BACKDROP_RENDER_WATER=nil')
+        self.lua.execute('ModCallbacks.MC_PRE_BACKDROP_RENDER_WALLS=nil')
         self.viewer()
         self.lua.execute("event(6,'conch_morph','moneytear'); event(1); event(2); assert(W.isRunning() and #errors==0)")
 
@@ -950,15 +950,16 @@ class MorphVisualTests(unittest.TestCase):
     def test_flood_uses_per_frame_floor_pass_and_fades_without_mutating_room(self):
         self.viewer()
         self.lua.execute('''
-            assert(callbacks[9]==nil)
+            -- the texture rebuild and the water-only pass are never used
+            assert(callbacks[9]==nil and callbacks[8]==nil)
             event(6,'conch_morph','moneytear')
             for i=1,30 do event(1) end
-            drawings={}; event(8); assert(#drawings==9); local first=drawings[1].alpha
+            drawings={}; event(10); assert(#drawings==9); local first=drawings[1].alpha
             for i=1,40 do event(1) end
-            drawings={}; event(8); assert(#drawings==9 and drawings[1].alpha>first)
+            drawings={}; event(10); assert(#drawings==9 and drawings[1].alpha>first)
             for i=1,110 do event(1) end
-            drawings={}; event(8); assert(#drawings==0)
-            event(6,'conch_morph','stop'); event(8); assert(#drawings==0)
+            drawings={}; event(10); assert(#drawings==0)
+            event(6,'conch_morph','stop'); event(10); assert(#drawings==0)
         ''')
 
     def test_rain_strikes_accumulate_tint_only_before_conversion_and_replay_resets(self):

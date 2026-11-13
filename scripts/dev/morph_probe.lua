@@ -277,7 +277,7 @@ local function effectChecks(plan, key, profile)
             return sampled(s, "wet", impact + 45, duration, function(v) return v == 0, "should be fully dry" end)
         end)
         plan.check(key .. ": the flood overlay draws on the floor pass", function(_, ctx)
-            if not ModCallbacks.MC_PRE_BACKDROP_RENDER_WATER then return nil, "MC_PRE_BACKDROP_RENDER_WATER unavailable; rain and ripples only" end
+            if not ModCallbacks.MC_PRE_BACKDROP_RENDER_WALLS then return nil, "MC_PRE_BACKDROP_RENDER_WALLS unavailable; rain and ripples only" end
             local s = ctx.scene
             return #s.floorCells > 0 and s.floorRenders > 0, string.format("cells=%d floorRenders=%d drops=%d", #s.floorCells, s.floorRenders, #(s.drops or {}))
         end)
@@ -896,9 +896,53 @@ local function build(plan, only)
     if not only or only == "return" then stageReturn(plan) end
 end
 
+-- Measurement (by name only): how often each backdrop render hook runs in the
+-- bench's ordinary room, against MC_POST_RENDER, so a floor overlay can sit
+-- on one that runs every frame.
+local FLOOR_HOOKS = { "MC_PRE_BACKDROP_RENDER_WALLS", "MC_PRE_BACKDROP_RENDER_FLOOR", "MC_PRE_BACKDROP_RENDER_WATER",
+    "MC_POST_BACKDROP_PRE_RENDER_WALLS", "MC_POST_RENDER" }
+local function dropFloorHooks(ctx)
+    for name, fn in pairs(ctx.hookFns or {}) do
+        ConchBlessing.originalMod:RemoveCallback(ModCallbacks[name], fn)
+    end
+    ctx.hookFns = nil
+end
+local function stageFloorHooks(plan)
+    plan.section("backdrop render hooks (measurement)", nil)
+    plan.act(function(_, ctx)
+        ctx.hookCounts, ctx.hookFns, ctx.hookOrder = {}, {}, {}
+        for _, name in ipairs(FLOOR_HOOKS) do
+            local id = ModCallbacks[name]
+            if id then
+                ctx.hookCounts[name] = 0
+                ctx.hookFns[name] = function()
+                    ctx.hookCounts[name] = ctx.hookCounts[name] + 1
+                    if #ctx.hookOrder < 12 then ctx.hookOrder[#ctx.hookOrder + 1] = name:gsub("^MC_", "") end
+                end
+                ConchBlessing.originalMod:AddCallback(id, ctx.hookFns[name])
+            end
+        end
+        local room = Game():GetRoom()
+        ctx.water = string.format("HasWater=%s WaterAmount=%s backdrop=%s",
+            tostring(type(room.HasWater) == "function" and room:HasWater()),
+            tostring(type(room.GetWaterAmount) == "function" and room:GetWaterAmount()),
+            tostring(room:GetBackdropType()))
+    end)
+    plan.wait(60)
+    plan.act(function(_, ctx) dropFloorHooks(ctx) end)
+    for _, name in ipairs(FLOOR_HOOKS) do
+        plan.note(name .. " calls in 60 updates", function(_, ctx)
+            return ctx.hookCounts[name] == nil and "not in this build" or tostring(ctx.hookCounts[name])
+        end)
+    end
+    plan.note("first calls, in order", function(_, ctx) return table.concat(ctx.hookOrder or {}, " > ") end)
+    plan.note("room", function(_, ctx) return ctx.water end)
+end
+
 local function cleanup(ctx)
     morphWatch = nil
     returnWatch = nil
+    dropFloorHooks(ctx)
     removeFixture(ctx)
 end
 
@@ -910,6 +954,8 @@ TestBench.register({ command = "conch_test morph cycle", tag = "MorphProbe", dur
     cleanup = cleanup, build = function(plan) build(plan, "cycle") end })
 TestBench.register({ command = "conch_test morph return", tag = "MorphProbe", duration = "about 15 seconds",
     cleanup = cleanup, build = function(plan) build(plan, "return") end })
+TestBench.register({ command = "conch_test morph floor_hooks", tag = "MorphProbe", duration = "about 3 seconds",
+    cleanup = cleanup, build = function(plan) stageFloorHooks(plan) end })
 for _, row in ipairs(Visuals.catalog) do
     if row.effect then
         TestBench.register({ command = "conch_test morph " .. string.lower(row.key), tag = "MorphProbe",
@@ -923,13 +969,15 @@ function Probe.commandFor(word)
     if word == "default" then return "conch_test morph default" end
     if word == "cycle" then return "conch_test morph cycle" end
     if word == "return" then return "conch_test morph return" end
+    if word == "floor_hooks" then return "conch_test morph floor_hooks" end
     local key = Visuals.resolveKey(word)
     if key and Visuals.isApplied(key) then return "conch_test morph " .. string.lower(key) end
 end
 function Probe.list()
     local lines = { "conch_test morph [all applied presentations + default flags + rotating pedestal]",
         "conch_test morph default", "conch_test morph cycle (a rotating pedestal held on its evolving choice)",
-        "conch_test morph return (leaving the room before the change)" }
+        "conch_test morph return (leaving the room before the change)",
+        "conch_test morph floor_hooks (measurement: how often each backdrop render hook runs)" }
     for _, row in ipairs(Visuals.catalog) do
         if row.effect then lines[#lines + 1] = "conch_test morph " .. string.lower(row.key) .. " (" .. row.effect .. ")" end
     end
