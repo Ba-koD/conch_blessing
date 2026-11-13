@@ -73,6 +73,30 @@ class BenchTests(unittest.TestCase):
             assert(output():find('suite END: 2 PASS, 0 FAIL, 2 SKIP',1,true))
         """)
 
+    def test_a_bench_does_not_start_while_another_mod_holds_the_controls(self):
+        # Inventory Descriptions answers every action with "not pressed" while
+        # its list is open; benches that shoot or walk would all fail.
+        self.run_lua("""
+            InputHook={IS_ACTION_PRESSED=0,IS_ACTION_TRIGGERED=1,GET_ACTION_VALUE=2}
+            ButtonAction={ACTION_RIGHT=1,ACTION_SHOOTRIGHT=5}
+            listOpen=true
+            local idesc={Name='Inventory Descriptions'}
+            Isaac.GetCallbacks=function(id)
+                assert(id==ModCallbacks.MC_INPUT_ACTION)
+                return {{Mod={Name='Quiet'},Function=function() return nil end},
+                        {Mod=idesc,Function=function(mod,entity,hook,action)
+                            assert(mod==idesc and entity==player and hook==InputHook.IS_ACTION_PRESSED)
+                            if listOpen then return false end end}}
+            end
+            ran=0
+            bench.register({command='walker', build=function(p) p.act(function() ran=ran+1 end) end})
+            assert(not bench.start('walker', false),'started while the controls were held')
+            assert(not bench.startSuite('suite', {'walker'}),'a suite started while the controls were held')
+            assert(output():find('Inventory Descriptions is holding',1,true), output())
+            listOpen=false
+            assert(bench.start('walker', false)); drain(); assert(ran==1)
+        """)
+
     def test_suite_restarts_into_each_members_own_character(self):
         self.run_lua("""
             for i, name in ipairs({'as_isaac','as_maggy','as_cain'}) do

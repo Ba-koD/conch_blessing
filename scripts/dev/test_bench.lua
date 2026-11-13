@@ -253,6 +253,38 @@ local function takeCleanLease(def)
     return false
 end
 
+-- Another mod holding the player's controls makes every bench that shoots or
+-- walks fail for no fault of the item: Inventory Descriptions answers every
+-- action with "not pressed" while its list is open (found 2026-11-13, when
+-- such failures looked like regressions). Returns the holder's name, or nil.
+local function inputHolder()
+    if type(Isaac.GetCallbacks) ~= "function" or not ModCallbacks.MC_INPUT_ACTION
+        or not InputHook or not ButtonAction then return nil end
+    local player = Isaac.GetPlayer(0)
+    local ok, entries = pcall(Isaac.GetCallbacks, ModCallbacks.MC_INPUT_ACTION)
+    if not player or not ok or type(entries) ~= "table" then return nil end
+    for _, entry in ipairs(entries) do
+        local param = entry.Param
+        if type(entry.Function) == "function" and (param == nil or param == -1 or param == InputHook.IS_ACTION_PRESSED) then
+            for _, action in ipairs({ ButtonAction.ACTION_SHOOTRIGHT, ButtonAction.ACTION_RIGHT }) do
+                local fine, answer = pcall(entry.Function, entry.Mod, player, InputHook.IS_ACTION_PRESSED, action)
+                if fine and answer == false then
+                    return entry.Mod and entry.Mod.Name or "an unnamed mod"
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function refuseHeldInput(def)
+    local holder = inputHolder()
+    if not holder then return false end
+    out(def, string.format("Not started: %s is holding the player's controls (an open menu such as "
+        .. "Inventory Descriptions' item list?). Close it and run the test again.", holder))
+    return true
+end
+
 function TestBench.start(command, restart)
     command = string.lower(command)
     local def = benches[command]
@@ -261,6 +293,7 @@ function TestBench.start(command, restart)
         out(def, command .. ": a test is already running")
         return false
     end
+    if refuseHeldInput(def) then return false end
     active = {
         def = def, index = 1, ctx = { rooms = 0 }, section = "setup", restartAtEnd = restart,
         results = { pass = 0, fail = 0, skip = 0, failures = {} },
@@ -340,6 +373,7 @@ end
 function TestBench.startSuite(command, commands)
     local def = { command = command, tag = "ConchTest" }
     if active or suite then out(def, "A test is already running; use conch_test status or conch_test stop."); return false end
+    if refuseHeldInput(def) then return false end
     local seen, copy = {}, {}
     for _, name in ipairs(commands) do
         assert(benches[name], "unregistered suite member: " .. name)
