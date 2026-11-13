@@ -22,7 +22,7 @@ class EntityDefinitionsTests(unittest.TestCase):
             generate_xml.create_entities2_xml(items, str(path), definitions, {})
             self.assertEqual(first, path.read_bytes())
             rows = ET.parse(path).getroot().findall('entity')
-            self.assertEqual(len(rows), 8)
+            self.assertEqual(len(rows), 9)
             self.assertEqual((rows[0].get('id'), rows[0].get('variant')), ('3', '777'))
             marker = rows[1]
             ox = rows[2]
@@ -48,6 +48,11 @@ class EntityDefinitionsTests(unittest.TestCase):
             tracks = rows[7]
             self.assertEqual((tracks.get('name'), tracks.get('variant'), tracks.get('shadowSize')),
                              (definitions['RABBIT_TRACKS']['name'], '7788', '0'))
+            # 전우치 arriving where a stolen item will stand (2026-11-13).
+            thief = rows[8]
+            self.assertEqual((thief.get('name'), thief.get('variant'), thief.get('shadowSize')),
+                             (definitions['JEON_WOOCHI']['name'], '7789', '0'))
+            self.assertTrue((Path('resources/gfx') / thief.get('anm2path')).is_file())
             self.assertTrue((Path('resources/gfx') / tracks.get('anm2path')).is_file())
             self.assertEqual(marker.get('id'), '2')
             self.assertEqual(marker.get('name'), definitions['NEGLECT_TEAR']['name'])
