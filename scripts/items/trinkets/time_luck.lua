@@ -36,6 +36,12 @@ end)
 
 local loadFromSave
 
+-- Right after a luamod SaveManager brings the save back a little after the
+-- first updates; until then no player's record can be read or written.
+local function saveLoaded()
+	return type(SaveManager.IsLoaded) ~= "function" or SaveManager.IsLoaded()
+end
+
 local function newPlayerState()
 	return {
 		luckBonus = 0.0,
@@ -54,6 +60,8 @@ local function getPlayerState(player)
 	local ps = s.perPlayer[key]
 	if not ps then
 		ps = newPlayerState()
+		-- not kept before the save is there: the next ask reads the record
+		if not saveLoaded() then return ps end
 		s.perPlayer[key] = ps
 		loadFromSave(player, ps)
 	end
@@ -117,6 +125,7 @@ loadFromSave = function(player, ps)
 end
 
 local function saveToSave(player)
+	if not saveLoaded() then return end
 	local id = getTrinketId()
 	if not id then return end
 	local ps = getPlayerState(player)
@@ -159,6 +168,26 @@ do
 	end
 end
 
+-- After a luamod the save comes back with SaveManager's POST_DATA_LOAD: the
+-- stat is evaluated again then, from the player's own record.
+do
+	local mod = ConchBlessing and ConchBlessing.originalMod
+	local callbacks = SaveManager.SaveCallbacks
+	if mod and callbacks and callbacks.POST_DATA_LOAD then
+		mod:AddCallback(callbacks.POST_DATA_LOAD, function(_, _, isLuamod)
+			if not isLuamod then return end
+			local game = Game()
+			for i = 0, game:GetNumPlayers() - 1 do
+				local p = game:GetPlayer(i)
+				if p then
+					p:AddCacheFlags(CacheFlag.CACHE_LUCK)
+					p:EvaluateItems()
+				end
+			end
+		end)
+	end
+end
+
 -- Public: allow toggling drop reset behavior
 function ConchBlessing.timelucktrinket.SetKeepOnDrop(player, keep)
 	ConchBlessing.timelucktrinket.data.keepOnDrop = keep == true
@@ -187,6 +216,7 @@ end
 
 -- Update growth and handle drop-reset
 function ConchBlessing.timelucktrinket.onUpdate()
+	if not saveLoaded() then return end
 	local game = Game()
 	local frame = TimerClock.now()
 	local num = game:GetNumPlayers()
@@ -260,6 +290,7 @@ end
 
 -- Pause growth on taking damage
 function ConchBlessing.timelucktrinket.onEntityTakeDamage(_, entity, amount, flags, source, countdown)
+	if not saveLoaded() then return end
 	local player = entity:ToPlayer()
 	if not player then return end
 	local id = getTrinketId()

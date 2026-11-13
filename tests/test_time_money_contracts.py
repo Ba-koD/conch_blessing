@@ -74,6 +74,28 @@ class TimeMoneyContracts(unittest.TestCase):
             local before=saves;update();assert(saves==before and coins==20)
         ''')
 
+    def test_a_reload_waits_for_the_save_and_never_pays_the_first_coins_again(self):
+        # A luamod mid-run: the module loads again and player updates may run
+        # before SaveManager has the save back. Nothing may read the record
+        # then, or a blank state would forget the copy and pay again.
+        self.lua.execute('''
+            p.count=1; M.onPlayerUpdate(nil,p); assert(coins==5)
+            -- the reload: a fresh module, the save not there yet
+            loaded=false
+            ConchBlessing.SaveManager.IsLoaded=function() return loaded end
+            local plain=ConchBlessing.SaveManager.GetRunSave
+            ConchBlessing.SaveManager.GetRunSave=function(x) assert(loaded,'save data used before it was loaded'); return plain(x) end
+            package.loaded['scripts.items.familiars.time_money']=nil
+            ConchBlessing.timemoney=nil
+            require('scripts.items.familiars.time_money'); M=ConchBlessing.timemoney
+            for _=1,3 do frame=frame+1; M.onPlayerUpdate(nil,p) end
+            assert(coins==5,'paid before the save was back')
+            loaded=true
+            for _=1,3 do frame=frame+1; M.onPlayerUpdate(nil,p) end
+            assert(coins==5,'the first-pickup coins were paid again after the reload: '..coins)
+            assert(store[p].timeMoney.lastItemCount==1)
+        ''')
+
     def test_zero_count_never_pays_periodic_coins(self):
         self.lua.execute('''
             p.count=1;M.onPlayerUpdate(nil,p);assert(coins==5)

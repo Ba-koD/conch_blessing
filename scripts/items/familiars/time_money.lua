@@ -63,6 +63,14 @@ end)
 
 local loadFromSave
 
+-- Right after a luamod SaveManager brings the save back a little after the
+-- first updates; until then no player's record can be read or written (a
+-- blank state kept then would forget the copies held and pay the first-pickup
+-- coins again).
+local function saveLoaded()
+	return type(SaveManager.IsLoaded) ~= "function" or SaveManager.IsLoaded()
+end
+
 local function newPlayerState()
 	return {
 		lastDropFrame = 0,
@@ -79,6 +87,8 @@ local function getPlayerState(player)
 	local ps = s.perPlayer[key]
 	if not ps then
 		ps = newPlayerState()
+		-- not kept before the save is there: the next ask reads the record
+		if not saveLoaded() then return ps end
 		s.perPlayer[key] = ps
 		loadFromSave(player, ps)
 	end
@@ -181,6 +191,7 @@ loadFromSave = function(player, ps)
 end
 
 local function saveToSave(player)
+	if not saveLoaded() then return end
 	local ps = getPlayerState(player)
 	local rec = getRecord(player)
 	if not rec then return end
@@ -433,6 +444,7 @@ end
 
 -- On damage: increment pending penalty unless excluded by time-trinket rules
 function ConchBlessing.timemoney.onEntityTakeDamage(_, entity, amount, flags, source, countdown)
+    if not saveLoaded() then return end
     local player = entity:ToPlayer()
     if not player then return end
     local id = getItemId()
@@ -480,6 +492,7 @@ end
 -- MC_POST_PLAYER_UPDATE: runs once for each player, so only that player's
 -- copies, timer and coins are handled here.
 function ConchBlessing.timemoney.onPlayerUpdate(_, player)
+	if not saveLoaded() then return end
 	if not player then return end
 	local id = getItemId()
 	if not id then return end

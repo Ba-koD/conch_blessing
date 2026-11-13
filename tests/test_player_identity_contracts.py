@@ -282,6 +282,38 @@ class PlayerIdentity(unittest.TestCase):
             T.onGameStarted(nil,true); assert(near(T.getPlayerState(c2).permanentBonus,0.8))
         ''')
 
+    def test_time_items_wait_for_the_save_after_a_reload(self):
+        # A luamod mid-run: the modules load again and updates run before
+        # SaveManager has the save back (its POST_DATA_LOAD, isLuamod), with no
+        # game start. Nothing may read or write a record until then, and the
+        # earned bonus must not be overwritten with a blank state.
+        self.run_lua('''
+            loaded=false
+            SM.IsLoaded=function() return loaded end
+            SM.SaveCallbacks.POST_DATA_LOAD='post_load'
+            local plain=SM.GetRunSave
+            SM.GetRunSave=function(p) assert(loaded,'save data used before it was loaded'); return plain(p) end
+            ConchBlessing.ItemData.TIME_LUCK={id=22}; ConchBlessing.ItemData.TIME_TEAR={id=23}
+            for _,case in ipairs({{'time_power','timepowertrinket','timePower','damageBonus',21},
+                                  {'time_luck','timelucktrinket','timeLuck','luckBonus',22},
+                                  {'time_tear','timeteartrinket','timeTear','spsBonus',23}}) do
+                local file,module,key,field,id=case[1],case[2],case[3],case[4],case[5]
+                require('scripts.items.trinkets.'..file); local T=ConchBlessing[module]
+                runSaves[33]={[key]={[field]=0.4,permanentBonus=0.2,pauseFramesRemaining=0}}
+                local c=newPlayer(0,33); c.slots={id,0}
+                for _=1,5 do frame=frame+1; T.onUpdate() end
+                assert(hits[file:upper()](nil,c,1,0,nil,30)==nil,file..': a hit before the save counted')
+                assert(runSaves[33][key][field]==0.4,file..': the saved bonus was overwritten before the load')
+                loaded=true
+                local evals=c.evals
+                fire('post_load',{},true)
+                assert(c.evals>evals,file..': the stat was not evaluated again once the save was back')
+                local ps=T.getPlayerState(c)
+                assert(near(ps[field],0.4) and near(ps.permanentBonus,0.2),file..': the earned bonus was lost: '..tostring(ps[field]))
+                loaded=false
+            end
+        ''')
+
     def test_minus_chain_hit_belongs_to_the_hit_player(self):
         self.run_lua('''
             require('scripts.items.trinkets.minus_chain'); local MC=ConchBlessing.minuschain
