@@ -16,6 +16,10 @@ EXCEPTIONS={
  'gfx/items/collectibles/tmp.png':'unused template',
  'gfx/items/trinkets/tmp.png':'unused template',
  'gfx/items/trinkets/time_template.png':'unused template',
+ # 선녀 (2026-11-13): its art is new and not yet modelled; until it is, April
+ # Fools keeps the original. Remove these two when the model is authored.
+ 'gfx/items/collectibles/seonnyeo.png':'new item, 3D model pending: original kept',
+ 'gfx/familiar/familiar_seonnyeo.png':'new item, 3D model pending: original kept',
 }
 
 

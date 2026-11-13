@@ -94,16 +94,18 @@ class GeneratedIdOrderTests(unittest.TestCase):
         i = names.index('Rat')
         # The released familiars (Time = Money, then the Hermit Crab appended on
         # 2026-11-09) come right after the released zodiac (묘 released 2026-11-10).
-        self.assertEqual(names[i:i + 7], ['Rat', 'Ox', 'Tiger', 'Rabbit', 'Dragon', 'Time = Money', 'Hermit Crab'])
+        # Seonnyeo (선녀) joined the familiars after the Hermit Crab on 2026-11-13.
+        self.assertEqual(names[i:i + 8], ['Rat', 'Ox', 'Tiger', 'Rabbit', 'Dragon', 'Time = Money', 'Hermit Crab',
+                                          'Seonnyeo'])
         # Console items in registry order: the Conch Certificate (2026-11-11)
         # sits with the collectibles, so it comes before the familiar Azure Dragon.
-        self.assertEqual(names[i + 7:i + 10], ['Inf D6', 'Conch Certificate', 'Azure Dragon'],
+        self.assertEqual(names[i + 8:i + 11], ['Inf D6', 'Conch Certificate', 'Azure Dragon'],
                          'console items follow the finished ones')
         wip = ['Snake (WIP)', 'Horse (WIP)', 'Goat (WIP)',
                'Monkey (WIP)', 'Chicken (WIP)', 'Dog (WIP)', 'Pig (WIP)']
-        self.assertEqual(names[i + 10:i + 17], wip)
-        self.assertEqual(rows[i + 17][0], 'trinket')
-        self.assertTrue(all(tag != 'trinket' for tag, _ in rows[:i + 16]))
+        self.assertEqual(names[i + 11:i + 18], wip)
+        self.assertEqual(rows[i + 18][0], 'trinket')
+        self.assertTrue(all(tag != 'trinket' for tag, _ in rows[:i + 17]))
         self.assertEqual([info.get('name') for info in registry.values()], names)
 
 

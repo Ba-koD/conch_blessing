@@ -33,24 +33,25 @@
     <passive id="30" name="Dragon" gfx="dragon.png" quality="4" tags="offensive" shopprice="20" devilprice="2"/>
     <familiar id="31" name="Time = Money" gfx="time_money.png" quality="4" cache="familiars" shopprice="30" devilprice="2"/>
     <familiar id="32" name="Hermit Crab" gfx="hermit_crab.png" quality="3" cache="familiars" shopprice="20" devilprice="2"/>
-    <active id="33" name="Inf D6" gfx="inf_d6.png" quality="0" tags="utility" hidden="true" shopprice="999" maxcharges="0" chargetype="normal"/>
-    <active id="34" name="Conch Certificate" gfx="conch_certificate.png" quality="0" tags="utility" hidden="true" shopprice="999" maxcharges="0"/>
-    <familiar id="35" name="Azure Dragon" gfx="azure_dragon.png" quality="0" tags="offensive summonable" cache="familiars" hidden="true" shopprice="999"/>
-    <passive id="36" name="Snake (WIP)" gfx="snake.png" hidden="true"/>
-    <passive id="37" name="Horse (WIP)" gfx="horse.png" hidden="true"/>
-    <passive id="38" name="Goat (WIP)" gfx="goat.png" hidden="true"/>
-    <passive id="39" name="Monkey (WIP)" gfx="monkey.png" hidden="true"/>
-    <passive id="40" name="Chicken (WIP)" gfx="chicken.png" hidden="true"/>
-    <passive id="41" name="Dog (WIP)" gfx="dog.png" hidden="true"/>
-    <passive id="42" name="Pig (WIP)" gfx="pig.png" hidden="true"/>
-    <trinket id="43" name="Time = Power" gfx="time_power.png" tags="offensive" cache="damage" shopprice="15"/>
-    <trinket id="44" name="Time = Tear" gfx="time_tear.png" tags="offensive" cache="firedelay" shopprice="15"/>
-    <trinket id="45" name="Time = Luck" gfx="time_luck.png" tags="utility" cache="luck" shopprice="15"/>
-    <trinket id="46" name="F -" gfx="f_minus.png" tags="offensive" cache="luck" shopprice="15"/>
-    <trinket id="47" name="C -" gfx="c_minus.png" tags="offensive" cache="firedelay" hidden="true" shopprice="15"/>
-    <trinket id="48" name="B -" gfx="b_minus.png" tags="offensive" cache="luck damage" hidden="true" shopprice="15"/>
-    <trinket id="49" name="A -" gfx="a_minus.png" tags="offensive" cache="luck damage firedelay" hidden="true" shopprice="15"/>
-    <trinket id="50" name="Atropos" gfx="atropos.png" tags="utility" shopprice="15"/>
-    <trinket id="51" name="Angel's Crown" gfx="angels_crown.png" tags="utility" shopprice="15"/>
-    <trinket id="52" name="Wrong Answer Note" gfx="wrong_answer_note.png" tags="offensive" shopprice="15"/>
+    <familiar id="33" name="Seonnyeo" gfx="seonnyeo.png" quality="3" cache="familiars" shopprice="20" devilprice="2"/>
+    <active id="34" name="Inf D6" gfx="inf_d6.png" quality="0" tags="utility" hidden="true" shopprice="999" maxcharges="0" chargetype="normal"/>
+    <active id="35" name="Conch Certificate" gfx="conch_certificate.png" quality="0" tags="utility" hidden="true" shopprice="999" maxcharges="0"/>
+    <familiar id="36" name="Azure Dragon" gfx="azure_dragon.png" quality="0" tags="offensive summonable" cache="familiars" hidden="true" shopprice="999"/>
+    <passive id="37" name="Snake (WIP)" gfx="snake.png" hidden="true"/>
+    <passive id="38" name="Horse (WIP)" gfx="horse.png" hidden="true"/>
+    <passive id="39" name="Goat (WIP)" gfx="goat.png" hidden="true"/>
+    <passive id="40" name="Monkey (WIP)" gfx="monkey.png" hidden="true"/>
+    <passive id="41" name="Chicken (WIP)" gfx="chicken.png" hidden="true"/>
+    <passive id="42" name="Dog (WIP)" gfx="dog.png" hidden="true"/>
+    <passive id="43" name="Pig (WIP)" gfx="pig.png" hidden="true"/>
+    <trinket id="44" name="Time = Power" gfx="time_power.png" tags="offensive" cache="damage" shopprice="15"/>
+    <trinket id="45" name="Time = Tear" gfx="time_tear.png" tags="offensive" cache="firedelay" shopprice="15"/>
+    <trinket id="46" name="Time = Luck" gfx="time_luck.png" tags="utility" cache="luck" shopprice="15"/>
+    <trinket id="47" name="F -" gfx="f_minus.png" tags="offensive" cache="luck" shopprice="15"/>
+    <trinket id="48" name="C -" gfx="c_minus.png" tags="offensive" cache="firedelay" hidden="true" shopprice="15"/>
+    <trinket id="49" name="B -" gfx="b_minus.png" tags="offensive" cache="luck damage" hidden="true" shopprice="15"/>
+    <trinket id="50" name="A -" gfx="a_minus.png" tags="offensive" cache="luck damage firedelay" hidden="true" shopprice="15"/>
+    <trinket id="51" name="Atropos" gfx="atropos.png" tags="utility" shopprice="15"/>
+    <trinket id="52" name="Angel's Crown" gfx="angels_crown.png" tags="utility" shopprice="15"/>
+    <trinket id="53" name="Wrong Answer Note" gfx="wrong_answer_note.png" tags="offensive" shopprice="15"/>
 </items>

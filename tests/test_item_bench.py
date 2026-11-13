@@ -363,7 +363,7 @@ class BenchTests(unittest.TestCase):
                     total=total+1
                 end
             end
-            assert(total==150,'update the documented synergy inventory when it changes')
+            assert(total==152,'update the documented synergy inventory when it changes')
             for _,name in ipairs({'conch_test kronos detail','conch_test live_eye detail','conch_test appraisal detail'}) do
                 bench.register({command=name,build=function() end})
             end
@@ -414,7 +414,7 @@ class BenchTests(unittest.TestCase):
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','kronos detail')
             assert(started=='conch_test kronos detail')
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','all')
-            assert(label=='conch_test' and #selected==382,'update the documented suite count when it changes (got '..#selected..')')
+            assert(label=='conch_test' and #selected==388,'update the documented suite count when it changes (got '..#selected..')')
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','rat characters')
             assert(label=='conch_test rat characters' and #selected==34,'every selectable character once')
             for _,name in ipairs(selected) do assert(name:match('^conch_test rat same_')) end

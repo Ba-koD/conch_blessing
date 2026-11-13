@@ -78,9 +78,10 @@ covered. Additive flashes, shadows and light filaments too thin to form a
 solid retain their original light imagery. Native HUD surfaces whose sprites the engine does not expose retain
 their normal icons; there is no unsafe ItemConfig/global texture mutation.
 
-`coverage.json` accounts for all 86 original PNGs under active `resources/gfx`:
+`coverage.json` accounts for all 88 original PNGs under active `resources/gfx`:
 76 have generated alternatives; 10 are fonts, transparent controls, a drawing
-pixel/light falloff, or retired/template sheets. It is an **asset audit**, not
+pixel/light falloff, or retired/template sheets; 2 (선녀's icon and familiar
+sheet, 2026-11-13) are new art whose model is still to be authored. It is an **asset audit**, not
 a claim that every engine-controlled HUD surface can be intercepted. Vanilla
 referenced art and third-party assets are never copied or changed. Original
 PNGs remain byte-for-byte intact. `_af3d.png` / `_af3d_spin.png` files ship;

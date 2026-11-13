@@ -18,6 +18,7 @@ for _, probe in ipairs({ "thurisaz_probe", "conch_ticket_probe", "uruz_probe" })
 load("locale_probe")       -- conch_test locale
 load("morph_probe")        -- conch_test morph
 load("evolution_probe")    -- conch_test evolution
+load("april_fools_probe")  -- conch_test april_fools
 load("appraisal_probe")    -- conch_test appraisal detail
 -- Last, so conch_test can include the detailed benches above in its suite.
 load("item_probe")

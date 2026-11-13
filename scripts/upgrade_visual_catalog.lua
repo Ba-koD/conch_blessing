@@ -47,4 +47,5 @@ return {
     { key = "KIDS_MENU" },
     { key = "HERMIT_CRAB" },
     { key = "WRONG_ANSWER_NOTE" },
+    { key = "SEONNYEO" },
 }

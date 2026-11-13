@@ -8,6 +8,7 @@
         <Item Name="Real Eyes" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Conch Pearl" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Jangseung" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Seonnyeo" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
     <Pool Name="secret">
         <Item Name="Live Eye" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>

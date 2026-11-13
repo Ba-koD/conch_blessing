@@ -12,7 +12,7 @@ end
 local CycleCompare = require("scripts.dev.item_test_cycle_compare")
 local BirthrightParity = require("scripts.dev.item_test_birthright_parity")
 local contracts = {}
-for _, module in ipairs({ "stats", "combat", "special", "rat", "conch_pearl", "tiger", "ox", "kids_menu", "hermit_crab", "wrong_answer_note", "rabbit", "jangseung", "conch_certificate" }) do
+for _, module in ipairs({ "stats", "combat", "special", "rat", "conch_pearl", "tiger", "ox", "kids_menu", "hermit_crab", "wrong_answer_note", "rabbit", "jangseung", "conch_certificate", "seonnyeo" }) do
     for key, contract in pairs(require("scripts.dev.item_test_" .. module)) do
         assert(not contracts[key], "duplicate item contract: " .. key)
         contracts[key] = contract
@@ -272,6 +272,13 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
         if not loaded then out("FAIL perf bench unavailable: " .. tostring(err)); return end
         if not singleRun() then out("Start a single-player test run first."); return end
         TestBench.start("conch_test perf", true); return
+    end
+    if action == "april_fools" then
+        if case then out("Usage: conch_test april_fools"); return end
+        local loaded, err = pcall(require, "scripts.dev.april_fools_probe")
+        if not loaded then out("FAIL April Fools bench unavailable: " .. tostring(err)); return end
+        if not singleRun() then out("Start a single-player test run first."); return end
+        TestBench.start("conch_test april_fools", true); return
     end
     if action == "evolution" then
         if case then out("Usage: conch_test evolution"); return end

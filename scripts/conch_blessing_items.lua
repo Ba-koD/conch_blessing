@@ -210,7 +210,6 @@ ConchBlessing.ItemData = {
         flag = "positive",
         script = "scripts/items/collectibles/eternal_flame",
         callbacks = {
-            postPlayerUpdate = "eternalflame.onPlayerUpdate",
             evaluateCache = "eternalflame.onEvaluateCache",
             postNewLevel = "eternalflame.onNewLevel",
             postNewRoom = "eternalflame.onNewRoom",
@@ -612,9 +611,10 @@ ConchBlessing.ItemData = {
             postEffectUpdate = "icebreath.onEffectUpdate",
             entityTakeDmg = "icebreath.onEntityTakeDamage",
             postEntityTakeDmg = "icebreath.onPostEntityTakeDamage",
-            weaponFired = "icebreath.onWeaponFired",
-            tearUpdate = "icebreath.onTearUpdate",
-            tearCollision = "icebreath.onTearCollision"
+            weaponFired = "icebreath.onWeaponFired"
+            -- No spawn mode makes a tear (every flame is an effect), so the
+            -- tear update/collision handlers are not registered: they would
+            -- read every tear's data each update for nothing.
         }
     },
     FIRE_BREATH = {
@@ -637,9 +637,10 @@ ConchBlessing.ItemData = {
             postPlayerUpdate = "firebreath.onPlayerUpdate",
             weaponFired = "firebreath.onWeaponFired",
             postEffectUpdate = "firebreath.onEffectUpdate",
-            postEntityTakeDmg = "firebreath.onPostEntityTakeDamage",
-            tearUpdate = "firebreath.onTearUpdate",
-            tearCollision = "firebreath.onTearCollision"
+            postEntityTakeDmg = "firebreath.onPostEntityTakeDamage"
+            -- No spawn mode makes a tear (every flame is an effect), so the
+            -- tear update/collision handlers are not registered: they would
+            -- read every tear's data each update for nothing.
         }
     },
     SOFLAM = {
@@ -1279,6 +1280,40 @@ ConchBlessing.ItemData = {
             postNewRoom = "hermitcrab.onNewRoom",
             gameStarted = "hermitcrab.onGameStarted",
             preGameExit = "hermitcrab.onGameExit",
+        },
+    },
+    SEONNYEO = {
+        -- 선녀: the Magic Conch's Succubus. A heavenly maiden roams the room
+        -- like Succubus; inside her golden aura her owner's tears are x1.2,
+        -- and auras stacked on each other multiply (user design 2026-11-13).
+        type = "familiar",
+        id = Isaac.GetItemIdByName("Seonnyeo"),
+        stackable = true, -- every copy adds an aura
+        gfx = "seonnyeo.png",
+        anm2 = "seonnyeo.anm2",
+        entity = { variant = 780, collisiondamage = 0, collisionmass = 3, collisionradius = 7, friction = 1, numgridcollisionpoints = 6, shadowsize = 0, tags = "cansacrifice", customtags = "" },
+        gibs = { amount = 0, blood = 0, bone = 0, eye = 0, gut = 0, large = 0 },
+        pool = { RoomType.ROOM_ANGEL },
+        quality = 3,
+        tags = "summonable",
+        cache = "familiars",
+        shopprice = 20,
+        devilprice = 2,
+        kronosAbsorb = true, -- Kronos and Thurisaz keep her light on the player, as with Succubus
+        origin = { id = CollectibleType.COLLECTIBLE_SUCCUBUS, type = "collectible" },
+        flag = "positive",
+        script = "scripts/items/familiars/seonnyeo",
+        synergies = {
+            [{ id = CollectibleType.COLLECTIBLE_BFFS, type = "collectible" }] = "bffs",
+            [{ id = Isaac.GetItemIdByName("Kronos"), type = "collectible" }] = "kronos",
+        },
+        callbacks = {
+            familiarInit = "seonnyeo.onFamiliarInit",
+            familiarUpdate = "seonnyeo.onFamiliarUpdate",
+            evaluateCache = "seonnyeo.onEvaluateCache",
+            postUpdate = "seonnyeo.onUpdate",
+            postNewRoom = "seonnyeo.onNewRoom",
+            gameStarted = "seonnyeo.onGameStarted",
         },
     },
 

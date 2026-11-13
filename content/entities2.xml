@@ -6,6 +6,9 @@
     <entity name="Hermit Crab" id="3" variant="779" anm2path="hermit_crab.anm2" collisionDamage="0" collisionMass="3" collisionRadius="7" friction="1" numGridCollisionPoints="6" shadowSize="14" tags="cansacrifice" customtags="">
         <gibs amount="0" blood="0" bone="0" eye="0" gut="0" large="0"/>
     </entity>
+    <entity name="Seonnyeo" id="3" variant="780" anm2path="seonnyeo.anm2" collisionDamage="0" collisionMass="3" collisionRadius="7" friction="1" numGridCollisionPoints="6" shadowSize="0" tags="cansacrifice" customtags="">
+        <gibs amount="0" blood="0" bone="0" eye="0" gut="0" large="0"/>
+    </entity>
     <entity name="Azure Dragon" id="3" variant="778" anm2path="dragon.anm2" collisionDamage="0" collisionMass="3" collisionRadius="8" friction="1" numGridCollisionPoints="1" shadowSize="0" customtags="">
         <gibs amount="0" blood="0" bone="0" eye="0" gut="0" large="0"/>
     </entity>

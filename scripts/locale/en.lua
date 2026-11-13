@@ -718,6 +718,19 @@ return {
                 kronos = "When absorbed, the trinkets it held are smelted for good, and as many trinkets as it could hold are smelted as soon as you get them",
             },
         },
+        SEONNYEO = {
+            name = "Seonnyeo",
+            description = "On second look, she's heavenly",
+            eid = {
+                "A heavenly maiden roams the room",
+                "#Standing in her light makes {{Tears}} tears x1.2",
+                "#Enemies in her light take damage that grows with your {{Tears}} tears",
+            },
+            synergies = {
+                bffs = "The damaging aura gets bigger, but the tears up aura doesn't",
+                kronos = "Attracts an aura around the player.",
+            },
+        },
 
         -- Trinkets
         TIME_POWER = {
