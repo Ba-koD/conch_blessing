@@ -42,9 +42,10 @@ FOOT = (20, 56)        # the point that stands on the floor
 # outline as small Isaac sprites use; three or four tones per material, the
 # light from the top left and the shadows shifted cool; no banding or pillow
 # shading. The user wants a mysterious, well proportioned stranger (about
-# four and a half heads tall): the brim's shadow hides his eyes but for a
-# glint, the fan hides his mouth, and the 도포's wide sleeves keep his arms
-# broad.
+# four and a half heads tall): the brim's deep shadow hides his eyes
+# entirely and thins in two soft steps below them (the user found the old
+# beady eyes petty and chose no eyes, 2026-11-13), the fan hides his mouth,
+# and the 도포's wide sleeves keep his arms broad.
 PAL = {
     ".": (0, 0, 0, 0),
     "K": (14, 8, 12, 255),       # outline, Isaac's near black
@@ -55,9 +56,12 @@ PAL = {
     "A": (26, 22, 30, 255),      # hair, 망건
     "S": (240, 216, 202, 255),   # skin
     "s": (206, 168, 162, 255),   # skin shade
-    "d": (78, 64, 82, 255),      # the brim's shadow over the eyes
+    "e": (22, 16, 28, 255),      # the brim's deep shadow over the eyes
+    "d": (78, 64, 82, 255),      # the shadow thinning below them
+    "t": (176, 142, 150, 255),   # its last soft step into the skin
     "E": (20, 12, 20, 255),      # eyes
     "G": (236, 244, 255, 255),   # the glint in his eyes
+    "c": (132, 156, 196, 255),   # its dimmer tail
     "m": (150, 84, 92, 255),     # the smile behind the fan
     "L": (246, 247, 251, 255),   # 도포 lit
     "W": (222, 226, 236, 255),   # 도포, moonlit white
@@ -146,8 +150,16 @@ def face_fill(x, y):
         return "A"                  # 망건, the black band under the 갓
     if y <= 16 and abs(x + 0.5 - 20) > 4.0:
         return "A"                  # hair at the temples
-    if y <= 15:
-        return "d"                  # the brim's shadow hides the eyes
+    # The brim casts a deep shadow over the eyes that thins as it comes down,
+    # reaching lower on his shaded right (user request 2026-11-13: dark over
+    # the eyes, a soft shade below, so he looks sharp rather than petty).
+    right = x >= 21
+    if y <= 14 or (y == 15 and right):
+        return "e"
+    if y == 15 or (y == 16 and right):
+        return "d"
+    if y == 16 or (y == 17 and right):
+        return "t"
     return "s" if x >= 22 else "S"
 
 
@@ -300,13 +312,21 @@ def hand(g, x0, y0):
 
 def face(g, smile=False):
     paint_part(g, face_mask, face_fill)
-    # under the brim: only a glint in each eye, glancing aside
-    put(g, [(16, 14), (22, 14)], "E")
-    put(g, [(17, 14), (23, 14)], "G")
+    if EYES == "glint":
+        # deep in the brim's shadow only his eyes catch the light: two narrow
+        # glints whose outer ends rise, sharp rather than beady
+        put(g, [(17, 14), (22, 14)], "G")
+        put(g, [(16, 13), (23, 13)], "c")
+    # EYES == "none": no eyes at all, only the shadow (the user's other idea)
     if smile:
         # the fan shut: a thin smile at one corner of the mouth
         put(g, [(18, 19), (19, 19), (20, 19), (21, 18)], "m")
 
+
+# His eyes under the brim: "glint" (two sharp slits of light) or "none"
+# (only the shadow). The user chose "none" over both the glint and the old
+# beady eyes (2026-11-13).
+EYES = "none"
 
 FAN_PIVOT = (25.6, 24.4, 8.4)
 FAN_ANGLES = {"a": (66, 192), "b": (76, 200), "half": (112, 196)}
