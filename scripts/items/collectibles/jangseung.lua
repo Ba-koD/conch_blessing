@@ -412,6 +412,9 @@ function M.onPlayerRender(_, player)
     if not next(wards) or not player then return end
     local ward = wards[GetPtrHash(player)]
     if not ward or ward.alpha <= 0 or reflecting() then return end
+    -- Hemispatial Neglect drawing the player again into its capture
+    local neglect = ConchBlessing.hemispatialneglect
+    if neglect and neglect.isCapturing and neglect.isCapturing() then return end
     local sprite = wardArt()
     if not sprite then return end
     local shown = ward.alpha / M.data.wardFade

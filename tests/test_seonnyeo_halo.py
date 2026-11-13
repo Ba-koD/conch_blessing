@@ -59,6 +59,18 @@ class SeonnyeoHaloTests(unittest.TestCase):
             end
         ''')
 
+    def test_no_halo_in_hemispatial_neglects_nested_capture(self):
+        self.lua.execute(r'''
+            capturing=true
+            ConchBlessing.hemispatialneglect={isCapturing=function() return capturing end}
+            draws={}; frame=frame+1
+            callbacks[ModCallbacks.MC_PRE_PLAYER_RENDER](nil,player,Vector(0,0))
+            assert(#draws==0,'the halo was drawn into the capture')
+            capturing=false; draws={}
+            callbacks[ModCallbacks.MC_PRE_PLAYER_RENDER](nil,player,Vector(0,0))
+            assert(#draws==2,'the halo was not drawn outside the capture')
+        ''')
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -6,6 +6,7 @@ local visual = require("scripts.items.collectibles.hemispatial_neglect_visual")
 M.onPrePlayerRender = visual.onPrePlayerRender
 M.resetVisual = visual.reset
 M.onUnload = visual.onUnload
+M.isCapturing = visual.isCapturing
 local definition = require("scripts.entities.definitions").NEGLECT_TEAR
 local BLOCKED = "__ConchBlessingNeglectTear"
 local variant

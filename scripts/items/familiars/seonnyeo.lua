@@ -269,6 +269,9 @@ end
 
 function M.onPlayerRender(_, player, offset)
     if ITEM_ID <= 0 or Game():GetRoom():GetRenderMode() == RenderMode.RENDER_WATER_REFLECT then return end
+    -- Hemispatial Neglect drawing the player again into its capture
+    local neglect = ConchBlessing.hemispatialneglect
+    if neglect and neglect.isCapturing and neglect.isCapturing() then return end
     local kept = M.absorbed(player)
     if kept <= 0 then return end
     local sprite = haloSprite()

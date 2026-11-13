@@ -142,6 +142,14 @@ local function captureDraw(controller)
     drawPlayer:Render(drawOffset)
 end
 
+-- Whether a player is being drawn into a capture right now. The nested draw
+-- runs every player render callback again, so art drawn under the player
+-- (Seonnyeo's kept halo, 장승's 금줄) skips it: it would be captured and shown
+-- a second time over its first draw.
+function M.isCapturing()
+    return drawPlayer ~= nil
+end
+
 local function capture(player, offset, key, direction)
     local state = surfaceFor(key)
     local left, right = bounds(player, offset, state, direction)

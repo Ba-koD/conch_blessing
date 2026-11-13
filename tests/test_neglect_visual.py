@@ -92,6 +92,21 @@ class NeglectVisualTests(unittest.TestCase):
             p=makePlayer(1); q=makePlayer(2); offset=Vector(6,4)
         ''')
 
+    def test_other_render_callbacks_can_tell_the_nested_capture_draw(self):
+        # Art drawn under the player (Seonnyeo's kept halo, the 장승 ward)
+        # skips the nested draw, so it must be marked exactly while it runs.
+        self.lua.execute('''
+            assert(M.isCapturing()==false)
+            local seen; local render=p.Render
+            function p:Render(o) seen=M.isCapturing(); return render(self,o) end
+            assert(M.onPrePlayerRender(nil,p,offset)==false)
+            assert(seen==true,'the nested draw was not marked')
+            assert(M.isCapturing()==false,'still marked after the capture')
+            failNative=true; seen=nil
+            M.onPrePlayerRender(nil,p,offset)
+            assert(seen==true and M.isCapturing()==false,'still marked after a failed capture')
+        ''')
+
     def test_front_right_half_is_removed_without_tinting_or_rescaling(self):
         self.lua.execute('''
             local colour=p.colour; local position=p.Position; local spriteOffset=p.SpriteOffset
