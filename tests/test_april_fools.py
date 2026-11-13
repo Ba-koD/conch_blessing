@@ -126,6 +126,22 @@ class AppearanceTests(unittest.TestCase):
             assert(late.layer.path==strip and late.loads==0,'healed outside the window')
         ''')
 
+    def test_the_heal_window_closes_with_the_run(self):
+        # Switched off late in one run, then a new run starts: its frames count
+        # from 0 again, so a window carried over would heal for that long.
+        self.run_lua('''
+            ConchBlessing.Config.aprilFools3D='on';A.Refresh()
+            local strip='gfx/items/collectibles/conch_pearl_af3d_spin.png'
+            tick=5000
+            ConchBlessing.Config.aprilFools3D='off';A.Refresh()
+            ConchBlessing.callbacks[ModCallbacks.MC_PRE_GAME_EXIT]()
+            tick=10
+            ConchBlessing.callbacks[ModCallbacks.MC_POST_GAME_STARTED]()
+            local s=sprite(strip);s.layer.crop=Vector(320,0)
+            A.Apply(s)
+            assert(s.layer.path==strip and s.loads==0,"the old run heal window was still open")
+        ''')
+
     def test_doors_are_restored_after_their_wrappers_are_collected(self):
         # A door's sprite is a fresh wrapper on every GetSprite; the record is
         # the door slot's, so switching off still finds and restores it.

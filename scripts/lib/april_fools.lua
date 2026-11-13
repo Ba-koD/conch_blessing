@@ -374,8 +374,10 @@ ConchBlessing:AddCallback(ModCallbacks.MC_POST_ENTITY_REMOVE, function(_, entity
     local key = GetPtrHash(entity)
     owned[key], plain[key] = nil, nil
 end)
-ConchBlessing:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, function() M.RestoreAll(); enabled = false end)
-ConchBlessing:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function() M.RestoreAll(); M.Refresh() end)
+-- The heal window counts game frames, which start again from 0 in the next
+-- run: a window left open would heal every drawn sprite for that long.
+ConchBlessing:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, function() M.RestoreAll(); enabled, healUntil = false, -1 end)
+ConchBlessing:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function() M.RestoreAll(); healUntil = -1; M.Refresh() end)
 if ModCallbacks.MC_PRE_MOD_UNLOAD then
     ConchBlessing:AddCallback(ModCallbacks.MC_PRE_MOD_UNLOAD, function(_, mod)
         if mod == ConchBlessing or mod == ConchBlessing.originalMod then
