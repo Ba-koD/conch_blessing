@@ -22,6 +22,20 @@ C.KIDS_MENU = { prepare = function(plan)
         for _, p in ipairs(pedestals()) do p:Remove() end
         ctx.kept = nil
     end)
+    plan.note("familiar items no item pool lists (never offered)", function()
+        local menu, pool = ConchBlessing.kidsmenu, Game():GetItemPool()
+        if not menu or type(pool.GetNumItemPools) ~= "function" then return "pool lists unavailable" end
+        local offered, left = {}, {}
+        for _, id in ipairs(menu.familiarItems()) do offered[id] = true end
+        local config = Isaac.GetItemConfig()
+        for id = 1, config:GetCollectibles().Size - 1 do
+            local item = config:GetCollectible(id)
+            if item and item.Type == ItemType.ITEM_FAMILIAR and not item.Hidden and not offered[id] then
+                left[#left + 1] = id .. "(" .. tostring(item.Name) .. ")"
+            end
+        end
+        return #left .. " left out of " .. (#left + #menu.familiarItems()) .. ": " .. table.concat(left, " ", 1, math.min(#left, 12))
+    end)
 end, stage = function(plan, _, n)
     plan.act(function(player, ctx)
         ctx.pickup = H.pickup(player, CollectibleType.COLLECTIBLE_SAD_ONION)
@@ -39,6 +53,30 @@ end, stage = function(plan, _, n)
             return #cycle == 1 and familiar ~= nil,
                 "copies=" .. n .. " shown=" .. shown .. " extra=[" .. table.concat(cycle, ",") .. "]"
         end)
+    if n > 0 then
+        -- User decision 2026-11-13: a familiar no item pool lists (another
+        -- mod's upgrade-only item) is never offered. Read from the pools here,
+        -- not from the item's own list.
+        plan.check("the offered familiar is one some item pool lists", function(_, ctx)
+            if not ctx.cycleAPI then return nil, "collectible-cycle API unavailable" end
+            local pool = Game():GetItemPool()
+            if type(pool.GetCollectiblesFromPool) ~= "function" or type(pool.GetNumItemPools) ~= "function" then
+                return nil, "REPENTOGON pool lists unavailable"
+            end
+            local ids = { ctx.pickup.SubType }
+            for _, id in ipairs(ctx.pickup:GetCollectibleCycle()) do ids[#ids + 1] = id end
+            local familiar
+            for _, id in ipairs(ids) do if id ~= CollectibleType.COLLECTIBLE_SAD_ONION and isFamiliar(id) then familiar = id end end
+            if not familiar then return false, "no familiar on the pedestal" end
+            local pools = {}
+            for kind = 0, pool:GetNumItemPools() - 1 do
+                for _, entry in ipairs(pool:GetCollectiblesFromPool(kind)) do
+                    if entry.itemID == familiar then pools[#pools + 1] = kind break end
+                end
+            end
+            return #pools > 0, string.format("familiar %d in pools [%s]", familiar, table.concat(pools, ","))
+        end)
+    end
     plan.check("an earlier pedestal keeps what it was given", function(_, ctx)
         if not ctx.kept then return true, "first stage" end
         local p = ctx.kept.pickup

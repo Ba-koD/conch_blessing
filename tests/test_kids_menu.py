@@ -3,8 +3,9 @@
 Binge Eater measured in game on 2026-11-07 follows Birthright's rules exactly
 (`conch_test kids_menu parity`, Binge Eater arm): only a pedestal created while
 someone holds it gains a choice. Family Combo gives a familiar item instead of
-food, from the pedestal's own seed, never from an item pool, so familiars may
-repeat. These are Lua regressions with doubles, not proof of engine behaviour.
+food, from the pedestal's own seed, never drawn from an item pool (the pools
+only say which familiars count: one no pool lists never comes up), so
+familiars may repeat. These are Lua regressions with doubles, not proof of engine behaviour.
 """
 from pathlib import Path
 import unittest
@@ -96,6 +97,25 @@ class KidsMenuTests(unittest.TestCase):
         self.lua.execute('''
             local list=M.familiarItems()
             assert(table.concat(list,',')=='10,11,12', table.concat(list,','))
+        ''')
+
+    def test_a_familiar_no_pool_lists_is_never_offered(self):
+        self.lua.execute('''
+            -- pool 0 lists 10 (taken out already: weight 0), pool 2 lists 12;
+            -- 11 is in no pool, like another mod's upgrade-only item
+            lists={[0]={{itemID=10,weight=0},{itemID=20,weight=1}},[1]={},[2]={{itemID=12,weight=1}}}
+            pool.GetNumItemPools=function() return 3 end
+            pool.GetCollectiblesFromPool=function(_,kind) return lists[kind] end
+            local list=M.familiarItems()
+            assert(table.concat(list,',')=='10,12', table.concat(list,','))
+            for seed=1,40 do assert(M.familiarFor(seed)~=11,'a pool-less familiar was offered') end
+            assert(poolCalls==0,'the pools are only read')
+        ''')
+
+    def test_without_pool_lists_every_familiar_stays(self):
+        self.lua.execute('''
+            assert(pool.GetCollectiblesFromPool==nil)
+            assert(table.concat(M.familiarItems(),',')=='10,11,12')
         ''')
 
     def test_a_seed_always_names_the_same_familiar_and_familiars_may_repeat(self):

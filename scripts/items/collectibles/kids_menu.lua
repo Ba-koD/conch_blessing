@@ -1,4 +1,5 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
+local RoomKey = require("scripts.lib.room_key")
 -- Family Combo (패밀리 세트), the Magic Conch's Binge Eater (user design 2026-11-07).
 --
 -- Binge Eater gives an item pedestal a food choice. Measured 2026-11-07
@@ -10,9 +11,11 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- nobody holds it never do; a choice already given stays after the item is
 -- lost. Family Combo does the same with a familiar item instead of food.
 --
--- The familiar is any available, non-hidden familiar collectible, drawn from
--- the pedestal's own seed without touching an item pool, so the same familiar
--- may come up on several pedestals (user request: duplicates allowed) and a
+-- The familiar is any available, non-hidden familiar collectible that some
+-- item pool lists (one no pool lists, such as another mod's upgrade-only item,
+-- never comes up; user decision 2026-11-13), drawn from the pedestal's own
+-- seed: the pools are only read, never drawn from or emptied, so the same
+-- familiar may come up on several pedestals (user request: duplicates allowed) and a
 -- Diplopia copy shows the same one, like Binge Eater's food. One choice per
 -- pedestal however many copies are held, like Binge Eater. It is appended
 -- after the choices the engine already gave, and never while a Magic Conch
@@ -40,20 +43,9 @@ local copied = {}            -- pointer hash -> seed of a fresh same-seed copy
 local states = {}            -- pointer hash -> { seed, state }: the saved record, read once
 local familiars = nil        -- the familiar items, by ID, cached per run
 
+-- The same room key as Severed Oath's (scripts/lib/room_key.lua).
 local function currentRoomKey()
-    local level = Game():GetLevel()
-    local seed = 0
-    if type(level.GetDungeonPlacementSeed) == "function" then
-        local ok, value = pcall(level.GetDungeonPlacementSeed, level)
-        if ok and type(value) == "number" then seed = value end
-    end
-    local dimension = 0
-    if type(level.GetDimension) == "function" then
-        local ok, value = pcall(level.GetDimension, level)
-        if ok and type(value) == "number" then dimension = value end
-    end
-    return table.concat({ tostring(seed), tostring(level:GetStage()), tostring(level:GetStageType()),
-        tostring(level:GetCurrentRoomIndex()), tostring(dimension) }, ":")
+    return RoomKey.current()
 end
 
 local function ensureRoom()
@@ -103,9 +95,33 @@ local function flush()
     if saveManager and type(saveManager.Save) == "function" then pcall(saveManager.Save) end
 end
 
--- Every available familiar item, sorted by ID so a seed picks the same one.
+-- The items some item pool lists (any pool, vanilla or a mod's own, however
+-- much of it is left), or nil when the build cannot list pools. An item no
+-- pool lists, such as another mod's upgrade-only item, is never offered
+-- (user decision 2026-11-13).
+local function pooledItems()
+    local pool = Game():GetItemPool()
+    if not pool or type(pool.GetCollectiblesFromPool) ~= "function" then return nil end
+    local count = type(pool.GetNumItemPools) == "function" and pool:GetNumItemPools()
+        or (ItemPoolType and ItemPoolType.NUM_ITEMPOOLS)
+    if type(count) ~= "number" or count <= 0 then return nil end
+    local listed = {}
+    for kind = 0, count - 1 do
+        local ok, entries = pcall(pool.GetCollectiblesFromPool, pool, kind)
+        if ok and type(entries) == "table" then
+            for _, entry in ipairs(entries) do
+                if type(entry) == "table" and type(entry.itemID) == "number" then listed[entry.itemID] = true end
+            end
+        end
+    end
+    return listed
+end
+
+-- Every available familiar item that some pool lists, sorted by ID so a seed
+-- picks the same one.
 function M.familiarItems()
     if familiars then return familiars end
+    local pooled = pooledItems()
     local list, config = {}, Isaac.GetItemConfig()
     local collectibles = config and config:GetCollectibles()
     local last = collectibles and collectibles.Size - 1 or 0
@@ -119,7 +135,7 @@ function M.familiarItems()
                 local ok, result = pcall(item.IsAvailable, item)
                 available = not ok or result ~= false
             end
-            if available then list[#list + 1] = id end
+            if available and (not pooled or pooled[id]) then list[#list + 1] = id end
         end
     end
     familiars = list
@@ -216,8 +232,8 @@ local function grant(pickup, state)
     if after and #after == #tail + 1 and after[#after] == familiar then
         state.granted = familiar
         flush()
-        ConchBlessing.printDebug(string.format("[Family Combo] pedestal %s (%d) offers familiar %d",
-            tostring(pickup.InitSeed), pickup.SubType, familiar))
+        ConchBlessing.printDebug("[Family Combo] pedestal %s (%d) offers familiar %d",
+            tostring(pickup.InitSeed), pickup.SubType, familiar)
     end
 end
 
