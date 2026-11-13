@@ -5,8 +5,16 @@ local S = require("scripts.dev.item_scenarios")
 local H = require("scripts.dev.item_test_support")
 local capture
 
+-- The observer runs first (IMPORTANT priority): a callback that returns a
+-- replacement stops the ones after it, so a later observer misses that draw
+-- entirely. Installed Astro Items does this from its own default-priority
+-- MC_POST_GET_COLLECTIBLE (its chance-based "Item Upgrade" swaps a drawn item
+-- for its EX version; measured 2026-11-13: an Angel's Crown conversion came
+-- out as Amazing Chaos Scroll of Goodness and no angel draw was seen).
 if ModCallbacks.MC_POST_GET_COLLECTIBLE then
-    ConchBlessing:AddCallback(ModCallbacks.MC_POST_GET_COLLECTIBLE, function(_, id, requested, decrease, seed)
+    local priority = rawget(_G, "CallbackPriority")
+    local important = type(priority) == "table" and tonumber(priority.IMPORTANT) or -200
+    ConchBlessing:AddPriorityCallback(ModCallbacks.MC_POST_GET_COLLECTIBLE, important, function(_, id, requested, decrease, seed)
         if not capture then return end
         local pool = Game():GetItemPool()
         capture[#capture+1] = {id=id, requested=requested, actual=pool:GetLastPool(), seed=seed, decrease=decrease}
@@ -50,20 +58,44 @@ local function snapshotPool(poolType)
     return ids
 end
 
+-- Every pedestal must come from a draw of `expected`: either it shows that
+-- draw's item (from the pool as it stood), or another mod's callback replaced
+-- the item the draw picked. A replacement cannot be seen (the callback chain
+-- stops at it), so it is accepted only for a draw of `expected` that no
+-- pedestal shows, one draw per pedestal, and never for an item that a draw of
+-- another pool picked (the room's own unconverted stock).
 local function poolResult(ctx, expected)
-    local seen, detail={},{}
+    local fromPool, otherPool, detail={},{},{}
     for _,draw in ipairs(ctx.draws) do
-        if draw.actual==expected then seen[draw.id]=true end
+        if draw.actual==expected then fromPool[#fromPool+1]=draw else otherPool[draw.id]=true end
         detail[#detail+1]=string.format("%s@%s",draw.id,draw.actual)
     end
     local stock=pedestals()
     if #stock~=ctx.stockCount then return false,"pedestal count changed: "..#stock.." expected="..ctx.stockCount end
+    local used, unexplained, replaced={},{},{}
     for _,pickup in ipairs(stock) do
-        if not seen[pickup.SubType] or not ctx.allowed[pickup.SubType] then
+        local match
+        for i,draw in ipairs(fromPool) do
+            if not used[i] and draw.id==pickup.SubType then match=i break end
+        end
+        if match and ctx.allowed[pickup.SubType] then used[match]=true
+        else unexplained[#unexplained+1]=pickup end
+    end
+    for _,pickup in ipairs(unexplained) do
+        -- A replacement changes the item: a draw that picked this very item
+        -- and still fails (it is not in the pool snapshot) explains nothing.
+        local free
+        for i,draw in ipairs(fromPool) do
+            if not used[i] and draw.id~=pickup.SubType then free=i break end
+        end
+        if not free or otherPool[pickup.SubType] then
             return false,string.format("item=%s expectedPool=%s; draws=[%s]",pickup.SubType,expected,table.concat(detail,","))
         end
+        used[free]=true
+        replaced[#replaced+1]=string.format("%s@%s->%s",fromPool[free].id,expected,pickup.SubType)
     end
-    return true,string.format("%d pedestals; expectedPool=%s actualDraws=[%s]",#stock,expected,table.concat(detail,","))
+    return true,string.format("%d pedestals; expectedPool=%s actualDraws=[%s]%s",#stock,expected,table.concat(detail,","),
+        #replaced>0 and (" replaced by another mod: "..table.concat(replaced,",")) or "")
 end
 
 local function visitTreasure(plan, before)

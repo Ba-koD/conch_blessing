@@ -105,6 +105,15 @@ class RunnerInfrastructureTests(unittest.TestCase):
             ctx.draws[1].actual=15; assert(check(nil,ctx))
             ctx.allowed={}; assert(not check(nil,ctx),'foreign item must fail')
             ctx.allowed={[7]=true}; ctx.draws={}; assert(not check(nil,ctx),'missing actual draw evidence must fail')
+            -- another mod replaced what an angel draw picked (its callback stops the chain)
+            ctx.allowed={}; ctx.draws={{id=5,actual=15}}
+            local ok,detail=check(nil,ctx); assert(ok and detail:find('5@15%->7'),'a replaced angel draw must pass: '..tostring(detail))
+            ctx.draws={{id=7,actual=1},{id=5,actual=15}}
+            assert(not check(nil,ctx),'the room\\'s own unconverted item must fail even beside an angel draw')
+            local second={SubType=9}; second.ToPickup=function() return second end
+            Isaac.FindByType=function() return {pickup,second} end
+            ctx.stockCount=2; ctx.draws={{id=5,actual=15}}
+            assert(not check(nil,ctx),'one angel draw cannot explain two pedestals')
         ''')
 
     def test_rng_arguments_reject_invalid_values_before_sampling(self):

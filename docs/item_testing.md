@@ -46,10 +46,12 @@ SOFLAM 지연·상태 이상 지속 시간과 기존 상세 벤치의 캡션 렌
 | `conch_test kronos` | 크로노스 생명주기 + 상세 + 각 펫 시너지·조건 검사 |
 | `conch_test damage` | 실제 적 HP 감소·범위·상태 이상·공격력 변화 검사 |
 | `conch_test conditions` | 피격·미피격·클리어·층 이동·보유 상태·시간 조건 검사 |
-| `conch_test synergies` | 설명에 등록된 시너지 150개를 연결한 검사 |
+| `conch_test synergies` | 설명에 등록된 시너지 152개를 연결한 검사 |
 | `conch_test perf` | 측정만 하는 검사(이름으로만 실행). 우리 아이템 없음 / 무해한 적에게 사격 / 출시된 패시브·패밀리어·장신구 전부(적 있음·없음) 네 구간에서 이 모드가 업데이트마다 쓰는 ms와 가장 무거운 콜백, 그다음 크로노스·진·반쪽 무시·Real Eyes 함수별 시간을 DIAG로 남김 |
 | `conch_test appraisal_certificate dc_vanilla` · `appraisal_return` | 측정만 하는 검사(이름으로만 실행). 진짜 사망증명서에서 아이템을 집거나 감정서에서 장신구를 집은 뒤 원래 방에 돌아올 때까지 차원·방·전환 모드·아이작 애니메이션·화면 흔들림·효과음을 업데이트와 렌더 프레임마다 바뀔 때 DIAG로 남김(감정서 귀환을 바닐라에 맞출 때 비교용) |
 | `conch_test conch_certificate dc_order` | 측정만 하는 검사(이름으로만 실행). 바닐라 사망증명서만 써서 모든 방을 돌며 받침대마다 엔진이 깐 아이템 ID를 ListIndex·배치 순서로 DIAG에 남기고, 그 순서로 ID가 오르는지 확인 |
+| `conch_test conch_certificate dc_revisit` | 측정만 하는 검사(이름으로만 실행). 바닐라 사망증명서를 한 층에서 두 번 써서, 들여다보기만 한 방과 아이템을 가져간 방에 두 번째 방문 때 받침대가 몇 개 남는지 DIAG로 남김(2026-11-13 실측: 가져간 방 18 → 0, 들여다본 방 92 → 92) |
+| `conch_test morph floor_hooks` | 측정만 하는 검사(이름으로만 실행). 평범한 방에서 배경 렌더 콜백이 60업데이트 동안 몇 번, 어떤 순서로 불리는지 DIAG로 남김(2026-11-13 실측: FLOOR·WALLS 각 120번, FLOOR > WALLS > POST_RENDER 순서, WATER·POST_PRE_RENDER_WALLS 0번) |
 | `conch_test time_money` | 지정한 ItemData 키 검사; 대소문자 무관 |
 | `conch_test realeyes` | Real Eyes 전체 검사 (`real_eyes`도 가능) |
 | `conch_test real_eyes prediction` | 예측과 실제 소라고둥 답변 비교; 테스트 런 필요 |
@@ -71,6 +73,7 @@ SOFLAM 지연·상태 이상 지속 시간과 기존 상세 벤치의 캡션 렌
 | `conch_test kronos transformation_engine` | 측정 전용(이름으로만 실행): 획득·중복·`FirstTimePickingUp=false`·`RemoveFromPlayerForm`·기본 제거·제단·`IncrementPlayerFormCounter`가 카운터와 변신에 주는 영향을 DIAG로 기록 |
 | `conch_test appraisal` | 감정 평가서 생명주기·상세·아트로포스 시너지 검사 |
 | `conch_test conch_certificate` | 소라 증명서(콘솔 전용) 생명주기 + `rooms`(실제 사망증명서 방을 모두 돌며 첫 받침대부터 우리 collectible→장신구가 순서대로 놓였는지, 범위 밖 받침대와 다른 받침대가 없는지, 엔진이 원래 깐 아이템 ID가 그 순서로 오르는지) · `take_reuse`(첫 아이템을 실제로 집고 원래 방으로 귀환, 두 번째 사용에서 가져간 것만 빠짐) · `inside_blocked`(공간 안 사용 거절). 새 items.xml 반영에 게임 완전 재시작 필요 |
+| `conch_test seonnyeo` | 선녀 생명주기 + `light`(선녀를 이삭 옆·빛 가장자리 안쪽·바깥쪽에 고정해 실제 연사가 1.2배/그대로인지, 두 마리 빛에서 1.44배, 아이템을 잃으면 원래대로) · `bffs`(서큐버스처럼 BFFS는 피해 범위만 1.25배: 원래 가장자리 바로 바깥은 BFFS가 있어도 연사 그대로, 그 자리의 적은 BFFS일 때만 피해) · `light_damage`(빛 안의 적 HP가 세 틱(7업데이트 간격) 동안 틱마다 주인 연사만큼 줄고, 빛 밖은 그대로, BFFS여도 틱당 피해는 같음) · `kronos`(크로노스가 흡수하면 선녀는 사라지고 빛이 주인에게 고정: 어디서나 연사 1.2배, 주인 곁의 적만 틱 피해, 크로노스를 잃으면 선녀가 돌아옴) · `roam`(10초 동안 주인을 따라다니지 않고 벽 안에서 서큐버스 속도(4.7)로 떠다니며 방향을 틀 때만 느려짐). `succubus_probe`는 측정만 하는 검사(이름으로만 실행): 바닐라 서큐버스의 속도·방향·꺾이는 위치와 오라 피해의 틱 간격·피해량(BFFS 포함)을 DIAG로 남겨 선녀를 맞출 때 씀. `diagonal_probe`도 측정만 하는 검사로, 엔진의 `MoveDiagonally`에 여러 값을 넣었을 때 선녀의 속도·방향·꺾이는 위치를 남김(1이 서큐버스와 같음) |
 | `conch_test utility_belt` / `conch_test belt` | 벨트 생명주기 + 제외 액티브 7개 양쪽 획득 순서를 한 묶음으로 검사 |
 | `conch_test kronos attacks` | 공격·상태 이상 펫 13종을 같은 런에서 순차 검사 |
 | `conch_test kronos auras` | 오라·추가 발사 펫 7종을 같은 런에서 순차 검사 |

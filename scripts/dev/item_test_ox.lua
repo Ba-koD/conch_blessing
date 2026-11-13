@@ -792,6 +792,12 @@ S.add("OX", "rice", { conditions = true }, function(plan, id)
             string.format("cell=%d spot=%s plant=%s", ctx.cell, spot and string.format("(%.0f,%.0f)", spot.x, spot.y) or "none",
                 tostring(plant ~= nil and plant:Exists()))
     end)
+    -- Where both oxen leave by the same way rice grows along it, often right
+    -- under the player at the start: let that two-second hold run out first.
+    plan.waitUntil(function(player)
+        local left = ox()._test.riceLeft()[GetPtrHash(player)]
+        return left == nil, "hold=" .. tostring(left)
+    end, 90, "the rice hold from where the player started runs out")
     plan.check("off the lines: no bonus", function(player)
         local d, t = bonus(player)
         return d == 1 and t == 1, string.format("damage x%s tears x%s", tostring(d), tostring(t))
