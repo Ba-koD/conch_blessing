@@ -675,6 +675,16 @@ return {
             },
         },
 
+        JEON_WOOCHI = {
+            name = "Jeon Woo-chi",
+            description = "What is a Taoist?",
+            eid = {
+                "Picks at random one of the unfinished sets with the most progress",
+                "#With his Taoist arts, Jeon Woo-chi summons as many items as it takes to complete the chosen set.",
+                "#{{Warning}} Requires REPENTOGON!",
+            },
+        },
+
         -- Familiars
         TIME_MONEY = {
             name = "Time = Money",

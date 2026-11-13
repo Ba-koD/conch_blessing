@@ -25,6 +25,11 @@
     "detail": "gfx/effects/conch_jangseung_ward_af3d.png"
   },
   {
+    "source": "gfx/effects/conch_jeonwoochi.png",
+    "status": "preserved",
+    "detail": "new effect, 3D model pending: original kept"
+  },
+  {
     "source": "gfx/effects/conch_ox.png",
     "status": "preserved",
     "detail": "retired sheet; runtime conch_ox.anm2 uses directions/equipped sleep"
@@ -223,6 +228,11 @@
     "source": "gfx/items/collectibles/jangseung.png",
     "status": "modelled",
     "detail": "gfx/items/collectibles/jangseung_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/jeon_woochi.png",
+    "status": "preserved",
+    "detail": "new item, 3D model pending: original kept"
   },
   {
     "source": "gfx/items/collectibles/kids_menu.png",

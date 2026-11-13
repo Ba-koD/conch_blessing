@@ -53,4 +53,12 @@ return {
         collisionDamage = 0, collisionMass = 0, collisionRadius = 0,
         friction = 1, numGridCollisionPoints = 0, shadowSize = 0,
     },
+    -- 전우치 arriving where a stolen item will stand, casting and vanishing
+    -- in smoke; its frames draw their own shadow.
+    JEON_WOOCHI = {
+        name = "Conch Blessing Jeon Woo-chi", id = 1000, variant = 7789,
+        anm2path = "effects/conch_jeonwoochi.anm2",
+        collisionDamage = 0, collisionMass = 0, collisionRadius = 0,
+        friction = 1, numGridCollisionPoints = 0, shadowSize = 0,
+    },
 }

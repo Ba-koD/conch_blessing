@@ -48,4 +48,5 @@ return {
     { key = "HERMIT_CRAB" },
     { key = "WRONG_ANSWER_NOTE" },
     { key = "SEONNYEO" },
+    { key = "JEON_WOOCHI" },
 }

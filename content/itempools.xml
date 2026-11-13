@@ -18,6 +18,7 @@
         <Item Name="AR Glasses" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Conch Pearl" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Family Combo" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Jeon Woo-chi" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Time = Money" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
     <Pool Name="devil">
@@ -44,6 +45,7 @@
         <Item Name="Round" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Floor" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Jangseung" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Jeon Woo-chi" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Rat" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Ox" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Tiger" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>

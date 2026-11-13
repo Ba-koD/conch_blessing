@@ -679,10 +679,9 @@ function Rune.removeKeepingForms(player, itemId)
     player:RemoveCollectible(itemId, false, ActiveSlot.SLOT_PRIMARY, false)
 end
 
--- Each transformation items count toward, by its tag (playerforms.xml).
-Rune.FORM_TAGS = { GUPPY = "GUPPY", LORD_OF_THE_FLIES = "FLY", MUSHROOM = "MUSHROOM", ANGEL = "ANGEL", BOB = "BOB",
-    DRUGS = "SYRINGE", MOM = "MOM", BABY = "BABY", EVIL_ANGEL = "DEVIL", POOP = "POOP", BOOK_WORM = "BOOK",
-    SPIDERBABY = "SPIDER" }
+-- Each transformation items count toward, by its tag (playerforms.xml); the
+-- table is shared with 전우치 (scripts/lib/player_forms.lua).
+Rune.FORM_TAGS = require("scripts.lib.player_forms").TAGS
 
 -- An absorbed copy used up for good gives its count back, as the engine's own
 -- removal of a held copy would. Needs REPENTOGON's IncrementPlayerFormCounter;

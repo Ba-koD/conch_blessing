@@ -20,6 +20,9 @@ EXCEPTIONS={
  # Fools keeps the original. Remove these two when the model is authored.
  'gfx/items/collectibles/seonnyeo.png':'new item, 3D model pending: original kept',
  'gfx/familiar/familiar_seonnyeo.png':'new item, 3D model pending: original kept',
+ # 전우치 (2026-11-13): new art, not yet modelled; the original is kept.
+ 'gfx/items/collectibles/jeon_woochi.png':'new item, 3D model pending: original kept',
+ 'gfx/effects/conch_jeonwoochi.png':'new effect, 3D model pending: original kept',
 }
 
 

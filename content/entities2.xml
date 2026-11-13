@@ -22,4 +22,5 @@
     <entity name="Conch Blessing Jangseung" id="1000" variant="7786" anm2path="effects/conch_jangseung.anm2" collisionDamage="0" collisionMass="0" collisionRadius="0" friction="1" numGridCollisionPoints="0" shadowSize="12"/>
     <entity name="Conch Blessing Jangseung Ground" id="1000" variant="7787" anm2path="effects/conch_jangseung_ground.anm2" collisionDamage="0" collisionMass="0" collisionRadius="0" friction="1" numGridCollisionPoints="0" shadowSize="0"/>
     <entity name="Conch Blessing Rabbit Tracks" id="1000" variant="7788" anm2path="effects/conch_rabbit_tracks.anm2" collisionDamage="0" collisionMass="0" collisionRadius="0" friction="1" numGridCollisionPoints="0" shadowSize="0"/>
+    <entity name="Conch Blessing Jeon Woo-chi" id="1000" variant="7789" anm2path="effects/conch_jeonwoochi.anm2" collisionDamage="0" collisionMass="0" collisionRadius="0" friction="1" numGridCollisionPoints="0" shadowSize="0"/>
 </entities>

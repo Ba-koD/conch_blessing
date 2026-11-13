@@ -660,6 +660,16 @@ return {
             },
         },
 
+        JEON_WOOCHI = {
+            name = "전우치",
+            description = "도사는 무엇이냐?",
+            eid = {
+                "아직 다 모으지 못한 묶음 가운데 가장 많이 모은 묶음을 하나 아무렇게나 고릅니다",
+                "#전우치가 도술로 고른 묶음을 다 채울 만큼 아이템을 불러냅니다.",
+                "#{{Warning}} 덧붙임 도우미(REPENTOGON)가 있어야 합니다!",
+            },
+        },
+
         -- Familiars
         TIME_MONEY = {
             name = "시간 = 돈",

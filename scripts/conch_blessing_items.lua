@@ -970,6 +970,33 @@ ConchBlessing.ItemData = {
             postNewLevel = "conchCertificate.onPostNewLevel",
         },
     },
+    JEON_WOOCHI = {
+        -- 전우치, the righteous thief of 『전우치전』 (user design 2026-11-13):
+        -- each copy, the moment it is picked up, steals the missing items of the
+        -- transformation its holder is closest to and leaves them as pedestals.
+        type = "passive",
+        id = Isaac.GetItemIdByName("Jeon Woo-chi"),
+        stackable = true, -- every copy picked up steals again
+        gfx = "jeon_woochi.png",
+        pool = {
+            RoomType.ROOM_TREASURE,
+            RoomType.ROOM_SECRET
+        },
+        quality = 3,
+        hidden = false,
+        shopprice = 15,
+        devilprice = 2,
+        origin = { id = CollectibleType.COLLECTIBLE_THE_WIZ, type = "collectible" },
+        flag = "positive",
+        script = "scripts/items/collectibles/jeon_woochi",
+        callbacks = {
+            postAddCollectible = "jeonwoochi.onAddCollectible",
+            postNewRoom = "jeonwoochi.onNewRoom",
+            gameStarted = "jeonwoochi.onGameStarted",
+            preGameExit = "jeonwoochi.onGameExit",
+            preModUnload = "jeonwoochi.onModUnload",
+        },
+    },
 
     -- The twelve zodiac items (십이지) close the collectible group in their own
     -- order, 자 … 해, followed by the familiars and trinkets.

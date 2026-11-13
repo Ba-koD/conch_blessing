@@ -660,6 +660,16 @@ return {
             },
         },
 
+        JEON_WOOCHI = {
+            name = "전우치",
+            description = "도사는 무엇이냐?",
+            eid = {
+                "현재 완성하지 못한 세트중 가장 진행도가 높은 세트를 무작위로 하나 선택합니다",
+                "#전우치가 도술로 선택된 세트를 완성시킬 수 있을 만큼 아이템을 소환합니다.",
+                "#{{Warning}} REPENTOGON이 필요합니다!",
+            },
+        },
+
         -- Familiars
         TIME_MONEY = {
             name = "시간 = 돈",
