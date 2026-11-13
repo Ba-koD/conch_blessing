@@ -27,7 +27,7 @@ class AppearanceTests(unittest.TestCase):
             os.date=function() return today end
             function Vector(x,y) return {X=x,Y=y} end
             ModCallbacks={MC_POST_UPDATE=1,MC_PRE_GAME_EXIT=2,MC_POST_GAME_STARTED=3,
-                MC_PRE_MOD_UNLOAD=4,MC_POST_ENTITY_REMOVE=5,MC_PRE_CHANGE_ROOM=6}
+                MC_PRE_MOD_UNLOAD=4,MC_POST_ENTITY_REMOVE=5,MC_PRE_CHANGE_ROOM=6,MC_POST_NEW_ROOM=7}
             ConchBlessing={Config={aprilFools3D='auto'},callbacks={},errors={}}
             function ConchBlessing:AddCallback(id,fn) self.callbacks[id]=fn end
             function ConchBlessing.printError(m) table.insert(ConchBlessing.errors,m) end
@@ -64,6 +64,85 @@ class AppearanceTests(unittest.TestCase):
             ConchBlessing.Config.aprilFools3D='on';assert(Config.IsAprilFools3D())
             ConchBlessing.Config.aprilFools3D='off';today.day=1;assert(not Config.IsAprilFools3D())
             ConchBlessing.Config.aprilFools3D='auto';os=nil;assert(not Config.IsAprilFools3D())
+        ''')
+
+    def test_world_skips_plain_entities_until_they_change(self):
+        # The update pass reads every room entity; one without a catalogued sheet
+        # is looked at again only when its type/variant/subtype changes, every
+        # 30 updates, or in a new room. A catalogued one turns every update.
+        self.run_lua('''
+            ConchBlessing.Config.aprilFools3D='on';A.Refresh()
+            local reads={}
+            local function actor(hash,path)
+                local a={hash=hash,Type=10,Variant=0,SubType=0,s=sprite(path)}
+                function a:Exists() return true end
+                function a:GetSprite() reads[self.hash]=(reads[self.hash] or 0)+1; return self.s end
+                return a
+            end
+            local foe,pet=actor(1,'gfx/monsters/foe.png'),actor(2,own)
+            Isaac={GetRoomEntities=function() return {foe,pet} end}
+            function Game() return {GetFrameCount=function() return tick end,
+                GetRoom=function() return {GetDoor=function() return nil end} end} end
+            local world=ConchBlessing.callbacks[ModCallbacks.MC_POST_UPDATE]
+            for f=0,9 do tick=f; world() end
+            assert(reads[1]==1,'a plain entity was read '..reads[1]..' times')
+            assert(reads[2]==10 and pet.s.layer.crop.X>0,'the catalogued one stopped turning')
+            foe.SubType=1; tick=10; world(); assert(reads[1]==2,'a changed entity was not read again')
+            tick=39; world(); assert(reads[1]==2)
+            tick=40; world(); assert(reads[1]==3,'no recheck after a second')
+            ConchBlessing.callbacks[ModCallbacks.MC_POST_NEW_ROOM](); tick=41; world()
+            assert(reads[1]==4,'a new room kept the old verdict')
+        ''')
+
+    def test_a_crop_left_inside_a_strip_heals_both_ways(self):
+        # A missed restore can leave the original sheet at a strip frame's crop
+        # (drawn from empty texture: invisible). Switching on folds it back into
+        # the first frame; switching off puts that folded base back.
+        self.run_lua('''
+            ConchBlessing.Config.aprilFools3D='on';A.Refresh()
+            s=sprite(own);s.layer.crop=Vector(96,3)
+            tick=0;A.Apply(s)
+            assert(s.layer.path:find('_spin.png',1,true) and s.layer.crop.X==0 and s.layer.crop.Y==3,
+                'strip started at '..s.layer.crop.X)
+            tick=10;A.Apply(s);assert(s.layer.crop.X==160)
+            ConchBlessing.Config.aprilFools3D='off';A.Refresh()
+            assert(s.layer.path==own and s.layer.crop.X==0 and s.layer.crop.Y==3,'off left crop '..s.layer.crop.X)
+        ''')
+
+    def test_a_3d_layer_without_a_record_is_put_back_after_switching_off(self):
+        # A sprite still drawn from our strip with no record (a reload, a lost
+        # wrapper) goes back to its original sheet and first frame when drawn
+        # shortly after the switch goes off, and is left alone after that.
+        self.run_lua('''
+            ConchBlessing.Config.aprilFools3D='on';A.Refresh()
+            local strip='gfx/items/collectibles/conch_pearl_af3d_spin.png'
+            tick=100
+            ConchBlessing.Config.aprilFools3D='off';A.Refresh()
+            s=sprite(strip);s.layer.crop=Vector(320,0)
+            tick=120;A.Apply(s)
+            assert(s.layer.path==own and s.layer.crop.X==0,'not healed: '..s.layer.path..' '..s.layer.crop.X)
+            late=sprite(strip);late.layer.crop=Vector(320,0)
+            tick=200;A.Apply(late)
+            assert(late.layer.path==strip and late.loads==0,'healed outside the window')
+        ''')
+
+    def test_doors_are_restored_after_their_wrappers_are_collected(self):
+        # A door's sprite is a fresh wrapper on every GetSprite; the record is
+        # the door slot's, so switching off still finds and restores it.
+        self.run_lua('''
+            local exitDoor='gfx/grid/door_01x_ghostexit_green.png'
+            local shared=sprite(exitDoor).layer
+            local door={}
+            function door:GetSprite() local w=sprite(exitDoor);w.layer=shared;return w end
+            Isaac={GetRoomEntities=function() return {} end}
+            function Game() return {GetFrameCount=function() return tick end,
+                GetRoom=function() return {GetDoor=function(_,slot) if slot==0 then return door end end} end} end
+            ConchBlessing.Config.aprilFools3D='on';A.Refresh()
+            local world=ConchBlessing.callbacks[ModCallbacks.MC_POST_UPDATE]
+            tick=1;world();assert(shared.path:find('_af3d.png',1,true))
+            collectgarbage('collect');collectgarbage('collect')
+            ConchBlessing.Config.aprilFools3D='off';A.Refresh()
+            assert(shared.path==exitDoor,'door stayed 3D: '..shared.path)
         ''')
 
     def test_full_turn_pause_and_exact_restoration(self):

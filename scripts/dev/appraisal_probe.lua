@@ -173,7 +173,10 @@ local function build(plan)
                     return nil, anm2 .. "; sheet not readable without REPENTOGON"
                 end
                 local sheet = layer:GetSpritesheetPath()
-                return sheet:lower():find("door_01x_ghostexit_green.png", 1, true) ~= nil, anm2 .. "; " .. sheet
+                -- With April Fools 3D on, the same green sheet's 3D version is drawn.
+                local s = sheet:lower()
+                return (s:find("door_01x_ghostexit_green.png", 1, true) or s:find("door_01x_ghostexit_green_af3d.png", 1, true)) ~= nil,
+                    anm2 .. "; " .. sheet
             end
         end
         return false, "no live return door"

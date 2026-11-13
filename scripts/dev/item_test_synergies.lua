@@ -272,7 +272,9 @@ S.add("ATROPOS","death_certificate",{synergies=true,conditions=true},function(pl
         local layer=type(sprite.GetLayer)=="function" and sprite:GetLayer(3) or nil
         if not (layer and type(layer.GetSpritesheetPath)=="function") then return nil,"spritesheet inspection unavailable" end
         local sheet=layer:GetSpritesheetPath()
-        return sheet:lower():find("door_01x_ghostexit_green.png",1,true)~=nil,tostring(sheet)
+        -- With April Fools 3D on, the same green sheet's 3D version is drawn.
+        local s=sheet:lower()
+        return (s:find("door_01x_ghostexit_green.png",1,true) or s:find("door_01x_ghostexit_green_af3d.png",1,true))~=nil,tostring(sheet)
     end)
     plan.require("return door is on the reachable left wall",function(player)
         local grid=StageAPI.GetCustomDoors("ConchBlessingAtroposDeathCertificateReturn")[1]
