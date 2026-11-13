@@ -1,7 +1,7 @@
 -- 선녀 (Seonnyeo): the Magic Conch's positive answer to Succubus (user design
 -- 2026-11-13). A heavenly maiden roams the room the way Succubus does. While
--- her owner stands in her golden light their tears are x1.2, and lights that
--- overlap multiply with no cap (two: x1.44). Like Succubus's aura her light
+-- her owner stands in her golden light their tears are x1.3, and lights that
+-- overlap multiply with no cap (two: x1.69). Like Succubus's aura her light
 -- hurts the enemies in it on a fixed tick, but by her owner's fire rate
 -- rather than a fixed 2.5: each tick deals their tears (shots a second), so
 -- it grows with every light they stand in. She gives no damage multiplier,
@@ -18,7 +18,7 @@ ConchBlessing.seonnyeo = M
 local ITEM_ID = Isaac.GetItemIdByName("Seonnyeo")
 
 M.data = {
-    tears = 1.2,      -- per light the owner stands in; lights multiply
+    tears = 1.3,      -- per light the owner stands in; lights multiply
     -- world units: the halo (`censer halo.png`, drawn at 100%) fades to half
     -- at 87 px, and a 40-unit grid cell is 26 px on screen
     radius = 87 * 40 / 26,
@@ -41,7 +41,6 @@ M.data = {
     -- her 7-unit body never meets the wall, which would slow her
     margin = 8,
     turn = 0.5,       -- share of the way to the new heading taken each update
-    lean = 7,         -- degrees she leans into her drift
     -- her light hurts the enemies in it every `tick` updates for the owner's
     -- tears (shots a second) x `perTears`. Succubus's aura ticks 2.5 every 7
     -- updates, the same with BFFS (measured), so BFFS only widens hers
@@ -123,10 +122,9 @@ function M.onFamiliarUpdate(_, familiar)
     else
         drift(familiar)
     end
-    local velocity = familiar.Velocity
-    -- she leans a little into the way she drifts, easing over a few updates
-    local lean = math.max(-M.data.lean, math.min(M.data.lean, velocity.X / M.data.speed * M.data.lean))
-    familiar.SpriteRotation = familiar.SpriteRotation + (lean - familiar.SpriteRotation) * 0.15
+    -- she stays upright like the vanilla familiars (user request 2026-11-13:
+    -- the lean into her drift is gone); one leaned by an older build straightens
+    if familiar.SpriteRotation ~= 0 then familiar.SpriteRotation = 0 end
     local sprite = familiar:GetSprite()
     if not sprite:IsPlaying("Float") then sprite:Play("Float", true) end
     if familiar.FrameCount % M.data.tick == 0 then M.hurt(familiar) end

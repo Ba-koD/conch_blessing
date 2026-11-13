@@ -1311,7 +1311,7 @@ ConchBlessing.ItemData = {
     },
     SEONNYEO = {
         -- 선녀: the Magic Conch's Succubus. A heavenly maiden roams the room
-        -- like Succubus; inside her golden aura her owner's tears are x1.2,
+        -- like Succubus; inside her golden aura her owner's tears are x1.3,
         -- and auras stacked on each other multiply (user design 2026-11-13).
         type = "familiar",
         id = Isaac.GetItemIdByName("Seonnyeo"),

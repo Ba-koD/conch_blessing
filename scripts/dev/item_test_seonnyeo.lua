@@ -2,7 +2,7 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- 선녀 (Seonnyeo): the lifecycle contract and its cases. Every check reads
 -- the maidens really in the room, their real positions and the player's real
 -- fire rate (30 / (MaxFireDelay + 1)) against the rate measured without the
--- item; the expected rate is 1.2 per light the player stands in.
+-- item; the expected rate is 1.3 per light the player stands in.
 local S = require("scripts.dev.item_scenarios")
 local H = require("scripts.dev.item_test_support")
 local C = {}
@@ -47,7 +47,7 @@ local function pin(player, offset)
 end
 
 -- Pins the maidens at `offset()` (read when the case runs) for a few updates,
--- then compares the fire rate with the rate without the item times 1.2^`lights`.
+-- then compares the fire rate with the rate without the item times 1.3^`lights`.
 local function expectRate(plan, label, offset, lights)
     plan.act(function(player, ctx) ctx.pin = offset() end)
     for _ = 1, 4 do
@@ -81,7 +81,7 @@ C.SEONNYEO = { stage = function(plan, _, n)
     end)
 end }
 
--- Her light: x1.2 inside it, nothing outside, two lights x1.44, and the
+-- Her light: x1.3 inside it, nothing outside, two lights x1.69, and the
 -- multiplier gone once the item is.
 S.add("SEONNYEO", "light", {}, function(plan, id)
     requireModule(plan)
@@ -91,18 +91,18 @@ S.add("SEONNYEO", "light", {}, function(plan, id)
         give(player, id, 1)
     end)
     plan.waitUntil(function(player) return #maidens(player) == 1, "maidens=" .. #maidens(player) end, 30, "the maiden appears")
-    expectRate(plan, "standing in her light: tears x1.2", function() return Vector(20, 0) end, 1)
+    expectRate(plan, "standing in her light: tears x1.3", function() return Vector(20, 0) end, 1)
     -- Pinned once an update, she still moves on her own between the pin and
     -- the moment the light is counted: up to about 13 units either way
     -- (measured 2026-11-13: pinned 6 outside the edge she was counted 1.2
     -- inside it, and pinned 4 inside she was 4.2 outside). The edge is tested
     -- 20 units either side of it.
-    expectRate(plan, "near the inside edge of her light: still x1.2",
+    expectRate(plan, "near the inside edge of her light: still x1.3",
         function() return Vector(seonnyeo().data.radius - 20, 0) end, 1)
     expectRate(plan, "just outside it: no change", function() return Vector(seonnyeo().data.radius + 20, 0) end, 0)
     plan.act(function(player) give(player, id, 2) end)
     plan.waitUntil(function(player) return #maidens(player) == 2, "maidens=" .. #maidens(player) end, 30, "a second maiden appears")
-    expectRate(plan, "in two lights: tears x1.44", function() return Vector(10, 0) end, 2)
+    expectRate(plan, "in two lights: tears x1.69", function() return Vector(10, 0) end, 2)
     plan.act(function(player) give(player, id, 0) end)
     plan.waitUntil(function(player) return #maidens(player) == 0, "maidens=" .. #maidens(player) end, 30, "the maidens leave")
     plan.wait(3)
@@ -214,7 +214,7 @@ S.add("SEONNYEO", "bffs", {}, function(plan, id)
 end, { "bffs" })
 
 -- Kronos absorbs her like Succubus: her light stays on its holder. No
--- maiden is left in the room; the holder's tears are x1.2 wherever they stand
+-- maiden is left in the room; the holder's tears are x1.3 wherever they stand
 -- and an enemy near them loses their tears each tick, one far away nothing.
 S.add("SEONNYEO", "kronos", {}, function(plan, id)
     requireModule(plan)
@@ -234,7 +234,7 @@ S.add("SEONNYEO", "kronos", {}, function(plan, id)
             "absorbed=" .. seonnyeo().absorbed(player) .. " maidens=" .. #maidens(player)
     end, 120, "Kronos absorbs her")
     plan.wait(4)
-    plan.check("her light stays on the holder: tears x1.2", function(player, ctx)
+    plan.check("her light stays on the holder: tears x1.3", function(player, ctx)
         local want = ctx.baseTears * seonnyeo().data.tears
         return H.near(tears(player), want), string.format("tears %.4f, expected %.4f", tears(player), want)
     end)
@@ -312,7 +312,7 @@ S.add("SEONNYEO", "roam", {}, function(plan, id)
     end)
     plan.act(function(player) give(player, id, 0) end)
     plan.wait(4)
-    plan.section("SEONNYEO / roam", "she drifts about the room, leaning into her drift, silk and hem swaying, in a gold halo")
+    plan.section("SEONNYEO / roam", "she drifts about the room upright, silk and hem swaying, in a gold halo")
 end)
 
 -- Measurement only (run by name): how the real vanilla Succubus moves, so

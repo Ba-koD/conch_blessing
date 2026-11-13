@@ -1,10 +1,10 @@
 """선녀 (Heavenly Maiden): the Magic Conch's positive answer to Succubus
 (user concept 2026-11-13). Authored directly on the native 32x32 grid.
 
-    python docs/previews/seonnyeo/author.py      writes the review sheet to
-                                                 .tmp/seonnyeo/review.png
-
-Nothing here is a runtime asset yet; the user reviews the draft first.
+    python docs/previews/seonnyeo/author.py        writes the review sheets
+                                                   to .tmp/seonnyeo/
+    python docs/previews/seonnyeo/author.py apply  also writes the icon, the
+                                                   familiar sheet and anm2
 """
 import os
 
@@ -62,80 +62,78 @@ def put(g, y, cells):
             g[y][x] = ch
 
 
-def entity_rows(hem="right"):
-    """선녀, full length (the familiar): a small oval face under the loops, a
-    pink jeogori with 색동 sleeves, a long white skirt floating at the hem."""
-    g = blank()
-    # Matched to the item icon (user choice 2026-11-13): small round 쌍계 with
-    # a hole, leaning a little outward from the crown; a slim gold band with
-    # a red jewel and a touch of 색동; hair covering the crown and swept down
-    # over the forehead corners; an oval face with calm, lowered closed eyes
-    # and a small closed mouth.
-    put(g, 0, {(10, 12): "K", (19, 21): "K"})
-    put(g, 1, {9: "K", 10: "h", 11: ".", 12: "H", 13: "K", 18: "K", 19: "H", 20: ".", 21: "H", 22: "K"})
-    put(g, 2, {9: "K", (10, 12): "H", (13, 18): "K", (19, 21): "H", 22: "K"})
-    put(g, 3, {10: "K", 11: "H", 12: "N", (13, 14): "G", (15, 16): "R", (17, 18): "G", 19: "U", 20: "H", 21: "K"})
-    # the hair covers the crown down to a small, level forehead
-    put(g, 4, {10: "K", 11: "h", 12: "h", (13, 20): "H", 21: "K"})
-    put(g, 5, {10: "K", 11: "h", (12, 20): "H", 21: "K"})
-    put(g, 6, {10: "K", 11: "h", (12, 20): "H", 21: "K"})
-    put(g, 7, {10: "K", 11: "h", 12: "H", (13, 14): "S", (15, 16): "R", (17, 18): "S", 19: "H", 20: "H", 21: "K"})
-    put(g, 8, {10: "K", 11: "H", (12, 18): "S", 19: "s", 20: "H", 21: "K"})
-    # closed eyes, lowered and calm
-    put(g, 9, {10: "K", 11: "H", 12: "S", (13, 14): "E", (15, 16): "S", (17, 18): "E", 19: "s", 20: "H", 21: "K"})
-    # faint 연지, the nose's shadow
-    put(g, 10, {10: "K", 11: "H", 12: "j", (13, 15): "S", 16: "s", (17, 18): "S", 19: "j", 20: "H", 21: "K"})
-    # a small closed mouth
-    put(g, 11, {10: "K", 11: "H", (12, 14): "S", (15, 16): "Q", (17, 18): "S", 19: "s", 20: "H", 21: "K"})
-    # the jaw narrows to a small chin; the hair falls behind it
-    put(g, 12, {10: "K", 11: "H", 12: "K", (13, 17): "S", 18: "s", 19: "K", 20: "H", 21: "K"})
-    put(g, 13, {10: "K", (11, 12): "H", 13: "K", (14, 16): "S", 17: "s", 18: "K", (19, 20): "H", 21: "K"})
-    # pink jeogori with a white collar and a slender neck; hair over the shoulders
-    put(g, 14, {10: "K", 11: "H", 12: "P", 13: "W", (14, 17): "K", 18: "W", 19: "P", 20: "H", 21: "K"})
-    put(g, 15, {9: "K", 10: "P", 11: "H", (12, 13): "P", 14: "W", (15, 16): "S", 17: "W", (18, 19): "P", 20: "H", 21: "P", 22: "K"})
-    put(g, 16, {8: "K", (9, 10): "P", 11: "H", (12, 14): "P", (15, 16): "W", (17, 19): "P", 20: "H", (21, 22): "p", 23: "K"})
-    put(g, 17, {7: "K", (8, 15): "P", 16: "T", (17, 23): "P", 24: "K"})
-    # wide sleeves at the sides; the long white skirt below a red tie
-    put(g, 18, {6: "K", (7, 9): "P", 10: "K", (11, 15): "W", 16: "T", (17, 20): "W", 21: "K", (22, 23): "P", 24: "p", 25: "K"})
-    put(g, 19, {6: "K", (7, 9): "P", 10: "K", (11, 15): "W", 16: "T", (17, 20): "W", 21: "K", (22, 23): "P", 24: "p", 25: "K"})
-    put(g, 20, {6: "K", (7, 9): "R", 10: "K", (11, 20): "W", 21: "K", (22, 24): "R", 25: "K"})
-    put(g, 21, {6: "K", (7, 9): "Y", 10: "K", (11, 14): "W", 15: "w", (16, 20): "W", 21: "K", (22, 24): "Y", 25: "K"})
-    put(g, 22, {6: "K", (7, 9): "U", 10: "K", (11, 14): "W", 15: "w", (16, 19): "W", 20: "w", 21: "K", (22, 24): "U", 25: "K"})
-    # hands peeking from the sleeves
-    put(g, 23, {7: "K", 8: "S", 9: "K", (10, 14): "W", 15: "w", (16, 19): "W", 20: "w", 21: "W", 22: "K", 23: "S", 24: "K"})
-    put(g, 24, {8: "K", 9: "K", (10, 14): "W", 15: "w", (16, 19): "W", 20: "w", 21: "W", 22: "K", 23: "K"})
-    # the skirt flares and floats; its hem sways (HEMS)
-    put(g, 25, {8: "K", (9, 14): "W", 15: "w", (16, 19): "W", 20: "w", (21, 22): "W", 23: "K"})
-    for y, cells in HEMS[hem].items():
-        put(g, y, cells)
-    return ["".join(r) for r in g]
-
-
-# The hem as it sways: lifted to her right, level, lifted to her left. The
-# shaded side stays on the right (light from the top left).
-HEMS = {
-    "right": {
-        26: {8: "K", (9, 13): "W", 14: "w", (15, 19): "W", 20: "w", (21, 22): "W", 23: "w", 24: "K"},
-        27: {7: "K", (8, 13): "W", 14: "w", (15, 20): "W", 21: "w", 22: "W", (23, 24): "w", 25: "K"},
-        28: {7: "K", (8, 13): "W", 14: "w", (15, 20): "W", 21: "w", (22, 23): "W", (24, 25): "w", 26: "K"},
-        29: {6: "K", (7, 25): "w", 26: "K"},
-        30: {(7, 26): "K"},
-    },
-    "level": {
-        26: {7: "K", (8, 13): "W", 14: "w", (15, 19): "W", 20: "w", (21, 22): "W", 23: "w", 24: "K"},
-        27: {7: "K", (8, 13): "W", 14: "w", (15, 20): "W", 21: "w", 22: "W", 23: "w", 24: "K"},
-        28: {6: "K", (7, 13): "W", 14: "w", (15, 20): "W", 21: "w", (22, 23): "W", 24: "w", 25: "K"},
-        29: {6: "K", (7, 24): "w", 25: "K"},
-        30: {(6, 25): "K"},
-    },
-    "left": {
-        26: {6: "K", (7, 13): "W", 14: "w", (15, 19): "W", 20: "w", 21: "W", 22: "w", 23: "K"},
-        27: {5: "K", (6, 13): "W", 14: "w", (15, 20): "W", 21: "w", 22: "w", 23: "K"},
-        28: {4: "K", (5, 13): "W", 14: "w", (15, 20): "W", 21: "w", 22: "w", 23: "K"},
-        29: {4: "K", (5, 22): "w", 23: "K"},
-        30: {(5, 22): "K"},
-    },
+# The familiar (user direction 2026-11-13: more like Isaac's own familiars).
+# Seraphim, Guardian Angel and the Brother Bobby family are a big round head
+# over a small body that tapers to a point, drawn at 100% with the
+# near-black (8, 0, 0) outline two pixels thick at the sides and flat colour
+# in two or three tones lit from the top left; Isaac's own skin tones and
+# Eve's dark hair are used here. 선녀 keeps what the user chose: small round
+# 쌍계 with a hole, the gold band with its red jewel and 색동, 곤지, closed
+# lowered eyes and a small red mouth, a pink jeogori with a white 동정, hands
+# folded into 색동 cuffs and the white skirt floating to a point. Her body
+# stays still; only her silk moves (user request).
+FAMILIAR_PALETTE = {
+    ".": (0, 0, 0, 0),
+    "K": (8, 0, 0, 255),        # the vanilla outline
+    "H": (51, 51, 51, 255),     # hair (Eve's)
+    "D": (31, 31, 31, 255),     # hair shade (Eve's)
+    "l": (92, 90, 104, 255),    # hair sheen
+    "S": (227, 198, 197, 255),  # Isaac's skin
+    "s": (207, 156, 155, 255),  # its shade
+    "E": (74, 46, 52, 255),     # closed eyes, as on the icon
+    "R": (214, 32, 50, 255),    # 곤지, lips, jewel, the tie, 색동 red
+    "j": (236, 150, 150, 255),  # 연지
+    "G": (248, 204, 72, 255),   # gold band, 색동 yellow
+    "U": (72, 132, 222, 255),   # 색동 blue
+    "N": (78, 178, 112, 255),   # 색동 green
+    "P": (242, 150, 178, 255),  # jeogori
+    "p": (206, 104, 140, 255),  # its shade
+    "W": (252, 252, 252, 255),  # skirt, 동정
+    "w": (192, 198, 216, 255),  # its shade
+    # the 피백: fine translucent silk with a soft edge instead of an outline
+    "L": (255, 255, 255, 235),  # the sheen along it
+    "B": (210, 232, 255, 172),  # its translucent body, faintly sky
+    "F": (172, 200, 242, 185),  # the side turned from the light, a fold
+    "o": (150, 186, 240, 118),  # its soft edge, barely there
+    "t": (230, 242, 255, 110),  # the end, thinning and fading
+    "T": (196, 216, 248, 90),   # the end's soft edge
 }
+
+# centred on the frame (pivot 16, 16), where her light is measured from
+FAMILIAR_BODY = [
+    "................................",
+    ".......KKK............KKK.......",  # the 쌍계, small round loops with a hole
+    "......KlHHK..........KHHDK......",
+    "......KH.HK.KKKKKKKK.KH.DK......",
+    ".......KHHKllHHHHHHHHKHDK.......",
+    ".......KKKHlHGGRRGGHHDKKK.......",  # the gold band, its red jewel
+    "........KHNUGHHHHHHGUNDK........",  # 색동 at its ends
+    ".......KHHHHHHHHHHHHHHDDK.......",
+    ".......KHHHHSSSSSSSSHHHDK.......",
+    ".......KHHHSSSSRRSSSSHHDK.......",  # 곤지
+    ".......KHHSESSESSESSEsHDK.......",  # closed eyes, lowered and calm
+    ".......KHHSSEESSSSEESsHDK.......",
+    ".......KHHSjSSSSSSSSjsHDK.......",  # 연지
+    ".......KHHHSSSSRRSSSsHHDK.......",  # a small red mouth
+    "........KHHKSSSSSSSsKHDK........",
+    ".........KHHKKssssKKHDK.........",
+    "........KPPPPPWssWPPPPpK........",  # the jeogori and its white 동정
+    ".......KPPPPPPPWWPPPPPppK.......",
+    ".......KPPPpPPPRRPPPpPPpK.......",  # the red tie
+    ".......KPPPPRGUSSUGRPPppK.......",  # hands folded into 색동 cuffs
+    "........KPPPRGUssUGRPppK........",
+    ".........KpKWWWWWWWWKpK.........",
+    "..........KWWWWWWWWWwK..........",  # the white skirt, floating to a point
+    "..........KWWWWWWWWwwK..........",
+    "...........KWWWWWWwwK...........",
+    "...........KWWWWWWwwK...........",
+    "............KWWWWwwK............",
+    ".............KWWwwK.............",
+    "..............KwwK..............",
+    "...............KK...............",
+    "................................",
+    "................................",
+]
 
 
 def sym(g, y, x0, x1, ch, mirror_ch=None):
@@ -274,78 +272,11 @@ def face_rows():
     return ["".join(r) for r in g]
 
 
-def bust_rows():
-    """The item icon: 선녀 close up, from the bands to the sleeves. Larger
-    hair loops, the same face given more room, and her body as the entity's
-    from the chin down, cut at the sleeves."""
-    g = blank()
-    left = {
-        0: {(6, 8): "K"},
-        1: {5: "K", 6: "h", 7: "H", 8: "H", 9: "K"},
-        2: {4: "K", 5: "h", 6: "H", 7: "K", 8: "H", 9: "H", 10: "K"},
-        3: {4: "K", 5: "H", 6: "K", 8: "K", 9: "H", 10: "K"},
-        4: {4: "K", 5: "H", 6: "K", 8: "K", 9: "H", 10: "H", 11: "K"},
-        5: {5: "K", 6: "H", 7: "K", 8: "K", 9: "H", 10: "H", 11: "K"},
-        6: {6: "K", 7: "H", 8: "H", 9: "H", 10: "H", 11: "H", 12: "K"},
-    }
-    for y, cells in left.items():
-        shifted = {}
-        for key, ch in cells.items():
-            x0, x1 = key if isinstance(key, tuple) else (key, key)
-            shifted[(x0 + 1, x1 + 1)] = ch
-        put(g, y, shifted)
-        put(g, y, {(30 - x1, 30 - x0): ("H" if ch == "h" else ch)
-                   for (x0, x1), ch in ((k if isinstance(k, tuple) else (k, k), c) for k, c in cells.items())})
-    g[1][21] = "h"
-    g[2][20] = "h"
-    put(g, 7, {10: "K", 11: "R", 12: "Y", 13: "N", 14: "U", 15: "R", 16: "Y", 17: "N", 18: "U", 19: "R", 20: "Y", 21: "K"})
-    put(g, 8, {9: "K", (10, 14): "G", (15, 16): "R", (17, 20): "G", 21: "g", 22: "K"})
-    put(g, 9, {9: "K", 10: "H", (11, 12): "h", (13, 21): "H", 22: "K"})
-    put(g, 10, {9: "K", 10: "h", (11, 13): "H", (14, 17): "S", (18, 21): "H", 22: "K"})
-    put(g, 11, {9: "K", 10: "h", 11: "H", (12, 14): "S", (15, 16): "R", (17, 19): "S", (20, 21): "H", 22: "K"})
-    put(g, 12, {9: "K", 10: "h", 11: "H", (12, 18): "S", 19: "s", (20, 21): "H", 22: "K"})
-    put(g, 13, {9: "K", 10: "H", 11: "H", (12, 18): "S", 19: "s", (20, 21): "H", 22: "K"})
-    put(g, 14, {9: "K", 10: "H", 11: "H", 12: "S", (13, 14): "E", (15, 16): "S", (17, 18): "E", 19: "s", (20, 21): "H", 22: "K"})
-    put(g, 15, {9: "K", 10: "H", 11: "H", (12, 18): "S", 19: "s", (20, 21): "H", 22: "K"})
-    put(g, 16, {9: "K", 10: "H", 11: "H", 12: "r", (13, 15): "S", 16: "s", (17, 18): "S", 19: "r", (20, 21): "H", 22: "K"})
-    put(g, 17, {9: "K", 10: "H", 11: "H", (12, 14): "S", (15, 16): "Q", (17, 18): "S", 19: "s", (20, 21): "H", 22: "K"})
-    put(g, 18, {9: "K", 10: "H", 11: "H", 12: "K", (13, 17): "S", 18: "s", 19: "K", (20, 21): "H", 22: "K"})
-    put(g, 19, {9: "K", (10, 12): "H", 13: "K", (14, 16): "S", 17: "s", 18: "K", (19, 21): "H", 22: "K"})
-    # the entity's body from the chin down, a column of hair either side
-    body = entity_rows("level")
-    for y in range(14, 26):
-        row = list(body[y])
-        g[y + 6] = row
-    for y in (20, 21):
-        g[y][9], g[y][10] = "K", "H"
-        g[y][21], g[y][22] = "H", "K"
-    return ["".join(r) for r in g]
-
-
-# The 피백 scarf: a long, light silk ribbon on each side. It rises from
-# behind the shoulder into a loop beside the head and flutters down in a
-# wave past the sleeve to a free end. The shape is a smooth spline whose
-# width swells and thins and which twists once (its shaded inner side shows);
-# the hand-placed control points are the art. It is translucent and outlined
-# in pale blue rather than black, so it reads as silk, not rope.
+# The icon's silk (`FACE_SILK`): a smooth spline whose width swells and
+# thins and which twists once (its shaded inner side shows); the hand-placed
+# control points are the art. It is translucent and outlined in pale blue
+# rather than black, so it reads as silk, not rope.
 import math
-
-SCARF_PATHS = [
-    # (control points, widths along the ribbon, twist range)
-    # the left streamer: up from behind the shoulder, a curl beside the head,
-    # then a wave down past the sleeve to its free end
-    ([(9.0, 16.5), (6.0, 13.5), (3.6, 10.0), (2.6, 6.6), (4.4, 4.4), (5.6, 6.4),
-      (3.2, 9.0), (1.0, 12.5), (2.8, 16.6), (4.0, 20.5), (1.8, 24.2), (0.8, 27.4), (2.6, 30.4)],
-     [1.1, 1.4, 1.5, 1.2, 1.2, 1.5, 1.6, 1.3, 1.5, 1.2, 1.6], (0.55, 0.61)),
-    ([(22.0, 16.5), (25.0, 13.5), (27.4, 10.0), (28.4, 6.6), (26.6, 4.4), (25.4, 6.4),
-      (27.8, 9.0), (30.0, 12.5), (28.2, 16.6), (27.0, 20.5), (29.2, 24.2), (30.2, 27.4), (28.6, 30.4)],
-     [1.1, 1.4, 1.5, 1.2, 1.2, 1.5, 1.6, 1.3, 1.5, 1.2, 1.6], (0.66, 0.72)),
-    # the silk wrapped round behind her: a faint loop behind the head and
-    # shoulders, seen only between her and the streamers
-    ([(15.5, 6.6), (22.0, 7.4), (25.6, 10.6), (26.2, 15.0), (24.6, 19.4), (20.0, 22.6),
-      (15.5, 23.4), (11.0, 22.6), (6.4, 19.4), (4.8, 15.0), (5.4, 10.6), (9.0, 7.4), (15.5, 6.6)],
-     [1.8] * 11, (2.0, 2.0)),
-]
 
 
 def _spline(points, n=600):
@@ -403,10 +334,6 @@ def scarf_cells(path):
     return cells
 
 
-SCARF_BACK = {y: [(x, "F" if ch == "b" else "f") for x, ch in cells]
-              for y, cells in scarf_cells(SCARF_PATHS[2]).items()}
-
-
 def compose(rows, *scarves):
     grid = [list(r) for r in rows]
     for scarf in scarves:
@@ -428,12 +355,12 @@ def compose(rows, *scarves):
     return ["".join(r) for r in out]
 
 
-def image(rows):
+def image(rows, palette=PALETTE):
     assert len(rows) == 32 and all(len(r) == 32 for r in rows), [len(r) for r in rows]
     im = Image.new("RGBA", (32, 32))
     for y, row in enumerate(rows):
         for x, ch in enumerate(row):
-            im.putpixel((x, y), PALETTE[ch])
+            im.putpixel((x, y), palette[ch])
     return im
 
 
@@ -455,40 +382,78 @@ def review(icon):
     return sheet
 
 
-# The familiar: the same 선녀, her silk fluttering. Each frame moves the
-# streamers' control points along a travelling wave, the shoulder end held
-# still and the free end moving most, the two sides out of step; the faint
-# loop behind her stays. The anm2 bobs her gently and lays the vanilla
-# Censer/Succubus halo (referenced in place, never copied) under her in gold
-# as the aura in which her owner's tears are faster.
+# The familiar's silk: one ribbon of even width on each side, like the
+# original 피백 (user requests 2026-11-13). It arcs out from behind the
+# shoulder over the top beside her head and down the outside, the upper wing
+# of a butterfly, tucks in at the shoulder and falls almost straight, not
+# bulging out, to an end that thins and fades. Fine silk: a sheen along it
+# that crosses to the other side where it turns, a translucent body and a
+# soft edge. Her left side as (x, y, colour); the right mirrors it with the
+# sheen on the same side, so the pair reads as wings.
+SILK_ARC = {
+    "open": [
+        (3, 8, "L"), (4, 8, "L"), (5, 8, "B"), (6, 8, "B"), (2, 9, "L"), (3, 9, "B"),
+        (4, 9, "F"), (5, 9, "F"), (6, 9, "F"), (1, 10, "L"), (2, 10, "B"), (1, 11, "L"),
+        (2, 11, "B"), (1, 12, "B"), (2, 12, "L"), (1, 13, "F"), (2, 13, "L"), (1, 14, "F"),
+        (2, 14, "L"), (2, 15, "F"), (3, 15, "L"), (3, 16, "L"), (4, 16, "B"), (4, 17, "L"),
+        (5, 17, "B"), (5, 18, "L"), (6, 18, "B"),
+    ],
+    "shut": [
+        (4, 8, "L"), (5, 8, "B"), (6, 8, "B"), (3, 9, "L"), (4, 9, "B"), (5, 9, "F"),
+        (6, 9, "F"), (2, 10, "L"), (3, 10, "B"), (2, 11, "L"), (3, 11, "B"), (2, 12, "B"),
+        (3, 12, "L"), (2, 13, "F"), (3, 13, "L"), (2, 14, "F"), (3, 14, "L"), (3, 15, "F"),
+        (4, 15, "L"), (4, 16, "L"), (5, 16, "B"), (4, 17, "L"), (5, 17, "B"), (5, 18, "L"),
+        (6, 18, "B"),
+    ],
+}
+# the hanging end, nearly straight: (row, left x, its cells)
+SILK_HANG = [(19, 5, 'LB'), (20, 5, 'LB'), (21, 5, 'LB'), (22, 4, 'LB'), (23, 4, 'BL'), (24, 4, 'FL'), (25, 4, 'LB'), (26, 3, 'Lt'), (27, 3, 't'), (28, 3, 't')]
 FRAMES = 8
 FRAME_DELAY = 3
-# her hem sways over the cycle while the silk waves
-HEM_CYCLE = ["right", "right", "level", "left", "left", "left", "level", "right"]
-# drawn smaller than the icon: the entity is the full figure at 80%
-ENTITY_SCALE = 80
+# the arc breathes and the free end swings out and back, its lower rows a
+# frame behind
+SILK_ARC_CYCLE = ['open', 'open', 'open', 'shut', 'shut', 'shut', 'shut', 'open']
+SILK_TIP = [0, -1, -1, -1, 0, 1, 1, 0]  # outward is negative on her left
+# drawn at 100% like the vanilla familiars (80% gave uneven pixels)
+ENTITY_SCALE = 100
 
 
-def fluttered(path, phase):
-    points, widths, twist = path
-    n = len(points)
-    moved = [points[0]]
-    for i, (x, y) in enumerate(points[1:], 1):
-        reach = i / (n - 1)
-        moved.append((min(31.3, max(0.3, x + 0.9 * reach * math.sin(phase + i * 0.8))),
-                      min(31.3, max(0.3, y + 0.4 * reach * math.cos(phase + i * 0.8)))))
-    return (moved, widths, twist)
+def silk_cells(k):
+    left = {(x, y): ch for x, y, ch in SILK_ARC[SILK_ARC_CYCLE[k]]}
+    tip, lag = SILK_TIP[k], SILK_TIP[(k - 1) % FRAMES]
+    for y, x, chs in SILK_HANG:
+        dx = tip if y >= 26 else (lag if y >= 24 else 0)
+        for i, ch in enumerate(chs):
+            left[(x + dx + i, y)] = ch
+    cells = {}
+    for (x, y), ch in left.items():
+        cells[(x, y)] = ch
+        cells[(31 - x, y)] = ch
+    return cells
+
+
+def familiar_rows(k):
+    """Frame k: the still body with the silk behind it and its soft edge."""
+    grid = [list(r) for r in FAMILIAR_BODY]
+    silk = silk_cells(k)
+    for (x, y), ch in silk.items():
+        if grid[y][x] == ".":
+            grid[y][x] = ch
+    out = [r[:] for r in grid]
+    for y in range(32):
+        for x in range(32):
+            if grid[y][x] != ".":
+                continue
+            near = [silk.get((x + dx, y + dy)) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))]
+            if any(c and c in "LBF" for c in near):
+                out[y][x] = "o"
+            elif "t" in near:
+                out[y][x] = "T"
+    return ["".join(r) for r in out]
 
 
 def familiar_frame(k):
-    phase = 2 * math.pi * k / FRAMES
-    return image(compose(entity_rows(HEM_CYCLE[k]), scarf_cells(fluttered(SCARF_PATHS[0], phase)),
-                         scarf_cells(fluttered(SCARF_PATHS[1], phase + math.pi)), SCARF_BACK))
-
-
-def shifted(path, dy):
-    points, widths, twist = path
-    return ([(x, y + dy) for x, y in points], widths, twist)
+    return image(familiar_rows(k), FAMILIAR_PALETTE)
 
 
 # The silk behind her face on the icon (user request): from behind each
@@ -508,7 +473,8 @@ def icon_image():
 
 
 # she floats centred on her halo: the frame centre is the entity position
-BOB = [0, -1, -2, -2, -1, 0, 1, 1]
+# her body stays still; only her silk moves (user request 2026-11-13)
+BOB = [0] * FRAMES
 HALO_TINT = (255, 226, 150, 45)  # a little dimmer than first drawn (user request 2026-11-13)
 
 
@@ -563,10 +529,10 @@ RUNTIME = {
 
 
 def preview_gif(path, seconds=10, fps=15, scale=2):
-    """A room-sized preview: the basement floor, her gold halo, her drift and
-    lean computed as `seonnyeo.lua` does (speed 2.2 world units an update,
-    turning back 12 units inside the walls, leaning up to 7 degrees), Isaac
-    standing still, and the tears multiplier he gets. Screen pixels are world
+    """A room-sized preview: the basement floor, her gold halo, her drift
+    (speed 2.2 world units an update, turning back 12 units inside the walls;
+    she stays upright like the vanilla familiars), Isaac standing still, and
+    the tears multiplier he gets. Screen pixels are world
     units x 26/40."""
     from PIL import ImageDraw
     k = 26 / 40
@@ -588,7 +554,6 @@ def preview_gif(path, seconds=10, fps=15, scale=2):
     vel = [2.2 * k * math.cos(math.radians(45)), 2.2 * k * math.sin(math.radians(45))]
     margin = 12 * k
     radius = 87
-    lean = 0.0
     frames = []
     for update in range(seconds * 30):
         if pos[0] + vel[0] < margin or pos[0] + vel[0] > room_w - margin:
@@ -597,7 +562,6 @@ def preview_gif(path, seconds=10, fps=15, scale=2):
             vel[1] = -vel[1]
         pos[0] += vel[0]
         pos[1] += vel[1]
-        lean += (max(-7, min(7, vel[0] / (2.2 * k) * 7)) - lean) * 0.15
         if update % (30 // fps):
             continue
         f = base.copy()
@@ -606,13 +570,12 @@ def preview_gif(path, seconds=10, fps=15, scale=2):
         inside = math.hypot(isaac[0] - pos[0], isaac[1] - pos[1]) <= radius
         d.ellipse((isaac[0] - 6, isaac[1] - 3, isaac[0] + 6, isaac[1] + 3), fill=(0, 0, 0, 90))
         d.ellipse((isaac[0] - 7, isaac[1] - 20, isaac[0] + 7, isaac[1] - 6), fill=(236, 196, 186, 255), outline=(30, 20, 24, 255))
-        d.text((isaac[0] - 14, isaac[1] - 34), "x1.2" if inside else "x1.0",
+        d.text((isaac[0] - 14, isaac[1] - 34), "x1.3" if inside else "x1.0",
                fill=(255, 226, 120, 255) if inside else (230, 230, 230, 255))
         frame = sheet.crop((32 * ((update // FRAME_DELAY) % FRAMES), 0, 32 * ((update // FRAME_DELAY) % FRAMES) + 32, 32))
         frame = frame.resize((size, size), Image.NEAREST)
         pad = Image.new("RGBA", (size * 2, size * 2))
         pad.alpha_composite(frame, (size // 2, size // 2))
-        pad = pad.rotate(-lean, resample=Image.NEAREST, center=(size, size))
         bob = BOB[(update // FRAME_DELAY) % FRAMES]
         f.alpha_composite(pad, (round(pos[0]) - size, round(pos[1]) - size + bob))
         frames.append(f.resize((room_w * scale, room_h * scale), Image.NEAREST).convert("RGB")
