@@ -55,10 +55,17 @@ local function expectRate(plan, label, offset, lights)
         plan.wait(1)
     end
     plan.check(label, function(player, ctx)
+        -- where she really was for the stat, before pinning her again
+        local seen = {}
+        for _, fam in ipairs(maidens(player)) do
+            seen[#seen + 1] = string.format("%.1f", fam.Position:Distance(player.Position) - seonnyeo().data.radius)
+        end
+        local counted = seonnyeo().lightsOver(player, maidens(player))
         pin(player, ctx.pin)
         local want = ctx.baseTears * seonnyeo().data.tears ^ lights
-        return H.near(tears(player), want), string.format("tears %.4f, expected %.4f (base %.4f, %d light(s))",
-            tears(player), want, ctx.baseTears, lights)
+        return H.near(tears(player), want), string.format("tears %.4f, expected %.4f (base %.4f, %d light(s)); "
+            .. "maidens past the edge by [%s], lights counted %d", tears(player), want, ctx.baseTears, lights,
+            table.concat(seen, ","), counted)
     end)
 end
 
@@ -85,9 +92,14 @@ S.add("SEONNYEO", "light", {}, function(plan, id)
     end)
     plan.waitUntil(function(player) return #maidens(player) == 1, "maidens=" .. #maidens(player) end, 30, "the maiden appears")
     expectRate(plan, "standing in her light: tears x1.2", function() return Vector(20, 0) end, 1)
-    expectRate(plan, "just inside the edge of her light: still x1.2",
-        function() return Vector(seonnyeo().data.radius - 4, 0) end, 1)
-    expectRate(plan, "just outside it: no change", function() return Vector(seonnyeo().data.radius + 6, 0) end, 0)
+    -- Pinned once an update, she still moves on her own between the pin and
+    -- the moment the light is counted: up to about 13 units either way
+    -- (measured 2026-11-13: pinned 6 outside the edge she was counted 1.2
+    -- inside it, and pinned 4 inside she was 4.2 outside). The edge is tested
+    -- 20 units either side of it.
+    expectRate(plan, "near the inside edge of her light: still x1.2",
+        function() return Vector(seonnyeo().data.radius - 20, 0) end, 1)
+    expectRate(plan, "just outside it: no change", function() return Vector(seonnyeo().data.radius + 20, 0) end, 0)
     plan.act(function(player) give(player, id, 2) end)
     plan.waitUntil(function(player) return #maidens(player) == 2, "maidens=" .. #maidens(player) end, 30, "a second maiden appears")
     expectRate(plan, "in two lights: tears x1.44", function() return Vector(10, 0) end, 2)
