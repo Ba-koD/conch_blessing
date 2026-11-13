@@ -11,6 +11,9 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 --   inside_blocked using it inside the area is refused
 --   dc_order       (measurement, by name only) vanilla Death Certificate alone:
 --                  the item IDs the engine puts on every pedestal, room by room
+--   dc_revisit     (measurement, by name only) vanilla Death Certificate used
+--                  twice: which pedestals a room still has after an item was
+--                  taken, in that room and in one only looked into
 local S = require("scripts.dev.item_scenarios")
 local H = require("scripts.dev.item_test_support")
 local DCRooms = require("scripts.rooms.death_certificate_gallery_rooms")
@@ -368,6 +371,64 @@ S.add(KEY, "dc_order", {}, function(plan)
             end
         end
         return count > 0, count .. " pedestals in order"
+    end)
+end)
+S.rows[#S.rows].manual = true
+
+-- Vanilla Death Certificate alone, used twice on one floor: which pedestals a
+-- room still has on the second visit, for a room merely looked into (A) and
+-- the room an item was taken from (B) (DIAG, by name only).
+S.add(KEY, "dc_revisit", {}, function(plan)
+    capabilities(plan)
+    local function count()
+        local n = 0
+        for _, list in pairs(pickupsByGrid(PickupVariant.PICKUP_COLLECTIBLE)) do n = n + #list end
+        return n
+    end
+    local function useDC(label)
+        plan.act(function(player)
+            player:UseActiveItem(CollectibleType.COLLECTIBLE_DEATH_CERTIFICATE, UseFlag.USE_NOANIM, -1)
+        end)
+        plan.waitUntil(function() return dimension() == DC and idle() end, 400, label)
+        plan.wait(6)
+    end
+    local function visit(which, field)
+        plan.act(function(player, ctx) goTo(player, ctx[which]) end)
+        plan.waitUntil(function(_, ctx) return inRoom(ctx[which]) end, 300, "room " .. which)
+        plan.wait(10)
+        plan.act(function(_, ctx) ctx[field] = count() end)
+    end
+    plan.act(function(_, ctx) ctx.originListIndex = listIndex() end)
+    useDC("first Death Certificate use")
+    plan.act(function(_, ctx)
+        local ok, graph, reason = pcall(DCRooms.capture, {}, 1)
+        assert(ok and graph, "capture failed: " .. tostring(reason or graph))
+        ctx.graph = graph
+        local stock = stockRooms(ctx)
+        ctx.A, ctx.B = stock[1], stock[2]
+        assert(ctx.A and ctx.B, "fewer than two stock rooms")
+    end)
+    visit("A", "aBefore")
+    visit("B", "bBefore")
+    plan.act(function(player, ctx)
+        local pickup
+        for _, list in pairs(pickupsByGrid(PickupVariant.PICKUP_COLLECTIBLE)) do pickup = pickup or list[1] end
+        assert(pickup, "no pedestal in room B")
+        pickup.Wait = 0
+        player.Position, player.Velocity = pickup.Position, Vector.Zero
+    end)
+    plan.waitUntil(function(_, ctx)
+        ctx.quiet = (dimension() ~= DC and idle()) and (ctx.quiet or 0) + 1 or 0
+        return ctx.quiet >= 20, "dimension " .. dimension()
+    end, 900, "Death Certificate takes Isaac home")
+    useDC("second Death Certificate use")
+    visit("A", "aAfter")
+    visit("B", "bAfter")
+    plan.note("room A (looked into): pedestals first visit / second use", function(_, ctx)
+        return string.format("ListIndex %d: %s / %s", ctx.A.listIndex, tostring(ctx.aBefore), tostring(ctx.aAfter))
+    end)
+    plan.note("room B (item taken): pedestals first visit / second use", function(_, ctx)
+        return string.format("ListIndex %d: %s / %s", ctx.B.listIndex, tostring(ctx.bBefore), tostring(ctx.bAfter))
     end)
 end)
 S.rows[#S.rows].manual = true

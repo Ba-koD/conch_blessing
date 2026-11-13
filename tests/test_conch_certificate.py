@@ -122,6 +122,7 @@ ConchBlessing={
 local stubs={['scripts.lib.isaacscript-common']={ModCallbackCustom={POST_ITEM_PICKUP=1}}}
 require=function(name)
     if stubs[name] then return stubs[name] end
+    if name=='scripts.lib.run_save_cache' then return dofile(root..'/scripts/lib/run_save_cache.lua') end
     assert(name=='scripts.rooms.death_certificate_gallery_rooms','unexpected require '..name)
     return dofile(root..'/scripts/rooms/death_certificate_gallery_rooms.lua')
 end
@@ -226,17 +227,43 @@ class ConchCertificateTests(unittest.TestCase):
             assert(ledger().rooms['ConchBlessing:DeathCertificate:1'].original[2]==0)
         ''')
 
-    def test_a_revisit_keeps_ours_removes_others_and_notes_what_is_gone(self):
+    def test_a_revisit_keeps_ours_removes_others_and_puts_back_what_was_not_taken(self):
         self.run_lua(r'''
             M.onUseItem(nil,975,nil,player); pickups={}; arrive(0); stock(1); arrive(1)
-            local kept={}
-            for _,p in ipairs(live(100)) do kept[#kept+1]=p end
-            at(100,slotGrid(1)).exists=false            -- taken
-            local foreign=pickup(100,555,slotGrid(4))   -- something else turned up
-            local before=at(100,slotGrid(2)).SubType
+            local state=ledger().rooms['ConchBlessing:DeathCertificate:1']
+            local seed2,seed4=state.seeds[2],state.seeds[4]
+            -- slot 1 taken for real, slot 2 and the trinket on slot 4 gone with the
+            -- room the engine emptied, slot 3 still there
+            M.onPostItemPickup(nil,player,{itemType=ItemType.ITEM_PASSIVE,subType=970})
+            at(100,slotGrid(1)).exists=false
+            at(100,slotGrid(2)).exists=false
+            at(350,slotGrid(4)).exists=false
+            local third=at(100,slotGrid(3))
+            local foreign=pickup(100,555,6+3*WIDTH)     -- something else turned up
+            local dropped=pickup(350,5,7+3*WIDTH)       -- a trinket a player dropped
             arrive(1)
-            assert(not foreign:Exists() and at(100,slotGrid(2)).SubType==before and at(100,slotGrid(3)))
-            assert(ledger().taken.c970==true and ledger().taken.c971==nil)
+            assert(not foreign:Exists(),'a foreign collectible goes')
+            assert(dropped:Exists(),'a dropped trinket stays')
+            assert(at(100,slotGrid(1))==nil,'the taken item came back')
+            local second=at(100,slotGrid(2))
+            assert(second and second.SubType==971 and second.InitSeed==seed2,'slot 2 not put back with its seed')
+            assert(at(100,slotGrid(3))==third and third:Exists(),'a present item was touched')
+            local trinket=at(350,slotGrid(4))
+            assert(trinket and trinket.SubType==200 and trinket.InitSeed==seed4,'the trinket not put back')
+            assert(ledger().taken.c970==true and ledger().taken.c971==nil and ledger().taken.t200==nil)
+            -- once more: nothing is doubled
+            local count=#live(100)+#live(350)
+            arrive(1)
+            assert(#live(100)+#live(350)==count,'a second revisit added pedestals')
+        ''')
+
+    def test_a_trinket_taken_on_the_way_is_not_put_back(self):
+        self.run_lua(r'''
+            M.onUseItem(nil,975,nil,player); pickups={}; arrive(0); stock(1); arrive(1)
+            M.onPostItemPickup(nil,player,{itemType=ItemType.ITEM_TRINKET,subType=200})
+            at(350,slotGrid(4)).exists=false
+            arrive(1)
+            assert(at(350,slotGrid(4))==nil and ledger().taken.t200==true)
         ''')
 
     def test_leaving_the_area_ends_the_visit(self):
@@ -251,11 +278,13 @@ class ConchCertificateTests(unittest.TestCase):
     def test_taking_a_catalog_collectible_is_noted(self):
         self.run_lua(r'''
             M.onUseItem(nil,975,nil,player); pickups={}; arrive(0)
-            M.onPostItemPickup(nil,player,{itemType=ItemType.ITEM_TRINKET,subType=200})
+            M.onPostItemPickup(nil,player,{itemType=ItemType.ITEM_TRINKET,subType=5})
             M.onPostItemPickup(nil,player,{itemType=ItemType.ITEM_PASSIVE,subType=12})
-            assert(next(ledger().taken)==nil,'a trinket or a foreign item is not a catalog take')
+            M.onPostItemPickup(nil,player,{itemType=ItemType.ITEM_TRINKET,subType=970})
+            assert(next(ledger().taken)==nil,'a foreign item, or a trinket with a collectible ID, is not a catalog take')
             M.onPostItemPickup(nil,player,{itemType=ItemType.ITEM_PASSIVE,subType=971})
-            assert(ledger().taken.c971==true)
+            M.onPostItemPickup(nil,player,{itemType=ItemType.ITEM_TRINKET,subType=207|32768})
+            assert(ledger().taken.c971==true and ledger().taken.t207==true,'golden or not, a catalog trinket is noted')
             dimension=0
             M.onPostItemPickup(nil,player,{itemType=ItemType.ITEM_PASSIVE,subType=970})
             assert(ledger().taken.c970==nil,'only inside the area')

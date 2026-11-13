@@ -1,4 +1,5 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
+local RunSaveCache = require("scripts.lib.run_save_cache")
 -- 소라 증명서 (Conch Certificate), console only (user design 2026-11-11). A use
 -- calls the real Death Certificate, so the engine generates and owns the rooms,
 -- their layouts and the way home. Only the pedestals change: starting from the
@@ -80,11 +81,9 @@ function M.slotSeed(seed, listIndex, slot)
         + slot * 8191) % 2147483646) + 1
 end
 
+-- The global run save, kept for the frame (scripts/lib/run_save_cache.lua).
 local function getRunSave(create)
-    local sm = ConchBlessing.SaveManager
-    if type(sm) ~= "table" or type(sm.IsLoaded) ~= "function" or not sm.IsLoaded() then return nil end
-    if create then return type(sm.GetRunSave) == "function" and sm.GetRunSave(nil, false) or nil end
-    return type(sm.TryGetRunSave) == "function" and sm.TryGetRunSave(nil, false) or nil
+    return RunSaveCache.global(create)
 end
 
 local function currentDimension()
@@ -148,14 +147,15 @@ local function newLedger()
     return run[SAVE_KEY]
 end
 
-local function takenKey(id) return "c" .. tostring(id) end
+-- A catalog entry the player took ("c<id>" or "t<id>").
+local function takenKey(entry) return (entry.kind == TRINKET and "t" or "c") .. tostring(entry.id) end
 
 -- Whether a collectible of the catalog can still be on a pedestal of this
 -- floor's certificate rooms. Taking one is the only way home (the engine's
 -- Death Certificate return), so a visit with none left would strand the player.
 function M.hasCollectibleLeft(ledger)
     for _, entry in ipairs(ledger.catalog or {}) do
-        if entry.kind == COLLECTIBLE and not (ledger.taken and ledger.taken[takenKey(entry.id)]) then
+        if entry.kind == COLLECTIBLE and not (ledger.taken and ledger.taken[takenKey(entry)]) then
             return true
         end
     end
@@ -329,18 +329,23 @@ local function convertRoom(ledger, manifest)
     end
     for _, pickup in ipairs(strays) do pickup:Remove() end
     ledger.rooms[manifest.key] = state
-    ConchBlessing.printDebug(string.format("[Conch Certificate] room %s converted: catalog %d..%d, %d of %d pedestals",
+    ConchBlessing.printDebug("[Conch Certificate] room %s converted: catalog %d..%d, %d of %d pedestals",
         tostring(manifest.listIndex), manifest.catalogStart, manifest.catalogStart + manifest.slotCount - 1,
-        manifest.slotCount, manifest.capacity))
+        manifest.slotCount, manifest.capacity)
 end
 
 -- A room converted before: the engine restored it from its own room save. A
--- collectible that is not one of the certificate's (by seed) goes; a missing
--- one of ours was taken (or removed by something else) and is noted as gone.
+-- collectible that is not one of the certificate's (by seed) goes. Only what
+-- the player took stays gone: the engine empties the room an item was taken
+-- from (measured 2026-11-13 with `conch_test conch_certificate dc_revisit`,
+-- vanilla Death Certificate used twice: 18 pedestals, then 0, while a room
+-- merely looked into kept all of its own), so every other entry of ours that
+-- is missing is put back on its slot with its own seed.
 local function revisitRoom(ledger, manifest, state)
     local ours = {}
+    state.seeds = state.seeds or {}
     for slot = 1, tonumber(manifest.slotCount) or 0 do
-        local seed = state.seeds and state.seeds[slot]
+        local seed = state.seeds[slot]
         if seed and seed ~= 0 then ours[seed] = slot end
     end
     local present = {}
@@ -348,11 +353,29 @@ local function revisitRoom(ledger, manifest, state)
         local slot = ours[pickup.InitSeed]
         if slot then present[slot] = true else pickup:Remove() end
     end
+    -- A trinket that is not ours (one a player dropped) stays where it is.
+    for _, pickup in ipairs(roomPickups(PickupVariant.PICKUP_TRINKET)) do
+        local slot = ours[pickup.InitSeed]
+        if slot then present[slot] = true end
+    end
+    local room, restored = Game():GetRoom(), 0
     for slot = 1, tonumber(manifest.slotCount) or 0 do
         local entry = M.entryFor(ledger.catalog, manifest, slot)
-        if entry and entry.kind == COLLECTIBLE and not present[slot] then
-            ledger.taken[takenKey(entry.id)] = true
+        if entry and not present[slot] and not ledger.taken[takenKey(entry)] then
+            local position = DCRooms.getSlotWorldPosition(room, manifest, slot)
+            local seed = state.seeds[slot]
+            if not seed or seed == 0 then seed = M.slotSeed(ledger.seed, manifest.listIndex, slot) end
+            local variant = entry.kind == TRINKET and PickupVariant.PICKUP_TRINKET or PickupVariant.PICKUP_COLLECTIBLE
+            local spawned = position and spawnAt(variant, entry.id, position, seed)
+            if spawned then
+                state.seeds[slot] = spawned.InitSeed
+                restored = restored + 1
+            end
         end
+    end
+    if restored > 0 then
+        ConchBlessing.printDebug("[Conch Certificate] room %s revisited: %d entries put back",
+            tostring(manifest.listIndex), restored)
     end
 end
 
@@ -395,17 +418,20 @@ function M.onPostNewRoom()
     prepareRoom(ledger)
 end
 
--- Taking a catalog collectible in the area ends the visit the vanilla way; the
--- ledger notes it so a later use knows whether anything is left.
+-- Taking a catalog collectible in the area ends the visit the vanilla way, and
+-- a catalog trinket can be picked up on the way. The ledger notes either, so a
+-- revisit never puts it back and a later use knows whether anything is left.
+local GOLDEN_TRINKET = 32768
 function M.onPostItemPickup(_, _, picking)
-    if M._ready ~= true or type(picking) ~= "table" then return end
-    if picking.itemType == ItemType.ITEM_TRINKET then return end
+    if M._ready ~= true or type(picking) ~= "table" or type(picking.subType) ~= "number" then return end
+    local trinket = picking.itemType == ItemType.ITEM_TRINKET
+    local id = trinket and picking.subType & ~GOLDEN_TRINKET or picking.subType
     local ledger = getLedger()
     if not ledger or ledger.visiting ~= true or currentDimension() ~= DC_DIMENSION then return end
     for _, entry in ipairs(ledger.catalog or {}) do
-        if entry.kind == COLLECTIBLE and entry.id == picking.subType then
+        if (entry.kind == TRINKET) == trinket and entry.id == id then
             ledger.taken = ledger.taken or {}
-            ledger.taken[takenKey(entry.id)] = true
+            ledger.taken[takenKey(entry)] = true
             return
         end
     end
