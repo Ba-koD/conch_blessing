@@ -116,10 +116,10 @@ local function updatePlayerMultipliers(player)
 			local cfg = ConchBlessing.aminus.data.config or {}
 			local sumCheck = 0
 			for stat, val in pairs(s) do sumCheck = sumCheck + (val or 0) end
-			ConchBlessing.printDebug(string.format("[A-] Split multipliers sum=%.3f (target=%.3f, min=%.3f each)",
-				sumCheck, cfg.totalMultSum or 4.0, cfg.minPerStat or 0.8))
-			ConchBlessing.printDebug(string.format("[A-] Final multipliers -> Tears=x%.3f, Damage=x%.3f, Luck=x%.3f",
-				s.Tears or 1.0, s.Damage or 1.0, s.Luck or 1.0))
+			ConchBlessing.printDebug("[A-] Split multipliers sum=%.3f (target=%.3f, min=%.3f each)",
+				sumCheck, cfg.totalMultSum or 4.0, cfg.minPerStat or 0.8)
+			ConchBlessing.printDebug("[A-] Final multipliers -> Tears=x%.3f, Damage=x%.3f, Luck=x%.3f",
+				s.Tears or 1.0, s.Damage or 1.0, s.Luck or 1.0)
 		end
 
 		-- Apply as first-use multipliers (xV) only once per run unless split changes
@@ -183,21 +183,21 @@ function ConchBlessing.aminus.onEvaluateCache(_, player, cacheFlag)
         local addLuck = (cfg.baseLuckAdd or 0) * count
         if addLuck ~= 0 then
             local scaled = addLuck * total
-            ConchBlessing.printDebug(string.format("[A-] Applying base luck addition: %+0.2f (count=%d, total=%.2f, scaled=%+.2f)", addLuck, count, total, scaled))
+            ConchBlessing.printDebug("[A-] Applying base luck addition: %+0.2f (count=%d, total=%.2f, scaled=%+.2f)", addLuck, count, total, scaled)
             ConchBlessing.stats.luck.applyAddition(player, scaled, nil)
         end
     elseif cacheFlag == CacheFlag.CACHE_DAMAGE then
         local addDmg = (cfg.baseDamageAdd or 0) * count
         if addDmg ~= 0 then
             local scaled = addDmg * total
-            ConchBlessing.printDebug(string.format("[A-] Applying base damage addition: %+0.2f (count=%d, total=%.2f, scaled=%+.2f)", addDmg, count, total, scaled))
+            ConchBlessing.printDebug("[A-] Applying base damage addition: %+0.2f (count=%d, total=%.2f, scaled=%+.2f)", addDmg, count, total, scaled)
             ConchBlessing.stats.damage.applyAddition(player, scaled, nil)
         end
     elseif cacheFlag == CacheFlag.CACHE_FIREDELAY then
         local addSPS = (cfg.baseTearsAdd or 0) * count
         if addSPS ~= 0 then
             local scaled = addSPS * total
-            ConchBlessing.printDebug(string.format("[A-] Applying base tears(SPS) addition: %+0.2f (count=%d, total=%.2f, scaled=%+.2f)", addSPS, count, total, scaled))
+            ConchBlessing.printDebug("[A-] Applying base tears(SPS) addition: %+0.2f (count=%d, total=%.2f, scaled=%+.2f)", addSPS, count, total, scaled)
             ConchBlessing.stats.tears.applyAddition(player, scaled, nil)
         end
 	end

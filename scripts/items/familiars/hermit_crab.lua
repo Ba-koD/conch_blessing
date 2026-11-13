@@ -174,6 +174,11 @@ function M.keptAllowance(player)
     return math.max(0, count) * perCrab(player)
 end
 
+-- Players found without a crab ledger (no crab this run): their run save is
+-- not read every update. Owning a crab, or a kept crab's room through Kronos,
+-- makes them active at once; a new room or game start looks again.
+local noLedger = {}
+
 local function players()
     local list, game = {}, Game()
     for i = 0, game:GetNumPlayers() - 1 do
@@ -731,9 +736,15 @@ function M.onUpdate()
     local sm = ConchBlessing.SaveManager
     for _, player in ipairs(players()) do
         -- only players who have or had a crab, or whose absorbed crabs still have room
-        local save = sm and sm.GetRunSave(player)
-        local active = save and (type(save[SAVE_KEY]) == "table" or player:GetCollectibleNum(ITEM_ID) > 0
-            or M.keptAllowance(player) > 0)
+        local key = GetPtrHash(player)
+        local active = player:GetCollectibleNum(ITEM_ID) > 0 or M.keptAllowance(player) > 0
+        if active then
+            noLedger[key] = nil
+        elseif not noLedger[key] then
+            local save = sm and sm.GetRunSave(player)
+            active = save and type(save[SAVE_KEY]) == "table"
+            if save and not active then noLedger[key] = true end
+        end
         local data = active and ledger(player) or nil
         if data and canHold(player) then
             if restorePending then restoreGroup(data, player) end
@@ -750,6 +761,7 @@ function M.onUpdate()
 end
 
 function M.onNewRoom()
+    noLedger = {}
     roomSerial = roomSerial + 1
     queue, claims, morphing = {}, {}, {}
 end
@@ -939,6 +951,7 @@ function M.onGameStarted()
     started = true
     restorePending = true
     roomSerial = roomSerial + 1
+    noLedger = {}
     queue, claims, layout, morphing = {}, {}, {}, {}
     sprites = { trinkets = {} }
 end

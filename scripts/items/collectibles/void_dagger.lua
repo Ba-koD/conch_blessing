@@ -121,17 +121,35 @@ local function tryProcFromAttack(player, attackEntity, npc, inheritedProvenance)
         local hitPos = npc.Position
         spawnVoidRingAt(player, hitPos, inheritedProvenance)
         if ConchBlessing and ConchBlessing.printDebug then
-            ConchBlessing.printDebug(string.format(
+            ConchBlessing.printDebug(
                 "Void Dagger PROC: base=%.2f%% final=%.2f%% (luck x%.1f @Luck=%.1f) roll=%.3f S=%.2f D=%.2f R=%.2f radius=%.2f pos=(%.1f,%.1f) npcSeed=%s",
                 pBase * 100.0, p * 100.0, luckFactor, clampedLuck, roll, shotsPerSecond, D, R, dbgRadius, hitPos.X, hitPos.Y, tostring(npc.InitSeed or npc.Index)
-            ))
+            )
         end
     end
+end
+
+-- Whether any player (a sub-player such as The Soul included) holds the item.
+-- Every enemy hit in the room reaches the damage callback; without a holder
+-- there is no attack whose provenance needs resolving.
+local function anyHolder(id)
+    if id == nil or id <= 0 then return false end
+    local game = Game()
+    for i = 0, game:GetNumPlayers() - 1 do
+        local player = Isaac.GetPlayer(i)
+        if player then
+            if player:HasCollectible(id) then return true end
+            local sub = type(player.GetSubPlayer) == "function" and player:GetSubPlayer() or nil
+            if sub and sub:HasCollectible(id) then return true end
+        end
+    end
+    return false
 end
 
 -- REPENTOGON path: trigger only after eligible player-owned attack damage is applied.
 ConchBlessing.voiddagger.onPostEntityTakeDamage = function(_, entity, amount, _flags, source, _countdown, extraSource)
     if not entity or (tonumber(amount) or 0) <= 0 then return end
+    if not anyHolder(VOID_DAGGER_ID) then return end
 
     local npc = entity:ToNPC()
     if not (npc and npc:Exists() and npc:IsVulnerableEnemy() and not npc:HasEntityFlags(EntityFlag.FLAG_FRIENDLY)) then
@@ -177,10 +195,10 @@ ConchBlessing.voiddagger.onPlayerUpdate = function(_, player)
             local radius = computeRingRadiusFromRange(player)
             local pBase = computeProcChanceFromS(S)
             local p, luckFactor, clampedLuck = applyLuckBonus(pBase, player.Luck)
-            ConchBlessing.printDebug(string.format(
+            ConchBlessing.printDebug(
                 "Void Dagger: base=%.2f%% final=%.2f%% (luck x%.1f @Luck=%.1f) S=%.2f D=%.2f R=%.2f radius=%.2f",
                 pBase * 100.0, p * 100.0, luckFactor, clampedLuck, S, D, R, radius
-            ))
+            )
         end
     end
 end

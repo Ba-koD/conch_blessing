@@ -83,6 +83,15 @@ local function equal(a,b)
     return true
 end
 
+-- "type:id base->now" for every effect that differs, for the failure detail.
+local function effectDiff(base,now)
+    local rows={}
+    for key,value in pairs(base) do if now[key]~=value then rows[#rows+1]=key.." "..value.."->"..tostring(now[key] or 0) end end
+    for key,value in pairs(now) do if base[key]==nil then rows[#rows+1]=key.." 0->"..value end end
+    table.sort(rows)
+    return table.concat(rows,", ")
+end
+
 local function empty(value)
     if value==nil then return true end
     if type(value)~="table" then return false end
@@ -271,7 +280,9 @@ function M.finish(plan,key,id,requireClean)
         if not equal(forms(player),base.forms) then return false,"permanent player transformation changed" end
         local currentEffects=effects(player)
         if not base.effects or not currentEffects then return false,"temporary-effect enumeration unavailable" end
-        if not equal(currentEffects,base.effects) then return false,"native temporary effects differ" end
+        if not equal(currentEffects,base.effects) then
+            return false,"native temporary effects differ ("..effectDiff(base.effects,currentEffects)..")"
+        end
         local ok,detail=H.sameStats(player,base.stats)
         if not ok then return false,detail end
         if not equal(counts(player),base.counts) then return false,"inventory differs from baseline" end

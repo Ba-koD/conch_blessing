@@ -449,9 +449,27 @@ local function tryProcFromAttack(player, attackEntity, npc, inheritedProvenance)
     end
 end
 
+-- Whether any player (a sub-player such as The Soul included) holds the item.
+-- Every enemy hit in the room reaches the damage callback; without a holder
+-- there is no attack whose provenance needs resolving.
+local function anyHolder(id)
+    if id == nil or id <= 0 then return false end
+    local game = Game()
+    for i = 0, game:GetNumPlayers() - 1 do
+        local player = Isaac.GetPlayer(i)
+        if player then
+            if player:HasCollectible(id) then return true end
+            local sub = type(player.GetSubPlayer) == "function" and player:GetSubPlayer() or nil
+            if sub and sub:HasCollectible(id) then return true end
+        end
+    end
+    return false
+end
+
 --- REPENTOGON path: roll only after eligible player-owned attack damage was applied.
 ConchBlessing.soflam.onPostEntityTakeDamage = function(_, entity, amount, _flags, source, _countdown, extraSource)
     if not entity or (tonumber(amount) or 0) <= 0 then return end
+    if not anyHolder(SOFLAM_ID) then return end
 
     local npc = entity:ToNPC()
     if not (npc and npc:Exists() and npc:IsVulnerableEnemy()) then

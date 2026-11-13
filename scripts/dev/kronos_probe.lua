@@ -215,6 +215,7 @@ function probe.legacyDaddy(player)
     player:AddCollectible(holy, 0, false)
     rs.absorbed[key] = { count = ConchBlessing.kronos._getAbsorbedCount(player, daddy) + 1, id = daddy }
     rs.totalAbsorbed = (rs.totalAbsorbed or 0) + 1
+    ConchBlessing.kronos._test.countsChanged()
     rs.itemGrants = rs.itemGrants or {}
     rs.itemGrantTotals = rs.itemGrantTotals or {}
     rs.itemGrantBaselines = rs.itemGrantBaselines or {}

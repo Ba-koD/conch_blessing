@@ -25,6 +25,16 @@ COMMON = r'''
     SM={GetRunSave=function(p) runs[p.seed]=runs[p.seed] or {}; return runs[p.seed] end,
         TryGetRunSave=function(p) return runs[p.seed] end,Save=function() end}
     modules['scripts.lib.save_manager']=SM
+    -- The frame cache's own behaviour is covered by test_run_save_cache; here it
+    -- passes straight through to the SaveManager double.
+    modules['scripts.lib.run_save_cache']={
+        player=function(p,create)
+            local sm=ConchBlessing.SaveManager
+            local s=create and sm.GetRunSave(p) or nil
+            if s==nil then s=sm.TryGetRunSave(p) end
+            return s
+        end,
+        global=function(create) local sm=ConchBlessing.SaveManager; return (create and sm.GetRunSave or sm.TryGetRunSave)(nil,false) end}
     ConchBlessingRequire=function(name) return assert(modules[name],'unexpected require '..tostring(name)) end
     package=nil
     EntityType={ENTITY_PICKUP=5,ENTITY_EFFECT=1000}; PickupVariant={PICKUP_COLLECTIBLE=100}; Vector={Zero={}}
@@ -189,7 +199,7 @@ class KillAndCurseHolders(unittest.TestCase):
             CacheFlag={CACHE_DAMAGE=1,CACHE_FIREDELAY=2,CACHE_SPEED=4}
             LevelCurse={CURSE_OF_DARKNESS=1,CURSE_OF_THE_LOST=4}
             modules['scripts.lib.enemy_utils']={isMonsterKind=function(n) return n.monster==true end}
-            modules['scripts.lib.player_hits']={register=function() end,counts=function() return true end}
+            modules['scripts.lib.player_hits']={register=function() end,counts=function() return true end,watchFloor=function() end,markBroken=function() end,recover=function() end}
             modules['scripts.lib.sound_volume']={volume=function(v) return v end}
             Isaac.GetItemIdByName=function(name) return ({['Eternal Flame']=20,['Sealed Demon Sword']=21,Tyrfing=22})[name] end
             ConchBlessing.stats={damage={applyAddition=function(p,x) p.Damage=p.Damage+x end},
@@ -285,7 +295,7 @@ class DescriptionReaders(unittest.TestCase):
             CacheFlag={CACHE_DAMAGE=1,CACHE_SPEED=4}; ActiveSlot={SLOT_PRIMARY=0,SLOT_POCKET=2}
             CollectibleType={}; SoundEffect={}
             modules['scripts.lib.enemy_utils']={}
-            modules['scripts.lib.player_hits']={register=function() end}
+            modules['scripts.lib.player_hits']={register=function() end,watchFloor=function() end,markBroken=function() end,recover=function() end}
             modules['scripts.lib.isaacscript-common']={}
             modules['scripts.lib.damage_provenance']={registerCallbacks=function() end}
             Isaac.GetItemIdByName=function(name) return ({['Sealed Demon Sword']=21,Tyrfing=22,['Utility Belt']=23,['Void Dagger']=24})[name] end

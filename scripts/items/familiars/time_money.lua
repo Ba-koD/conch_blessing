@@ -309,7 +309,7 @@ local function tryInitialDrop(player, diffCount)
 	for _ = 1, count do
 		spawnCoinNear(player, player, rng)
 	end
-	ConchBlessing.printDebug(string.format("[Time=Money] initial drop executed, count=%d, diff=%d", count, diffCount))
+	ConchBlessing.printDebug("[Time=Money] initial drop executed, count=%d, diff=%d", count, diffCount)
 end
 
 -- Periodic drop based on current money
@@ -339,7 +339,7 @@ local function tryPeriodicDrop(player)
 	ps.lastDropFrame = frame
     ps.pendingPenalty = 0 -- reset after a drop cycle
 	saveToSave(player)
-	ConchBlessing.printDebug(string.format("[Time=Money] periodic drop executed, toDrop=%d, coins=%d", toDrop, coins))
+	ConchBlessing.printDebug("[Time=Money] periodic drop executed, toDrop=%d, coins=%d", toDrop, coins)
 end
 
 -- Callbacks
@@ -402,7 +402,7 @@ function ConchBlessing.timemoney.onFamiliarRender(_, familiar, offset)
 		-- Debug (prints once per run when debugMode is on): non-target familiar render skipped
 		local st = ensureState()
 		if ConchBlessing and ConchBlessing.Config and ConchBlessing.Config.debugMode and not st.loggedNonTargetVariantSeen then
-			ConchBlessing.printDebug(string.format("[Time=Money] skipping render for variant=%s (target=%s)", tostring(familiar.Variant), tostring(targetVariant)))
+			ConchBlessing.printDebug("[Time=Money] skipping render for variant=%s (target=%s)", tostring(familiar.Variant), tostring(targetVariant))
 			st.loggedNonTargetVariantSeen = true
 		end
 		return
@@ -426,7 +426,7 @@ function ConchBlessing.timemoney.onFamiliarRender(_, familiar, offset)
 	-- Debug (once per run): log current offsets
 	local st = ensureState()
 	if ConchBlessing and ConchBlessing.Config and ConchBlessing.Config.debugMode and not st.loggedRenderOffsetOnce then
-		ConchBlessing.printDebug(string.format("[Time=Money] render offset dx=%s dy=%s", tostring(dx), tostring(dy)))
+		ConchBlessing.printDebug("[Time=Money] render offset dx=%s dy=%s", tostring(dx), tostring(dy))
 		st.loggedRenderOffsetOnce = true
 	end
 end

@@ -453,7 +453,8 @@ ConchBlessing.dragon.onUpdate = function()
     sky.sinceStrike = sky.sinceStrike + 1
     if sky.flash > 0 then sky.flash = sky.flash - 1 end
     local held = false
-    local enemies = roomEnemies()
+    -- The room is scanned only for a holder (twisters scan for themselves).
+    local enemies
     local charge = ConchBlessing.dragon._charge
     for i = 0, game:GetNumPlayers() - 1 do
         local player = Isaac.GetPlayer(i)
@@ -461,6 +462,7 @@ ConchBlessing.dragon.onUpdate = function()
         local key = GetPtrHash(player)
         if count > 0 then
             held = true
+            enemies = enemies or roomEnemies()
             if #enemies == 0 or not isActingPlayer(player) then
                 charge[key] = 0                 -- no bolts are banked between fights, or while dead
             else
@@ -541,36 +543,61 @@ local function drawVeil()
 end
 
 local RAIN = { 0.69, 0.83, 0.88 }
+-- A drop's spot, period and phase come from its index and the room's bounds
+-- alone, so they are worked out once per room instead of every render frame.
+local rainLayout = { count = -1 }
+local function rainDrops(d, topLeft, bottomRight)
+    local layout = rainLayout
+    if layout.count == d.rainDrops and layout.left == topLeft.X and layout.top == topLeft.Y
+        and layout.right == bottomRight.X and layout.bottom == bottomRight.Y then
+        return layout
+    end
+    layout = { count = d.rainDrops, left = topLeft.X, top = topLeft.Y,
+        right = bottomRight.X, bottom = bottomRight.Y }
+    for i = 1, d.rainDrops do
+        local period = 0.8 + hash(i + 200) * 0.6
+        layout[i] = {
+            spot = Vector(topLeft.X + hash(i) * (bottomRight.X - topLeft.X),
+                topLeft.Y + hash(i + 100) * (bottomRight.Y - topLeft.Y)),
+            period = period, offset = hash(i + 300) * period,
+        }
+    end
+    rainLayout = layout
+    return layout
+end
+
 local function drawRain()
     local d = ConchBlessing.dragon.data
     local pixel = getArt("rain", "gfx/effects/conch_upgrade_pixel.anm2", "Idle")
     if not pixel then return end
     local ripple = getArt("ripple", "gfx/1000.133_water ripple.anm2", "Poof")
     local room = Game():GetRoom()
-    local topLeft, bottomRight = room:GetTopLeftPos(), room:GetBottomRightPos()
+    local drops = rainDrops(d, room:GetTopLeftPos(), room:GetBottomRightPos())
     local time = Isaac.GetFrameCount() / 60          -- render frames, 60 a second
-    for i = 1, d.rainDrops do
-        local spot = Vector(topLeft.X + hash(i) * (bottomRight.X - topLeft.X),
-            topLeft.Y + hash(i + 100) * (bottomRight.Y - topLeft.Y))
-        local period = 0.8 + hash(i + 200) * 0.6
-        local p = ((time + hash(i + 300) * period) % period) / period
-        local at = Isaac.WorldToScreen(spot)
+    -- The streak leans rainSlant degrees (top to the right) and the drop
+    -- travels along it, so its lower end lands on the ripple's spot. Every
+    -- streak and every ripple looks the same apart from where it is drawn.
+    local slant = math.rad(d.rainSlant)
+    local alongX, alongY = -math.sin(slant), math.cos(slant)   -- down the streak
+    pixel.Scale = Vector(1, 8)
+    pixel.Rotation = d.rainSlant
+    pixel.Color = Color(RAIN[1], RAIN[2], RAIN[3], d.rainAlpha)
+    if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(pixel) end
+    if ripple then
+        ripple.Scale = Vector(0.22, 0.22)
+        ripple.Color = Color(1, 1, 1, d.rainAlpha * 0.8)
+        if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(ripple) end
+    end
+    for i = 1, drops.count do
+        local drop = drops[i]
+        local period = drop.period
+        local p = ((time + drop.offset) % period) / period
+        local at = Isaac.WorldToScreen(drop.spot)
         if p < 0.7 then
-            -- The streak leans rainSlant degrees (top to the right) and the drop
-            -- travels along it, so its lower end lands on the ripple's spot.
-            local slant = math.rad(d.rainSlant)
-            local along = Vector(-math.sin(slant), math.cos(slant))   -- down the streak
-            local head = at - along * (d.rainFall * (1 - p / 0.7))
-            pixel.Scale = Vector(1, 8)
-            pixel.Rotation = d.rainSlant
-            pixel.Color = Color(RAIN[1], RAIN[2], RAIN[3], d.rainAlpha)
-            if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(pixel) end
-            pixel:Render(head - along * 8)
+            local back = d.rainFall * (1 - p / 0.7) + 8
+            pixel:Render(Vector(at.X - alongX * back, at.Y - alongY * back))
         elseif ripple then
             ripple:SetFrame("Poof", math.min(13, math.floor((p - 0.7) * period * 30)))
-            ripple.Scale = Vector(0.22, 0.22)
-            ripple.Color = Color(1, 1, 1, d.rainAlpha * 0.8)
-            if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(ripple) end
             ripple:Render(at)
         end
     end
@@ -580,12 +607,13 @@ local function drawStrikes()
     local d = ConchBlessing.dragon.data
     local scorches, bolts = ConchBlessing.dragon._scorches, ConchBlessing.dragon._bolts
     local lightning = (#scorches > 0 or #bolts > 0) and getArt("lightning", "gfx/effects/conch_dragon_lightning.anm2")
+    -- The April Fools sheet is a still swap: once per sprite and frame is enough.
+    if lightning and ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(lightning) end
     if lightning then
         -- Burnt patches first, their embers dying, then fading out.
         for _, item in ipairs(scorches) do
             lightning:SetFrame("Scorch", math.min(2, item.age // 10))
             lightning.Color = Color(1, 1, 1, math.min(1, 2 * (1 - item.age / d.scorchTicks)))
-            if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(lightning) end
             lightning:Render(Isaac.WorldToScreen(item.position))
         end
         lightning.Color = Color(1, 1, 1, 1)
@@ -594,9 +622,9 @@ local function drawStrikes()
     if #twisters > 0 then
         local pillar = getArt("pillar", "gfx/1000.096_hushlaser.anm2")
         if pillar then
+            if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(pillar) end
             for _, twister in ipairs(twisters) do
                 pillar:SetFrame(twisterFrame(twister))
-                if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(pillar) end
                 pillar:Render(Isaac.WorldToScreen(twister.position))
             end
         end
@@ -609,7 +637,6 @@ local function drawStrikes()
                 lightning:SetFrame(shape == 1 and "Strike" or "Strike" .. shape, frame)
                 lightning.FlipX = item.flip == true
                 lightning.Scale = Vector(item.scale or 1, item.scale or 1)
-                if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(lightning) end
                 lightning:Render(Isaac.WorldToScreen(item.position))
             end
         end

@@ -70,8 +70,8 @@ local function rebuildOralUnified(player, stored)
         if total < floorValue then
             um:SetItemAdditiveMultiplier(player, ORAL_STEROIDS_ID, statName,
                 1.0 + (floorValue - total), "Oral Steroids floor")
-            ConchBlessing.printDebug(string.format(
-                "Oral Steroids: %s total %.3f floored to %.3f", statName, total, floorValue))
+            ConchBlessing.printDebug(
+                "Oral Steroids: %s total %.3f floored to %.3f", statName, total, floorValue)
         end
     end
     um:SaveToSaveManager(player)
@@ -135,8 +135,8 @@ local function rollMissing(player, stored, itemNum)
             luck = rollStat()
         }
         stored[i] = newMultipliers
-        ConchBlessing.printDebug(string.format("Oral Steroids #%d: Tears=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx",
-            i, newMultipliers.tears, newMultipliers.damage, newMultipliers.range, newMultipliers.luck))
+        ConchBlessing.printDebug("Oral Steroids #%d: Tears=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx",
+            i, newMultipliers.tears, newMultipliers.damage, newMultipliers.range, newMultipliers.luck)
     end
     SaveManager.Save()
     rebuildOralUnified(player, stored)

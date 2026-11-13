@@ -30,6 +30,7 @@ function E.build(plan,name,give)
             ctx.target=H.target(player,true); ctx.target.Position=player.Position+Vector(60,0)
             ctx.outsideTarget=H.target(player,true); ctx.outsideTarget.Position=player.Position+Vector(170,0)
             ctx.hp,ctx.farHp=ctx.target.HitPoints,ctx.outsideTarget.HitPoints
+            ctx.necronomicon=player:GetEffects():GetCollectibleEffectNum(CollectibleType.COLLECTIBLE_NECRONOMICON)
         end)
         H.hit(plan)
         plan.check("confirmed hit produces the promised ability",function(player,ctx)
@@ -54,8 +55,17 @@ function E.build(plan,name,give)
             end
             return H.expect(#ctx.spawned,({holy_water=4,mystery_egg=5,my_shadow=3})[name])
         end)
-        plan.act(function(_,ctx)
+        plan.act(function(player,ctx)
             ctx.target:Remove(); ctx.outsideTarget:Remove(); ctx.target=nil; ctx.outsideTarget=nil
+            -- Dry Baby's Necronomicon is a real active use: the engine leaves its
+            -- per-room effect marker on the player (3:35, gone on the next room).
+            -- It is this fixture's by-product, never Kronos state, so only the
+            -- copies the hit added are taken back before the shared-run check.
+            if name=="dry_baby" then
+                local effects=player:GetEffects()
+                local extra=effects:GetCollectibleEffectNum(CollectibleType.COLLECTIBLE_NECRONOMICON)-(ctx.necronomicon or 0)
+                if extra>0 then effects:RemoveCollectibleEffect(CollectibleType.COLLECTIBLE_NECRONOMICON,extra) end
+            end
         end)
         if name=="holy_water" then
             plan.act(function(_,ctx) for i=2,#(ctx.spawned or {}) do ctx.spawned[i]:Remove() end end)

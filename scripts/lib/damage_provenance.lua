@@ -449,6 +449,17 @@ end
 --- Returns the canonical attack entity, its player owner, and a merged provenance
 --- snapshot, or nil when ownership is unavailable or this proc key already ran.
 function DamageProvenance.getEligiblePlayerAttack(source, extraSource, procKey)
+    local attackEntity, player, snapshot = DamageProvenance.getPlayerAttack(source, extraSource)
+    if not (attackEntity and isSnapshotHitProcEligible(snapshot, procKey)) then
+        return nil
+    end
+    return attackEntity, player, snapshot
+end
+
+--- The same attack, owner and snapshot without asking about one proc. A handler
+--- that rolls several procs on one hit resolves the attack once and asks
+--- `allowsProc(snapshot, procKey)` for each, instead of resolving it per proc.
+function DamageProvenance.getPlayerAttack(source, extraSource)
     local attackEntity = DamageProvenance.getSourceEntity(source, extraSource)
     if not attackEntity then
         return nil
@@ -461,7 +472,7 @@ function DamageProvenance.getEligiblePlayerAttack(source, extraSource, procKey)
         canonicalAttackEntity ~= attackEntity and DamageProvenance.resolve(canonicalAttackEntity) or nil,
         sourceEntity ~= attackEntity and DamageProvenance.resolve(sourceEntity) or nil
     )
-    if not isSnapshotHitProcEligible(snapshot, procKey) then
+    if recordBlocksAllHitProcs(snapshot) then
         return nil
     end
 
@@ -475,6 +486,11 @@ function DamageProvenance.getEligiblePlayerAttack(source, extraSource, procKey)
     end
 
     return canonicalAttackEntity, player, snapshot
+end
+
+--- Whether a snapshot from getPlayerAttack may trigger `procKey`.
+function DamageProvenance.allowsProc(snapshot, procKey)
+    return isSnapshotHitProcEligible(snapshot, procKey)
 end
 
 --- Legacy tear-only classifier retained for base collision call sites.

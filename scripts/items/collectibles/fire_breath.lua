@@ -487,7 +487,9 @@ ConchBlessing.firebreath.onPostEntityTakeDamage = function(_, entity, amount, _,
 end
 
 ConchBlessing.firebreath.onEffectUpdate = function(_, effect)
-    if not effect then return end
+    -- Every effect in the room comes through here each update; only this
+    -- item's flame variant can carry its data.
+    if not effect or effect.Variant ~= FIRE_EFFECT_VARIANT then return end
     local data = effect:GetData()
     if not data or not data.__ConchFireBreath then return end
 

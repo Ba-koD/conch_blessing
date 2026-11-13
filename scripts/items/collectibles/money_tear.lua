@@ -83,11 +83,11 @@ local function applyForPlayer(player)
             end
             ps.lastCoins = coins
             ps.lastCount = count
-            ConchBlessing.printDebug(string.format(
+            ConchBlessing.printDebug(
                 "[Money=Tear] coins=%d, items=%d, basePer=%.4f, effPer=%.4f, addSps=%+.4f (inputsChanged=%s, drift=%s)",
                 coins, count, basePer, effectivePer, addSps,
                 tostring(inputsChanged), tostring(providerDrifted)
-            ))
+            )
         end
     else
         if stored ~= nil or ps.lastCoins ~= nil or ps.lastCount ~= nil then
@@ -111,6 +111,8 @@ function ConchBlessing.moneytear.onGameStarted(_, isContinued)
     -- Never pre-seed lastCoins/lastCount here: doing so makes the very first
     -- applyForPlayer() a no-op when the run already starts with the item, and
     -- on a continued run it hides the fact that the provider state was reset.
+    -- Entries of an earlier run's players (another InitSeed) mean nothing now.
+    ensureState().perPlayer = {}
     for i = 0, num - 1 do
         local p = game:GetPlayer(i)
         local ps = getPlayerState(p)

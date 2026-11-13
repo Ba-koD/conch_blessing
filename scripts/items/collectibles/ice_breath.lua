@@ -507,7 +507,9 @@ ConchBlessing.icebreath.onPostEntityTakeDamage = function(_, entity, amount, _, 
 end
 
 ConchBlessing.icebreath.onEffectUpdate = function(_, effect)
-    if not effect then return end
+    -- Every effect in the room comes through here each update; only this
+    -- item's flame variant can carry its data.
+    if not effect or effect.Variant ~= ICE_EFFECT_VARIANT then return end
     local data = effect:GetData()
     if not data or not data.__ConchIceBreath then return end
 

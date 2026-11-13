@@ -1,4 +1,5 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
+local RunSaveCache = require("scripts.lib.run_save_cache")
 -- New visits use native Death Certificate rooms. Existing version-9 StageAPI
 -- saves keep their exact journals and graph until that floor has been settled.
 -- Each backend owns its callbacks, but only the selected backend may act.
@@ -11,9 +12,9 @@ local initializing = false
 local reconciledBackend
 
 local function selectedBackend()
-    local saveManager = ConchBlessing.SaveManager
-    local run = saveManager and type(saveManager.TryGetRunSave) == "function"
-        and saveManager.TryGetRunSave(nil, false) or nil
+    -- Every input action and backend field read asks; the run table is kept
+    -- for the frame, the session itself is read live.
+    local run = RunSaveCache.global(false)
     local session = run and run.appraisalGallerySession
     if type(session) == "table" and session.version == 9
         and session.mode == "appraisal_trinkets_stageapi" then

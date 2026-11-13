@@ -160,10 +160,10 @@ function M.onEvaluateCache(_, player, cacheFlag)
     if value == original then return end
 
     stat.write(player, value)
-    ConchBlessing.printDebug(string.format(
+    ConchBlessing.printDebug(
         "[StatRounding] player=%d %s %.4f -> %.4f (ceil=%s round=%s floor=%s)",
         player:GetPlayerType(), stat.name, original, value,
-        tostring(hasCeil), tostring(hasRound), tostring(hasFloor)))
+        tostring(hasCeil), tostring(hasRound), tostring(hasFloor))
 end
 
 if not M._callbackRegistered then

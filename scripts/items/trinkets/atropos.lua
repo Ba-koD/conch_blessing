@@ -1,4 +1,5 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
+local RunSaveCache = require("scripts.lib.run_save_cache")
 local NativeReturnDoor = require("scripts.rooms.native_return_door")
 local GalleryExitDoor = require("scripts.rooms.gallery_exit_door")
 local isc = require("scripts.lib.isaacscript-common")
@@ -79,21 +80,9 @@ local function getState()
     return M._state
 end
 
+-- The global run save, kept for the frame (scripts/lib/run_save_cache.lua).
 local function getRunSave(create)
-    local saveManager = ConchBlessing.SaveManager
-    if type(saveManager) ~= "table"
-        or type(saveManager.IsLoaded) ~= "function"
-        or not saveManager.IsLoaded()
-    then
-        return nil
-    end
-
-    if create then
-        if type(saveManager.GetRunSave) ~= "function" then return nil end
-        return saveManager.GetRunSave(nil, false)
-    end
-    if type(saveManager.TryGetRunSave) ~= "function" then return nil end
-    return saveManager.TryGetRunSave(nil, false)
+    return RunSaveCache.global(create)
 end
 
 local function getNativeSave(create)
@@ -1017,9 +1006,9 @@ local function syncReturnDoorInner()
             kind = RETURN_DOOR_KIND, sessionId = nativeSave.sessionId,
             entranceKey = nativeSave.entrance.key,
         })
-        ConchBlessing.printDebug(string.format(
+        ConchBlessing.printDebug(
             "[Atropos] Return door physicalIndex=%d x=%.1f y=%.1f nominalIndex=%d",
-            index, position.X, position.Y, nominal))
+            index, position.X, position.Y, nominal)
         existing = stageAPI.GetCustomDoorDataAtSlot(DoorSlot.LEFT0, RETURN_DOOR_NAME)
         if not returnDoorDataMatches(existing, nativeSave) then return end
     end
@@ -1750,11 +1739,11 @@ local function closeTransaction(nativeSave, transaction, context, status, select
     if context and context.key == transaction.roomKey then
         removed = removeRoomCollectibles()
     end
-    ConchBlessing.printDebug(string.format(
+    ConchBlessing.printDebug(
         "[Atropos] Closed Death Certificate room choice (%s); removed %d collectible(s).",
         tostring(status),
         removed
-    ))
+    )
 
     nativeSave.transaction = nil
     getState().runtimeTransactionToken = nil

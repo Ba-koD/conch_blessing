@@ -1,4 +1,5 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
+local RunSaveCache = require("scripts.lib.run_save_cache")
 -- Conch Ticket (소라 예약권): reserve the Magic Conch's next answers.
 --
 -- Using the card spends it and opens a picker over the user's head: the
@@ -58,7 +59,7 @@ local testKeys = {}
 local function save() ConchBlessing.SaveManager.Save() end
 
 local function runTicket(create)
-    local run = ConchBlessing.SaveManager.GetRunSave(nil)
+    local run = RunSaveCache.global(true)
     if type(run) ~= "table" then return nil end
     if create and type(run.conchTicket) ~= "table" then run.conchTicket = { queue = {} } end
     local ticket = run.conchTicket
@@ -168,7 +169,7 @@ local function arm(a, kind)
         return false
     end
     armed = { token = token, kind = kind, usage = View.usage(a), room = roomKey() }
-    ConchBlessing.printDebug(string.format("[ConchTicket] reserved %s for the next Conch (token %s)", kind, tostring(token)))
+    ConchBlessing.printDebug("[ConchTicket] reserved %s for the next Conch (token %s)", kind, tostring(token))
     return true
 end
 
@@ -177,8 +178,13 @@ end
 function M.sync()
     if not ready then return end
     local queue = M.queue()
+    -- Nothing waiting (the usual case): only a reservation still held needs
+    -- the provider, so it is not asked every update for nothing.
+    if #queue == 0 then
+        if armed then release(api()) end
+        return
+    end
     local a = api()
-    if #queue == 0 then release(a); return end
     if not a then armed = nil; return end
     if armed then
         local ok, current = pcall(a.GetNextResultReservation, OWNER)
@@ -192,7 +198,7 @@ function M.sync()
             if armed.room == roomKey() and armed.usage and now and now > armed.usage and queue[1] == armed.kind then
                 table.remove(queue, 1)
                 save()
-                ConchBlessing.printDebug(string.format("[ConchTicket] the Conch used %s; %d left", armed.kind, #queue))
+                ConchBlessing.printDebug("[ConchTicket] the Conch used %s; %d left", armed.kind, #queue)
             end
         end
         armed = nil
@@ -421,9 +427,9 @@ local function settleDeparted(present, players)
                     track(heir, heirKey, heirPick)
                     latches[heirKey] = readInputs(heir)
                 end
-                ConchBlessing.printDebug(string.format(
+                ConchBlessing.printDebug(
                     "[ConchTicket] %d ticket(s) and %d AR Glasses picker(s) of a player who left went to controller %s",
-                    counts.card or 0, counts.glasses or 0, tostring(heir.ControllerIndex)))
+                    counts.card or 0, counts.glasses or 0, tostring(heir.ControllerIndex))
             end
             save()
         end
@@ -446,22 +452,24 @@ function M.onUpdate()
     M.sync()
 end
 
+local function renderAll()
+    local hud = Game():GetHUD()
+    local visible = not (hud and type(hud.IsVisible) == "function" and not hud:IsVisible())
+    local game = Game()
+    for i = 0, game:GetNumPlayers() - 1 do
+        local player = game:GetPlayer(i)
+        if player then
+            step(player)
+            local counts = pickers[GetPtrHash(player)]
+            if counts and visible then drawPicker(player, counts) end
+        end
+    end
+    drawQueue()
+end
+
 function M.onRender()
     if not ready then return end
-    local ok, err = pcall(function()
-        local hud = Game():GetHUD()
-        local visible = not (hud and type(hud.IsVisible) == "function" and not hud:IsVisible())
-        local game = Game()
-        for i = 0, game:GetNumPlayers() - 1 do
-            local player = game:GetPlayer(i)
-            if player then
-                step(player)
-                local counts = pickers[GetPtrHash(player)]
-                if counts and visible then drawPicker(player, counts) end
-            end
-        end
-        drawQueue()
-    end)
+    local ok, err = pcall(renderAll)
     if not ok then View.warn("TICKET_RENDER_FAILED", err) end
 end
 

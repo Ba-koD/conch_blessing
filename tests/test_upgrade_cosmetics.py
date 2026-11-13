@@ -133,7 +133,7 @@ class UpgradeCosmeticsTests(unittest.TestCase):
 
     def test_debug_mode_logs_default_cue_and_engine_playback(self):
         self.lua.execute('''
-            local logs={}; ConchBlessing.printDebug=function(t) logs[#logs+1]=t end
+            local logs={}; ConchBlessing.printDebug=function(t,...) if select('#',...)>0 then t=string.format(t,...) end logs[#logs+1]=t end
             T.neutral.onBeforeChange(pos,p,data)
             for _,line in ipairs(logs) do assert(not line:find('SOUND',1,true), 'debug off logs no cue') end
             ConchBlessing.Config={debugMode=true}; logs={}

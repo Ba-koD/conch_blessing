@@ -22,7 +22,7 @@ function M.registerTrinket(cfg)
 	local tid = getTrinketIdByName(cfg.name)
 	if not tid or tid <= 0 then return end
 
-	ConchBlessing.printDebug(string.format("[MinusTrinket] Register %s (id=%s)", tostring(cfg.name), tostring(tid)))
+	ConchBlessing.printDebug("[MinusTrinket] Register %s (id=%s)", tostring(cfg.name), tostring(tid))
 
     ConchBlessing.originalMod:AddCallback(ModCallbacks.MC_EVALUATE_CACHE, function(_, player, cacheFlag)
         local count = getCount(player, tid)

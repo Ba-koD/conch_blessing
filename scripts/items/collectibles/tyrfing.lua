@@ -67,7 +67,7 @@ ConchBlessing.tyrfing.onEntityTakeDamage = function(_, entity, amount, flags, so
     
     -- Self-damage and Sacrifice Room spikes are not hits (scripts/lib/player_hits.lua).
     if not Hits.counts(flags) then
-        ConchBlessing.printDebug(string.format("[Tyrfing] Ignored self-inflicted damage (flags=%d)", flags or -1))
+        ConchBlessing.printDebug("[Tyrfing] Ignored self-inflicted damage (flags=%d)", flags or -1)
         return
     end
     
@@ -78,8 +78,8 @@ ConchBlessing.tyrfing.onEntityTakeDamage = function(_, entity, amount, flags, so
         local damageLost = currentDamage * DAMAGE_LOSS_ON_HIT
         data.accumulatedDamage = currentDamage - damageLost
         
-        ConchBlessing.printDebug(string.format("[Tyrfing] Player took damage! Lost %.2f damage (%.2f -> %.2f)", 
-            damageLost, currentDamage, data.accumulatedDamage))
+        ConchBlessing.printDebug("[Tyrfing] Player took damage! Lost %.2f damage (%.2f -> %.2f)", 
+            damageLost, currentDamage, data.accumulatedDamage)
         
         -- Update cache for damage change
         player:AddCacheFlags(CacheFlag.CACHE_DAMAGE)

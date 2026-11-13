@@ -480,6 +480,7 @@ end
 -- A reload can keep the ConchBlessing table alive, while a late EID load can replace
 -- the provider object entirely. Neither can reuse another provider's text cache.
 local registeredProvider, registeredItems, registeredSignature, registrationError
+local registeredLang, registeredEidLang, registeredSpecials
 local registerItems = ConchBlessing.EID.registerAllItems
 ConchBlessing.EID.registerAllItems = function()
     if not EID or type(EID.addCollectible) ~= "function" or type(EID.addTrinket) ~= "function" then return false end
@@ -501,12 +502,17 @@ local function ensureDescriptionsRegistered(force)
     if not EID or type(EID.addCollectible) ~= "function" or type(EID.addTrinket) ~= "function" then return false end
     local specialsReady = type(EID.CreateDescriptionTableIfMissing) == "function"
         and type(EID.addGoldenTrinketTable) == "function" and type(EID.descriptions) == "table"
-    local signature = getCurrentLang() .. ":" .. getEIDLanguage() .. ":" .. tostring(specialsReady)
+    -- Asked every update and render: compare the parts before building a string.
+    local lang, eidLang = getCurrentLang(), getEIDLanguage()
     if not force and registeredProvider == EID and registeredItems == ConchBlessing.ItemData
-        and registeredSignature == signature then return true end
+        and registeredLang == lang and registeredEidLang == eidLang and registeredSpecials == specialsReady then
+        return true
+    end
+    local signature = lang .. ":" .. eidLang .. ":" .. tostring(specialsReady)
     if registeredProvider ~= EID then ConchBlessing._eidRegistered = {} end
     if not ConchBlessing.EID.registerAllItems() then return false end
     registeredProvider, registeredItems, registeredSignature = EID, ConchBlessing.ItemData, signature
+    registeredLang, registeredEidLang, registeredSpecials = lang, eidLang, specialsReady
     ConchBlessing._eidDescriptionsRegistered = true
     return true
 end

@@ -68,8 +68,8 @@ local function rebuildPowerTrainingUnified(player)
         if total < floorValue then
             um:SetItemAdditiveMultiplier(player, POWER_TRAINING_ID, statName,
                 1.0 + (floorValue - total), "Power Training floor")
-            ConchBlessing.printDebug(string.format(
-                "Power Training: %s total %.3f floored to %.3f", statName, total, floorValue))
+            ConchBlessing.printDebug(
+                "Power Training: %s total %.3f floored to %.3f", statName, total, floorValue)
         end
     end
     um:SaveToSaveManager(player)
@@ -181,8 +181,8 @@ ConchBlessing.powertraining.onUseItem = function(_, collectibleID, _rng, player,
     SaveManager.Save()
     ConchBlessing.printDebug("SaveManager.Save() completed!")
     
-    ConchBlessing.printDebug(string.format("Power Training #%d used: Speed=-%.2f Tears=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx", 
-        newIndex, ConchBlessing.powertraining.data.speedDecrease, newMultipliers.tears, newMultipliers.damage, newMultipliers.range, newMultipliers.luck))
+    ConchBlessing.printDebug("Power Training #%d used: Speed=-%.2f Tears=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx", 
+        newIndex, ConchBlessing.powertraining.data.speedDecrease, newMultipliers.tears, newMultipliers.damage, newMultipliers.range, newMultipliers.luck)
     
     -- Calculate total accumulated multipliers for display
     local totalSpeed = 1.0
@@ -289,8 +289,8 @@ ConchBlessing.powertraining.onEvaluateCache = function(_, player, cacheFlag)
     
     if cacheFlag == CacheFlag.CACHE_DAMAGE and useCount ~= (ConchBlessing.powertraining._lastFinalDebugUseCount or 0) then
         local speedDecrease = ConchBlessing.powertraining.data.speedDecrease * useCount
-        ConchBlessing.printDebug(string.format("Power Training Final (x%d uses): Speed=-%.2f Tears=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx", 
-            useCount, speedDecrease, totalTears, totalDamage, totalRange, totalLuck))
+        ConchBlessing.printDebug("Power Training Final (x%d uses): Speed=-%.2f Tears=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx", 
+            useCount, speedDecrease, totalTears, totalDamage, totalRange, totalLuck)
         ConchBlessing.powertraining._lastFinalDebugUseCount = useCount
     end
     

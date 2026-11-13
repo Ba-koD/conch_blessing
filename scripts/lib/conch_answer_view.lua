@@ -48,10 +48,12 @@ function V.text(key, ...)
     return ConchBlessing.Locale.textIn("en", key, ...)
 end
 local function width(s) return font and font:GetStringWidthUTF8(s) or Isaac.GetTextWidth(s) end
+-- The shadow first, then the text: constant tables, drawn every render frame.
+local OFFSETS, SHADOW = { 1, 0 }, { 0, 0, 0 }
 local function draw(s, x, y, scale, rgb, alpha)
     alpha = alpha or 1
-    for _, offset in ipairs({1, 0}) do
-        local c = offset == 1 and {0, 0, 0} or rgb
+    for _, offset in ipairs(OFFSETS) do
+        local c = offset == 1 and SHADOW or rgb
         if font then font:DrawStringScaledUTF8(s, x+offset, y+offset, scale, scale, KColor(c[1],c[2],c[3],alpha),0,false)
         else Isaac.RenderText(s, x+offset, y+offset,c[1],c[2],c[3],alpha) end
     end

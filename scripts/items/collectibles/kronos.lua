@@ -28,8 +28,8 @@ local function logAbsorbOnce(label, total, delta)
     local previous = absorbLogState[label]
     if previous and previous.total == t and previous.delta == d then return end
     absorbLogState[label] = { total = t, delta = d }
-    ConchBlessing.printDebug(string.format(
-        "[Kronos] %s absorbed: total=%d, delta=%d", label, t, d))
+    ConchBlessing.printDebug(
+        "[Kronos] %s absorbed: total=%d, delta=%d", label, t, d)
 end
 
 -- Data container: configuration and runtime-safe defaults (no hardcoded debug literals)
@@ -411,6 +411,9 @@ Rune.saves = {}
 function Rune.runSave(entity)
     local sm = ConchBlessing.SaveManager
     if not (sm and type(sm.GetRunSave) == "function") then return nil end
+    -- Before SaveManager has loaded (a luamod's first frames) it has no table
+    -- to give and only logs an error for each ask.
+    if type(sm.IsLoaded) == "function" and not sm.IsLoaded() then return nil end
     local frame = Game():GetFrameCount()
     if Rune.saves.frame ~= frame then Rune.saves = { frame = frame } end
     local key = entity and GetPtrHash(entity) or "global"
@@ -422,8 +425,12 @@ function Rune.runSave(entity)
     return save
 end
 
+Rune.noManual = {}
 function Rune.dropSaves()
     Rune.saves = {}
+    Rune.synced = {}
+    Rune.noManual = {}
+    Rune.changed()
 end
 
 function Rune.registerSaveDrops()
@@ -478,6 +485,7 @@ Rune.MERGE_SUM = { totalAbsorbed = true, itemGrants = true, itemGrantTotals = tr
     tempPermanent = true, prettyFlies = true, paschalHundredths = true, lostSoulRewardPending = true }
 
 function Rune.mergeLedger(target, old)
+    Rune.changed()
     for key, value in pairs(old) do
         local mine = target[key]
         if mine == nil then
@@ -629,6 +637,19 @@ function Rune.hasEffects(player)
     return player ~= nil and (player:HasCollectible(KRONOS_ID) or Rune.total(player) > 0)
 end
 
+-- Whether any player has absorbed abilities, read once per game frame.
+function Rune.anyEffects()
+    local frame = Game():GetFrameCount()
+    if Rune.anyFrame ~= frame then
+        Rune.anyFrame, Rune.any = frame, false
+        local game = Game()
+        for i = 0, game:GetNumPlayers() - 1 do
+            if Rune.hasEffects(game:GetPlayer(i)) then Rune.any = true break end
+        end
+    end
+    return Rune.any
+end
+
 -- Absorbed-ability state (floor serial, room-clear counters, Paschal earnings,
 -- the Lost Soul reward) lives in each player's own ledger, like the rest of it:
 -- a player with effects owns, pays and keeps their own.
@@ -755,8 +776,8 @@ end
 local function countOwnedFamiliarCollectibles(player)
     local counts = {}
     for _, id in ipairs(getFamiliarCollectibleIds()) do
-        local okOwned, owned = pcall(function() return player:GetCollectibleNum(id, true) end)
-        if okOwned and owned and owned > 0 then counts[id] = owned end
+        local owned = player:GetCollectibleNum(id, true)
+        if owned > 0 then counts[id] = owned end
     end
     return counts
 end
@@ -768,20 +789,6 @@ function ConchBlessing.kronos._getAbsorbedCount(player, famId)
     local key = "fam_" .. tostring(famId)
     local sub = rs.absorbed[key]
     local count = (sub and sub.count) or 0
-    return count
-end
-
--- Buddy in a Box and Lil Delirium lend one random familiar's absorbed effect per
--- copy for the current floor (see _ensureFloorPicks). A pick only adds to effect
--- counts; it never grants a collectible or spawns a pinned familiar, so ledger and
--- pinned-entity code keep reading _getAbsorbedCount.
-local function getFloorPickCount(rs, famId)
-    local picks = rs and type(rs.floorPicks) == "table" and rs.floorPicks.ids or nil
-    if type(picks) ~= "table" then return 0 end
-    local count = 0
-    for _, id in ipairs(picks) do
-        if tonumber(id) == famId then count = count + 1 end
-    end
     return count
 end
 
@@ -808,6 +815,7 @@ local refreshEffectCaches
 local function clearRoomTemporaryState(player)
     local only = player and GetPtrHash(player)
     local had = false
+    Rune.changed()
     for key, room in pairs(Rune.rooms) do
         if only == nil or key == only then
             had = had or room.double > 0 or next(room.counts) ~= nil
@@ -830,39 +838,85 @@ local function clearRoomTemporaryState(player)
     return had
 end
 
--- Absorbed familiars that did not come from an owned collectible: Monster Manual
--- (`tempFloor`, this floor) and Soul of Lilith (`tempPermanent`), plus the room ones.
-local function getTemporaryCount(player, rs, famId)
-    local key = "fam_" .. tostring(famId)
-    local count = tonumber(Rune.room(player).counts[key]) or 0
-    local floor = rs and rs.tempFloor
-    if type(floor) == "table" and floor.serial == (tonumber(rs.floorSerial) or 0) and type(floor.counts) == "table" then
-        count = count + (tonumber(floor.counts[key]) or 0)
-    end
-    if rs and type(rs.tempPermanent) == "table" then
-        count = count + (tonumber(rs.tempPermanent[key]) or 0)
-    end
-    return count
+-- Every absorbed-ability count of a player, built in one pass over their
+-- ledgers. A player's own Kronos ledger, floor picks and temporary sources
+-- count only while that player holds Kronos; their Thurisaz familiars count
+-- with or without it. Nothing here reads another player's ledger.
+function Rune.famIdOf(key)
+    return type(key) == "string" and tonumber(key:match("^fam_(%-?%d+)$")) or nil
 end
 
--- A player's own Kronos ledger, floor picks and temporary sources count only
--- while that player holds Kronos; their Thurisaz familiars count with or without
--- it. Nothing here reads another player's ledger.
+function Rune.buildEffects(player, holds)
+    local counts = {}
+    local function add(id, n)
+        if id then counts[id] = (counts[id] or 0) + n end
+    end
+    local ledger = Rune.ledger(player, false)
+    if ledger then
+        for key, value in pairs(ledger.absorbed) do
+            add(Rune.famIdOf(key), math.max(0, math.floor(tonumber(value) or 0)))
+        end
+    end
+    if not (holds or Rune.total(player) > 0) then return {} end
+    local rs = getRunSave(player)
+    if not rs then return counts end
+    -- Buddy in a Box and Lil Delirium lend one random familiar's absorbed effect
+    -- per copy for the current floor (see _ensureFloorPicks). A pick only adds to
+    -- effect counts; it never grants a collectible or spawns a pinned familiar,
+    -- so ledger and pinned-entity code keep reading _getAbsorbedCount.
+    local picks = type(rs.floorPicks) == "table" and rs.floorPicks.ids or nil
+    if type(picks) == "table" then
+        for _, id in ipairs(picks) do add(tonumber(id), 1) end
+    end
+    if holds then
+        local room = Rune.room(player)
+        for key, entry in pairs(rs.absorbed) do
+            local id = Rune.famIdOf(key)
+            local absorbed = (type(entry) == "table" and entry.count) or 0
+            add(id, absorbed + absorbed * (id and room.twins[id] or 0))
+        end
+        -- Absorbed familiars that did not come from an owned collectible: the
+        -- room ones, Monster Manual (`tempFloor`, this floor) and Soul of
+        -- Lilith (`tempPermanent`).
+        for key, value in pairs(room.counts) do add(Rune.famIdOf(key), tonumber(value) or 0) end
+        local floor = rs.tempFloor
+        if type(floor) == "table" and floor.serial == (tonumber(rs.floorSerial) or 0) and type(floor.counts) == "table" then
+            for key, value in pairs(floor.counts) do add(Rune.famIdOf(key), tonumber(value) or 0) end
+        end
+        if type(rs.tempPermanent) == "table" then
+            for key, value in pairs(rs.tempPermanent) do add(Rune.famIdOf(key), tonumber(value) or 0) end
+        end
+    end
+    return counts
+end
+
+-- An update asks for a dozen counts and every hit for a dozen more; each used
+-- to read the saves again. The table is kept for the game frame, rebuilt when
+-- the player gains or loses Kronos, and dropped at once by Rune.changed(),
+-- which every write to those ledgers calls (and every save drop: new room,
+-- game start, save load, Glowing Hourglass).
+Rune.maps, Rune.mapsFrame = {}, -1
+function Rune.changed()
+    Rune.maps = {}
+end
+
+function Rune.effects(player)
+    local frame = Game():GetFrameCount()
+    if Rune.mapsFrame ~= frame then Rune.mapsFrame, Rune.maps = frame, {} end
+    local key = GetPtrHash(player)
+    local holds = player:HasCollectible(KRONOS_ID)
+    local entry = Rune.maps[key]
+    if not (entry and entry.holds == holds) then
+        entry = { holds = holds, counts = Rune.buildEffects(player, holds),
+            box = holds and Rune.room(player).double or 0 }
+        Rune.maps[key] = entry
+    end
+    return entry
+end
+
 local function getEffectCountBeforeBox(player, famId)
     if not player then return 0 end
-    local holds = player:HasCollectible(KRONOS_ID)
-    local count = Rune.count(player, famId)
-    if not (holds or Rune.total(player) > 0) then return 0 end
-    local rs = getRunSave(player)
-    if not rs then return count end
-    count = count + getFloorPickCount(rs, famId)
-    if holds then
-        local entry = rs.absorbed["fam_" .. tostring(famId)]
-        local absorbed = (entry and entry.count) or 0
-        count = count + absorbed + getTemporaryCount(player, rs, famId)
-            + absorbed * (Rune.room(player).twins[famId] or 0)
-    end
-    return count
+    return Rune.effects(player).counts[famId] or 0
 end
 
 -- Box of Friends doubles the absorbed abilities of the Kronos holder who used it.
@@ -871,7 +925,9 @@ function Rune.boxDouble(player)
 end
 
 function ConchBlessing.kronos._getEffectCount(player, famId)
-    return getEffectCountBeforeBox(player, famId) * (1 + Rune.boxDouble(player))
+    if not player then return 0 end
+    local entry = Rune.effects(player)
+    return (entry.counts[famId] or 0) * (1 + entry.box)
 end
 
 -- A player's room-temporary state (player 0's without an argument).
@@ -1099,6 +1155,7 @@ function ConchBlessing.kronos._detectAndAbsorb(player)
                 rs.absorbed[key] = { count = prev + removed, id = famId }
                 rs.totalAbsorbed = (rs.totalAbsorbed or 0) + removed
                 changed = true
+                Rune.changed()
                 
                 dbg(string.format("[Kronos] Absorbed familiar: ID=%d (key=%s), prev=%d, removed=%d, total=%d", 
                     tonumber(famId) or 0, key, prev, removed, prev + removed))
@@ -1172,6 +1229,9 @@ function ConchBlessing.kronos._trackConvertedItemRemoval(player)
     rs.itemGrants = rs.itemGrants or {}
     rs.itemGrantTotals = rs.itemGrantTotals or {}
     rs.itemGrantBaselines = rs.itemGrantBaselines or {}
+    -- with no conversion grant and no baseline left there is nothing to track
+    -- (the loop below would only find grantedCount 0 and no baseline)
+    if next(rs.itemGrants) == nil and next(rs.itemGrantBaselines) == nil then return end
     local saveChanged = false
 
     for itemId, familiarIds in pairs(getGrantGroups()) do
@@ -1252,6 +1312,7 @@ function ConchBlessing.kronos._trackConvertedItemRemoval(player)
                         rs.absorbed[key] = nil
                     end
                     rs.totalAbsorbed = math.max(0, (rs.totalAbsorbed or 0) - permanentTaken)
+                    Rune.changed()
 
                     dbg(string.format("[Kronos] Detected %d item (ID:%d) removal, reduced familiar (ID:%d) count: %d -> %d",
                         taken, tonumber(itemId) or 0, tonumber(familiarId) or 0, absorbedCount, newAbsorbedCount))
@@ -1947,6 +2008,53 @@ function ConchBlessing.kronos._updateBloodshotEyeAnchors(player)
 end
 
 -- Pinned stand-ins and other per-update upkeep for every absorbed ability.
+-- The inventory signal: the engine's collectible total, and a generation that
+-- REPENTOGON's add and removal callbacks, every new room and game start bump
+-- (a swap such as D4's keeps the total). Without those callbacks the sweep
+-- keeps the old fifteen-update scan; with them it is only a safety net.
+Rune.invGen = 0
+function Rune.inventoryTouched()
+    Rune.invGen = Rune.invGen + 1
+end
+
+function Rune.inventoryChanged(player, pdata)
+    local count = type(player.GetCollectibleCount) == "function" and player:GetCollectibleCount() or -1
+    local changed = pdata.__kronosItems ~= count or pdata.__kronosInvGen ~= Rune.invGen
+    pdata.__kronosItems, pdata.__kronosInvGen = count, Rune.invGen
+    return changed
+end
+
+function Rune.sweepFrames()
+    if Rune.hooked then return 60 end
+    return tonumber(ConchBlessing.kronos.data.scanIntervalFrames) or 15
+end
+
+-- The absorbed familiars the damage bonus counts, from the ledger alone.
+function Rune.damageCopies(player, rs)
+    local holds = player:HasCollectible(KRONOS_ID)
+    local copies = holds
+        and (math.max(0, tonumber(rs.totalAbsorbed) or 0)
+            + ConchBlessing.kronos._getTemporaryDamageCopies(player)) or 0
+    -- Thurisaz's familiars, with or without Kronos (Box doubles them under Kronos).
+    return copies + Rune.total(player) * (1 + Rune.boxDouble(player))
+end
+
+-- The ledger's damage is compared every update; StatsAPI's own row is read
+-- when that changes, after every save drop (new room, game start, save load,
+-- Glowing Hourglass) and every 30 updates, so a reset made elsewhere is put
+-- right within a second.
+Rune.synced = {}
+function Rune.syncDamage(player, frame)
+    local rs = getRunSave(player)
+    if not rs then return end
+    local copies = Rune.damageCopies(player, rs)
+    local key = GetPtrHash(player)
+    local memo = Rune.synced[key]
+    if memo and memo.copies == copies and frame < memo.until_ then return end
+    ConchBlessing.kronos._syncAbsorbedDamage(player)
+    Rune.synced[key] = { copies = copies, until_ = frame + 30 }
+end
+
 function Rune.runAbsorbActions(player)
     local absorbActions = ConchBlessing.kronos.data.absorbActions
     if not absorbActions then return end
@@ -1971,17 +2079,18 @@ ConchBlessing.kronos.onPlayerUpdate = function(_, player)
     if player:HasCollectible(KRONOS_ID) then
         pdata.__kronosHadCollectible = true
         migrateRetiredGrants(player, getRunSave(player))
+        -- Absorbing and charging lost conversion items both follow the
+        -- inventory, so they run on the update after it changes and otherwise
+        -- only as a sweep (see Rune.inventoryChanged).
         pdata.__kronosNextScan = pdata.__kronosNextScan or 0
-        local interval = tonumber(ConchBlessing.kronos.data.scanIntervalFrames) or 15
-        if frame >= pdata.__kronosNextScan then
-            pdata.__kronosNextScan = frame + interval
+        if Rune.inventoryChanged(player, pdata) or frame >= pdata.__kronosNextScan then
+            pdata.__kronosNextScan = frame + Rune.sweepFrames()
             local ok, changed = pcall(function() return ConchBlessing.kronos._detectAndAbsorb(player) end)
             if ok and changed then ConchBlessing.kronos._finalizeAbsorb(player) end
+            -- Track converted item removal (all familiar->item conversions)
+            ConchBlessing.kronos._trackConvertedItemRemoval(player)
         end
-
-        -- Track converted item removal (all familiar->item conversions)
-        ConchBlessing.kronos._trackConvertedItemRemoval(player)
-        ConchBlessing.kronos._syncAbsorbedDamage(player)
+        Rune.syncDamage(player, frame)
 
         -- Auto-execute absorbActions for all absorbed familiars
         Rune.runAbsorbActions(player)
@@ -2001,7 +2110,7 @@ ConchBlessing.kronos.onPlayerUpdate = function(_, player)
     end
     -- Thurisaz's familiars keep working without Kronos.
     if not player:HasCollectible(KRONOS_ID) and Rune.total(player) > 0 then
-        ConchBlessing.kronos._syncAbsorbedDamage(player)
+        Rune.syncDamage(player, frame)
         Rune.runAbsorbActions(player)
     end
 end
@@ -2316,6 +2425,7 @@ function Rune.revertKronos(player)
         
         rs.absorbed = {}
         rs.totalAbsorbed = 0
+        Rune.changed()
         rs.itemGrants = {}  -- Clear granted item counts
         rs.itemGrantTotals = {}
         rs.itemGrantBaselines = {}
@@ -2760,11 +2870,11 @@ end
 -- tear or a beam does not reroll per target. A familiar body (blue flies and
 -- spiders included) cannot claim an attack, so their contact damage never triggers
 -- a proc, and each proc's output carries its key so nothing it causes re-enters it.
-local function tryAttackProc(source, extraSource, procKey, chanceFor, rngItem, apply)
-    local attackEntity, player, provenance = DamageProvenance.getEligiblePlayerAttack(source, extraSource, procKey)
-    if not (attackEntity and Rune.hasEffects(player)) then return end
-    local chance = chanceFor(player)
+-- The attack was resolved once for the hit (applyHitEffects); a proc whose
+-- chance is 0, the usual case, costs nothing more.
+local function tryAttackProc(attackEntity, player, provenance, procKey, chance, rngItem, apply)
     if chance <= 0 then return end
+    if not DamageProvenance.allowsProc(provenance, procKey) then return end
     if not DamageProvenance.tryClaimAttackProc(attackEntity, procKey) then return end
     if player:GetCollectibleRNG(rngItem):RandomFloat() >= chance then return end
     apply(player, provenance)
@@ -2823,11 +2933,18 @@ local function applyBleed(npc, player)
 end
 
 local function applyHitEffects(npc, source, extraSource)
+    -- every effect below needs a player with absorbed abilities; without one,
+    -- skip the attack-provenance lookups each hit would otherwise pay for
+    if not Rune.anyEffects() then return end
     if not isHostileTarget(npc) then return end
     local effectCount = ConchBlessing.kronos._getEffectCount
 
-    local _, player = DamageProvenance.getEligiblePlayerAttack(source, extraSource, STATUS_KEY)
-    if Rune.hasEffects(player) then
+    -- One resolution of the attack for every effect below: each one used to
+    -- resolve and merge the attack's provenance again (seven times a hit).
+    local attack, player, provenance = DamageProvenance.getPlayerAttack(source, extraSource)
+    if not (attack and Rune.hasEffects(player)) then return end
+
+    if DamageProvenance.allowsProc(provenance, STATUS_KEY) then
         if effectCount(player, CollectibleType.COLLECTIBLE_LIL_HAUNT) > 0 then
             npc:AddFear(EntityRef(player), STATUS_FRAMES)
         end
@@ -2836,34 +2953,34 @@ local function applyHitEffects(npc, source, extraSource)
         end
     end
 
-    tryAttackProc(source, extraSource, FLY_PROC_KEY,
-        function(owner) return getSpawnChance(sumEffectCounts(owner, FLY_SPAWN_FAMILIARS)) end,
+    tryAttackProc(attack, player, provenance, FLY_PROC_KEY,
+        getSpawnChance(sumEffectCounts(player, FLY_SPAWN_FAMILIARS)),
         CollectibleType.COLLECTIBLE_ROTTEN_BABY,
-        function(owner, provenance)
+        function(owner, snapshot)
             local fly = owner:AddBlueFlies(1, owner.Position, nil)
             bump("flies")
-            if fly then DamageProvenance.markTriggeredAttack(fly, FLY_PROC_KEY, provenance, FLY_PROC_KEY) end
+            if fly then DamageProvenance.markTriggeredAttack(fly, FLY_PROC_KEY, snapshot, FLY_PROC_KEY) end
         end)
-    tryAttackProc(source, extraSource, SPIDER_PROC_KEY,
-        function(owner) return getSpawnChance(sumEffectCounts(owner, SPIDER_SPAWN_FAMILIARS)) end,
+    tryAttackProc(attack, player, provenance, SPIDER_PROC_KEY,
+        getSpawnChance(sumEffectCounts(player, SPIDER_SPAWN_FAMILIARS)),
         CollectibleType.COLLECTIBLE_JUICY_SACK,
-        function(owner, provenance)
+        function(owner, snapshot)
             local spider = owner:AddBlueSpider(owner.Position)
             bump("spiders")
-            if spider then DamageProvenance.markTriggeredAttack(spider, SPIDER_PROC_KEY, provenance, SPIDER_PROC_KEY) end
+            if spider then DamageProvenance.markTriggeredAttack(spider, SPIDER_PROC_KEY, snapshot, SPIDER_PROC_KEY) end
         end)
-    tryAttackProc(source, extraSource, DADDY_PROC_KEY,
-        function(owner) return getProcChance(owner, CollectibleType.COLLECTIBLE_DADDY_LONGLEGS) end,
+    tryAttackProc(attack, player, provenance, DADDY_PROC_KEY,
+        getProcChance(player, CollectibleType.COLLECTIBLE_DADDY_LONGLEGS),
         CollectibleType.COLLECTIBLE_DADDY_LONGLEGS,
-        function(owner, provenance) daddyStomp(owner, npc.Position, provenance) end)
-    tryAttackProc(source, extraSource, RAZOR_PROC_KEY,
-        function(owner) return getProcChance(owner, CollectibleType.COLLECTIBLE_MOMS_RAZOR) end,
+        function(owner, snapshot) daddyStomp(owner, npc.Position, snapshot) end)
+    tryAttackProc(attack, player, provenance, RAZOR_PROC_KEY,
+        getProcChance(player, CollectibleType.COLLECTIBLE_MOMS_RAZOR),
         CollectibleType.COLLECTIBLE_MOMS_RAZOR,
         function(owner)
             if npc:Exists() and not npc:IsDead() then applyBleed(npc, owner) end
         end)
-    tryAttackProc(source, extraSource, CUBE_PROC_KEY,
-        function(owner) return getProcChance(owner, CollectibleType.COLLECTIBLE_CUBE_BABY) end,
+    tryAttackProc(attack, player, provenance, CUBE_PROC_KEY,
+        getProcChance(player, CollectibleType.COLLECTIBLE_CUBE_BABY),
         CollectibleType.COLLECTIBLE_CUBE_BABY,
         function(owner)
             if npc:Exists() and not npc:IsDead() then
@@ -2871,11 +2988,11 @@ local function applyHitEffects(npc, source, extraSource)
                 bump("freezes")
             end
         end)
-    tryAttackProc(source, extraSource, SPEWER_PROC_KEY,
-        function(owner) return getProcChance(owner, CollectibleType.COLLECTIBLE_LIL_SPEWER) end,
+    tryAttackProc(attack, player, provenance, SPEWER_PROC_KEY,
+        getProcChance(player, CollectibleType.COLLECTIBLE_LIL_SPEWER),
         CollectibleType.COLLECTIBLE_LIL_SPEWER,
-        function(owner, provenance)
-            spawnPlayerCreep(owner, EffectVariant.PLAYER_CREEP_RED, npc.Position, provenance, SPEWER_PROC_KEY)
+        function(owner, snapshot)
+            spawnPlayerCreep(owner, EffectVariant.PLAYER_CREEP_RED, npc.Position, snapshot, SPEWER_PROC_KEY)
             bump("creeps")
         end)
 end
@@ -3174,6 +3291,7 @@ end
 -- ------------------------------------------------------------ floor state
 -- Every player with absorbed abilities, or only `only`.
 refreshEffectCaches = function(only)
+    Rune.changed()
     local game = Game()
     local onlyKey = only and GetPtrHash(only)
     for i = 0, game:GetNumPlayers() - 1 do
@@ -3242,6 +3360,7 @@ function Rune.advanceFloor(player)
         rs.lostSoulRewardPending = (tonumber(rs.lostSoulRewardPending) or 0) + lostSoul
     end
     rs.floorSerial = previous + 1
+    Rune.changed()
     -- Monster Manual familiars last one floor.
     local hadFloorTemp = rs.tempFloor ~= nil
     ConchBlessing.kronos._clearManualGrants(player, rs)
@@ -3353,6 +3472,7 @@ local function releaseCopies(player, rs, familiarIds, returnToPlayer)
             local after = before - count
             rs.absorbed[key] = after > 0 and { count = after, id = familiarId } or nil
             rs.totalAbsorbed = math.max(0, (rs.totalAbsorbed or 0) - count)
+            Rune.changed()
             trimGrantsToAbsorbed(player, rs, familiarId, after)
             if returnToPlayer then
                 rs.spared[key] = (tonumber(rs.spared[key]) or 0) + count
@@ -3468,12 +3588,7 @@ function ConchBlessing.kronos._syncAbsorbedDamage(player)
     if not (player and um and type(um.SetItemAddition) == "function") then return end
     local rs = getRunSave(player)
     if not rs then return end
-    local holds = player:HasCollectible(KRONOS_ID)
-    local copies = holds
-        and (math.max(0, tonumber(rs.totalAbsorbed) or 0)
-            + ConchBlessing.kronos._getTemporaryDamageCopies(player)) or 0
-    -- Thurisaz's familiars, with or without Kronos (Box doubles them under Kronos).
-    copies = copies + Rune.total(player) * (1 + Rune.boxDouble(player))
+    local copies = Rune.damageCopies(player, rs)
     local wanted = copies * ConchBlessing.kronos.STATS.DAMAGE_PER_FAMILIAR
     local state = ConchBlessing.getUnifiedMultiplierState(player, um)
     local entry = state and state.itemAdditions and state.itemAdditions[KRONOS_ID]
@@ -3547,10 +3662,23 @@ end
 -- floor save. Consumed counts are tombstones so a cache/room replay cannot pay
 -- damage or conversion rewards again. Other sources are never swept here.
 local function getManualSource(player)
-    local floor = ConchBlessing.SaveManager.GetFloorSave(player)
-    if not floor then return nil end
+    local sm = ConchBlessing.SaveManager
+    if type(sm.IsLoaded) == "function" and not sm.IsLoaded() then return nil end
+    -- Every familiar asks on every update (_suppressConsumedManualFamiliar), so
+    -- the table is kept with the frame's run saves (Rune.runSave).
+    local frame = Game():GetFrameCount()
+    if Rune.saves.frame ~= frame then Rune.saves = { frame = frame } end
+    local cacheKey = "manual" .. GetPtrHash(player)
+    local cached = Rune.saves[cacheKey]
+    if cached ~= nil then return cached or nil end
+    local floor = sm.GetFloorSave(player)
+    if not floor then
+        Rune.saves[cacheKey] = false
+        return nil
+    end
     adoptLegacy(floor, "kronosManual", LEGACY.MANUAL)
     floor.kronosManual = floor.kronosManual or { counts = {}, absorbed = {} }
+    Rune.saves[cacheKey] = floor.kronosManual
     return floor.kronosManual
 end
 
@@ -3561,10 +3689,13 @@ function ConchBlessing.kronos._suppressConsumedManualFamiliar(fam)
     local player = fam.Player
     if not (player and player:HasCollectible(KRONOS_ID)
         and type(fam.GetItemConfig) == "function") then return false end
+    -- Nothing consumed on this floor (the usual case): no familiar to ask about.
+    local source = getManualSource(player)
+    local consumed = source and source.absorbed
+    if type(consumed) ~= "table" or next(consumed) == nil then return false end
     local ok, item = pcall(fam.GetItemConfig, fam)
     if not (ok and item) then return false end
-    local source = getManualSource(player)
-    if not (source and (tonumber(source.absorbed["fam_" .. item.ID]) or 0) > 0) then return false end
+    if (tonumber(consumed["fam_" .. item.ID]) or 0) <= 0 then return false end
     if player:GetCollectibleNum(item.ID, true) > 0
         or player:GetEffects():GetCollectibleEffectNum(item.ID) > 0 then return false end
     fam:Remove()
@@ -3572,6 +3703,7 @@ function ConchBlessing.kronos._suppressConsumedManualFamiliar(fam)
 end
 
 local function captureManualUse(player, pending)
+    Rune.noManual[GetPtrHash(player)] = nil
     local source = getManualSource(player)
     if not source then return end
     local changed = false
@@ -3608,10 +3740,27 @@ end
 
 function ConchBlessing.kronos._scanManualFamiliars(player)
     if not player:HasCollectible(KRONOS_ID) then return end
+    -- No Monster Manual use recorded on this floor (the usual case): once seen,
+    -- nothing is read again until a use is recorded or the saves are dropped
+    -- (new room, game start, save load, Glowing Hourglass).
+    local key = GetPtrHash(player)
+    if Rune.noManual[key] then return end
     local source = getManualSource(player)
     local rs = getRunSave(player)
     if not (source and rs) then return end
-    if next(source.counts) == nil then return end
+    if next(source.counts) == nil then
+        Rune.noManual[key] = true
+        return
+    end
+    -- Only a live effect of a recorded familiar can be credited or removed;
+    -- without one, skip reading the whole effect list.
+    local effects = player:GetEffects()
+    local live = false
+    for key in pairs(source.counts) do
+        local id = tonumber(key:match("^fam_(%d+)$"))
+        if id and effects:GetCollectibleEffectNum(id) > 0 then live = true break end
+    end
+    if not live then return end
     local current = readTemporaryFamiliarEffects(player)
     local remove, found = {}, {}
     for key, total in pairs(source.counts) do
@@ -3641,6 +3790,7 @@ local function applyTwinsDouble(player, standInId)
     end
     table.sort(candidates)
     local room = Rune.room(player)
+    Rune.changed()
     if #candidates == 0 then
         local key = "fam_" .. tostring(standInId)
         room.counts[key] = (room.counts[key] or 0) + 1
@@ -3660,6 +3810,7 @@ function ConchBlessing.kronos._absorbTemporary(player, source, captured)
     for id in pairs(found) do ids[#ids + 1] = id end
     table.sort(ids)
     local total = 0
+    if #ids > 0 then Rune.changed() end
     for _, id in ipairs(ids) do
         local count = found[id]
         local key = "fam_" .. tostring(id)
@@ -3670,6 +3821,7 @@ function ConchBlessing.kronos._absorbTemporary(player, source, captured)
                 rs.tempFloor = { serial = serial, counts = {} }
             end
             rs.tempFloor.counts[key] = (tonumber(rs.tempFloor.counts[key]) or 0) + count
+            Rune.changed()
             local before = familiarGrantCount(rs, id)
             ConchBlessing.kronos._handleFamiliarToItemConversion(player, id,
                 ConchBlessing.kronos._getEffectCount(player, id), count)
@@ -3784,6 +3936,7 @@ local function onUseBoxOfFriends(_, _item, _rng, player)
     if not (player and player:HasCollectible(KRONOS_ID)) then return end
     local room = Rune.room(player)
     room.double = room.double + 1
+    Rune.changed()
     bump("boxUses")
     ConchBlessing.kronos._queueTransferEffect(player, CollectibleType.COLLECTIBLE_BOX_OF_FRIENDS, false)
     scanNowAndNextUpdate(player, SOURCE_BOX)
@@ -3981,12 +4134,29 @@ local function getCaptionAtlas()
 end
 
 -- The familiar's Kronos synergy lines in `lang`, as the locale writes them.
+local function synergyText(value, lang)
+    local text = type(value) == "table" and (value[lang] or value.en) or value
+    return type(text) == "table" and text or { text }
+end
+
+-- The ability line of an absorbed familiar: a vanilla familiar's sits in
+-- Kronos's own synergy table; one of this mod's familiars (`kronosAbsorb`, such
+-- as Seonnyeo or the Hermit Crab) carries its Kronos line on its own row.
 local function kronosSynergyLines(itemId, lang)
-    local data = ConchBlessing.ItemData and ConchBlessing.ItemData.KRONOS
+    local itemData = ConchBlessing.ItemData or {}
+    local data = itemData.KRONOS
     for target, value in pairs(data and data.synergies or {}) do
         if type(target) == "table" and target.type == "collectible" and target.id == itemId then
-            local text = type(value) == "table" and (value[lang] or value.en) or value
-            return type(text) == "table" and text or { text }
+            return synergyText(value, lang)
+        end
+    end
+    for _, row in pairs(itemData) do
+        if type(row) == "table" and row.kronosAbsorb == true and row.id == itemId then
+            for target, value in pairs(row.synergies or {}) do
+                if type(target) == "table" and target.type == "collectible" and target.id == KRONOS_ID then
+                    return synergyText(value, lang)
+                end
+            end
         end
     end
     return {}
@@ -4633,6 +4803,9 @@ end
 
 -- Test/diagnostic hooks for the RNG and Kronos probes.
 ConchBlessing.kronos._test = {
+    -- A bench or test that writes a ledger directly drops the frame's counts,
+    -- as every production writer does (Rune.changed).
+    countsChanged = function() Rune.changed() end,
     -- Read-only queue evidence for test isolation. Never drain or replace a
     -- production queue to make a reusable test baseline appear clean.
     pendingCounts = function()
@@ -4859,6 +5032,7 @@ function ConchBlessing.kronos.devourWithRune(player, count, randomInt)
     end
     if taken == 0 then return 0 end
     Rune.totals[GetPtrHash(player)] = nil
+    Rune.changed()
     ConchBlessing.SaveManager.Save()
     local actions = ConchBlessing.kronos.data.absorbActions or {}
     for _, pick in ipairs(devoured) do
@@ -4955,6 +5129,11 @@ ConchBlessing:AddCallback(ModCallbacks.MC_PRE_USE_ITEM, onPreUseSacrificialAltar
 ConchBlessing:AddCallback(ModCallbacks.MC_USE_ITEM, onUseSacrificialAltar, CollectibleType.COLLECTIBLE_SACRIFICIAL_ALTAR)
 ConchBlessing:AddCallback(ModCallbacks.MC_USE_CARD, onUseSoulOfLilith, Card.CARD_SOUL_LILITH)
 ConchBlessing:AddCallback(ModCallbacks.MC_POST_ENTITY_REMOVE, ConchBlessing.kronos.onPlayerRemoved, EntityType.ENTITY_PLAYER)
+for _, id in ipairs({ ModCallbacks.MC_POST_NEW_ROOM, ModCallbacks.MC_POST_GAME_STARTED,
+    ModCallbacks.MC_POST_ADD_COLLECTIBLE, ModCallbacks.MC_POST_TRIGGER_COLLECTIBLE_REMOVED }) do
+    ConchBlessing:AddCallback(id, Rune.inventoryTouched)
+end
+Rune.hooked = ModCallbacks.MC_POST_ADD_COLLECTIBLE ~= nil and ModCallbacks.MC_POST_TRIGGER_COLLECTIBLE_REMOVED ~= nil
 if type(ModCallbacks.MC_PRE_USE_PILL) == "number" then
     ConchBlessing:AddCallback(ModCallbacks.MC_PRE_USE_PILL, onPreUsePrettyFly, PillEffect.PILLEFFECT_PRETTY_FLY)
 end

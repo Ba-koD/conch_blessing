@@ -487,8 +487,12 @@ ConchBlessing.Sounds = {
 }
 
 -- debug print functions
-ConchBlessing.printDebug = function(text)
+-- printDebug(format, ...) formats only when debug mode is on: most calls sit
+-- in update and cache paths, where building the string for nothing every time
+-- cost more than the check. A lone string is written as it is.
+ConchBlessing.printDebug = function(text, ...)
     if ConchBlessing.Config.debugMode then
+        if select("#", ...) > 0 then text = string.format(text, ...) end
         local frame = (Game and Game():GetFrameCount()) or -1
         Isaac.DebugString("[ConchBlessing][DEBUG][F:" .. tostring(frame) .. "] " .. tostring(text))
         Isaac.ConsoleOutput("[ConchBlessing][DEBUG][F:" .. tostring(frame) .. "] " .. tostring(text) .. "\n")

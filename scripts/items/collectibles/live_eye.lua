@@ -181,7 +181,7 @@ ConchBlessing.liveeye.onEvaluateCache = function(_, player, cacheFlag)
                 player, "Damage", mult, mult, "Live Eye"
             )
             
-            ConchBlessing.printDebug(string.format("Live Eye final mult=%.2f -> damage=%.2f", mult, player.Damage))
+            ConchBlessing.printDebug("Live Eye final mult=%.2f -> damage=%.2f", mult, player.Damage)
         end
     end
 end
@@ -199,7 +199,7 @@ local function shiftMultiplier(player, delta, label)
         player:AddCacheFlags(CacheFlag.CACHE_DAMAGE)
         player:EvaluateItems()
     end
-    ConchBlessing.printDebug(string.format("Live Eye: %s! multiplier %.2f -> %.2f", label, old, record.multiplier))
+    ConchBlessing.printDebug("Live Eye: %s! multiplier %.2f -> %.2f", label, old, record.multiplier)
 end
 
 -- player: the owner of the tear that hit. A missing owner is rejected.
@@ -217,8 +217,8 @@ ConchBlessing.liveeye.handleMiss = function(player)
     local chance = getMissForgiveChance(player)
     if player:GetCollectibleRNG(LIVE_EYE_ID):RandomFloat() < chance then
         counters.forgiven = counters.forgiven + 1
-        ConchBlessing.printDebug(string.format("Live Eye: miss forgiven (chance %.0f%%), multiplier stays %.2f",
-            chance * 100, ConchBlessing.liveeye.getMultiplier(player)))
+        ConchBlessing.printDebug("Live Eye: miss forgiven (chance %.0f%%), multiplier stays %.2f",
+            chance * 100, ConchBlessing.liveeye.getMultiplier(player))
         return
     end
     shiftMultiplier(player, -ConchBlessing.liveeye.data.missMultiplierDecrease, "miss")

@@ -986,9 +986,9 @@ local function _completeRoomRecords(reason)
             if not called then ConchBlessing.printError("[Upgrade] Finishing a recorded upgrade failed: " .. tostring(result)) end
         end
         if ok then finished = finished + 1 end
-        ConchBlessing.printDebug(string.format("[Upgrade] %s: recorded upgrade %s of %s %s (%s)", tostring(reason),
+        ConchBlessing.printDebug("[Upgrade] %s: recorded upgrade %s of %s %s (%s)", tostring(reason),
             tostring(id), tostring(type(record) == "table" and record.itemKey), ok and "finished" or "dropped",
-            tostring(detail)))
+            tostring(detail))
         records[id] = nil
     end
     Pending.flush()
@@ -998,7 +998,7 @@ end
 local function _processUpgradeJobs()
     if Game():IsPaused() then return end
     -- A Morph cancelled by another mod never reaches POST; its proof ends here.
-    nativeMorphs = {}
+    if next(nativeMorphs) ~= nil then nativeMorphs = {} end
     for _, job in ipairs(ConchBlessing._upgradeJobs) do job.nativeMorphLease = nil end
     if #ConchBlessing._upgradeJobs == 0 then
         return

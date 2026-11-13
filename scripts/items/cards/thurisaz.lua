@@ -21,7 +21,7 @@ ConchBlessing.thurisaz.onUseCard = function(_, card, player)
     local rng = player:GetCardRNG(card)
     local taken = kronos.devourWithRune(player, ConchBlessing.thurisaz.data.devour,
         function(n) return rng:RandomInt(n) end)
-    ConchBlessing.printDebug(string.format("[Thurisaz] devoured %d familiar(s)", taken))
+    ConchBlessing.printDebug("[Thurisaz] devoured %d familiar(s)", taken)
 end
 
 ConchBlessing:AddCallback(ModCallbacks.MC_USE_CARD, ConchBlessing.thurisaz.onUseCard, CARD)

@@ -294,9 +294,9 @@ local function applyDoorSheet(door, png)
         -- A recognised non-treasure door (a secret room's hole in the wall, say) is an
         -- ordinary skip; only report one this code could not classify.
         if filename == nil then
-            ConchBlessing.printDebug(string.format(
+            ConchBlessing.printDebug(
                 "[Angel's Crown] door skipped, unidentified: target=%s current=%s",
-                tostring(door.TargetRoomType), tostring(door.CurrentRoomType)))
+                tostring(door.TargetRoomType), tostring(door.CurrentRoomType))
         end
         return false
     end
@@ -430,10 +430,10 @@ local function applyAngelRoomLook()
 
     local grids = applyAngelGridLook()
     local fires = applyAngelFireplaces()
-    ConchBlessing.printDebug(string.format(
+    ConchBlessing.printDebug(
         "[Angel's Crown] room look applied: doors=%d/%d grids=%d fires=%d backdrop=%s",
         doors, seen, grids, fires,
-        backdropChanged and "yes" or "no (REPENTOGON unavailable)"))
+        backdropChanged and "yes" or "no (REPENTOGON unavailable)")
 end
 
 ---True when the Treasure Room behind this door is, or is about to become, an Angel
@@ -534,9 +534,9 @@ local function applyBlessing(rng)
         local pickup = spawnAngelPedestal(position, seed)
         if pickup then
             markDeal(pickup)
-            ConchBlessing.printDebug(string.format(
+            ConchBlessing.printDebug(
                 "[Angel's Crown] blessed extra pedestal: item=%d price=%d seed=%d",
-                pickup.SubType, pickup.Price, pickup.InitSeed))
+                pickup.SubType, pickup.Price, pickup.InitSeed)
         end
     end
 
@@ -582,9 +582,9 @@ local function convertRoom(record, goldenCount, hasMomsBox)
             -- same puff the door flip does.
             spawnPuff(pickup.Position)
             converted = converted + 1
-            ConchBlessing.printDebug(string.format(
+            ConchBlessing.printDebug(
                 "[Angel's Crown] converted pedestal: item=%d price=%d seed=%d",
-                pickup.SubType, pickup.Price, pickup.InitSeed))
+                pickup.SubType, pickup.Price, pickup.InitSeed)
         end
     end
 
@@ -594,10 +594,10 @@ local function convertRoom(record, goldenCount, hasMomsBox)
         applyBlessing(rng)
     end
 
-    ConchBlessing.printDebug(string.format(
+    ConchBlessing.printDebug(
         "[Angel's Crown] room converted: pedestals=%d blessed=%s chance=%.2f (golden=%d momsBox=%s)",
         converted, tostring(record.blessed), getBlessedChance(goldenCount, hasMomsBox),
-        goldenCount or 0, tostring(hasMomsBox)))
+        goldenCount or 0, tostring(hasMomsBox))
 end
 
 -- A reroll swaps the item under a pedestal without changing rooms, so the deal terms
@@ -629,8 +629,8 @@ local function settleDeal(pickup)
     dealSubTypes[GetPtrHash(pickup)] = nil
     pickup.Price = 0
     pickup.AutoUpdatePrice = false
-    ConchBlessing.printDebug(string.format(
-        "[Angel's Crown] deal settled, pedestal released: item=%d", pickup.SubType))
+    ConchBlessing.printDebug(
+        "[Angel's Crown] deal settled, pedestal released: item=%d", pickup.SubType)
     SaveManager.Save()
 end
 
@@ -682,9 +682,9 @@ local function refreshRerolledDeals()
                     or pickup.OptionsPickupIndex ~= 0
                 then
                     quoteDeal(pickup, marker)
-                    ConchBlessing.printDebug(string.format(
+                    ConchBlessing.printDebug(
                         "[Angel's Crown] deal restated after a reroll: item=%d price=%d",
-                        pickup.SubType, pickup.Price))
+                        pickup.SubType, pickup.Price)
                 end
             end
         end
@@ -741,8 +741,8 @@ function ConchBlessing.angelscrown.onPreGetCollectible(_, poolType, decrease, se
     inPoolOverride = false
 
     if ok and type(collectibleType) == "number" and collectibleType > 0 then
-        ConchBlessing.printDebug(string.format(
-            "[Angel's Crown] treasure request answered from the angel pool: item=%d", collectibleType))
+        ConchBlessing.printDebug(
+            "[Angel's Crown] treasure request answered from the angel pool: item=%d", collectibleType)
         return collectibleType
     end
 

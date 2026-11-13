@@ -1,4 +1,5 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
+local RunSaveCache = require("scripts.lib.run_save_cache")
 ConchBlessing.utilitybelt = {}
 
 local UTILITY_BELT_ID = Isaac.GetItemIdByName("Utility Belt")
@@ -89,10 +90,9 @@ end
 -- active into an empty pocket. _pendingPlayers mirrors the saved mark by
 -- pointer hash for this session's readers. nil when the run save is missing.
 local function getRecord(player, create)
-    local SaveManager = ConchBlessing.SaveManager
-    if not SaveManager then return nil end
-    local save
-    if create then save = SaveManager.GetRunSave(player) else save = SaveManager.TryGetRunSave(player) end
+    if not ConchBlessing.SaveManager then return nil end
+    -- Every player asks twice an update: the table is kept for the frame.
+    local save = RunSaveCache.player(player, create)
     if type(save) ~= "table" then return nil end
     local record = save[SAVE_KEY]
     if type(record) ~= "table" then

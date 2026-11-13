@@ -58,6 +58,9 @@ class KronosRoomEffectsTests(unittest.TestCase):
                 p.Position=p.Position or Vector.Zero
                 function p:HasCollectible(id) return (self.inventory[id] or 0)>0 end
                 function p:GetCollectibleNum(id) return self.inventory[id] or 0 end
+                function p:GetCollectibleCount()
+                    local n=0; for _,c in pairs(self.inventory) do n=n+c end; return n
+                end
                 function p:AddCollectible(id) self.inventory[id]=(self.inventory[id] or 0)+1 end
                 function p:RemoveCollectible(id) self.inventory[id]=math.max(0,(self.inventory[id] or 0)-1) end
                 function p:GetData() return self.data end
@@ -146,6 +149,7 @@ class KronosRoomEffectsTests(unittest.TestCase):
                 local rs=ConchBlessing.SaveManager.GetRunSave(who).kronos
                 rs.absorbed['fam_'..id]={id=id,count=count}
                 rs.totalAbsorbed=rs.totalAbsorbed+count
+                K._test.countsChanged()
                 K._syncAbsorbedDamage(who)
                 who:EvaluateItems()
                 return id

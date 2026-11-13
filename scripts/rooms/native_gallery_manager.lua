@@ -1,4 +1,5 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
+local RunSaveCache = require("scripts.lib.run_save_cache")
 local NativeReturnDoor = require("scripts.rooms.native_return_door")
 local isc = require("scripts.lib.isaacscript-common")
 local NativeGalleryRooms = require("scripts.rooms.death_certificate_gallery_rooms")
@@ -66,21 +67,9 @@ M._debugStockAudit = nil
 -- callback may open this semantic lifecycle gate.
 M._runLifecycleReady = false
 
+-- The global run save, kept for the frame (scripts/lib/run_save_cache.lua).
 local function getRunSave(create)
-    local saveManager = ConchBlessing.SaveManager
-    if type(saveManager) ~= "table"
-        or type(saveManager.IsLoaded) ~= "function"
-        or not saveManager.IsLoaded()
-    then
-        return nil
-    end
-
-    if create then
-        if type(saveManager.GetRunSave) ~= "function" then return nil end
-        return saveManager.GetRunSave(nil, false)
-    end
-    if type(saveManager.TryGetRunSave) ~= "function" then return nil end
-    return saveManager.TryGetRunSave(nil, false)
+    return RunSaveCache.global(create)
 end
 
 local function getSession()
@@ -3385,10 +3374,11 @@ function M.onInputAction(_, entity, inputHook, action)
     if action ~= ButtonAction.ACTION_ITEM and action ~= ButtonAction.ACTION_PILLCARD then
         return
     end
-    if not ConchBlessing.GalleryManager.isBackendActive(M) then return end
     if M._runLifecycleReady ~= true then return end
     local player = entity and entity:ToPlayer() or nil
-    if not player or not M.isCurrentGalleryRoom() then return end
+    if not player then return end
+    if not ConchBlessing.GalleryManager.isBackendActive(M) then return end
+    if not M.isCurrentGalleryRoom() then return end
     local blocksHourglass = action == ButtonAction.ACTION_ITEM
         and player:GetActiveItem(ActiveSlot.SLOT_PRIMARY)
             == CollectibleType.COLLECTIBLE_GLOWING_HOUR_GLASS

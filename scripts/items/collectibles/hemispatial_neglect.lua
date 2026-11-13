@@ -40,12 +40,25 @@ function M.onTearParams(_, player, params, weaponType, _, eye, source)
     params.TearColor = Color(1, 1, 1, 0)
 end
 
+-- Only a tear silence() tagged carries BLOCKED, and silence() removes it in
+-- the same or the next update. Every tear passes through four callbacks here
+-- each update, so the tag is looked for only within a second of the last one.
+local lastSilenced = -math.huge
+local function gameFrame()
+    local game = rawget(_G, "Game") and Game()
+    return game and game.GetFrameCount and game:GetFrameCount() or nil
+end
+
 function M.isBlockedTear(tear)
     if not tear or tear.Type ~= definition.id then return false end
-    return (variant ~= nil and tear.Variant == variant) or tear:GetData()[BLOCKED] == true
+    if variant ~= nil and tear.Variant == variant then return true end
+    local frame = gameFrame()
+    if frame and frame - lastSilenced > 30 then return false end
+    return tear:GetData()[BLOCKED] == true
 end
 
 local function silence(tear)
+    lastSilenced = gameFrame() or lastSilenced
     tear:GetData()[BLOCKED] = true
     tear.Visible = false
     tear.CollisionDamage = 0

@@ -34,10 +34,12 @@ local function tableHasEntries(t)
     return type(t) == "table" and next(t) ~= nil
 end
 
+local function readGameFrame()
+    return Game():GetFrameCount()
+end
+
 local function getFrame()
-    local ok, frame = pcall(function()
-        return Game():GetFrameCount()
-    end)
+    local ok, frame = pcall(readGameFrame)
     if ok and type(frame) == "number" then
         return frame
     end
@@ -118,9 +120,7 @@ local function getPickupOriginInfo(pickup)
     -- tail. Without that API a turning pedestal is read as its shown choice.
     if pickup.Variant == PickupVariant.PICKUP_COLLECTIBLE
         and type(pickup.GetCollectibleCycle) == "function" then
-        local ok, queue = pcall(function()
-            return pickup:GetCollectibleCycle()
-        end)
+        local ok, queue = pcall(pickup.GetCollectibleCycle, pickup)
         if ok and type(queue) == "table" and #queue > 0 then
             local itemIds = { rawId }
             for _, itemId in ipairs(queue) do
@@ -152,11 +152,36 @@ local function getPickupOriginInfo(pickup)
     }
 end
 
+-- Whether any choice the pickup shows (or holds in its cycle) has a Conch
+-- result. Every pedestal and trinket is asked each update and most have none,
+-- so this is answered before the origin's tables and strings are built.
+local function mayUpgrade(pickup, maps)
+    if not pickup or not isUpgradeablePickupVariant(pickup.Variant) then return false end
+    local rawId = pickup.SubType
+    if type(rawId) ~= "number" or rawId <= 0 then return false end
+    if pickup.Variant == PickupVariant.PICKUP_TRINKET then
+        local baseId = rawId >= 32768 and (rawId - 32768) or rawId
+        return tableHasEntries(maps["T:" .. baseId])
+    end
+    if tableHasEntries(maps["C:" .. rawId]) then return true end
+    if pickup.Variant == PickupVariant.PICKUP_COLLECTIBLE
+        and type(pickup.GetCollectibleCycle) == "function" then
+        local ok, queue = pcall(pickup.GetCollectibleCycle, pickup)
+        if ok and type(queue) == "table" then
+            for _, itemId in ipairs(queue) do
+                if type(itemId) == "number" and tableHasEntries(maps["C:" .. itemId]) then return true end
+            end
+        end
+    end
+    return false
+end
+
 local function getPickupUpgradeInfo(pickup)
     local maps = ConchBlessing.ItemMaps
     if not tableHasEntries(maps) then
         return nil
     end
+    if not mayUpgrade(pickup, maps) then return nil end
 
     local originInfo = getPickupOriginInfo(pickup)
     if not originInfo then
@@ -248,8 +273,8 @@ local function record(event, rec, detail)
         frame = getFrame() }
     if #events > EVENT_LIMIT then table.remove(events, 1) end
     if debugOn() then
-        ConchBlessing.printDebug(string.format("[EvolutionPreview] %s %s%s", event, tostring(rec.identity),
-            detail and (" " .. tostring(detail)) or ""))
+        ConchBlessing.printDebug("[EvolutionPreview] %s %s%s", event, tostring(rec.identity),
+            detail and (" " .. tostring(detail)) or "")
     end
 end
 

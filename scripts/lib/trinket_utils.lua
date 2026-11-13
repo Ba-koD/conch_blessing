@@ -12,9 +12,8 @@ end
 -- Mom's Box, which does not stack with the number of copies.
 function M.getMultiplier(player, trinketId)
 	if not player or not trinketId then return 0 end
-	local ok, n = pcall(function()
-		return player:GetTrinketMultiplier(trinketId)
-	end)
+	-- No closure per call: several items ask for every player every update.
+	local ok, n = pcall(player.GetTrinketMultiplier, player, trinketId)
 	n = ok and tonumber(n) or 0
 	return n > 0 and n or 0
 end

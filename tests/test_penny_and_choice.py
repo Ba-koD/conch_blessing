@@ -24,10 +24,12 @@ class PennyTests(unittest.TestCase):
             function Game() return {GetLevel=function() return {GetStage=function() return stage end,GetStageType=function() return 0 end} end,
                 GetNumPlayers=function() return #players end} end
             function SFXManager() return {Play=function() sounds=sounds+1 end} end
+            GetPtrHash=GetPtrHash or function(p) return p.hash or tostring(p) end
             SoundEffect={SOUND_POWERUP1=1}
             DamageFlag={DAMAGE_NO_PENALTIES=1<<28}; RoomType={ROOM_SACRIFICE=13}
             ConchBlessingRequire=function(name)
                 if name=='scripts.lib.player_hits' then return load(hitsSource,'player_hits')() end
+                if name=='scripts.lib.run_save_cache' then return load(cacheSource,'run_save_cache')() end
                 assert(name=='scripts.lib.sound_volume','unexpected require '..tostring(name))
                 return {volume=function(v) return v end}
             end
@@ -74,6 +76,7 @@ class PennyTests(unittest.TestCase):
         ''')
         self.lua.globals().source = (ROOT/'scripts/items/collectibles/two_faced_penny.lua').read_text(encoding='utf-8')
         self.lua.globals().hitsSource = (ROOT/'scripts/lib/player_hits.lua').read_text(encoding='utf-8')
+        self.lua.globals().cacheSource = (ROOT/'scripts/lib/run_save_cache.lua').read_text(encoding='utf-8')
         self.load()
 
     def load(self):

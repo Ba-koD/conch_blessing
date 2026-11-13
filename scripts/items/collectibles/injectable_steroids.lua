@@ -120,8 +120,8 @@ local function rebuildInjectableUnified(player)
         if total < floorValue then
             um:SetItemAdditiveMultiplier(player, INJECTABLE_STEROIDS_ID, statName,
                 1.0 + (floorValue - total), "Injectable Steroids floor")
-            ConchBlessing.printDebug(string.format(
-                "Injectable Steroids: %s total %.3f floored to %.3f", statName, total, floorValue))
+            ConchBlessing.printDebug(
+                "Injectable Steroids: %s total %.3f floored to %.3f", statName, total, floorValue)
         end
     end
     um:SaveToSaveManager(player)
@@ -273,8 +273,8 @@ ConchBlessing.injectablsteroids.onUseItem = function(_, collectibleID, _rng, pla
     SaveManager.Save()
     ConchBlessing.printDebug("SaveManager.Save() completed!")
     
-    ConchBlessing.printDebug(string.format("Injectable Steroids #%d used: Speed=-%.2f Tears=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx", 
-        newIndex, ConchBlessing.injectablsteroids.data.speedDecrease, newMultipliers.tears, newMultipliers.damage, newMultipliers.range, newMultipliers.luck))
+    ConchBlessing.printDebug("Injectable Steroids #%d used: Speed=-%.2f Tears=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx", 
+        newIndex, ConchBlessing.injectablsteroids.data.speedDecrease, newMultipliers.tears, newMultipliers.damage, newMultipliers.range, newMultipliers.luck)
     
     -- Update unified multiplier system with the new multipliers
     local uniqueKey = INJECTABLE_STEROIDS_ID .. "_" .. newIndex
@@ -377,8 +377,8 @@ ConchBlessing.injectablsteroids.onEvaluateCache = function(_, player, cacheFlag)
     
     if cacheFlag == CacheFlag.CACHE_DAMAGE and useCount ~= (ConchBlessing.injectablsteroids._lastFinalDebugUseCount or 0) then
         local speedDecrease = ConchBlessing.injectablsteroids.data.speedDecrease * useCount
-        ConchBlessing.printDebug(string.format("Injectable Steroids Final (x%d uses): Speed=-%.2f Tears=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx", 
-            useCount, speedDecrease, totalTears, totalDamage, totalRange, totalLuck))
+        ConchBlessing.printDebug("Injectable Steroids Final (x%d uses): Speed=-%.2f Tears=%.2fx Damage=%.2fx Range=%.2fx Luck=%.2fx", 
+            useCount, speedDecrease, totalTears, totalDamage, totalRange, totalLuck)
         ConchBlessing.injectablsteroids._lastFinalDebugUseCount = useCount
     end
     

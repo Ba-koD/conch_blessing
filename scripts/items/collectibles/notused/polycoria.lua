@@ -49,7 +49,7 @@ ConchBlessing.polycoria.onDamage = function(_, entity, amount, flags, src, count
     
     -- Exclude self-inflicted damage (same logic as Minus Chain and Time = Power)
     if DamageUtils.isSelfInflictedDamage(flags, src) then
-        ConchBlessing.printDebug(string.format("Polycoria: Ignored self-inflicted damage (flags=%d)", flags or -1))
+        ConchBlessing.printDebug("Polycoria: Ignored self-inflicted damage (flags=%d)", flags or -1)
         return
     end
     
@@ -72,10 +72,10 @@ ConchBlessing.polycoria.onNewFloor = function(_)
                     pData.given2020Count = (pData.given2020Count or 0) + 1
                     SFXManager():Play(SoundEffect.SOUND_POWERUP1, 1.0)
                     
-                    ConchBlessing.printDebug(string.format(
+                    ConchBlessing.printDebug(
                         "Polycoria: No-hit bonus! Total 20/20: %d",
                         pData.given2020Count
-                    ))
+                    )
                 else
                     ConchBlessing.printDebug("Polycoria: Took damage, no bonus")
                 end

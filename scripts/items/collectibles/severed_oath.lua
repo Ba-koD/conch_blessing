@@ -1,4 +1,5 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
+local RoomKey = require("scripts.lib.room_key")
 ConchBlessing.severedoath = ConchBlessing.severedoath or {}
 local M = ConchBlessing.severedoath
 
@@ -126,38 +127,10 @@ local function getPickupOptionsIndex(pickup)
     return math.max(0, tonumber(pickup and pickup.OptionsPickupIndex) or 0)
 end
 
+-- "placementSeed:stage:stageType:roomIndex:dimension", rebuilt only when the
+-- room changes (scripts/lib/room_key.lua).
 local function getCurrentRoomKey()
-    local game = Game()
-    local level = game:GetLevel()
-    local roomIndex = level and level:GetCurrentRoomIndex() or -1
-    local stage = level and level:GetStage() or -1
-    local stageType = level and level:GetStageType() or -1
-    local placementSeed = 0
-    if level and type(level.GetDungeonPlacementSeed) == "function" then
-        local ok, seed = pcall(function()
-            return level:GetDungeonPlacementSeed()
-        end)
-        if ok and type(seed) == "number" then
-            placementSeed = seed
-        end
-    end
-    local dimension = 0
-    if level and type(level.GetDimension) == "function" then
-        local ok, currentDimension = pcall(function()
-            return level:GetDimension()
-        end)
-        if ok and type(currentDimension) == "number" then
-            dimension = currentDimension
-        end
-    end
-
-    return table.concat({
-        tostring(placementSeed),
-        tostring(stage),
-        tostring(stageType),
-        tostring(roomIndex),
-        tostring(dimension),
-    }, ":")
+    return RoomKey.current()
 end
 
 local function ensureCycleRoomState()
@@ -1458,8 +1431,8 @@ local function finishHeldBonusCycle(pickup, state, target)
         if not added then
             state.retrySignature = retrySignature(pickup, target)
             state.retryFrame = Game():GetFrameCount() + 30
-            ConchBlessing.printDebug(string.format(
-                "[Severed Oath] Deferred bonus for %s: %s.", tostring(pickup.InitSeed), tostring(detail)))
+            ConchBlessing.printDebug(
+                "[Severed Oath] Deferred bonus for %s: %s.", tostring(pickup.InitSeed), tostring(detail))
             break
         end
         if state.pendingSwap then break end
@@ -1617,11 +1590,11 @@ local function splitPickup(entry, player)
     local count = #cycleItems
 
     spawnCleaverSlashEffect(basePos, player)
-    ConchBlessing.printDebug(string.format(
+    ConchBlessing.printDebug(
         "[Severed Oath] Spawning split items from seed=%s items=[%s].",
         tostring(pickup.InitSeed),
         formatItemList(cycleItems)
-    ))
+    )
     pickup:Remove()
 
     for index, itemId in ipairs(cycleItems) do
@@ -1774,7 +1747,7 @@ function M.onUseItem(_, collectibleId, rng, player, useFlags, activeSlot, varDat
 
     SFXManager():Play(SoundEffect.SOUND_POWERUP_SPEWER, require("scripts.lib.sound_volume").volume(1.0), 0, false, 1.0, 0)
     logVerify(string.format("active-result split=%d spawned=%d", splitCount, spawnedCount))
-    ConchBlessing.printDebug(string.format("[Severed Oath] Split %d cycling pickups into %d items.", splitCount, spawnedCount))
+    ConchBlessing.printDebug("[Severed Oath] Split %d cycling pickups into %d items.", splitCount, spawnedCount)
     return { Discharge = true, Remove = false, ShowAnim = true }
 end
 
