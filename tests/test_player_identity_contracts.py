@@ -58,7 +58,7 @@ SM={SaveCallbacks={PRE_DATA_SAVE='pre_save',PRE_FLOOR_DATA_RESET='pre_floor',POS
     GetFloorSave=function(p) local k=p and p.seed or 'global'; floorSaves[k]=floorSaves[k] or {}; return floorSaves[k] end,
     Save=function() saves=saves+1 end}
 package.loaded['scripts.lib.save_manager']=SM
-package.loaded['scripts.lib.player_hits']={register=function(key,fn) hits[key]=fn end,counts=function(flags) return flags~=SELF end}
+package.loaded['scripts.lib.player_hits']={register=function(key,fn) hits[key]=fn end,counts=function(flags) return flags~=SELF end,watchFloor=function() end,markBroken=function() end,recover=function() end}
 UM={writes=0}
 local function bucket(p,group,id,stat) UM[p.hash]=UM[p.hash] or {}; local t=UM[p.hash]
     t[group]=t[group] or {}; t[group][id]=t[group][id] or {}; return t[group][id] end

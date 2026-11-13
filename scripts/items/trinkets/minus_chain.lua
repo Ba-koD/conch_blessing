@@ -72,7 +72,7 @@ Hits.register("MINUS_CHAIN", function(_, ent, amount, flags, src, countdown)
 	if not player then return end
 
 	if not Hits.counts(flags) then
-		ConchBlessing.printDebug(string.format("[MinusChain] Ignored self-inflicted damage (flags=%d)", flags or -1))
+		ConchBlessing.printDebug("[MinusChain] Ignored self-inflicted damage (flags=%d)", flags or -1)
 		return
 	end
 
@@ -145,9 +145,19 @@ else
 	ConchBlessing.printError("[MinusChain] SaveManager has no PRE_FLOOR_DATA_RESET; minus trinkets cannot evolve")
 end
 
+-- A hit ends this floor's evolution; on the next floor the trinkets watch again.
+for _, pair in ipairs(HELD_KEYS) do Hits.watchFloor(pair[2]) end
+
 ConchBlessing.originalMod:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function()
 	M._runReady = true
 	endedFloor = nil
+	-- A continued floor that was already hit still owes the recovery icons.
+	for i = 0, Game():GetNumPlayers() - 1 do
+		local player = Isaac.GetPlayer(i)
+		if player and wasHit(player) then
+			Hits.markBroken(player, { "F_MINUS", "C_MINUS", "B_MINUS", "WRONG_ANSWER_NOTE" })
+		end
+	end
 end)
 
 ConchBlessing.originalMod:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, function()

@@ -73,7 +73,8 @@ local SaveManager={GetRunSave=function(p) return p.save end,
     SaveCallbacks={PRE_FLOOR_DATA_RESET='PRE_FLOOR',POST_DATA_LOAD='POST_LOAD'}}
 ConchBlessing.SaveManager=SaveManager
 local Hits={register=function(key,fn) hitHandlers[key]=fn end,
-    counts=function(flags) return (flags or 0)&DamageFlag.DAMAGE_RED_HEARTS==0 end}
+    counts=function(flags) return (flags or 0)&DamageFlag.DAMAGE_RED_HEARTS==0 end,
+    watchFloor=function() end,markBroken=function() end,recover=function() end}
 local Provenance={getSourceEntity=function(source,extra) return (extra and extra.Entity) or (source and source.Entity) end,
     getPlayerOwner=function(e)
         for _=1,12 do

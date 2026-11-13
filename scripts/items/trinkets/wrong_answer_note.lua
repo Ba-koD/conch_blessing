@@ -186,6 +186,9 @@ local function markEnemy(npc)
     if bonus > 0 then addMarker(npc, percent(bonus), RED) end
 end
 
+-- Its clean-floor bonus breaks on any hit; on the next floor it watches again.
+Hits.watchFloor("WRONG_ANSWER_NOTE")
+
 -- A hit is written down under the kind of enemy behind it.
 Hits.register("WRONG_ANSWER_NOTE", function(_, entity, amount, flags, source)
     local player = entity and entity:ToPlayer()

@@ -1,6 +1,7 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 local S = require("scripts.dev.item_scenarios")
 local H = require("scripts.dev.item_test_support")
+local Hits = require("scripts.lib.player_hits")
 
 for key, nextKey in pairs({ F_MINUS="C_MINUS", C_MINUS="B_MINUS", B_MINUS="A_MINUS" }) do
     for _, golden in ipairs({false,true}) do
@@ -12,6 +13,11 @@ for key, nextKey in pairs({ F_MINUS="C_MINUS", C_MINUS="B_MINUS", B_MINUS="A_MIN
             S.newFloor(plan,2)
             plan.check("hit floor does not evolve the trinket", function(player)
                 return player:GetTrinket(0)==id+flag, "held=" .. player:GetTrinket(0)
+            end)
+            plan.check("the next floor shows the trinket's green recovery", function(player)
+                local keys=Hits._test.recovering(player) or {}
+                for _,k in ipairs(keys) do if k==key then return true,"recovering="..table.concat(keys,",") end end
+                return false,"recovering="..table.concat(keys,",")
             end)
             S.newFloor(plan,3)
             plan.check("next clean floor evolves once and preserves golden state", function(player)
@@ -73,6 +79,11 @@ for key, spec in pairs({ TIME_POWER={"timepowertrinket","damageBonus",0.006},
             plan.check("exact deadline resumes one normal growth update",function(player,ctx)
                 return H.expect(bonus(player)-ctx.pausedBonus,spec[3]/30)
             end)
+            plan.check("growth resuming shows the green recovery",function(player)
+                local keys=Hits._test.recovering(player) or {}
+                for _,k in ipairs(keys) do if k==key then return true,"recovering="..table.concat(keys,",") end end
+                return false,"recovering="..table.concat(keys,",")
+            end)
             plan.act(function(player,ctx)
                 ctx.resumedBonus=bonus(player); H.clockAt(ctx,ctx.hitClock+1801)
             end)
@@ -115,11 +126,20 @@ S.add("TWO_FACED_PENNY","clean_and_hit_floors",{conditions=true},function(plan,i
         local ok,detail=H.expect(player:GetCollectibleNum(CollectibleType.COLLECTIBLE_SAD_ONION,true)-ctx.before,1)
         return ok and player:GetCollectibleNum(CollectibleType.COLLECTIBLE_D6,true)==1,detail
     end)
+    plan.check("a clean floor shows no green recovery",function(player)
+        local keys=Hits._test.recovering(player)
+        return keys==nil,"recovering="..table.concat(keys or {},",")
+    end)
     H.hit(plan)
     plan.act(function(player,ctx) ctx.before=player:GetCollectibleNum(CollectibleType.COLLECTIBLE_SAD_ONION,true) end)
     S.newFloor(plan,3)
     plan.check("hit floor grants no extra collectible",function(player,ctx)
         return H.expect(player:GetCollectibleNum(CollectibleType.COLLECTIBLE_SAD_ONION,true),ctx.before)
+    end)
+    plan.check("the next floor shows the coin's green recovery",function(player)
+        local keys=Hits._test.recovering(player) or {}
+        for _,key in ipairs(keys) do if key=="TWO_FACED_PENNY" then return true,"recovering="..table.concat(keys,",") end end
+        return false,"recovering="..table.concat(keys,",")
     end)
 end)
 

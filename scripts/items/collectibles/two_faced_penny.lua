@@ -1,4 +1,5 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
+local RunSaveCache = require("scripts.lib.run_save_cache")
 local game = Game()
 local Hits = require("scripts.lib.player_hits")
 local Sound = require("scripts.lib.sound_volume")
@@ -30,9 +31,9 @@ end
 -- with the inventory. Before, they lived in GetData: Continue reopened every
 -- slot, and the next item then took the coin and its floor payouts.
 local function getState(player, create)
-    local SaveManager = ConchBlessing.SaveManager
-    if not SaveManager then return nil end
-    local save = create and SaveManager.GetRunSave(player) or SaveManager.TryGetRunSave(player)
+    if not ConchBlessing.SaveManager then return nil end
+    -- Every player asks twice an update: the table is kept for the frame.
+    local save = RunSaveCache.player(player, create)
     if type(save) ~= "table" then return nil end
     local state = save[SAVE_KEY]
     if type(state) ~= "table" then
@@ -217,8 +218,8 @@ local function claimNextCollectible(player, state, runtime, itemId)
     for _ = 1, claimed do
         grantItem(player, itemId, runtime)
     end
-    ConchBlessing.printDebug(string.format(
-        "[Two Faced Penny] Claimed collectible %d for %d slot(s).", itemId, claimed))
+    ConchBlessing.printDebug(
+        "[Two Faced Penny] Claimed collectible %d for %d slot(s).", itemId, claimed)
     return true
 end
 
@@ -311,6 +312,8 @@ function M.onDamage(_, entity, amount, flags, source, countdown)
     return true
 end
 Hits.register("TWO_FACED_PENNY", M.onDamage)
+-- A hit takes this floor's payouts; on the next floor the coin watches again.
+Hits.watchFloor("TWO_FACED_PENNY")
 
 function M.onNewFloor(_)
     if not M._runReady then return end
@@ -356,6 +359,9 @@ function M.onGameStarted(_, isContinued)
             if state then
                 syncPennySlots(player, state)
                 if state.floorKey == nil then state.floorKey = getFloorKey() end
+                for _, slot in ipairs(state.slots) do
+                    if slot.hit then Hits.markBroken(player, { "TWO_FACED_PENNY" }); break end
+                end
             end
             refreshCounts(player, getRuntime(player))
         end

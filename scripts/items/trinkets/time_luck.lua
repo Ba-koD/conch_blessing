@@ -111,6 +111,7 @@ loadFromSave = function(player, ps)
 		local remainingFrames = math.max(0, math.min(getPauseDurationFrames(), math.floor(tonumber(rec.pauseFramesRemaining) or 0)))
 		local currentFrame = TimerClock.now()
 		ps.pausedUntilFrame = currentFrame + remainingFrames
+		ps.recovering = remainingFrames > 0 or nil
 		writePauseTimerRecord(rec, ps, currentFrame)
 	end
 end
@@ -173,7 +174,7 @@ function ConchBlessing.timelucktrinket.onEvaluateCache(_, player, cacheFlag)
 	if id and player:HasTrinket(id) then
 		bonus = bonus + (ps.luckBonus or 0.0)
 	end
-	ConchBlessing.printDebug(string.format("[Time=Luck] onEvaluateCache: bonus=%.6f (perm=%.6f, temp=%.6f)", bonus, ps.permanentBonus or 0.0, ps.luckBonus or 0.0))
+	ConchBlessing.printDebug("[Time=Luck] onEvaluateCache: bonus=%.6f (perm=%.6f, temp=%.6f)", bonus, ps.permanentBonus or 0.0, ps.luckBonus or 0.0)
 	if bonus ~= 0 then
 		local minL = (ConchBlessing.stats and ConchBlessing.stats.BASE_STATS and ConchBlessing.stats.BASE_STATS.luck or 0.1) * 0.4
 		if ConchBlessing.stats and ConchBlessing.stats.luck and ConchBlessing.stats.luck.applyAddition then
@@ -221,6 +222,11 @@ function ConchBlessing.timelucktrinket.onUpdate()
 		-- Growth when held and not paused
 		if has then
 			if frame >= ps.pausedUntilFrame then
+				-- the pause after a hit is over: growth starts again
+				if ps.recovering then
+					ps.recovering = nil
+					Hits.recover(p, { "TIME_LUCK" })
+				end
 				local fps = ConchBlessing.timelucktrinket.data.framesPerSecond or 30
 				if fps <= 0 then fps = 30 end
 				-- The engine's trinket multiplier: +1 per normal copy, +2 per golden
@@ -239,8 +245,8 @@ function ConchBlessing.timelucktrinket.onUpdate()
 				    ps.lastLogKey = logKey
 					if ConchBlessing.Config and ConchBlessing.Config.debugMode then
 						local normalCount, goldenCount, hasMomsBox = TrinketUtils.getTrinketCounts(p, id)
-						ConchBlessing.printDebug(string.format("[Time=Luck] perSecond=%.6f perTick=%.6f (mult=%d: normal=%d golden=%d momsBox=%s)",
-							perSecond, delta, mult, normalCount, goldenCount, tostring(hasMomsBox)))
+						ConchBlessing.printDebug("[Time=Luck] perSecond=%.6f perTick=%.6f (mult=%d: normal=%d golden=%d momsBox=%s)",
+							perSecond, delta, mult, normalCount, goldenCount, tostring(hasMomsBox))
 					end
 				end
 				if frame % 90 == 0 then
@@ -260,12 +266,13 @@ function ConchBlessing.timelucktrinket.onEntityTakeDamage(_, entity, amount, fla
 	if not id then return end
 	if not player:HasTrinket(id) then return end
 	if not Hits.counts(flags) then
-		ConchBlessing.printDebug(string.format("[Time=Luck] ignore pause by flags=%d", flags or -1))
+		ConchBlessing.printDebug("[Time=Luck] ignore pause by flags=%d", flags or -1)
 		return
 	end
 	local ps = getPlayerState(player)
 	local frame = TimerClock.now()
 	ps.pausedUntilFrame = math.max(ps.pausedUntilFrame or 0, frame + getPauseDurationFrames())
+	ps.recovering = true
 	saveToSave(player)
 	return true
 end
