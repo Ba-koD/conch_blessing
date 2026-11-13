@@ -920,6 +920,9 @@ return {
         sealed_demon_sword = {
             remaining_kills = "#{{ColorYellow}}Remaining kills: %s{{CR}}",
         },
+        jeon_woochi = {
+            summon_count = "#{{ColorYellow}}Items summoned: %s{{CR}}",
+        },
         tyrfing = {
             accumulated_damage = "#{{Damage}} Accumulated damage: +%s",
         },

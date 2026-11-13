@@ -488,6 +488,36 @@ class JeonWoochiTests(unittest.TestCase):
             assert(#effects==0 and next(removed)==nil and #errors==0, 'effects '..#effects)
         ''')
 
+    def test_eid_shows_how_many_items_he_would_summon(self):
+        # user request 2026-11-13: the set is random, the count is not
+        self.run_lua(r'''
+            ConchBlessing.Locale={text=function(path,n)
+                assert(path=='ui.jeon_woochi.summon_count', path); return '#COUNT '..n end}
+            EID={ClosestPlayerTo=function() return player end}
+            local function shown(text)
+                return M.describe({Description=text}).Description
+            end
+            local base='Picks a set#Summons items#{{Warning}} Requires REPENTOGON!'
+            -- Guppy 1 (two left) and Bob 2 (one left): he would summon one
+            counters[PlayerForm.PLAYERFORM_GUPPY]=1
+            counters[PlayerForm.PLAYERFORM_BOB]=2
+            assert(M.summonCount(player)==1, 'count '..tostring(M.summonCount(player)))
+            assert(shown(base)=='Picks a set#Summons items#COUNT 1#{{Warning}} Requires REPENTOGON!', shown(base))
+            -- the same count whichever of the closest sets he would pick
+            counters[PlayerForm.PLAYERFORM_BOB]=1
+            gameFrame=gameFrame+1
+            assert(M.summonCount(player)==2, 'two left in both closest sets')
+            -- the count is what a pickup really summons
+            for seed=1,20 do assert(#M.plan(player,RNG(seed)).items==M.summonCount(player)) end
+            -- every set complete: zero, and no line without REPENTOGON
+            for _,f in pairs(PlayerForm) do done[f]=true end
+            gameFrame=gameFrame+1
+            assert(M.summonCount(player)==0, 'complete sets still count')
+            assert(shown('x')=='x#COUNT 0', shown('x'))
+            player.GetPlayerFormCounter=nil
+            assert(shown('x')=='x', 'a line without REPENTOGON')
+        ''')
+
     def test_without_repentogon_nothing_is_stolen_and_one_error_is_reported(self):
         self.run_lua(r'''
             player.GetPlayerFormCounter=nil

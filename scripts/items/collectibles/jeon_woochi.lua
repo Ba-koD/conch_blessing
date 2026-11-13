@@ -215,10 +215,9 @@ local function randomizer(rng)
     return function(n) return rng:RandomInt(n) + 1 end
 end
 
--- What a copy picked up by `player` steals: { form = key, left, items =
--- { { kind, id } } }, or nil when every set is complete. A piece is a
--- collectible, a trinket or a pill (by its color in this run).
-function M.plan(player, rng)
+-- The player's unfinished sets that something can still fill, each
+-- { form, left, members }.
+local function openSets(player)
     local idx = M.index()
     local open = {}
     for i, f in ipairs(idx.forms) do
@@ -237,11 +236,35 @@ function M.plan(player, rng)
         local left, pieces = specialSet(player, set)
         if left then open[#open + 1] = { form = set, left = left, members = pieces } end
     end
+    return open
+end
+
+-- What a copy picked up by `player` steals: { form = key, left, items =
+-- { { kind, id } } }, or nil when every set is complete. A piece is a
+-- collectible, a trinket or a pill (by its color in this run).
+function M.plan(player, rng)
+    local open = openSets(player)
     if #open == 0 then return nil end
     local rand = randomizer(rng)
     local closest = M.closest(open)
     local target = closest[rand(#closest)]
     return { form = target.form.key, left = target.left, items = M.chooseItems(target.members, target.left, rand) }
+end
+
+-- How many items a copy picked up now would summon: whichever of the closest
+-- sets he picks, it is what they have left, so EID can show it (user request
+-- 2026-11-13); 0 with every set complete. EID asks every render frame, so the
+-- answer is kept for the game frame.
+local countCache = { frame = nil, key = nil, value = nil }
+function M.summonCount(player)
+    local frame = Game():GetFrameCount()
+    local key = type(GetPtrHash) == "function" and GetPtrHash(player) or nil
+    if key and countCache.key == key and countCache.frame == frame then return countCache.value end
+    local open = openSets(player)
+    local value = 0
+    if #open > 0 then value = select(2, M.closest(open)) end
+    countCache.frame, countCache.key, countCache.value = frame, key, value
+    return value
 end
 
 -- ------------------------------------------------------------- the records
@@ -519,6 +542,38 @@ do
             restore()
         end)
     end
+end
+
+-- EID: below his description, how many items he would summon now for the
+-- player reading it (EID's own reader, the Item Reminder's player or the one
+-- nearest the pedestal), above the REPENTOGON line.
+local function describedPlayer(descObj)
+    if type(EID) ~= "table" or type(EID.ClosestPlayerTo) ~= "function" then return nil end
+    local ok, found = pcall(EID.ClosestPlayerTo, EID, descObj.Entity)
+    return ok and found or nil
+end
+
+function M.describe(descObj)
+    local player = describedPlayer(descObj)
+    if not player or not capable(player) then return descObj end
+    local ok, count = pcall(M.summonCount, player)
+    if not ok or type(count) ~= "number" then return descObj end
+    local line = ConchBlessing.Locale.text("ui.jeon_woochi.summon_count", tostring(count))
+    local desc = descObj.Description or ""
+    local at = desc:find("#{{Warning}}", 1, true)
+    if at then
+        descObj.Description = desc:sub(1, at - 1) .. line .. desc:sub(at)
+    else
+        descObj.Description = desc .. line
+    end
+    return descObj
+end
+
+if type(EID) == "table" and type(EID.addDescriptionModifier) == "function" then
+    EID:addDescriptionModifier("ConchBlessing_JeonWoochiSummonCount", function(descObj)
+        return descObj.ObjType == EntityType.ENTITY_PICKUP and descObj.ObjVariant == PickupVariant.PICKUP_COLLECTIBLE
+            and descObj.ObjSubType == itemId() and itemId() > 0
+    end, M.describe)
 end
 
 ConchBlessing.jeonwoochi._test = {
