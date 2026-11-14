@@ -1,6 +1,6 @@
 """Generate the runtime art of Conch Blessing's cards and runes.
 
-Thurisaz (the Kronos rune) is a charcoal stone shard with the Saturn sign
+Thurisaz (the Kronos rune) is a charcoal stone shard with its own rune ᚦ
 inlaid in gold and a dim crimson glow under it. Uruz (the Tyrfing rune) is the
 same shard with the rune ᚢ inlaid and an amber glow. The Conch Ticket is a cream
 claim ticket tilted like the vanilla floor cards, with a red stub behind a
@@ -64,25 +64,27 @@ RIDGE2 = ((19, 6), (20, 25))          # right of this: the shaded face
 HIGHLIGHT = ((13, 5), (12, 6), (11, 8), (14, 5), (15, 6), (11, 9))
 CRACK = ((21, 13), (21, 14), (20, 15), (20, 16), (21, 17))
 
-# The Saturn sign, 7x11 with a 2px stem: the cross, then the sickle hooking
-# down to the right. Large enough to read in the pocket slot.
+# Thurisaz (ᚦ), 7x11 with 2px strokes: the stem on the left and the thorn, a
+# triangle pointing right from its middle. It was the Saturn sign until the
+# user asked for the rune's own letter (2026-11-15). Large enough to read in
+# the pocket slot; the dark groove fills the thorn's hollow.
 GLYPH = [
-    "..##...",
-    "######.",
-    "######.",
-    "..##...",
-    "..####.",
-    "..##.##",
-    "..##..#",
-    "..##..#",
-    "......#",
-    ".....##",
-    "....##.",
+    "##.....",
+    "##.....",
+    "###....",
+    "####...",
+    "##.##..",
+    "##..##.",
+    "##.##..",
+    "####...",
+    "###....",
+    "##.....",
+    "##.....",
 ]
 GLYPH_AT = (12, 9)
 
 # Uruz (ᚢ): the stem on the left, from its top a stroke over and down to the
-# right leg; 2px strokes like the Saturn sign.
+# right leg; 2px strokes like Thurisaz's ᚦ.
 URUZ_GLYPH = [
     "####...",
     "#####..",
