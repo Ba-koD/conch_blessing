@@ -733,7 +733,7 @@ return {
             description = "On second look, she's heavenly",
             eid = {
                 "A heavenly maiden roams the room",
-                "#Standing in her light makes {{Tears}} tears x1.3",
+                "#Standing in her light makes {{Tears}} tears x1.5",
                 "#Enemies in her light take damage that grows with your {{Tears}} tears",
             },
             synergies = {

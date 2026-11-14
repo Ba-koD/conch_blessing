@@ -1,7 +1,7 @@
 -- 선녀 (Seonnyeo): the Magic Conch's positive answer to Succubus (user design
 -- 2026-11-13). A heavenly maiden roams the room the way Succubus does. While
--- her owner stands in her golden light their tears are x1.3, and lights that
--- overlap multiply with no cap (two: x1.69). Like Succubus's aura her light
+-- her owner stands in her golden light their tears are x1.5, and lights that
+-- overlap multiply with no cap (two: x2.25). Like Succubus's aura her light
 -- hurts the enemies in it on a fixed tick, but by her owner's fire rate
 -- rather than a fixed 2.5: each tick deals their tears (shots a second), so
 -- it grows with every light they stand in. She gives no damage multiplier,
@@ -18,7 +18,7 @@ ConchBlessing.seonnyeo = M
 local ITEM_ID = Isaac.GetItemIdByName("Seonnyeo")
 
 M.data = {
-    tears = 1.3,      -- per light the owner stands in; lights multiply
+    tears = 1.5,      -- per light the owner stands in; lights multiply
     -- world units: the halo (`censer halo.png`, drawn at 100%) fades to half
     -- at 87 px, and a 40-unit grid cell is 26 px on screen
     radius = 87 * 40 / 26,
