@@ -411,6 +411,56 @@ local function nearestPlayerDistance(position)
     return best
 end
 
+local function screenSize()
+    if type(Isaac.GetScreenWidth) ~= "function" or type(Isaac.GetScreenHeight) ~= "function" then return nil end
+    local ok, w, h = pcall(function() return Isaac.GetScreenWidth(), Isaac.GetScreenHeight() end)
+    if ok and type(w) == "number" and type(h) == "number" and w > 0 and h > 0 then return w, h end
+end
+local function hudOffset()
+    local ok, value = pcall(function() return Options.HUDOffset end)
+    return ok and type(value) == "number" and value or 0
+end
+
+-- How this tree grows, decided as it starts to open and kept until it has
+-- closed, so a moving camera never flips it (user choice 2026-11-14): up when
+-- that fits, else beside or below the item, clear of the screen edges, the
+-- trees already open, every other item and the HUD (Preview.place).
+local function choosePlacement(rec, pickup)
+    local w, h = screenSize()
+    local kind, x, y = Preview.kind(pickup), Preview.base(pickup)
+    local scene
+    if w then
+        scene = { w = w, h = h, boxes = {}, trees = {}, hud = Preview.hudBoxes(w, h, hudOffset()) }
+        if type(Isaac.FindByType) == "function" then
+            for _, variant in ipairs({ PickupVariant.PICKUP_COLLECTIBLE, PickupVariant.PICKUP_TRINKET }) do
+                for _, entity in ipairs(Isaac.FindByType(EntityType.ENTITY_PICKUP, variant)) do
+                    local other = entity:ToPickup()
+                    if other and getPickupHash(other) ~= rec.hash then
+                        local ox, oy = Preview.base(other)
+                        scene.boxes[#scene.boxes + 1] = Preview.artBox(Preview.kind(other), ox, oy)
+                    end
+                end
+            end
+        end
+        local nearest
+        for hash, other in pairs(UpgradeHighlight._previews) do
+            local otherPickup = hash ~= rec.hash and livePreviewPickup(other)
+            if otherPickup then
+                local ox, oy = Preview.base(otherPickup)
+                if math.abs(oy - y) < 60 and (not nearest or math.abs(ox - x) < math.abs(nearest - x)) then nearest = ox end
+                if other.place and other.t > 0 then
+                    local tx, ty = Preview.anchor(otherPickup, other.place.dir)
+                    scene.trees[#scene.trees + 1] = { parts = other.place.parts, x = tx, y = ty }
+                end
+            end
+        end
+        scene.neighbour = nearest
+    end
+    local layout, _, _, dir = Preview.place(rec.groups, rec.layout.tree, kind, x, y, scene)
+    rec.place = { layout = layout, dir = dir, parts = Preview.parts(layout) }
+    record("PLACE", rec, dir .. (layout.shift ~= 0 and (" " .. tostring(layout.shift)) or ""))
+end
+
 local function stepPreview(rec, pickup, clock)
     local distance = nearestPlayerDistance(pickup.Position)
     local openRange, closeRange = Config.GetPreviewRanges()
@@ -421,6 +471,13 @@ local function stepPreview(rec, pickup, clock)
         rec.open = true
         rec.opens = rec.opens + 1
         record("OPEN", rec)
+        if rec.t <= 0 or not rec.place then
+            local ok, err = pcall(choosePlacement, rec, pickup)
+            if not ok then
+                rec.place = nil
+                ConchBlessing.printError("[EvolutionPreview] placement failed for " .. tostring(rec.identity) .. ": " .. tostring(err))
+            end
+        end
     end
     if rec.open then
         rec.t = math.min(rec.layout.openEnd, rec.t + 1)
@@ -622,8 +679,9 @@ local function renderPreviews()
             local pickup = livePreviewPickup(rec)
             if pickup then
                 local ok, drawn = pcall(function()
-                    local x, y = Preview.anchor(pickup)
-                    return Preview.render(rec.layout, x, y, rec.t, UpgradeHighlight._previewClock + rec.phase)
+                    local place = rec.place
+                    local x, y = Preview.anchor(pickup, place and place.dir)
+                    return Preview.render(place and place.layout or rec.layout, x, y, rec.t, UpgradeHighlight._previewClock + rec.phase)
                 end)
                 if ok then
                     rec.draws = rec.draws + 1

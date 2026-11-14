@@ -4,10 +4,15 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- Conch answer colours. A rotating pedestal grows a two-level tree: its
 -- evolvable choices first, then each choice's results.
 --
+-- A tree grows up from the item. Where that would leave the screen or cover a
+-- neighbour's tree, another pickup or the HUD, Preview.place turns it to the
+-- side or below and pushes its results along their spread back onto the
+-- screen (user choice 2026-11-14, docs/previews/evolution-edge-preview.html).
+--
 -- Pure presentation with standalone Sprites: no entity, no RNG, and the pickup
 -- itself is never touched here. conch_blessing_highlight.lua decides when a
--- tree opens and owns the out-of-range hop. The layout and timing are mirrored
--- by docs/previews/evolution-branch-preview.html.
+-- tree opens and owns the out-of-range hop. The upward layout and timing are
+-- mirrored by docs/previews/evolution-branch-preview.html.
 local View = require("scripts.lib.conch_answer_view")
 
 local Preview = {}
@@ -22,6 +27,14 @@ local STAGGER = 2
 -- ANM2s): a pedestal item bobs up to 42px high, a shop item sits at 24px and a
 -- trinket at 25px. The tree starts slightly inside that edge.
 local ITEM_TOP = { pedestal = -40, shop = -22, trinket = -22 }
+-- The other roots, from the same ANM2s: under the pedestal base, the shop
+-- price and the trinket, and beside the middle of the item art (a pedestal
+-- item spans -42..-6, a shop item -24..8, a trinket -25..7).
+local ITEM_BOTTOM = { pedestal = 10, shop = 20, trinket = 9 }
+local ITEM_SIDE = { pedestal = { 14, -24 }, shop = { 14, -8 }, trinket = { 10, -9 } }
+-- What another tree must not cover: the item art with its pedestal or price.
+local ART = { pedestal = { -14, -42, 14, 8 }, shop = { -14, -24, 14, 18 }, trinket = { -10, -25, 10, 7 } }
+local EDGE = 3 -- kept clear along the screen's edges
 
 -- Out-of-range cue, asking to be looked at: the item crouches and hops twice
 -- in place in quick succession (7px, then 5px), landing squashed each time,
@@ -77,17 +90,19 @@ local function addBar(layout, x, y, left, right, from, to)
     addLine(layout, x, y, 1, 0, right - x, TRUNK_RGB, from, to)
 end
 
--- prefix: the route from the root to (centre, y) that a spark follows.
-local function addResults(layout, results, centre, y, start, prefix)
+-- prefix: the route from the root to (junction, y) that a spark follows. The
+-- stem below meets the bar at the junction; the results are centred on centre,
+-- which differs from it only when they are pushed back onto the screen.
+local function addResults(layout, results, junction, centre, y, start, prefix)
     local xs = centred(#results, centre)
-    if #results > 1 then addBar(layout, centre, y, xs[1], xs[#xs], start, start + 5) end
+    addBar(layout, junction, y, math.min(junction, xs[1]), math.max(junction, xs[#xs]), start, start + 5)
     for i, result in ipairs(results) do
         local rgb = View.colors[result.flag]
         local s = start + 3 + (i - 1) * STAGGER
         addLine(layout, xs[i], y, 0, -1, 4, rgb, s, s + 3)
         local path = {}
         for k, point in ipairs(prefix) do path[k] = point end
-        path[#path + 1] = { centre, y }
+        path[#path + 1] = { junction, y }
         path[#path + 1] = { xs[i], y }
         path[#path + 1] = { xs[i], y - 4 }
         layout.icons[#layout.icons + 1] = {
@@ -99,55 +114,108 @@ local function addResults(layout, results, centre, y, start, prefix)
     end
 end
 
---- Geometry and timing relative to the tree's root (top of the item art).
+-- The upward tree turned to grow another way. Sideways, the results stand in a
+-- column with the first (positive) at the top.
+local TURN = {
+    up = function(x, y) return x, y end,
+    down = function(x, y) return x, -y end,
+    right = function(x, y) return -y, x end,
+    left = function(x, y) return y, x end,
+}
+
+--- Geometry and timing relative to the tree's root.
 --- groups: { { source = { id } | nil, results = { { flag, id, trinket } } } }.
 --- One group without a source is a plain tree; otherwise every group hangs
 --- below its source icon (a rotating pedestal's evolvable choice).
-function Preview.layout(groups, tree)
+--- dir ("up" by default, "down", "left", "right") is the way it grows; shift
+--- moves the results along their spread while the trunk stays at the item.
+function Preview.layout(groups, tree, dir, shift)
     assert(type(groups) == "table" and #groups > 0, "evolution preview needs results")
-    local layout = { lines = {}, icons = {}, openEnd = 0, tree = tree == true }
+    dir, shift = dir or "up", round(shift or 0)
+    local turn = assert(TURN[dir], "unknown direction")
+    local layout = { lines = {}, icons = {}, openEnd = 0, tree = tree == true, dir = dir, shift = shift }
     addLine(layout, 0, 0, 0, -1, 5, TRUNK_RGB, 0, 4)
     if not layout.tree then
-        addResults(layout, groups[1].results, 0, -5, 3, { { 0, 0 } })
-        return layout
+        addResults(layout, groups[1].results, 0, shift, -5, 3, { { 0, 0 } })
+    else
+        local widths, total = {}, 0
+        for i, group in ipairs(groups) do
+            assert(group.source and #group.results > 0, "a tree group needs its source and results")
+            widths[i] = (#group.results - 1) * RESULT_SPACING + 2 * RESULT_HALF
+            total = total + widths[i] + (i > 1 and GROUP_GAP or 0)
+        end
+        local centres, x = {}, -total / 2 + shift
+        for i, width in ipairs(widths) do
+            centres[i] = round(x + width / 2)
+            x = x + width + GROUP_GAP
+        end
+        addBar(layout, 0, -5, math.min(0, centres[1]), math.max(0, centres[#centres]), 3, 8)
+        for i, group in ipairs(groups) do
+            local c = centres[i]
+            addLine(layout, c, -5, 0, -1, 4, TRUNK_RGB, 6, 9)
+            layout.icons[#layout.icons + 1] = {
+                x = c, y = -9 - SOURCE_HALF, scale = SOURCE_SCALE, half = SOURCE_HALF,
+                id = group.source.id, trinket = false, rgb = TRUNK_RGB, from = 8, to = 14,
+            }
+            addLine(layout, c, -9 - 2 * SOURCE_HALF, 0, -1, 4, TRUNK_RGB, 13, 16)
+            addResults(layout, group.results, c, c, -13 - 2 * SOURCE_HALF, 15,
+                { { 0, 0 }, { 0, -5 }, { c, -5 }, { c, -9 - 2 * SOURCE_HALF } })
+        end
     end
-
-    local widths, total = {}, 0
-    for i, group in ipairs(groups) do
-        assert(group.source and #group.results > 0, "a tree group needs its source and results")
-        widths[i] = (#group.results - 1) * RESULT_SPACING + 2 * RESULT_HALF
-        total = total + widths[i] + (i > 1 and GROUP_GAP or 0)
-    end
-    local centres, x = {}, -total / 2
-    for i, width in ipairs(widths) do
-        centres[i] = round(x + width / 2)
-        x = x + width + GROUP_GAP
-    end
-    addBar(layout, 0, -5, math.min(0, centres[1]), math.max(0, centres[#centres]), 3, 8)
-    for i, group in ipairs(groups) do
-        local c = centres[i]
-        addLine(layout, c, -5, 0, -1, 4, TRUNK_RGB, 6, 9)
-        layout.icons[#layout.icons + 1] = {
-            x = c, y = -9 - SOURCE_HALF, scale = SOURCE_SCALE, half = SOURCE_HALF,
-            id = group.source.id, trinket = false, rgb = TRUNK_RGB, from = 8, to = 14,
-        }
-        addLine(layout, c, -9 - 2 * SOURCE_HALF, 0, -1, 4, TRUNK_RGB, 13, 16)
-        addResults(layout, group.results, c, -13 - 2 * SOURCE_HALF, 15,
-            { { 0, 0 }, { 0, -5 }, { c, -5 }, { c, -9 - 2 * SOURCE_HALF } })
+    if dir ~= "up" then
+        for _, line in ipairs(layout.lines) do
+            line.x, line.y = turn(line.x, line.y)
+            line.dx, line.dy = turn(line.dx, line.dy)
+        end
+        for _, icon in ipairs(layout.icons) do
+            icon.x, icon.y = turn(icon.x, icon.y)
+            -- New points: the results of one group share their prefix's tables.
+            if icon.path then
+                local path = {}
+                for k, point in ipairs(icon.path) do path[k] = { turn(point[1], point[2]) } end
+                icon.path = path
+            end
+        end
     end
     return layout
 end
 
---- Root of the tree on screen: the top of the item art.
-function Preview.anchor(pickup)
-    local kind = "trinket"
+--- What a pickup shows, as the roots and art boxes name it.
+function Preview.kind(pickup)
     if pickup.Variant == PickupVariant.PICKUP_COLLECTIBLE then
         local sprite = pickup:GetSprite()
-        kind = sprite and sprite:GetAnimation() == "ShopIdle" and "shop" or "pedestal"
+        return sprite and sprite:GetAnimation() == "ShopIdle" and "shop" or "pedestal"
     end
+    return "trinket"
+end
+
+--- The pickup's base on screen (its position with its sprite offset).
+function Preview.base(pickup)
     local pos = Isaac.WorldToScreen(pickup.Position)
     local offset = pickup.SpriteOffset
-    return round(pos.X + offset.X), round(pos.Y + offset.Y + ITEM_TOP[kind])
+    return round(pos.X + offset.X), round(pos.Y + offset.Y)
+end
+
+--- Where a tree growing dir starts, from a pickup's kind and base.
+function Preview.root(kind, x, y, dir)
+    dir = dir or "up"
+    if dir == "up" then return x, y + ITEM_TOP[kind] end
+    if dir == "down" then return x, y + ITEM_BOTTOM[kind] end
+    local side = ITEM_SIDE[kind]
+    return x + (dir == "right" and side[1] or -side[1]), y + side[2]
+end
+
+--- Root of the tree on screen: the top of the item art, or the side or the
+--- base the placement chose.
+function Preview.anchor(pickup, dir)
+    local x, y = Preview.base(pickup)
+    return Preview.root(Preview.kind(pickup), x, y, dir)
+end
+
+--- The item art (and pedestal or price) a pickup shows, on screen.
+function Preview.artBox(kind, x, y)
+    local a = ART[kind]
+    return { x + a[1], y + a[2], x + a[3], y + a[4] }
 end
 
 --- Pose of each part at open time t (0 = closed, layout.openEnd = open).
@@ -212,6 +280,137 @@ local function lineRect(line, length)
     if line.dx > 0 then return x, y, length, 1 end
     if line.dy < 0 then return x, y - length, 1, length end
     return x, y, 1, length
+end
+
+-- Top-left of a result's label: beyond its icon in the way the tree grows
+-- (above, below, or beside it), half its height h away from the icon edge.
+local function labelSpot(dir, cx, cy, half, w, h)
+    if dir == "down" then return cx - w / 2, cy + half + 1 end
+    if dir == "right" then return cx + half + 2, cy - h / 2 end
+    if dir == "left" then return cx - half - 2 - w, cy - h / 2 end
+    return cx - w / 2, cy - half - 1 - h
+end
+
+--- Every part a fully open tree draws, as boxes { x0, y0, x1, y1 } around its
+--- root: each line with its border, each icon at its largest pop, each label.
+function Preview.parts(layout)
+    local out, labels = {}, View.hasFont()
+    for _, line in ipairs(layout.lines) do
+        local x, y, w, h = lineRect(line, line.length)
+        out[#out + 1] = { x - 1, y - 1, x + w + 1, y + h + 1 }
+    end
+    for _, icon in ipairs(layout.icons) do
+        local h = icon.half * (icon.label and 1 + POP_SCALE or 1) + 1
+        out[#out + 1] = { icon.x - h, icon.y - h, icon.x + h, icon.y + h }
+        if icon.label and labels then
+            local text = View.text("ui.conch_mode.flags." .. icon.label)
+            local w, lh = View.width(text, LABEL_SCALE), View.lineHeight(LABEL_SCALE)
+            local x, y = labelSpot(layout.dir, icon.x, icon.y, icon.half, w, lh)
+            out[#out + 1] = { x - 1, y - 1, x + w + 1, y + lh + 1 }
+        end
+    end
+    return out
+end
+
+local function bounds(parts, rx, ry)
+    local b = { math.huge, math.huge, -math.huge, -math.huge }
+    for _, p in ipairs(parts) do
+        b[1], b[2] = math.min(b[1], rx + p[1]), math.min(b[2], ry + p[2])
+        b[3], b[4] = math.max(b[3], rx + p[3]), math.max(b[4], ry + p[4])
+    end
+    return b
+end
+-- Boxes that only graze (a pedestal's shadow edge) do not count as covering.
+local function overlaps(a, b)
+    return a[1] < b[3] - 2 and b[1] < a[3] - 2 and a[2] < b[4] - 2 and b[2] < a[4] - 2
+end
+local function partsHit(parts, rx, ry, box)
+    for _, p in ipairs(parts) do
+        if overlaps({ rx + p[1], ry + p[2], rx + p[3], ry + p[4] }, box) then return true end
+    end
+    return false
+end
+
+--- Screen boxes of the HUD a tree should not cover, at the player's HUD
+--- offset: active item, hearts, coins/bombs/keys, minimap, trinket and pocket
+--- slots. Approximate by design; a tree only prefers to stay clear of them.
+function Preview.hudBoxes(w, h, offset)
+    offset = type(offset) == "number" and offset == offset and math.max(0, math.min(1, offset)) or 0
+    local dx, dy = 20 * offset, 12 * offset
+    return {
+        { 4 + dx, 4 + dy, 36 + dx, 36 + dy },
+        { 44 + dx, 6 + dy, 120 + dx, 34 + dy },
+        { 4 + dx, 42 + dy, 34 + dx, 82 + dy },
+        { w - 60 - dx, 4 + dy, w - 4 - dx, 48 + dy },
+        { 4 + dx, h - 40 - dy, 40 + dx, h - 4 - dy },
+        { w - 50 - dx, h - 40 - dy, w - 4 - dx, h - 4 - dy },
+    }
+end
+
+--- Chooses how a pickup's tree grows (user choice 2026-11-14). It grows up
+--- when that fits; otherwise a plain tree turns to the side away from its
+--- nearest neighbour (else toward the roomier side), then the other side, then
+--- down; a rotating pedestal's two-level tree, which would stand in a tall
+--- column sideways, tries down before the sides. Each try pushes its results
+--- along their spread to stay on screen, and a try is good when nothing leaves
+--- the screen and no drawn part covers a box in scene.boxes (other pickups), a
+--- part of a tree in scene.trees ({ parts, x, y }) or a box in scene.hud. When
+--- no try is good the least bad wins: leaving the screen loses results and is
+--- worst, covering another tree or item next, covering the HUD least (measured
+--- 2026-11-14: in the top-left corner every other way brushed the HUD, and up
+--- lost 24px). Without a scene it grows up.
+--- scene = { w, h, boxes, trees, hud, neighbour = screen x | nil }.
+--- Returns the layout, its root and its direction.
+function Preview.place(groups, tree, kind, x, y, scene)
+    if not scene or not scene.w or not scene.h then
+        local rx, ry = Preview.root(kind, x, y, "up")
+        return Preview.layout(groups, tree), rx, ry, "up"
+    end
+    local first
+    if scene.neighbour then first = scene.neighbour > x and "left" or "right"
+    else first = x < scene.w / 2 and "right" or "left" end
+    local other = first == "left" and "right" or "left"
+    local order = tree and { "up", "down", first, other } or { "up", first, other, "down" }
+    local best
+    for _, dir in ipairs(order) do
+        local rx, ry = Preview.root(kind, x, y, dir)
+        local layout = Preview.layout(groups, tree, dir, 0)
+        local parts = Preview.parts(layout)
+        local b = bounds(parts, rx, ry)
+        local across = dir == "up" or dir == "down"
+        local lo, hi, size = across and b[1] or b[2], across and b[3] or b[4], across and scene.w or scene.h
+        local shift = 0
+        if hi - lo > size - 2 * EDGE then shift = round(size / 2 - (lo + hi) / 2)
+        elseif lo < EDGE then shift = math.ceil(EDGE - lo)
+        elseif hi > size - EDGE then shift = math.floor(size - EDGE - hi) end
+        if shift ~= 0 then
+            -- Sideways the results' spread runs down the screen (the turn
+            -- maps the upward x to y), so the same shift moves them there.
+            layout = Preview.layout(groups, tree, dir, shift)
+            parts = Preview.parts(layout)
+            b = bounds(parts, rx, ry)
+        end
+        local off = math.max(0, -b[1]) + math.max(0, -b[2]) + math.max(0, b[3] - scene.w) + math.max(0, b[4] - scene.h)
+        local hits, hud = 0, 0
+        for _, box in ipairs(scene.boxes or {}) do
+            if partsHit(parts, rx, ry, box) then hits = hits + 1 end
+        end
+        for _, other in ipairs(scene.trees or {}) do
+            for _, p in ipairs(other.parts) do
+                if partsHit(parts, rx, ry, { other.x + p[1], other.y + p[2], other.x + p[3], other.y + p[4] }) then
+                    hits = hits + 1
+                    break
+                end
+            end
+        end
+        for _, box in ipairs(scene.hud or {}) do
+            if partsHit(parts, rx, ry, box) then hud = hud + 1 end
+        end
+        local cost = off * 1000 + hits * 100 + hud * 10
+        if cost == 0 then return layout, rx, ry, dir end
+        if not best or cost < best.cost then best = { layout = layout, x = rx, y = ry, dir = dir, cost = cost } end
+    end
+    return best.layout, best.x, best.y, best.dir
 end
 
 local function pathLength(path)
@@ -310,8 +509,8 @@ function Preview.render(layout, x, y, t, clock)
             if pop then drawn.pops = 1 end
             if icon.label and labels then
                 local text = View.text("ui.conch_mode.flags." .. icon.label)
-                local top = cy - icon.half * scale - 1 - View.lineHeight(LABEL_SCALE)
-                View.drawAt(text, round(cx - View.width(text, LABEL_SCALE) / 2), round(top), LABEL_SCALE, icon.rgb, alpha)
+                local lx, ly = labelSpot(layout.dir, cx, cy, icon.half * scale, View.width(text, LABEL_SCALE), View.lineHeight(LABEL_SCALE))
+                View.drawAt(text, round(lx), round(ly), LABEL_SCALE, icon.rgb, alpha)
                 drawn.labels = drawn.labels + 1
             end
         end

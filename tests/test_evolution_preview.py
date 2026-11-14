@@ -182,6 +182,134 @@ class EvolutionPreviewTests(unittest.TestCase):
             for _,l in ipairs(L.lines) do assert((l.dx==0)~=(l.dy==0)) end
         ''')
 
+    # ---------------------------------------------- placement (2026-11-14)
+    def test_turned_trees_keep_their_shape_and_answer_order(self):
+        self.lua.execute('''
+            local groups={{results={{flag='positive',id=801},{flag='neutral',id=802},{flag='negative',id=803}}}}
+            local up=P.layout(groups,false)
+            for _,dir in ipairs({'down','left','right'}) do
+                local L=P.layout(groups,false,dir)
+                assert(L.dir==dir and L.openEnd==up.openEnd and #L.lines==#up.lines and #L.icons==3, dir)
+                for i,icon in ipairs(L.icons) do
+                    assert(icon.label==groups[1].results[i].flag)
+                    if dir=='down' then assert(icon.y==21 and icon.x==up.icons[i].x, dir)
+                    elseif dir=='right' then assert(icon.x==21 and icon.y==up.icons[i].x, dir)
+                    else assert(icon.x==-21 and icon.y==up.icons[i].x, dir) end
+                    -- The spark's route ends at the icon's edge facing the root.
+                    local last=icon.path[#icon.path]
+                    assert(math.abs(last[1]-icon.x)+math.abs(last[2]-icon.y)==icon.half, dir..' spark end')
+                end
+                for _,l in ipairs(L.lines) do assert((l.dx==0)~=(l.dy==0), 'only straight segments') end
+            end
+            -- Sideways the results stand in a column, positive at the top.
+            local R=P.layout(groups,false,'right')
+            assert(R.icons[1].y<R.icons[2].y and R.icons[2].y<R.icons[3].y)
+            -- A two-level tree's shared route points are turned once, not once per result.
+            local T=P.layout({{source={id=304},results=groups[1].results}},true,'left')
+            for _,icon in ipairs(T.icons) do
+                if icon.path then assert(icon.path[2][1]==-5 and icon.path[2][2]==0, 'trunk end turned once') end
+            end
+        ''')
+
+    def test_shift_moves_the_results_and_leaves_the_trunk_at_the_item(self):
+        self.lua.execute('''
+            local L=P.layout({{results={{flag='positive',id=801},{flag='neutral',id=802},{flag='negative',id=803}}}},false,'up',40)
+            assert(L.icons[1].x==14 and L.icons[2].x==40 and L.icons[3].x==66)
+            local trunk,left,right=false,0,0
+            for _,l in ipairs(L.lines) do
+                if l.x==0 and l.y==0 and l.dy==-1 then trunk=true end
+                if l.y==-5 and l.dx~=0 then
+                    if l.dx<0 then left=l.x-l.length else right=l.x+l.length end
+                end
+            end
+            assert(trunk and left==0 and right==66, 'the bar runs from the trunk to the farthest result')
+            -- One result pushed aside gets a bar of its own.
+            local one=P.layout({{results={{flag='positive',id=804}}}},false,'up',-20)
+            local bar=false
+            for _,l in ipairs(one.lines) do if l.y==-5 and l.dx==-1 and l.length==20 then bar=true end end
+            assert(bar and one.icons[1].x==-20)
+        ''')
+
+    def test_place_grows_up_when_it_fits_and_turns_at_the_screen_top(self):
+        self.lua.execute('''
+            local three={{results={{flag='positive',id=801},{flag='neutral',id=802},{flag='negative',id=803}}}}
+            local scene={w=480,h=270,boxes={},trees={}}
+            -- In the middle of the room it grows up as it always did.
+            local L,x,y,dir=P.place(three,false,'pedestal',240,150,scene)
+            assert(dir=='up' and x==240 and y==110 and L.shift==0)
+            -- In the top row (screen y 57) up would leave the screen: it turns
+            -- to the roomier side and is pushed down onto the screen.
+            L,x,y,dir=P.place(three,false,'pedestal',240,57,scene)
+            assert(dir=='left' or dir=='right', dir)
+            local parts=P.parts(L)
+            for _,p in ipairs(parts) do assert(x+p[1]>=0 and y+p[2]>=0 and x+p[3]<=480 and y+p[4]<=270, 'on screen') end
+            -- Away from a neighbour on its right.
+            scene.neighbour=292
+            L,x,y,dir=P.place(three,false,'pedestal',240,57,scene)
+            assert(dir=='left')
+            -- Without a screen size it grows up.
+            L,x,y,dir=P.place(three,false,'pedestal',240,57,nil)
+            assert(dir=='up')
+        ''')
+
+    def test_place_tries_below_first_for_a_two_level_tree_and_avoids_trees_and_boxes(self):
+        self.lua.execute('''
+            local groups={{source={id=373},results={{flag='positive',id=804}}},
+                {source={id=304},results={{flag='positive',id=801},{flag='neutral',id=802},{flag='negative',id=803}}}}
+            local scene={w=480,h=270,boxes={},trees={}}
+            local L,x,y,dir=P.place(groups,true,'pedestal',344,83,scene)
+            assert(dir=='down' and y==93, dir)
+            -- An item right under the pedestal sends it to a side, clear of that item.
+            scene.boxes={{336,95,352,200}}
+            L,x,y,dir=P.place(groups,true,'pedestal',344,83,scene)
+            assert(dir=='left' or dir=='right', dir)
+            for _,p in ipairs(P.parts(L)) do
+                local b={x+p[1],y+p[2],x+p[3],y+p[4]}
+                assert(not (b[1]<350 and 336<b[3]-2 and b[2]<198 and 95<b[4]-2), 'clear of the item below')
+            end
+            -- So does another open tree's drawn parts.
+            local three={{results={{flag='positive',id=801},{flag='neutral',id=802},{flag='negative',id=803}}}}
+            local other=P.layout(three,false,'up')
+            local s2={w=480,h=270,boxes={},trees={{parts=P.parts(other),x=188,y=69}}}
+            local L2,x2,y2,dir2=P.place(three,false,'trinket',240,109,s2)
+            assert(dir2~='up', 'the neighbour tree above blocks up')
+            -- Every try failing, the least bad one is kept and still drawn.
+            local L3,x3,y3,dir3=P.place(three,false,'pedestal',240,57,{w=480,h=270,boxes={{0,0,480,270}},trees={}})
+            assert(L3 and dir3)
+            -- Measured in game 2026-11-14: in the top-left corner, at HUD offset 1, every
+            -- way but up brushed the HUD and up lost 24px. Covering the HUD is the
+            -- lesser harm, so the tree stays on screen.
+            local L4,x4,y4,dir4=P.place(three,false,'pedestal',84,57,
+                {w=480,h=270,boxes={{96,32,124,64}},trees={},hud=P.hudBoxes(480,270,1)})
+            assert(dir4~='up', dir4)
+            for _,p in ipairs(P.parts(L4)) do assert(x4+p[1]>=0 and y4+p[2]>=0 and x4+p[3]<=480 and y4+p[4]<=270, dir4..' on screen') end
+        ''')
+
+    def test_the_highlight_places_a_tree_as_it_opens_and_keeps_it(self):
+        self.lua.execute('''
+            Isaac.GetScreenWidth=function() return 480 end
+            Isaac.GetScreenHeight=function() return 270 end
+            Isaac.FindByType=function(_,variant)
+                local out={}
+                for _,e in ipairs(entities) do if e:Exists() and e.Variant==variant then out[#out+1]=e end end
+                return out
+            end
+            -- Libra in the top row: up would leave the screen.
+            local pl=player(240,500); local p=spawn(100,304,240,57); H.ScanRoom(frame); tick(5)
+            local r=H.previewFor(p); assert(r and not r.place)
+            pl.Position=Vector(240,90); tick(40)
+            assert(r.open and r.place and r.place.dir~='up', r.place and r.place.dir)
+            local first=r.place
+            -- The camera moves: the choice stays while the tree is open.
+            p.Position=Vector(240,150); tick(10)
+            assert(r.place==first)
+            renders={}; event(2); assert(#renders>0)
+            -- Closed and reopened in the middle of the room, it grows up again.
+            pl.Position=Vector(240,600); tick(60); assert(r.t==0)
+            pl.Position=Vector(240,190); tick(40)
+            assert(r.place~=first and r.place.dir=='up', r.place.dir)
+        ''')
+
     def test_render_draws_only_grown_parts_borders_first(self):
         self.lua.execute('''
             local L=P.layout({{results={{flag='positive',id=801},{flag='neutral',id=802},{flag='negative',id=803}}}},false)
@@ -522,7 +650,7 @@ class EvolutionPreviewTests(unittest.TestCase):
                 return function(a,b) ops=ops+1; if kind=='section' then sections[#sections+1]=a end end
             end})
             defs[1].build(plan)
-            assert(#sections==6 and ops>60, #sections..' sections, '..ops..' steps')
+            assert(#sections==13 and ops>60, #sections..' sections, '..ops..' steps')
             -- The oracle reads ItemData declarations, in answer order.
             ConchBlessing.ItemData.ROUND={id=802,flag='neutral',type='passive',origin={},originId=304}
             local list=probe.expectedResults(100,304)

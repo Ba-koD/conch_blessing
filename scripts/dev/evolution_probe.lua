@@ -12,6 +12,7 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 local TestBench = require("scripts.dev.test_bench")
 local Visuals = require("scripts.lib.upgrade_visuals")
 local View = require("scripts.lib.conch_answer_view")
+local Preview = require("scripts.lib.upgrade_branch_preview")
 
 local FLAG_ORDER = { "positive", "neutral", "negative" }
 -- Far is down and to the right, past the closing distance: the hop must still
@@ -186,11 +187,12 @@ local function checkDrawn(plan, label)
         local r = rec(ctx)
         local d = r and r.lastDrawn
         if not d then return false, "nothing drawn" end
-        local icons = #r.layout.icons
+        local layout = r.place and r.place.layout or r.layout
+        local icons = #layout.icons
         local labelsWanted = View.hasFont() and #ctx.expected or 0
-        return d.icons == icons and d.lines == #r.layout.lines and d.labels == labelsWanted,
-            string.format("icons %d/%d, lines %d/%d, labels %d/%d (draws %d)", d.icons, icons, d.lines,
-                #r.layout.lines, d.labels, labelsWanted, r.draws)
+        return d.icons == icons and d.lines == #layout.lines and d.labels == labelsWanted,
+            string.format("icons %d/%d, lines %d/%d, labels %d/%d (draws %d, grows %s)", d.icons, icons, d.lines,
+                #layout.lines, d.labels, labelsWanted, r.draws, layout.dir or "up")
     end)
 end
 
@@ -507,6 +509,199 @@ local function stageReroll(plan)
     plan.act(function(_, ctx) removeFixture(ctx) end)
 end
 
+-- Every case of docs/previews/evolution-edge-preview.html on real pickups:
+-- items at the screen's edges and side by side, all trees open at once.
+local function screenParts(pickup, r)
+    local place = r and r.place
+    if not place then return nil end
+    local x, y = Preview.anchor(pickup, place.dir)
+    local out = {}
+    for i, p in ipairs(place.parts) do out[i] = { x + p[1], y + p[2], x + p[3], y + p[4] } end
+    return out
+end
+local function covers(parts, box)
+    for _, p in ipairs(parts) do
+        if p[1] < box[3] - 2 and box[1] < p[3] - 2 and p[2] < box[4] - 2 and box[2] < p[4] - 2 then return true end
+    end
+    return false
+end
+local function removeEdges(ctx)
+    for _, e in ipairs(ctx.edges or {}) do
+        local entity = e.ptr.Ref
+        if entity and entity:Exists() then
+            local pickup = entity:ToPickup()
+            if pickup then H().StopForPickup(pickup) end
+            entity:Remove()
+        end
+    end
+    ctx.edges = nil
+end
+local function edgePickup(e)
+    local entity = e.ptr.Ref
+    if entity and entity:Exists() then return entity:ToPickup() end
+    -- A rotating pedestal's native turn renews the reference.
+    if e.entity:Exists() and GetPtrHash(e.entity) == e.hash then
+        e.ptr = EntityPtr(e.entity)
+        return e.entity:ToPickup()
+    end
+end
+local function cell(col, row)
+    return Game():GetRoom():GetTopLeftPos() + Vector(20 + 40 * col, 20 + 40 * row)
+end
+-- Out of range of every case pickup: the room corner farthest from them all
+-- (far() from one spot can fall outside the room and be pushed back in range).
+local function farCorner(items)
+    local best, bestDistance
+    for _, corner in ipairs({ { 0, 0 }, { 12, 0 }, { 0, 6 }, { 12, 6 } }) do
+        local near = math.huge
+        for _, item in ipairs(items) do
+            near = math.min(near, (cell(corner[1], corner[2]) - cell(item.col, item.row)):Length())
+        end
+        if not bestDistance or near > bestDistance then best, bestDistance = corner, near end
+    end
+    return cell(best[1], best[2])
+end
+local function standAway(player, ctx)
+    player.Position, player.Velocity = ctx.edgeFar, Vector(0, 0)
+end
+-- Items named by an ItemData key whose origin they are; a cycle adds more
+-- evolvable origins to the pedestal (REPENTOGON's collectible cycle).
+local EDGE_CASES = {
+    { "top row pedestal", "Libra in the middle of the top row: its tree no longer goes off the top of the screen; it grows beside the item, results in a column with labels outside",
+        { { key = "CEIL", col = 6, row = 0 } }, { 6, 1.25 } },
+    { "top-left trinket", "Perfection alone in the top-left corner: its tree stays on screen",
+        { { key = "TIME_LUCK", col = 0, row = 0 } }, { 0.5, 1.25 } },
+    { "second-row rotating pedestal", "a rotating pedestal (Dead Eye, Libra, Sacred Orb) in the second row near the right wall: its two-level tree hangs below the pedestal instead of leaving the screen",
+        { { key = "LIVE_EYE", col = 10, row = 1, cycle = { "CEIL", "CONCH_PEARL" } } }, { 10, 2.25 } },
+    { "wide rotating pedestal by the left wall", "a rotating pedestal with five evolvable choices by the left wall: its tree is pushed back onto the screen, the trunk still at the item",
+        { { key = "CEIL", col = 0, row = 3, cycle = { "LIVE_EYE", "SEONNYEO", "CONCH_PEARL", "KIDS_MENU" } } }, { 1, 4.25 } },
+    { "top-left pair", "Libra and Perfection side by side in the top-left corner: both trees on screen, neither over the other",
+        { { key = "CEIL", col = 0, row = 0 }, { key = "TIME_LUCK", col = 1, row = 0 } }, { 0.5, 1.25 } },
+    { "three in a row, two tiles apart", "Libra, Perfection and Dead Eye two tiles apart in the middle of the room, like a shop: no tree over another",
+        { { key = "CEIL", col = 4, row = 3 }, { key = "TIME_LUCK", col = 6, row = 3 }, { key = "LIVE_EYE", col = 8, row = 3 } }, { 6, 4.25 } },
+    { "three in the top row, two tiles apart", "the same three in the top row: every tree on screen and none over another",
+        { { key = "CEIL", col = 4, row = 0 }, { key = "TIME_LUCK", col = 6, row = 0 }, { key = "LIVE_EYE", col = 8, row = 0 } }, { 6, 1.25 } },
+}
+local function stageEdgeCase(plan, case)
+    local title, look, items, standAt = case[1], case[2], case[3], case[4]
+    local cycled = false
+    for _, item in ipairs(items) do cycled = cycled or item.cycle ~= nil end
+    plan.section("edge: " .. title, look)
+    plan.act(function(player, ctx)
+        removeFixture(ctx); removeEdges(ctx)
+        ctx.edges, ctx.edgeSkip = {}, nil
+        ctx.fixturePos, ctx.edgeFar = cell(standAt[1], standAt[2]), farCorner(items)
+        standAway(player, ctx)
+        for _, item in ipairs(items) do
+            local variant, id = originOf(item.key)
+            local entity = Isaac.Spawn(EntityType.ENTITY_PICKUP, variant, id, cell(item.col, item.row), Vector(0, 0), nil)
+            local pickup = entity:ToPickup()
+            pickup.Price, pickup.ShopItemId, pickup.AutoUpdatePrice, pickup.OptionsPickupIndex = 0, -1, false, 0
+            ctx.edges[#ctx.edges + 1] = { entity = entity, ptr = EntityPtr(entity), hash = GetPtrHash(entity), item = item }
+        end
+    end)
+    plan.waitUntil(function(player, ctx)
+        standAway(player, ctx)
+        for _, e in ipairs(ctx.edges) do
+            local pickup = edgePickup(e)
+            if not pickup or pickup.FrameCount < 1 then return false, "pickup not initialized" end
+        end
+        return true
+    end, 60, title .. ": pickups initialized")
+    if cycled then
+        plan.act(function(_, ctx)
+            for _, e in ipairs(ctx.edges) do
+                if e.item.cycle then
+                    local pickup = edgePickup(e)
+                    if type(pickup.AddCollectibleCycle) ~= "function" or type(pickup.RemoveCollectibleCycle) ~= "function" then
+                        ctx.edgeSkip = "collectible cycle API unavailable without REPENTOGON"
+                        return
+                    end
+                    pickup:RemoveCollectibleCycle()
+                    for _, key in ipairs(e.item.cycle) do
+                        local _, extra = originOf(key)
+                        assert(pickup:AddCollectibleCycle(extra), "AddCollectibleCycle refused " .. tostring(extra))
+                    end
+                end
+            end
+        end)
+    end
+    plan.waitUntil(function(player, ctx)
+        standAway(player, ctx)
+        if ctx.edgeSkip then return true end
+        for _, e in ipairs(ctx.edges) do
+            local pickup = edgePickup(e)
+            local r = pickup and H().previewFor(pickup)
+            if not r or (e.item.cycle ~= nil) ~= (r.layout.tree == true) then return false, "not tracked as wanted yet" end
+            if r.t > 0 then return false, "a tree is still folding" end
+        end
+        return true
+    end, 90, title .. ": every pickup tracked, every tree closed")
+    plan.waitUntil(function(player, ctx)
+        stand(player, ctx, Vector(0, 0))
+        if ctx.edgeSkip then return true end
+        for _, e in ipairs(ctx.edges) do
+            local pickup = edgePickup(e)
+            local r = pickup and H().previewFor(pickup)
+            if not r or not r.open or r.t < r.layout.openEnd then return false, "t=" .. tostring(r and r.t) end
+        end
+        return true
+    end, 90, title .. ": every tree open for a player among them")
+    plan.check(title .. ": every tree chose where to grow", function(_, ctx)
+        if ctx.edgeSkip then return nil, ctx.edgeSkip end
+        local text, ok = {}, true
+        for _, e in ipairs(ctx.edges) do
+            local r = H().previewFor(edgePickup(e))
+            ok = ok and r.place ~= nil
+            local shift = r.place and r.place.layout.shift or 0
+            text[#text + 1] = e.item.key .. " " .. tostring(r.place and r.place.dir) .. (shift ~= 0 and (" shifted " .. shift) or "")
+        end
+        return ok, table.concat(text, ", ")
+    end)
+    plan.check(title .. ": every tree stays on screen", function(_, ctx)
+        if ctx.edgeSkip then return nil, ctx.edgeSkip end
+        if type(Isaac.GetScreenWidth) ~= "function" then return nil, "no screen size API" end
+        local w, h = Isaac.GetScreenWidth(), Isaac.GetScreenHeight()
+        local text, ok = {}, true
+        for _, e in ipairs(ctx.edges) do
+            local pickup = edgePickup(e)
+            local parts = screenParts(pickup, H().previewFor(pickup))
+            if not parts then return false, "no placement" end
+            local b = { math.huge, math.huge, -math.huge, -math.huge }
+            for _, p in ipairs(parts) do
+                b = { math.min(b[1], p[1]), math.min(b[2], p[2]), math.max(b[3], p[3]), math.max(b[4], p[4]) }
+            end
+            ok = ok and b[1] >= 0 and b[2] >= 0 and b[3] <= w and b[4] <= h
+            text[#text + 1] = string.format("%s %.0f,%.0f..%.0f,%.0f", e.item.key, b[1], b[2], b[3], b[4])
+        end
+        return ok, table.concat(text, " | ") .. string.format(" on %.0fx%.0f", w, h)
+    end)
+    plan.check(title .. ": no tree covers another tree or another item", function(_, ctx)
+        if ctx.edgeSkip then return nil, ctx.edgeSkip end
+        local all = {}
+        for i, e in ipairs(ctx.edges) do
+            local pickup = edgePickup(e)
+            local x, y = Preview.base(pickup)
+            all[i] = { key = e.item.key, parts = screenParts(pickup, H().previewFor(pickup)),
+                art = Preview.artBox(Preview.kind(pickup), x, y) }
+        end
+        for i, a in ipairs(all) do
+            for j, b in ipairs(all) do
+                if i ~= j then
+                    if covers(a.parts, b.art) then return false, a.key .. "'s tree covers " .. b.key end
+                    if j > i then
+                        for _, p in ipairs(b.parts) do
+                            if covers(a.parts, p) then return false, a.key .. " and " .. b.key .. " overlap" end
+                        end
+                    end
+                end
+            end
+        end
+        return true, #all .. " trees clear"
+    end)
+    plan.act(function(_, ctx) removeEdges(ctx); ctx.fixturePos = nil end)
+end
+
 local function build(plan)
     plan.act(function(_, ctx)
         -- The player's MCM range stays saved; only this run uses the default.
@@ -527,16 +722,18 @@ local function build(plan)
     stageHidden(plan)
     stageCycle(plan)
     stageReroll(plan)
+    for _, case in ipairs(EDGE_CASES) do stageEdgeCase(plan, case) end
 end
 
 local function cleanup(ctx)
     removeFixture(ctx)
+    removeEdges(ctx)
     if ctx.savedPreviewRange ~= nil then
         ConchBlessing.Config.previewRange, ctx.savedPreviewRange = ctx.savedPreviewRange, nil
     end
 end
 
-TestBench.register({ command = "conch_test evolution", tag = "EvolutionProbe", duration = "about 40 seconds",
+TestBench.register({ command = "conch_test evolution", tag = "EvolutionProbe", duration = "about a minute",
     cleanup = cleanup, build = build })
 
 return { expectedResults = expectedResults }
