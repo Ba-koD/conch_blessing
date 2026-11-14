@@ -2,12 +2,12 @@
 
 Production Kronos Lua against a player double whose transformation counters
 follow the engine rule measured in game on 2026-10-29
-(`conch_test kronos transformation_engine`): a first pickup adds one per tag,
+(`cb test kronos transformation_engine`): a first pickup adds one per tag,
 including duplicate copies; AddCollectible with FirstTimePickingUp false adds
 none; RemoveCollectible takes one back per tag unless RemoveFromPlayerForm is
 false, even from a copy that never counted; IncrementPlayerFormCounter moves the
 counter; a counter of 3 or more is the transformation. The in-game
-`conch_test kronos transformation_*` benches read the real counters.
+`cb test kronos transformation_*` benches read the real counters.
 """
 import unittest
 

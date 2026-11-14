@@ -1,7 +1,7 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- How a vanilla Death Certificate visit ends, so Appraisal's return can follow
 -- it (user request 2026-11-10: the screen shakes, Isaac lies down, then the
--- fade). Measurement by name only: `conch_test appraisal_certificate dc_vanilla`
+-- fade). Measurement by name only: `cb test appraisal_certificate dc_vanilla`
 -- takes a real item in the real Death Certificate area and logs, from the
 -- pickup until home, every change of dimension, room, RoomTransition mode,
 -- Isaac's animation (with frame), visibility, controls and item queue, each

@@ -142,9 +142,9 @@ class HarnessRegressionTests(unittest.TestCase):
             for name,members in pairs(groups.sequential) do groups[name]=members end
             groups.sequential=nil
             for name,members in pairs(groups) do
-                assert(counts['conch_test kronos '..name]==1)
+                assert(counts['cb test kronos '..name]==1)
                 for _,member in ipairs(members) do
-                    local command='conch_test kronos '..member
+                    local command='cb test kronos '..member
                     assert(bench.get(command) and not counts[command],member..' duplicated or no longer callable')
                     total=total+1
                 end

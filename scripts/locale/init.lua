@@ -24,7 +24,7 @@ Locale.FALLBACK = "en"
 -- same-named file shipped by another mod is never picked up by probing.
 Locale.LANGUAGES = { "en", "kr", "urimal" }
 
--- Every problem this module reported, kept for the conch_test locale test bench.
+-- Every problem this module reported, kept for the cb test locale test bench.
 Locale.problems = {}
 
 local function printError(message)

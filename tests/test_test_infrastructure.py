@@ -96,7 +96,7 @@ class RunnerInfrastructureTests(unittest.TestCase):
             local checks={}
             local plan=setmetatable({check=function(name,fn) checks[name]=fn end},
                 {__index=function() return function() end end})
-            bench.get('conch_test angels_crown dice_pool').build(plan)
+            bench.get('cb test angels_crown dice_pool').build(plan)
             local pickup={SubType=7}; pickup.ToPickup=function() return pickup end
             Isaac.FindByType=function() return {pickup} end
             local ctx={stockCount=1,allowed={[7]=true},draws={{id=7,actual=1}}}

@@ -3,7 +3,7 @@
 Each hit writes down the kind of enemy that dealt it; the holder's attacks deal
 +50% (x trinket multiplier) to that kind, and a floor passed without a hit adds
 +25% (x multiplier) against every enemy. These doubles cannot show the engine's
-damage pipeline or drawing; `conch_test wrong_answer_note` covers those in game.
+damage pipeline or drawing; `cb test wrong_answer_note` covers those in game.
 """
 from pathlib import Path
 import re

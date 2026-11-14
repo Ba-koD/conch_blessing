@@ -16,17 +16,17 @@ class LatestTests(unittest.TestCase):
         self.run_lua('''
             local names=bench.latestCommands();assert(#names==13)
             local seen={};for _,name in ipairs(names) do seen[name]=true;assert(bench.get(name)) end
-            assert(seen['conch_test kronos guardian_angel'] and seen['conch_test kronos twisted_pair'])
-            assert(not seen['conch_test kronos abilities'] and not seen['conch_test kronos auras'])
-            assert(not seen['conch_test kronos incubus'] and not seen['conch_test fire_breath lifecycle'])
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','latest list')
+            assert(seen['cb test kronos guardian_angel'] and seen['cb test kronos twisted_pair'])
+            assert(not seen['cb test kronos abilities'] and not seen['cb test kronos auras'])
+            assert(not seen['cb test kronos incubus'] and not seen['cb test fire_breath lifecycle'])
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'latest list')
             assert(#restarts==0 and not bench.isRunning())
             local selected
-            bench.startSuite=function(label,commands) assert(label=='conch_test latest');selected=commands end
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','latest')
+            bench.startSuite=function(label,commands) assert(label=='cb test latest');selected=commands end
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'latest')
             assert(#selected==13)
             for _,params in ipairs({'latest nonsense','latest list extra'}) do
-                selected=nil;dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test',params);assert(not selected)
+                selected=nil;dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..params);assert(not selected)
             end
         ''')
 
@@ -130,7 +130,7 @@ class LatestTests(unittest.TestCase):
         self.load_item_probe()
         self.init_persistence()
         self.run_lua('''
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','latest')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'latest')
             assert(#restarts==0 and not bench.isRunning())
             bench.register({command='diagnostic',build=function(p)
                 p.note('native control',function() return 'age=5 damage=0.6' end)
@@ -147,7 +147,7 @@ class LatestTests(unittest.TestCase):
             local notes={}
             local plan=setmetatable({note=function(label,fn) notes[#notes+1]=fn end},
                 {__index=function() return function() end end})
-            bench.get('conch_test ice_breath status_conditions').build(plan)
+            bench.get('cb test ice_breath status_conditions').build(plan)
             assert(#notes==1)
             local npc={count=0,alive=true}
             function npc:GetFreezeCountdown() return self.count end

@@ -6,7 +6,7 @@ it holds that choice (user request 2026-11-07): its queue waits in the job and
 the room's record, so the engine has nothing to turn to, and the commit puts
 the queue back behind the evolved item. Leaving the room or the game before the
 change keeps the answer: the next visit (or Continue) finds the pedestal evolved.
-Offline doubles only: `conch_test morph cycle` and `conch_test morph return`
+Offline doubles only: `cb test morph cycle` and `cb test morph return`
 check the engine.
 """
 import unittest

@@ -1,4 +1,4 @@
-"""Offline oracle for conch_test hemispatial_neglect right_eye. Requires lupa.
+"""Offline oracle for cb test hemispatial_neglect right_eye. Requires lupa.
 
 The first class tests the pure burst bookkeeping. The second drives the shipped
 bench plan through the real runner against a scripted engine double: strictly
@@ -130,7 +130,7 @@ class EyeSampleOracleTests(unittest.TestCase):
 
 
 class RightEyeBenchSimulationTests(unittest.TestCase):
-    COMMAND = 'conch_test hemispatial_neglect right_eye'
+    COMMAND = 'cb test hemispatial_neglect right_eye'
 
     def setUp(self):
         runner_tests.BenchTests.setUp(self)
@@ -172,7 +172,7 @@ class RightEyeBenchSimulationTests(unittest.TestCase):
                 add=function(key,name,_,build) builders[key..' '..name]=build end,
                 collectible=function(p,id,wanted) p.inv[id]=wanted end}
             require('scripts.dev.item_test_eye_upgrades')
-            bench.register({command='conch_test hemispatial_neglect right_eye',build=function(plan)
+            bench.register({command='cb test hemispatial_neglect right_eye',build=function(plan)
                 plan.act(function(_,ctx) ctx.base={Damage=3.5} end)
                 builders['HEMISPATIAL_NEGLECT right_eye'](plan,NEGLECT)
             end})
@@ -265,7 +265,7 @@ class RightEyeBenchSimulationTests(unittest.TestCase):
             end
 
             function runBench()
-                assert(bench.start('conch_test hemispatial_neglect right_eye',false))
+                assert(bench.start('cb test hemispatial_neglect right_eye',false))
                 for _=1,30000 do
                     if not bench.isRunning() then return output() end
                     engineUpdate()

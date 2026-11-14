@@ -403,7 +403,7 @@ end
 -- out a player's save key on every call (the room's list index, the player's
 -- collectible RNG seed as a string), and every absorbed-ability count asked it
 -- three times: about 19 us a count, 0.7 ms an update for one holder (measured
--- 2026-11-10 with conch_test perf). The table it returns is kept for the rest
+-- 2026-11-10 with cb test perf). The table it returns is kept for the rest
 -- of the game frame, as Rune.total keeps its total; a new room (every new
 -- level brings one), game start, a save load and a Glowing Hourglass reset
 -- drop it at once.
@@ -1956,7 +1956,7 @@ end
 
 --- Bloodshot Eye: hidden, with no body contact, on its own orbit. It shoots
 --- outward from the player, so pinned on the player (or at orbit radius 0) it
---- never fires (measured 2026-11-07, conch_test kronos bloodshot_probe); its
+--- never fires (measured 2026-11-07, cb test kronos bloodshot_probe); its
 --- shots are separate entities and stay visible.
 local function spawnInvisibleBloodshotEye(player)
     local ent = Isaac.Spawn(EntityType.ENTITY_FAMILIAR, FamiliarVariant.BLOODSHOT_EYE, 0, player.Position, Vector.Zero, player)

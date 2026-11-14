@@ -275,7 +275,7 @@ if DevOrigins then DevOrigins.during("scripts.lib.isaacscript-common (upgradeMod
 -- No optional IsaacScript Common features: nothing here reads the player
 -- inventory or room history they offer, and grid entity collision detection
 -- walked every grid entity with collision and the entities touching it on every
--- update (about 0.3 ms an update, measured 2026-11-10 with conch_test perf)
+-- update (about 0.3 ms an update, measured 2026-11-10 with cb test perf)
 -- for a callback nothing registers. The custom callbacks used here
 -- (PRE_ITEM_PICKUP, POST_ITEM_PICKUP) bring the features they need themselves.
 ConchBlessing = isc:upgradeMod(mod, {})
@@ -592,7 +592,7 @@ if not highlightSuccess then
 end
 
 -- dev-only:begin
--- Dev tooling (scripts/dev: the conch_test benches and probes, the conch_morph
+-- Dev tooling (scripts/dev: the cb test benches and probes, the conch_morph
 -- viewer, the profiler and the command queue) is left out of the Workshop
 -- package. It loads last, and only where that folder is present.
 local devSuccess, devErr = pcall(function()

@@ -1,7 +1,7 @@
 """Shipped EID adapter with a double matching the installed public registration API.
 
 This verifies only owned descriptions and language transitions; actual EID rendering
-is covered by conch_test locale in the game.
+is covered by cb test locale in the game.
 """
 from pathlib import Path
 import unittest

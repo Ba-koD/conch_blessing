@@ -8,7 +8,7 @@
 -- so she is her own familiar rather than the vanilla Succubus entity, which
 -- would add Succubus's x1.5 damage. Her light is the vanilla Censer/Succubus
 -- halo drawn in gold by her anm2; its radius here is that halo's visible edge.
--- She moves and ticks as the real Succubus does (measured with `conch_test
+-- She moves and ticks as the real Succubus does (measured with `cb test
 -- seonnyeo succubus_probe`, 2026-11-13). Kronos may absorb her like Succubus:
 -- her light then stays on its holder, drawn as the halo alone (no stand-in
 -- familiar), for each copy absorbed.
@@ -31,7 +31,7 @@ M.data = {
     -- that range after each bounce, turning over two or three updates
     speed = 4.7,
     -- the engine's own Succubus movement, `EntityFamiliar:MoveDiagonally`:
-    -- at 1 she moves exactly as Succubus (measured 2026-11-13 with `conch_test
+    -- at 1 she moves exactly as Succubus (measured 2026-11-13 with `cb test
     -- seonnyeo diagonal_probe`: 4.71 an update, 35-45 degrees, turning 7-9
     -- units from the walls), so Succubus calls it with 1
     engineSpeed = 1,

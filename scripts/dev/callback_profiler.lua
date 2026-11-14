@@ -5,7 +5,7 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- Priority, Param } returned by Isaac.GetCallbacks. start() swaps the Function
 -- of this mod's entries for a timing wrapper and stop() puts every original
 -- back, so other mods are never touched and nothing stays wrapped. Used only by
--- conch_test benches; it does nothing on runtimes without Isaac.GetCallbacks.
+-- cb test benches; it does nothing on runtimes without Isaac.GetCallbacks.
 
 local P = {}
 local wrapped = nil          -- list of { entry, original }

@@ -4,7 +4,7 @@ The pure rules (the bonus on the line and the rice's hold, the room route, the g
 walk, the plough's line and stamping each quarter of it once) and the room graph over
 fake descriptors run here. How the
 oxen walk, break rocks, open the secret wall and grow the holder's real stats
-needs the engine: `conch_test ox` covers those in game.
+needs the engine: `cb test ox` covers those in game.
 """
 from pathlib import Path
 import re

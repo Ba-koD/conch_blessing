@@ -90,7 +90,7 @@ local function path(value, sprite)
 end
 
 -- Sheet swaps made by Apply since load, by sheet: a sprite swapped again every
--- frame would reload its texture every frame (conch_test april_fools counts them).
+-- frame would reload its texture every frame (cb test april_fools counts them).
 M.swaps = {}
 
 local function equal(a, b)
@@ -353,7 +353,7 @@ local function world()
 end
 
 ConchBlessing.AprilFools = M
--- Read-only views for conch_test april_fools.
+-- Read-only views for cb test april_fools.
 M._test = { path = path, reverse = reverse }
 ConchBlessing:AddCallback(ModCallbacks.MC_POST_UPDATE, world)
 -- A rotating pedestal can replace its visible sheet after the update pass.

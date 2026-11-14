@@ -3,7 +3,7 @@ local RoomKey = require("scripts.lib.room_key")
 -- Family Combo (패밀리 세트), the Magic Conch's Binge Eater (user design 2026-11-07).
 --
 -- Binge Eater gives an item pedestal a food choice. Measured 2026-11-07
--- (`conch_test kids_menu parity`, Binge Eater arm) it follows Birthright's
+-- (`cb test kids_menu parity`, Binge Eater arm) it follows Birthright's
 -- rules exactly: a pedestal created while someone holds it gains one choice
 -- (a room's first-visit stock, a later reward, a reroll with a new seed, a
 -- Diplopia copy, Damocles' extra pedestal); items seen before, an active

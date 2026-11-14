@@ -2,7 +2,7 @@
 
 Production scripts/lib/pocket_synergies.lua, Thurisaz's line rule and the locale
 loader, with doubles for the players' pocket slots and the frame counter. EID's
-own rendering of the lines stays an in-game check (`conch_test locale`).
+own rendering of the lines stays an in-game check (`cb test locale`).
 """
 from pathlib import Path
 import unittest

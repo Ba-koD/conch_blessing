@@ -4,7 +4,7 @@ One fake per copy: the holder's character, controller, passives and health (as
 they were at that moment), Parent set to the holder; a fall empties that place
 until the next floor; item loss and a lost holder remove fakes without a fall.
 These doubles cannot show what the engine really does with a Parent helper
-(revives, pickups, Continue, HUD); `conch_test rat` covers those in game.
+(revives, pickups, Continue, HUD); `cb test rat` covers those in game.
 """
 from pathlib import Path
 import unittest

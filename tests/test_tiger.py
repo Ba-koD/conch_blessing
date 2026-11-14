@@ -6,7 +6,7 @@ raises the vanilla Purgatory soul where the enemy died. Its Ghost Bombs
 explosion's own sourceless ticks are cancelled, and each enemy it reaches takes
 one hit of 3x the holder's damage from the explosion, then fear for 3 seconds.
 These doubles cannot show how the engine flies the soul or what its explosion
-reaches; `conch_test tiger` covers those in game.
+reaches; `cb test tiger` covers those in game.
 """
 from pathlib import Path
 import re

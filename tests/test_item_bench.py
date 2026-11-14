@@ -127,12 +127,12 @@ class BenchTests(unittest.TestCase):
             assert(screen()=='','idle HUD must be empty')
             local commands={}
             for i=1,209 do
-                commands[i]='conch_test item'..i..' lifecycle'
+                commands[i]='cb test item'..i..' lifecycle'
                 bench.register({command=commands[i],build=function(p)
                     p.section('acquisition and removal'); p.wait(3)
                 end})
             end
-            bench.startSuite('conch_test',commands)
+            bench.startSuite('cb test',commands)
             local s=screen()
             assert(s:find('1/209 Test - '..commands[1],1,true),s)
             assert(s:find('Restarting test run',1,true),s)
@@ -160,12 +160,12 @@ class BenchTests(unittest.TestCase):
                 if r~=0 then drawn[#drawn+1]=text end
             end
             local ready=false
-            bench.register({command='conch_test kronos box_of_friends',build=function(p)
+            bench.register({command='cb test kronos box_of_friends',build=function(p)
                 p.section('KRONOS / temporary room effect')
                 p.waitUntil(function() return ready end,30,'observe actual familiar absorption')
                 p.check('completed',function() return true,'ok' end)
             end})
-            bench.start('conch_test kronos box_of_friends',false); tick()
+            bench.start('cb test kronos box_of_friends',false); tick()
             dispatch(ModCallbacks.MC_POST_RENDER)
             local s=table.concat(drawn,' ')
             assert(s:find('1/1 Test',1,true),s)
@@ -383,12 +383,12 @@ class BenchTests(unittest.TestCase):
             for key,item in pairs(require('scripts.locale.en').items) do
                 for name in pairs(item.synergies or {}) do
                     local command=assert((probe.scenarios.coverage[key] or {})[name],key..':'..name..' missing synergy case')
-                    assert(bench.get(command) or command=='conch_test appraisal detail',command..' missing command')
+                    assert(bench.get(command) or command=='cb test appraisal detail',command..' missing command')
                     total=total+1
                 end
             end
             assert(total==152,'update the documented synergy inventory when it changes')
-            for _,name in ipairs({'conch_test kronos detail','conch_test live_eye detail','conch_test appraisal detail'}) do
+            for _,name in ipairs({'cb test kronos detail','cb test live_eye detail','cb test appraisal detail'}) do
                 bench.register({command=name,build=function() end})
             end
             local suite=probe.suiteCommands(probe.keys)
@@ -402,11 +402,11 @@ class BenchTests(unittest.TestCase):
             local selected
             bench.startSuite=function(_,commands) selected=commands end
             for _,group in ipairs({'damage','conditions','synergies'}) do
-                dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test',group)
+                dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..group)
                 assert(selected and #selected>0,group..' group is empty')
                 for _,command in ipairs(selected) do assert(bench.get(command),command..' not registered') end
             end
-            bench.start('conch_test snake lifecycle',false); drain()
+            bench.start('cb test snake lifecycle',false); drain()
             assert(output():find('0 PASS, 0 FAIL, 1 SKIP',1,true))
         """)
 
@@ -416,64 +416,64 @@ class BenchTests(unittest.TestCase):
             local started, selected, label, restart
             bench.start=function(name,withRestart) started=name; restart=withRestart end
             bench.startSuite=function(name,commands) label=name; selected=commands end
-            for _,name in ipairs({'conch_test kronos detail','conch_test live_eye detail','conch_test appraisal detail'}) do
+            for _,name in ipairs({'cb test kronos detail','cb test live_eye detail','cb test appraisal detail'}) do
                 bench.register({command=name,build=function() end})
             end
             for _,key in ipairs(probe.keys) do
-                dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test',string.lower(key))
-                assert(label=='conch_test '..string.lower(key))
+                dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..string.lower(key))
+                assert(label=='cb test '..string.lower(key))
                 local expected=probe.suiteCommands({key})
                 assert(table.concat(selected,'|')==table.concat(expected,'|'),key..' wrong item suite')
-                dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test',key..' lifecycle')
+                dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..key..' lifecycle')
                 assert(started==probe.commands[key] and restart==true,key..' wrong lifecycle')
-                assert(started=='conch_test '..string.lower(key)..' lifecycle')
+                assert(started=='cb test '..string.lower(key)..' lifecycle')
             end
             for _,row in ipairs(probe.scenarios.rows) do
-                dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test',row.key..' '..row.name)
+                dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..row.key..' '..row.name)
                 assert(started==row.command and restart==true,row.command..' unreachable case')
                 assert(not row.command:match('^conch_test_'),'legacy command exposed')
             end
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'CONCH_TEST','  KrOnOs   BoX_Of_FrIeNdS  ')
-            assert(started=='conch_test kronos box_of_friends')
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','kronos detail')
-            assert(started=='conch_test kronos detail')
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','all')
-            assert(label=='conch_test' and #selected==403,'update the documented suite count when it changes (got '..#selected..')')
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','rat characters')
-            assert(label=='conch_test rat characters' and #selected==34,'every selectable character once')
-            for _,name in ipairs(selected) do assert(name:match('^conch_test rat same_')) end
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','severed_oath compare')
-            assert(label=='conch_test severed_oath compare' and #selected==50)
-            assert(selected[1]=='conch_test severed_oath compare_capacity0_native')
-            assert(selected[2]=='conch_test severed_oath compare_capacity0_oath')
+            assert(started=='cb test kronos box_of_friends')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'kronos detail')
+            assert(started=='cb test kronos detail')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'all')
+            assert(label=='cb test' and #selected==403,'update the documented suite count when it changes (got '..#selected..')')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'rat characters')
+            assert(label=='cb test rat characters' and #selected==34,'every selectable character once')
+            for _,name in ipairs(selected) do assert(name:match('^cb test rat same_')) end
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'severed_oath compare')
+            assert(label=='cb test severed_oath compare' and #selected==50)
+            assert(selected[1]=='cb test severed_oath compare_capacity0_native')
+            assert(selected[2]=='cb test severed_oath compare_capacity0_oath')
             for _,name in ipairs(selected) do
                 assert(not bench.get(name).reuseGroup,'comparison arm reused a consumed pool')
                 assert(bench.get(name).resetReason:find('consumes pools',1,true))
             end
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','severed_oath birthright')
-            assert(label=='conch_test severed_oath birthright' and #selected==22)
-            assert(selected[1]=='conch_test severed_oath birthright_first_visit_birthright')
-            assert(selected[2]=='conch_test severed_oath birthright_first_visit_oath')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'severed_oath birthright')
+            assert(label=='cb test severed_oath birthright' and #selected==22)
+            assert(selected[1]=='cb test severed_oath birthright_first_visit_birthright')
+            assert(selected[2]=='cb test severed_oath birthright_first_visit_oath')
             for _,name in ipairs(selected) do
                 assert(not bench.get(name).reuseGroup,'Birthright arm reused a consumed pool')
                 assert(bench.get(name).resetReason:find('consumes pools',1,true))
             end
             -- Family Combo against its vanilla control, Binge Eater, case by case.
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','kids_menu parity')
-            assert(label=='conch_test kids_menu parity' and #selected==24)
-            assert(selected[1]=='conch_test kids_menu parity_first_visit_binge')
-            assert(selected[2]=='conch_test kids_menu parity_first_visit_kids')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'kids_menu parity')
+            assert(label=='cb test kids_menu parity' and #selected==24)
+            assert(selected[1]=='cb test kids_menu parity_first_visit_binge')
+            assert(selected[2]=='cb test kids_menu parity_first_visit_kids')
             for _,name in ipairs(selected) do
                 assert(not bench.get(name).reuseGroup,'Binge Eater arm reused a changed run')
                 assert(bench.get(name).resetReason:find('fresh run',1,true))
             end
             local previous=selected
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','severed_oath compare extra')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'severed_oath compare extra')
             assert(selected==previous,'trailing parameter started a broader suite')
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','severed_oath cycles')
-            assert(label=='conch_test severed_oath cycles' and #selected==4)
-            assert(table.concat(selected,'|')=='conch_test severed_oath cycle_ownership|conch_test severed_oath dice_copy_split'
-                ..'|conch_test severed_oath cycle_stacking|conch_test severed_oath golden_cycle')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'severed_oath cycles')
+            assert(label=='cb test severed_oath cycles' and #selected==4)
+            assert(table.concat(selected,'|')=='cb test severed_oath cycle_ownership|cb test severed_oath dice_copy_split'
+                ..'|cb test severed_oath cycle_stacking|cb test severed_oath golden_cycle')
         """)
 
     def test_aliases_detailed_helpers_and_shared_probes_use_the_single_command(self):
@@ -482,39 +482,44 @@ class BenchTests(unittest.TestCase):
             local started,selected,helper,helped,rng,rounding
             bench.start=function(name) started=name end
             bench.startSuite=function(_,commands) selected=commands end
-            for _,name in ipairs({'conch_test kronos detail','conch_test live_eye detail','conch_test appraisal detail'}) do
+            for _,name in ipairs({'cb test kronos detail','cb test live_eye detail','cb test appraisal detail'}) do
                 bench.register({command=name,build=function() end,help=function() helped=true end,
                     handle=function(action,words,p) helper=table.concat(words,' '); return p==player end})
             end
-            bench.register({command='conch_test locale',build=function() end})
+            bench.register({command='cb test locale',build=function() end})
             for alias,key in pairs({appraisal='APPRAISAL_CERTIFICATE',belt='UTILITY_BELT',liveeye='LIVE_EYE'}) do
-                dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test',alias)
+                dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..alias)
                 assert(table.concat(selected,'|')==table.concat(probe.suiteCommands({key}),'|'))
             end
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','kronos detail caption 8'); assert(helper=='caption 8')
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','kronos detail help'); assert(helped)
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','locale'); assert(started=='conch_test locale')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'kronos detail caption 8'); assert(helper=='caption 8')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'kronos detail help'); assert(helped)
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'locale'); assert(started=='cb test locale')
+            -- The console's split of `cb test locale`; the pre-rename word still works,
+            -- and any other `cb` word starts nothing.
+            started=nil; dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','locale'); assert(started=='cb test locale')
+            started=nil; dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','tset locale'); assert(started==nil)
+            started=nil; dispatch(ModCallbacks.MC_EXECUTE_CMD,'CB','TEST locale'); assert(started=='cb test locale')
             package.loaded['scripts.dev.rng_probe']={run=function(params) rng=params end}
             package.loaded['scripts.dev.stat_rounding_probe']={execute=function(params) rounding=params end}
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','rng 2000 luck 5'); assert(rng=='2000 luck 5')
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','rounding sweep 6'); assert(rounding=='sweep 6')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'rng 2000 luck 5'); assert(rng=='2000 luck 5')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'rounding sweep 6'); assert(rounding=='sweep 6')
             local listed=0
             package.loaded['scripts.dev.morph_probe']={list=function() listed=listed+1; return {'a','b'} end,
                 commandFor=function(word)
-                    if word==nil then return 'conch_test morph' end
-                    if word=='kronos' then return 'conch_test morph kronos' end
+                    if word==nil then return 'cb test morph' end
+                    if word=='kronos' then return 'cb test morph kronos' end
                 end}
-            started=nil; dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','morph'); assert(started=='conch_test morph')
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','morph kronos'); assert(started=='conch_test morph kronos')
-            started=nil; dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','morph list'); assert(listed==1 and started==nil)
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','morph live_eye'); assert(started==nil,'pending item has no applied bench')
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','morph kronos extra'); assert(started==nil,'trailing words rejected')
+            started=nil; dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'morph'); assert(started=='cb test morph')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'morph kronos'); assert(started=='cb test morph kronos')
+            started=nil; dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'morph list'); assert(listed==1 and started==nil)
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'morph live_eye'); assert(started==nil,'pending item has no applied bench')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'morph kronos extra'); assert(started==nil,'trailing words rejected')
             bench.isRunning=function() return true end
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','rng 9'); assert(rng=='2000 luck 5')
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','kronos detail caption 9'); assert(helper=='caption 8')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'rng 9'); assert(rng=='2000 luck 5')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'kronos detail caption 9'); assert(helper=='caption 8')
         ''')
 
-    def test_thurisaz_cases_helpers_and_parameters_route_through_conch_test(self):
+    def test_thurisaz_cases_helpers_and_parameters_route_through_cb_test(self):
         self.load_item_probe()
         self.run_lua("""
             local enum=function() return setmetatable({}, {__index=function(_, k) return #k end}) end
@@ -525,7 +530,7 @@ class BenchTests(unittest.TestCase):
                 'gb_bug','clear_rune','card','drop','pool'}
             assert(#Rune.commands()==#names)
             for i,name in ipairs(names) do
-                local command='conch_test thurisaz '..name
+                local command='cb test thurisaz '..name
                 assert(Rune.commands()[i]==command and Rune.commandFor(name)==command)
                 local def=bench.get(command); assert(def and def.restartCommand=='restart 0', command)
                 local ops=0
@@ -536,23 +541,23 @@ class BenchTests(unittest.TestCase):
             bench.start=function(name) started=name end
             bench.startSuite=function(name,list) suiteName=name; suiteList=list end
             Rune.helper=function(name,words) helped=name..':'..table.concat(words,' ') end
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','thurisaz')
-            assert(suiteName=='conch_test thurisaz' and #suiteList==#names)
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','thurisaz kronos'); assert(started=='conch_test thurisaz kronos')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'thurisaz')
+            assert(suiteName=='cb test thurisaz' and #suiteList==#names)
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'thurisaz kronos'); assert(started=='cb test thurisaz kronos')
             started=nil
             for _,params in ipairs({'thurisaz typo','thurisaz kronos extra','thurisaz list extra','thurisaz give 2 3','thurisaz ledger x'}) do
-                dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test',params)
+                dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..params)
             end
             assert(started==nil and helped==nil,'invalid parameters started something')
             assert(output():find('Unknown case: typo',1,true))
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','thurisaz give 2'); assert(helped=='give:thurisaz give 2')
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','thurisaz ledger'); assert(helped=='ledger:thurisaz ledger')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'thurisaz give 2'); assert(helped=='give:thurisaz give 2')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'thurisaz ledger'); assert(helped=='ledger:thurisaz ledger')
             assert(started==nil,'a helper never starts a bench')
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','thurisaz list')
-            assert(output():find('conch_test thurisaz drop',1,true) and output():find('give [N]',1,true))
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'thurisaz list')
+            assert(output():find('cb test thurisaz drop',1,true) and output():find('give [N]',1,true))
         """)
 
-    def test_uruz_cases_and_helpers_route_through_conch_test(self):
+    def test_uruz_cases_and_helpers_route_through_cb_test(self):
         self.load_item_probe()
         self.run_lua("""
             local enum=function() return setmetatable({}, {__index=function(_, k) return #k end}) end
@@ -562,7 +567,7 @@ class BenchTests(unittest.TestCase):
             local names={'kills','stack','room_ends','hit_keeps','clear_rune','card'}
             assert(#Rune.commands()==#names)
             for i,name in ipairs(names) do
-                local command='conch_test uruz '..name
+                local command='cb test uruz '..name
                 assert(Rune.commands()[i]==command and Rune.commandFor(name)==command)
                 local def=bench.get(command); assert(def and def.restartCommand=='restart 0', command)
                 local ops=0
@@ -573,16 +578,16 @@ class BenchTests(unittest.TestCase):
             bench.start=function(name) started=name end
             bench.startSuite=function(name,list) suiteName=name; suiteList=list end
             Rune.helper=function(name,words) helped=name..':'..table.concat(words,' ') end
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','uruz')
-            assert(suiteName=='conch_test uruz' and #suiteList==#names)
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','uruz stack'); assert(started=='conch_test uruz stack')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'uruz')
+            assert(suiteName=='cb test uruz' and #suiteList==#names)
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'uruz stack'); assert(started=='cb test uruz stack')
             started=nil
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','uruz typo')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'uruz typo')
             assert(started==nil and helped==nil and output():find('Unknown case: typo',1,true))
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','uruz earned'); assert(helped=='earned:uruz earned')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'uruz earned'); assert(helped=='earned:uruz earned')
         """)
 
-    def test_conch_ticket_cases_helpers_and_alias_route_through_conch_test(self):
+    def test_conch_ticket_cases_helpers_and_alias_route_through_cb_test(self):
         self.load_item_probe()
         self.run_lua("""
             local enum=function() return setmetatable({}, {__index=function(_, k) return #k end}) end
@@ -591,7 +596,7 @@ class BenchTests(unittest.TestCase):
             local names={'pick','rooms','use','card','pool','tarot_cloth'}
             assert(#Ticket.commands()==#names)
             for i,name in ipairs(names) do
-                local command='conch_test conch_ticket '..name
+                local command='cb test conch_ticket '..name
                 assert(Ticket.commands()[i]==command and Ticket.commandFor(name)==command)
                 local def=bench.get(command); assert(def and def.restartCommand=='restart 0', command)
                 local ops=0
@@ -602,18 +607,18 @@ class BenchTests(unittest.TestCase):
             bench.start=function(name) started=name end
             bench.startSuite=function(name,list) suiteName=name; suiteList=list end
             Ticket.helper=function(name,words) helped=name..':'..table.concat(words,' ') end
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','ticket')
-            assert(suiteName=='conch_test conch_ticket' and #suiteList==#names, 'the short name runs the suite')
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','conch_ticket use'); assert(started=='conch_test conch_ticket use')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'ticket')
+            assert(suiteName=='cb test conch_ticket' and #suiteList==#names, 'the short name runs the suite')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'conch_ticket use'); assert(started=='cb test conch_ticket use')
             started=nil
             for _,params in ipairs({'ticket typo','ticket use extra','ticket queue extra','ticket give 1 2'}) do
-                dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test',params)
+                dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..params)
             end
             assert(started==nil and helped==nil,'invalid parameters started something')
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','ticket queue'); assert(helped=='queue:ticket queue')
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','conch_ticket give 3'); assert(helped=='give:conch_ticket give 3')
-            dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test','ticket list')
-            assert(output():find('conch_test conch_ticket card',1,true) and output():find('queue | clear',1,true))
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'ticket queue'); assert(helped=='queue:ticket queue')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'conch_ticket give 3'); assert(helped=='give:conch_ticket give 3')
+            dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'ticket list')
+            assert(output():find('cb test conch_ticket card',1,true) and output():find('queue | clear',1,true))
         """)
 
     def test_sequential_bundle_uses_one_run_and_aborts_on_failed_boundary(self):
@@ -655,18 +660,18 @@ class BenchTests(unittest.TestCase):
             bench.startSuite=function() error('must not start a suite') end
             for _,params in ipairs({'kronos typo','kronos box_of_friends extra','all extra',
                 'status extra','damage extra','does_not_exist','list does_not_exist'}) do
-                dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test',params)
+                dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..params)
             end
             for _,params in ipairs({'list','kronos list','list kronos','kronos help'}) do
-                dispatch(ModCallbacks.MC_EXECUTE_CMD,'conch_test',params)
+                dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..params)
             end
             local log=output()
             assert(not log:find('FAIL',1,true),log)
             assert(log:find('Unknown case: typo',1,true))
             assert(log:find('Unexpected parameter: extra',1,true))
-            assert(log:find('conch_test kronos box_of_friends',1,true))
-            assert(log:find('conch_test kronos lifecycle',1,true))
-            assert(log:find('conch_test kronos detail',1,true))
+            assert(log:find('cb test kronos box_of_friends',1,true))
+            assert(log:find('cb test kronos lifecycle',1,true))
+            assert(log:find('cb test kronos detail',1,true))
             assert(not log:find('conch_test_',1,true),log)
         """)
 
@@ -677,7 +682,7 @@ class BenchTests(unittest.TestCase):
             local capture=function(label,fn) checks[label]=fn end
             local plan=setmetatable({check=capture,require=capture},
                 {__index=function() return function() end end})
-            bench.get('conch_test atropos death_certificate').build(plan)
+            bench.get('cb test atropos death_certificate').build(plan)
             local dimension,roomIndex,mode=2,81,0
             Game=function() return {GetLevel=function() return {
                 GetDimension=function() return dimension end,

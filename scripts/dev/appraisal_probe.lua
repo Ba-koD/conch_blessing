@@ -1,5 +1,5 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
--- Run conch_test appraisal detail: actual engine uses, native entry, pickup and return.
+-- Run cb test appraisal detail: actual engine uses, native entry, pickup and return.
 -- TestBench restarts before and after; ordinary gameplay does not run this.
 local TestBench = require("scripts.dev.test_bench")
 local NativeGalleryRooms = require("scripts.rooms.death_certificate_gallery_rooms")
@@ -274,6 +274,6 @@ end, ConchBlessing.ItemData.APPRAISAL_CERTIFICATE.id)
 
 ConchBlessing:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function() observing = nil end)
 
-TestBench.register({ command = "conch_test appraisal detail", tag = "AppraisalProbe", duration = "about 40 seconds", build = build })
+TestBench.register({ command = "cb test appraisal detail", tag = "AppraisalProbe", duration = "about 40 seconds", build = build })
 
 return {}

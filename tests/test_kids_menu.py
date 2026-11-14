@@ -1,7 +1,7 @@
 """Family Combo (the Magic Conch's Binge Eater) through its shipped Lua callbacks.
 
 Binge Eater measured in game on 2026-11-07 follows Birthright's rules exactly
-(`conch_test kids_menu parity`, Binge Eater arm): only a pedestal created while
+(`cb test kids_menu parity`, Binge Eater arm): only a pedestal created while
 someone holds it gains a choice. Family Combo gives a familiar item instead of
 food, from the pedestal's own seed, never drawn from an item pool (the pools
 only say which familiars count: one no pool lists never comes up), so

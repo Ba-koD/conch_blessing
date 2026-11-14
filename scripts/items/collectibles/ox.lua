@@ -93,7 +93,7 @@ local riceLeft = {}       -- [GetPtrHash(player)] = updates the rice's bonus sti
 local stamped = {}        -- ["color:cell"] = directions already stamped into this room's floor
 local furrowVersion, furrowSynced = 0, -1 -- a furrow cell gaining a direction anywhere bumps the version
 local rice = {}          -- [cell] = { x, y, ref } of this room's rice, where the two lines meet
--- Runtime evidence for conch_test ox; never saved.
+-- Runtime evidence for cb test ox; never saved.
 local evidence
 local function resetEvidence()
     evidence = { broken = 0, ploughed = 0, passed = 0, revealed = {}, opened = 0, steps = 0, spawned = 0, stuck = {},
@@ -655,7 +655,7 @@ local function doorTo(level, room, desc, index)
 end
 
 -- An ox that cannot go on stays where it is; the reason goes to the debug log
--- and to conch_test's evidence.
+-- and to cb test's evidence.
 local function stuck(color, reason, room)
     local doors = {}
     for slot = 0, 7 do

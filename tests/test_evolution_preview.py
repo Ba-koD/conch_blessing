@@ -3,7 +3,7 @@
 The branch tree (scripts/lib/upgrade_branch_preview.lua) and its range/hop
 lifecycle (scripts/conch_blessing_highlight.lua). These checks prove layout,
 timing, ownership and cleanup; the in-game look stays a user-reviewed LOOK
-check (conch_test evolution).
+check (cb test evolution).
 """
 from pathlib import Path
 import unittest
@@ -644,7 +644,7 @@ class EvolutionPreviewTests(unittest.TestCase):
                 LIVE_EYE={id=804,flag='positive',type='passive',origin={},originId=373},
                 TIME_LUCK={id=91,flag='positive',type='trinket',origin={},originId=145}}
             local probe=require('scripts.dev.evolution_probe')
-            assert(#defs==1 and defs[1].command=='conch_test evolution' and defs[1].cleanup)
+            assert(#defs==1 and defs[1].command=='cb test evolution' and defs[1].cleanup)
             local sections,ops={},0
             local plan=setmetatable({}, {__index=function(_,kind)
                 return function(a,b) ops=ops+1; if kind=='section' then sections[#sections+1]=a end end

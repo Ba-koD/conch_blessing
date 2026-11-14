@@ -1,5 +1,5 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
--- `conch_test kronos bloodshot_probe` (a measurement, run by name only): which
+-- `cb test kronos bloodshot_probe` (a measurement, run by name only): which
 -- part of Kronos's hidden Bloodshot Eye stops it from firing. The same eye is
 -- spawned plain, hidden, without collision, pinned to the player and exactly
 -- as Kronos does it, against the real item as the control. Each variant gets

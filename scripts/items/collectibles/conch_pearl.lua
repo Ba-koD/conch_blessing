@@ -40,7 +40,7 @@ local drawing = false -- inside our own redraw: those draws are filtered by the 
 local pending = {} -- conversions waiting for the pickup they were drawn for
 local effects = {}
 local warned = {}
--- Runtime evidence for conch_test conch_pearl; never saved.
+-- Runtime evidence for cb test conch_pearl; never saved.
 local evidence = { redraws = 0, conversions = 0, fallbacks = 0, emptyPools = 0, lastConversion = nil }
 
 local function warn(key, detail)

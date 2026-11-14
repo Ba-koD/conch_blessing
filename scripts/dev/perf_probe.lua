@@ -1,5 +1,5 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
--- Dev-only: `conch_test perf` (by name only) measures what this mod costs. It
+-- Dev-only: `cb test perf` (by name only) measures what this mod costs. It
 -- times every handler this mod registered (callback_profiler) through four
 -- ten-second windows in a fresh run: Isaac standing in the start room with none
 -- of our items; the same with ten harmless, sturdy enemies and Isaac firing at them;
@@ -124,7 +124,7 @@ local function build(plan)
     end)
 end
 
-TestBench.register({ command = "conch_test perf", tag = "PerfProbe", duration = "about 45 seconds",
+TestBench.register({ command = "cb test perf", tag = "PerfProbe", duration = "about 45 seconds",
     restartCommand = "restart 0", build = build,
     cleanup = function(ctx) Profiler.stop(); removeEnemies(ctx) end })
 

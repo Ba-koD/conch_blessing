@@ -7,16 +7,16 @@ import argparse
 from pathlib import Path
 import re
 
-START = "== conch_test severed_oath compare START:"
-END = "== conch_test severed_oath compare END:"
-MEMBER = re.compile(r"== conch_test severed_oath compare_(\w+)_(native|oath) END: (\d+) PASS, (\d+) FAIL, (\d+) SKIP ==")
+START = "== cb test severed_oath compare START:"
+END = "== cb test severed_oath compare END:"
+MEMBER = re.compile(r"== cb test severed_oath compare_(\w+)_(native|oath) END: (\d+) PASS, (\d+) FAIL, (\d+) SKIP ==")
 FIELDS = re.compile(r"\b(case|arm|phase|status|contract|metadata|before|after|decrease|preview|weightLost|poolKnown|frames|seed|expectedPool|source|newSame|newCross)=([^\s)]+)")
 
 
 def parse_log(text):
     start = text.rfind(START)
     if start < 0:
-        raise ValueError("No explicit 'conch_test severed_oath compare' suite found in this log.")
+        raise ValueError("No explicit 'cb test severed_oath compare' suite found in this log.")
     text = text[start:]
     match = re.search(re.escape(END) + r" (\d+) PASS, (\d+) FAIL, (\d+) SKIP ==", text)
     if match:

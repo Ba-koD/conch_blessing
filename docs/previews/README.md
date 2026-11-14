@@ -2,7 +2,7 @@
 
 아이템 그림의 최종 적용본과 원본 비교는 [스프라이트 최종 선택](resprite-final/README.md)에 정리되어 있습니다.
 
-> 진화 미리보기(받침대 위로 결과가 나무처럼 갈라지는 표시)는 `evolution-branch-preview.html`을 직접 열면 됩니다. 수치는 `scripts/lib/upgrade_branch_preview.lua`·`scripts/conch_blessing_highlight.lua`와 같고, 게임 안 확인은 `conch_test evolution`입니다. 시안을 고친 뒤에는 두 Lua 파일도 같은 값으로 맞춥니다.
+> 진화 미리보기(받침대 위로 결과가 나무처럼 갈라지는 표시)는 `evolution-branch-preview.html`을 직접 열면 됩니다. 수치는 `scripts/lib/upgrade_branch_preview.lua`·`scripts/conch_blessing_highlight.lua`와 같고, 게임 안 확인은 `cb test evolution`입니다. 시안을 고친 뒤에는 두 Lua 파일도 같은 값으로 맞춥니다.
 
 `item-upgrade-player.html`을 직접 열면 재생됩니다. 서버와 인터넷은 필요하지 않습니다.
 아이콘으로 항목을 선택하고, **전체 / 인게임 적용 / 보류**로 목록을 나눌 수 있습니다.
@@ -33,7 +33,7 @@ HTML의 크로노스 보유 펫 선택은 예시 목록이며 실제 게임의 �
 - 실제 강화와 변환 처리·타이밍은 같고, 대상·진행 상태·스프라이트는 각각 별도로 관리합니다. 실제 소라고둥의 강화·삭제 검색은 미리보기 아이템을 제외하며, 미리보기 전환·종료는 동시에 진행 중인 실제 강화를 취소하지 않습니다. 효과음은 한 번 재생한 뒤 자연스럽게 끝나게 하여 다른 강화나 게임 소리의 중지·볼륨을 건드리지 않습니다.
 - 강화 대기부터 후속 연출이 끝날 때까지 해당 아이템의 강화 가능 색칠을 멈춥니다. 다른 아이템의 표시에는 영향을 주지 않습니다.
 - 런은 재시작하지 않으며 게임 진행 자체를 정지시키지 않습니다. 방 이동 전에 미리보기 아이템을 정리하도록 REPENTOGON의 `MC_PRE_CHANGE_ROOM` 기능이 필요합니다.
-- 방 이동·게임 종료·새 게임 시작·모드 재로드 시 종료하며, `conch_test` 실행 중에는 열리지 않습니다.
+- 방 이동·게임 종료·새 게임 시작·모드 재로드 시 종료하며, `cb test` 실행 중에는 열리지 않습니다.
 - 새 ANM2를 처음 적용하거나 수정한 뒤에는 게임을 완전히 재실행해야 합니다.
 
 현재 적용 대상은 공허의 단검, 진, 크로노스, 돈 = 연사, 서리의 숨결, 화염의 숨결, SOFLAM, 편측무시,
@@ -83,7 +83,7 @@ REPENTOGON의 `Sprite:Copy`가 없는 구버전은 펫의 원래 ANM2 포즈를 
 - 효과음 크기·일치 검사: `python -m unittest tests.test_upgrade_sound_levels` (모든 강화음이 볼륨 1 이하에서 -18dB 이상으로 들리는지, HTML이 같은 소리를 같은 볼륨·높이로 트는지)
 - 런타임 보조 이미지/ANM2·진 낙뢰음 재생성: `python generate_upgrade_visual_assets.py` (`content/sounds.xml`을 처음 적용하거나 바꾼 뒤에는 게임 완전 재실행)
 - 오프라인 검사: `python -m unittest discover -s tests -p test_morph_viewer.py -v`, 프레임별 연출 계약은 `python -m unittest discover -s tests -p test_upgrade_presentations.py -v`
-- 게임 자동 검사: `conch_test morph` (적용 연출 13종 + 기본 애니메이션 3종, 효과음 실제 재생·프레임·색 복원; `conch_test morph kronos`처럼 개별 실행)
+- 게임 자동 검사: `cb test morph` (적용 연출 13종 + 기본 애니메이션 3종, 효과음 실제 재생·프레임·색 복원; `cb test morph kronos`처럼 개별 실행)
 - HTML 동작·Canvas 검사: `node tests/check_upgrade_preview.cjs` (`@napi-rs/canvas` 필요, 저장소 루트에서 실행; 브라우저 레이아웃 검사와는 별개)
 - 실제 게임 검증: 각 연출, 재시작·이동 키, 일시 정지, 방 이동, 실제 Magic Conch 강화 전환을 확인하고 `log.txt`의 `[ConchMorph]` 및 리소스 오류 확인
 - `[ConchMorph] DISPLAY`는 연출 종료 후 실제 픽업의 투명도·크기·레이어 표시·프레임 유무를 한 번 기록합니다. `MORPH`는 변환 완료만 뜻하며, `DISPLAY`도 화면의 최종 픽셀을 검증한 결과는 아닙니다. 아이템을 집어 들어 표시 프레임이 사라진 경우에는 강화 연출을 정리하고 게임의 획득 애니메이션을 유지합니다.

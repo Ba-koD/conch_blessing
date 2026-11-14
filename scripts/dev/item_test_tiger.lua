@@ -307,7 +307,7 @@ S.add("TIGER", "chain", { damage = true }, function(plan, id)
 end)
 
 -- Many real kills at once per copy count: about 1/3 and 2/3 of them raise a
--- 창귀, and all of them from three copies. The exact odds are `conch_test rng`.
+-- 창귀, and all of them from three copies. The exact odds are `cb test rng`.
 S.add("TIGER", "odds", { conditions = true }, function(plan, id)
     local KILLS = 36
     -- Three standard deviations around n/3 of KILLS (an outside sample is a FAIL).

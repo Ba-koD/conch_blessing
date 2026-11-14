@@ -4,13 +4,13 @@
 local M = {}
 local KEY = "conchTestFailuresV1"
 local seed = {
-    "conch_test kronos guardian_angel", "conch_test kronos twisted_pair",
-    "conch_test kronos bum_friend", "conch_test kronos lil_chest",
-    "conch_test kronos mystery_sack", "conch_test kronos paschal_candle",
-    "conch_test kronos relic", "conch_test kronos rune_bag",
-    "conch_test ice_breath lifecycle", "conch_test ice_breath status_conditions",
-    "conch_test kronos box_of_friends", "conch_test sealed_demon_sword lifecycle",
-    "conch_test tyrfing lifecycle",
+    "cb test kronos guardian_angel", "cb test kronos twisted_pair",
+    "cb test kronos bum_friend", "cb test kronos lil_chest",
+    "cb test kronos mystery_sack", "cb test kronos paschal_candle",
+    "cb test kronos relic", "cb test kronos rune_bag",
+    "cb test ice_breath lifecycle", "cb test ice_breath status_conditions",
+    "cb test kronos box_of_friends", "cb test sealed_demon_sword lifecycle",
+    "cb test tyrfing lifecycle",
 }
 local memory
 local observingManager, confirmedRevision
@@ -37,6 +37,13 @@ local function state()
     if save and save[KEY] then
         assert(save[KEY].version==1 and type(save[KEY].pending)=="table", "invalid test failure ledger")
         memory=save[KEY]
+        -- Failures recorded before conch_test became `cb test` (2026-11-14).
+        local renamed={}
+        for command,reason in pairs(memory.pending) do
+            local rest=command:match("^conch_test(.*)$")
+            if rest then renamed[#renamed+1]={command,"cb test"..rest,reason} end
+        end
+        for _,r in ipairs(renamed) do memory.pending[r[1]]=nil; memory.pending[r[2]]=r[3] end
     elseif not memory then
         memory={version=1,source="reviewed log 2026-10-09: 28 failures / 13 scenarios",pending={}}
         for _,command in ipairs(seed) do memory.pending[command]="reviewed log failure" end

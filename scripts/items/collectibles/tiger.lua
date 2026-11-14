@@ -14,7 +14,7 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- When it reaches the enemy it bursts into Ghost Bombs' explosion (1000.144.1).
 -- That explosion ticks twice the player's damage up to four times on everything
 -- around it, with no damage source at all (measured in game 2026-10-31 with
--- `conch_test tiger ghost_native`), so its own damage could neither be 3x nor
+-- `cb test tiger ghost_native`), so its own damage could neither be 3x nor
 -- name its owner. Each of its ticks is cancelled, and the first time it reaches
 -- an enemy that enemy takes one hit of 3x the holder's damage with the explosion
 -- as the source, which leads back to the holder for kill credit and other
@@ -55,7 +55,7 @@ M.data = {
 
 local souls = {}   -- [GetPtrHash(soul)] = { ref, owner, provenance, x, y, burst }
 local blasts = {}  -- [GetPtrHash(blast)] = { ref, owner, provenance, damage, hit = {}, queue = {} }
--- Runtime evidence for conch_test tiger; never saved.
+-- Runtime evidence for cb test tiger; never saved.
 local evidence
 local function resetEvidence()
     evidence = { kills = 0, rolls = 0, spawned = 0, claimed = 0, cancelled = 0, hits = 0, feared = 0, lastRoll = nil }

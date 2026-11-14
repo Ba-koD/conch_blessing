@@ -1,4 +1,4 @@
-"""Run the shipped `conch_test kronos detail` barrier section against a fixture world.
+"""Run the shipped `cb test kronos detail` barrier section against a fixture world.
 
 The world below is a double: it decides when a shot touches the player and what
 blocks it. It checks the bench's own sequence (wait for the absorbed barrier and

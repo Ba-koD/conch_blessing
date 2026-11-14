@@ -3,7 +3,7 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- created now gains exactly one familiar choice while a copy is held (two
 -- copies still give one, like Binge Eater), and none once the item is gone;
 -- an earlier pedestal keeps what it was given. The rules against vanilla
--- Binge Eater are `conch_test kids_menu parity`.
+-- Binge Eater are `cb test kids_menu parity`.
 local H = require("scripts.dev.item_test_support")
 local C = {}
 

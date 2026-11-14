@@ -16,7 +16,7 @@ INCLUDE_DIRS = ("content", "resources", "scripts")
 INCLUDE_FILES = ("main.lua", "metadata.xml", "Thumbnail.png")
 # Only what the mod runs goes to the Workshop. Left out: the dev tooling, which
 # the released mod never loads (core loads scripts/dev/init.lua only where it is
-# present: the conch_test benches and probes, the conch_morph viewer, the
+# present: the cb test benches and probes, the conch_morph viewer, the
 # profiler and the save-file command queue); modules nothing loads (an
 # unregistered item, an unused helper, the retired custom-room Appraisal
 # backend kept in the repository as a reference); and art kept for later.

@@ -4,7 +4,7 @@ Runs the shipped renderer through the shared template exactly like a real
 conversion (before phase, commit, after phase) and checks the cue schedule,
 milestones, drawn curves, debug story and the in-game bench's own oracles.
 Expected values come from the approved presentation decisions, not from the
-renderer's tables. This is offline evidence; conch_test morph checks the engine.
+renderer's tables. This is offline evidence; cb test morph checks the engine.
 """
 from pathlib import Path
 import re
@@ -511,7 +511,7 @@ class UpgradePresentationTests(unittest.TestCase):
 
 
 class MorphBenchOracleTests(unittest.TestCase):
-    """conch_test morph's checks pass on correct runs and catch each defect."""
+    """cb test morph's checks pass on correct runs and catch each defect."""
 
     def setUp(self):
         UpgradePresentationTests.setUp(self)
@@ -538,7 +538,7 @@ class MorphBenchOracleTests(unittest.TestCase):
                 local scene,p=runFull(key)
                 local ctx=contextFor(key,scene,p)
                 if mutate then mutate(ctx,scene,p) end
-                local checks,order=checksFor('conch_test morph '..string.lower(key))
+                local checks,order=checksFor('cb test morph '..string.lower(key))
                 local failed={}; checked=0; skipped=0
                 for _,label in ipairs(order) do
                     if label:find(key..':',1,true)==1 then
@@ -555,21 +555,21 @@ class MorphBenchOracleTests(unittest.TestCase):
 
     def test_registers_all_and_per_item_commands(self):
         commands = set(self.lua.eval('benches').keys())
-        self.assertIn('conch_test morph', commands)
-        self.assertIn('conch_test morph default', commands)
+        self.assertIn('cb test morph', commands)
+        self.assertIn('cb test morph default', commands)
         for key, *_ in ROWS:
-            self.assertIn('conch_test morph ' + key.lower(), commands)
-        self.assertEqual(self.lua.eval('Probe.commandFor("kronos")'), 'conch_test morph kronos')
-        self.assertEqual(self.lua.eval('Probe.commandFor("angels crown")'), 'conch_test morph angels_crown')
+            self.assertIn('cb test morph ' + key.lower(), commands)
+        self.assertEqual(self.lua.eval('Probe.commandFor("kronos")'), 'cb test morph kronos')
+        self.assertEqual(self.lua.eval('Probe.commandFor("angels crown")'), 'cb test morph angels_crown')
         self.assertIsNone(self.lua.eval('Probe.commandFor("live_eye")'), 'pending items have no applied bench')
 
     def test_rotating_pedestal_stage_passes_a_correct_wheel_and_catches_each_defect(self):
-        self.assertIn('conch_test morph cycle', set(self.lua.eval('benches').keys()))
-        self.assertEqual(self.lua.eval('Probe.commandFor("cycle")'), 'conch_test morph cycle')
+        self.assertIn('cb test morph cycle', set(self.lua.eval('benches').keys()))
+        self.assertEqual(self.lua.eval('Probe.commandFor("cycle")'), 'cb test morph cycle')
         self.lua.execute('''
             function cycleRun(mutate)
                 local checks,order={},{}
-                benches['conch_test morph cycle'].build(setmetatable({
+                benches['cb test morph cycle'].build(setmetatable({
                     check=function(label,fn) checks[label]=fn; order[#order+1]=label end},
                     {__index=function() return function() end end}))
                 local source,target=7,ConchBlessing.ItemData.LIVE_EYE.id
@@ -651,7 +651,7 @@ class MorphBenchOracleTests(unittest.TestCase):
             end return out end)()''')
         for command, n in sizes.items():
             self.assertGreater(n, 5, command)
-        self.assertGreater(sizes['conch_test morph'], sizes['conch_test morph kronos'] * 10)
+        self.assertGreater(sizes['cb test morph'], sizes['cb test morph kronos'] * 10)
 
     def test_default_flag_stage_checks_pass_on_the_shipped_templates(self):
         self.lua.execute("SoundEffect.SOUND_POWERUP_SPEWER=23")
@@ -659,7 +659,7 @@ class MorphBenchOracleTests(unittest.TestCase):
             with self.subTest(flag=flag):
                 result = self.lua.eval('''(function()
                     local checks,waits={},{}
-                    benches['conch_test morph default'].build(setmetatable({
+                    benches['cb test morph default'].build(setmetatable({
                         check=function(label,fn) checks[label]=fn end,
                         waitUntil=function(fn,_,label) waits[label]=fn end},
                         {__index=function() return function() end end}))

@@ -39,7 +39,7 @@ local function ensureCentralUpdater()
         -- The floor pass: REPENTOGON calls PRE_BACKDROP_RENDER_WALLS every
         -- render frame right after the floor is drawn and before the walls and
         -- entities, so the overlay lies on the floor (measured 2026-11-13 with
-        -- `conch_test morph floor_hooks`: RENDER_FLOOR > RENDER_WALLS > POST_RENDER
+        -- `cb test morph floor_hooks`: RENDER_FLOOR > RENDER_WALLS > POST_RENDER
         -- each frame). RENDER_WATER runs only in a room with water, never in
         -- an ordinary one, and POST_BACKDROP_PRE_RENDER_WALLS only rebuilds the
         -- backdrop texture; neither can host a running animation.

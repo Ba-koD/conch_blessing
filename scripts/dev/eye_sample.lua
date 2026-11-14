@@ -1,4 +1,4 @@
--- Pure bookkeeping for conch_test hemispatial_neglect right_eye. Nothing here
+-- Pure bookkeeping for cb test hemispatial_neglect right_eye. Nothing here
 -- touches the engine: the bench feeds it what the engine reported during one
 -- burst of real weapon triggers, and the offline tests feed it scripted bursts,
 -- so the oracle itself can be run against deliberately wrong items.

@@ -1,5 +1,5 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
--- Locale test bench: `conch_test locale` restarts the run, checks that every item's
+-- Locale test bench: `cb test locale` restarts the run, checks that every item's
 -- text came from scripts/locale (all three languages loaded, no icon token left,
 -- every icon a real item), that EID holds and renders the selected mod locale
 -- (descriptions, conch-mode lines, synergy lines, the Kronos lines Thurisaz
@@ -337,7 +337,7 @@ local function build(plan)
 end
 
 TestBench.register({
-    command = "conch_test locale",
+    command = "cb test locale",
     tag = "LocaleProbe",
     duration = "about 5 seconds",
     cleanup = restoreLanguage,

@@ -110,5 +110,5 @@ restoration/foreign replacement and removed-owner reuse.
 After restart, check Auto/On/Off in MCM, a pedestal for a complete turn, a blind
 pedestal and reroll, both sizes of the crab with 0/1/2 trinkets, ox walking in
 each direction and sleeping, doors and custom effects. Check room/continue,
-pause and exit. Run `conch_test locale` for the new menu strings. The user
+pause and exit. Run `cb test locale` for the new menu strings. The user
 performs these in-game actions; this project forbids UI automation.

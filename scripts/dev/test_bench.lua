@@ -1,7 +1,7 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Shared runner for in-game test benches (AGENTS.md, Verification).
 --
--- Each feature registers a `conch_test <feature> [case]` plan. item_probe.lua
+-- Each feature registers a `cb test <feature> [case]` plan. item_probe.lua
 -- dispatches the single public command. Starting an isolated plan restarts the run, plays the feature's plan on its own (it gives
 -- items, triggers events and waits on game state, never on player input), prints
 -- one PASS/FAIL/SKIP line per check and LOOK lines for visual-only checks to the
@@ -9,7 +9,7 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- again so nothing the test did leaks into play.
 --
 --   TestBench.register({
---       command  = "conch_test feature detail", -- dispatched plan name
+--       command  = "cb test feature detail", -- dispatched plan name
 --       tag      = "FeatureProbe",           -- log.txt prefix
 --       duration = "about 10 seconds",       -- shown in the START line
 --       build    = function(plan) ... end,   -- adds the steps (see newPlan)
@@ -372,7 +372,7 @@ end
 
 function TestBench.startSuite(command, commands)
     local def = { command = command, tag = "ConchTest" }
-    if active or suite then out(def, "A test is already running; use conch_test status or conch_test stop."); return false end
+    if active or suite then out(def, "A test is already running; use cb test status or cb test stop."); return false end
     if refuseHeldInput(def) then return false end
     local seen, copy = {}, {}
     for _, name in ipairs(commands) do
@@ -425,7 +425,7 @@ local function progressLines(run)
         lines[#lines + 1] = string.format("Step %d/%d: %s", run.index, run.ops and #run.ops or 0, description)
     end
     local r = run.results
-    lines[#lines + 1] = string.format("PASS %d | FAIL %d | SKIP %d | conch_test stop", r.pass, r.fail, r.skip)
+    lines[#lines + 1] = string.format("PASS %d | FAIL %d | SKIP %d | cb test stop", r.pass, r.fail, r.skip)
     return lines
 end
 
@@ -484,7 +484,7 @@ function TestBench.stop()
     if suite then suite.cancelled = true end
     active.cancelled = true
     if active.finished then return true end
-    record(active, false, "cancelled", "requested with conch_test stop")
+    record(active, false, "cancelled", "requested with cb test stop")
     active.restartAtEnd = true
     finish(active)
     return true

@@ -5,7 +5,7 @@ extend the harness when a new one is added.
 
 There are two tools and they check each other. Neither is sufficient alone:
 
-| | `rng_report.py` | `conch_test rng` console command |
+| | `rng_report.py` | `cb test rng` console command |
 | --- | --- | --- |
 | Runs | Offline, no game needed | In game |
 | Models | The Lua expressions, transcribed | Calls the shipped Lua functions |
@@ -38,9 +38,9 @@ instead of quietly publishing a stale number. Every figure in the output cites t
 Open the console and type:
 
 ```
-conch_test rng              # every probe, 100000 samples
-conch_test rng 500000       # custom sample count
-conch_test rng luck 20      # evaluate the luck-scaled chances at Luck 20
+cb test rng              # every probe, 100000 samples
+cb test rng 500000       # custom sample count
+cb test rng luck 20      # evaluate the luck-scaled chances at Luck 20
 ```
 
 Output goes to the console and to `log.txt`. `scripts/dev/rng_probe.lua` registers a
@@ -87,7 +87,7 @@ copies of the same roll.
    handler.
 4. Add the matching section to `rng_report.py`, reading its constants with `const()`
    so the report follows the code.
-5. Regenerate `docs/rng_report.md` and compare against `conch_test rng` in game.
+5. Regenerate `docs/rng_report.md` and compare against `cb test rng` in game.
 
 ## Reading the numbers
 

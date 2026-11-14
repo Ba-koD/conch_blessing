@@ -1,5 +1,5 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
--- Live Eye test bench: `conch_test live_eye detail` restarts the run, checks that a missed
+-- Live Eye test bench: `cb test live_eye detail` restarts the run, checks that a missed
 -- tear can be forgiven (50% + 5% per luck), that only unforgiven misses lower
 -- the damage multiplier (by 0.25; a hit raises it by 0.1), that one copy keeps it
 -- within x0.5-x3 and every further copy raises the floor by 0.5 and the cap by 1,
@@ -227,7 +227,7 @@ local function build(plan)
 end
 
 TestBench.register({
-    command = "conch_test live_eye detail",
+    command = "cb test live_eye detail",
     tag = "LiveEyeProbe",
     duration = "about 25 seconds",
     build = build,

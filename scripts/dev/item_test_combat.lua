@@ -307,7 +307,7 @@ end }
 -- own bolt counter, never from hits. The holder never shoots here, so every hit
 -- whose source is the player itself is the weather's: bolts for 1x damage,
 -- twister touches for 5%. Rain and the dim room are visual only; the rain loop
--- and the hit odds are covered offline and by conch_test rng.
+-- and the hit odds are covered offline and by cb test rng.
 local WEATHER_SPOTS = { { -220, -100 }, { 0, 110 }, { 220, -100 } }
 local function pinWeatherTargets(ctx)
     for i, target in ipairs(ctx.targets or {}) do
@@ -398,7 +398,7 @@ C.DRAGON = { stage = function(plan, _, n)
     local weather = ConchBlessing.dragon and ConchBlessing.dragon.data
     if n >= (weather and weather.twisterMinCopies or 2) then
         -- Twister mechanics with the chance forced to 1 for this check only; the
-        -- 5% roll itself is measured by conch_test rng and rng_report.py.
+        -- 5% roll itself is measured by cb test rng and rng_report.py.
         plan.act(function(player, ctx)
             ctx.chance = ConchBlessing.dragon.data.twisterChance
             ConchBlessing.dragon.data.twisterChance = 1

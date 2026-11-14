@@ -13,7 +13,7 @@ Usage
     python rng_report.py --samples 500000         # heavier Monte Carlo
     python rng_report.py --seed 1234              # different RNG stream
 
-The companion in-game probe (`conch_test rng` from scripts/dev/rng_probe.lua) samples the
+The companion in-game probe (`cb test rng` from scripts/dev/rng_probe.lua) samples the
 real Lua functions. This script models the same expressions offline, so agreement
 between the two is the actual check.
 """

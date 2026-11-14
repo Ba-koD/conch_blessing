@@ -35,7 +35,7 @@ local REWARD_RETURN_TRANSITION = RoomTransitionAnim.DEATH_CERTIFICATE or RETURN_
 local REWARD_RETURN_REASONS = { choice_complete = true, choice_complete_external = true }
 -- Vanilla Death Certificate answers a taken item with a choir and a screen
 -- that keeps shaking for about three seconds, until Isaac lies down for the
--- trip home (measured 2026-11-10 with conch_test appraisal_certificate
+-- trip home (measured 2026-11-10 with cb test appraisal_certificate
 -- dc_vanilla: CHOIR_UNLOCK at 0.5 as the item is taken, the shake countdown
 -- held at 10 from then on and still 10 as the DEATH_CERTIFICATE transition
 -- starts 90 updates later).

@@ -1,5 +1,5 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
--- Dev-only: `conch_test april_fools` switches the April Fools 3D art on and off
+-- Dev-only: `cb test april_fools` switches the April Fools 3D art on and off
 -- the way the MCM option does (the setting, then Refresh) and checks every
 -- catalogued layer of real subjects: a collectible pedestal and a trinket of
 -- ours (turning strips), a familiar of ours (a still sheet) and a standalone
@@ -286,7 +286,7 @@ local function cleanup(ctx)
     end
 end
 
-TestBench.register({ command = "conch_test april_fools", tag = "AprilFoolsProbe", duration = "about 25 seconds",
+TestBench.register({ command = "cb test april_fools", tag = "AprilFoolsProbe", duration = "about 25 seconds",
     restartCommand = "restart 0", build = build, cleanup = cleanup })
 
 return {}

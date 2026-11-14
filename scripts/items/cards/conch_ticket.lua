@@ -50,7 +50,7 @@ local releaseLock = {}     -- [GetPtrHash(player)] = { [source name] = true } un
 local controllers = {}     -- [GetPtrHash(player)] = ControllerIndex while that player picks or holds releaseLock
 local pickRefs = {}        -- [GetPtrHash(player)] = that player's saved picker, to settle it if they leave
 local reading = false      -- our own reads pass the input hook untouched
--- Test-only key source for conch_test: Lua's Input reads cannot be faked through
+-- Test-only key source for cb test: Lua's Input reads cannot be faked through
 -- MC_INPUT_ACTION (measured in game), so the bench holds keys here instead. It
 -- feeds the same reads; cleared on every game start, exit and bench cleanup.
 local testKeys = {}

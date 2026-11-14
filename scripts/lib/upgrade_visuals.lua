@@ -81,7 +81,7 @@ local function ring(scene, x, y, rx, ry, rgb, alpha)
 end
 
 -- Runtime evidence (never saved): what each scene actually played and drew.
--- conch_test morph reads these records; debug mode also writes them to the log.
+-- cb test morph reads these records; debug mode also writes them to the log.
 local function debugOn() return ConchBlessing.Config and ConchBlessing.Config.debugMode end
 local function trace(scene, event, detail)
     if not debugOn() then return end

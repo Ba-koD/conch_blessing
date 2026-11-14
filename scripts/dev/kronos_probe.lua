@@ -3,18 +3,18 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- so each can be checked by hand. Run `restart` between scenarios to keep them
 -- apart; they stack otherwise.
 --
--- Console:  conch_test kronos detail                 restart the run, test every feature on its own
+-- Console:  cb test kronos detail                 restart the run, test every feature on its own
 --                                         (PASS/FAIL/SKIP to console + log.txt), then restart
 --                                         again so nothing leaks into play (test_bench.lua)
---           conch_test kronos detail help            list the manual scenarios and helpers
---           conch_test kronos detail <scenario>      give Kronos + the scenario's familiars
---           conch_test kronos detail status          print the Kronos run save
---           conch_test kronos detail caption         preview the localized caption without changing the run
---           conch_test kronos detail hurtme          take one half-heart hit (never lethal)
---           conch_test kronos detail clearsim [n]    run the room-clear reward n times (default 1)
---           conch_test kronos detail enemies [n]     spawn n Fatties (default 3)
---           conch_test kronos detail give <id> [n]   give collectible <id> n times
---           conch_test kronos detail drop            remove Kronos (familiars come back)
+--           cb test kronos detail help            list the manual scenarios and helpers
+--           cb test kronos detail <scenario>      give Kronos + the scenario's familiars
+--           cb test kronos detail status          print the Kronos run save
+--           cb test kronos detail caption         preview the localized caption without changing the run
+--           cb test kronos detail hurtme          take one half-heart hit (never lethal)
+--           cb test kronos detail clearsim [n]    run the room-clear reward n times (default 1)
+--           cb test kronos detail enemies [n]     spawn n Fatties (default 3)
+--           cb test kronos detail give <id> [n]   give collectible <id> n times
+--           cb test kronos detail drop            remove Kronos (familiars come back)
 --
 -- Player 0 only. This file is dev tooling: it only runs from the console.
 
@@ -83,7 +83,7 @@ local SCENARIOS = {
     },
     {
         key = "hurt",
-        about = "effects of getting hit; then use: conch_test kronos detail hurtme",
+        about = "effects of getting hit; then use: cb test kronos detail hurtme",
         give = { { C.COLLECTIBLE_HOLY_WATER, 4 }, { C.COLLECTIBLE_DRY_BABY, 4 }, { C.COLLECTIBLE_MILK, 1 },
             { C.COLLECTIBLE_BIRD_CAGE, 1 }, { C.COLLECTIBLE_MYSTERY_EGG, 2 }, { C.COLLECTIBLE_MY_SHADOW, 2 },
             { C.COLLECTIBLE_HALLOWED_GROUND, 1 } },
@@ -94,7 +94,7 @@ local SCENARIOS = {
     },
     {
         key = "clear",
-        about = "room-clear drops; then use: conch_test kronos detail clearsim 7",
+        about = "room-clear drops; then use: cb test kronos detail clearsim 7",
         give = { { C.COLLECTIBLE_BUM_FRIEND, 10 }, { C.COLLECTIBLE_LIL_CHEST, 10 }, { C.COLLECTIBLE_RELIC, 1 },
             { C.COLLECTIBLE_MYSTERY_SACK, 1 }, { C.COLLECTIBLE_RUNE_BAG, 1 }, { C.COLLECTIBLE_PASCHAL_CANDLE, 1 } },
         checks = { "every clear: 1 random pickup + 1 chest", "6th clear: + soul heart + random pickup; 7th: + rune",
@@ -120,7 +120,7 @@ local SCENARIOS = {
         key = "floor",
         about = "Buddy in a Box x2 + Lil Delirium: random effect per floor",
         give = { { C.COLLECTIBLE_BUDDY_IN_A_BOX, 2 }, { C.COLLECTIBLE_LIL_DELIRIUM, 1 } },
-        checks = { "conch_test kronos detail status: 3 floor picks", "stage 2 then status: picks rerolled, serial +1" },
+        checks = { "cb test kronos detail status: 3 floor picks", "stage 2 then status: picks rerolled, serial +1" },
     },
     {
         key = "items",
@@ -135,7 +135,7 @@ local SCENARIOS = {
         about = "Lost Soul x2: hit-free floor pays eternal hearts",
         give = { { C.COLLECTIBLE_LOST_SOUL, 2 } },
         checks = { "stage 2 without a hit: 2 eternal hearts in the first room (or the next one)",
-            "then conch_test kronos detail hurtme, stage 3: nothing" },
+            "then cb test kronos detail hurtme, stage 3: nothing" },
     },
     {
         key = "actives",
@@ -294,7 +294,7 @@ function probe.status(player)
 end
 
 function probe.help()
-    out("conch_test kronos detail <scenario>  manual setups (run `restart` between them)")
+    out("cb test kronos detail <scenario>  manual setups (run `restart` between them)")
     for _, scenario in ipairs(SCENARIOS) do
         out(string.format("  %-9s %s", scenario.key, scenario.about))
     end
@@ -302,7 +302,7 @@ function probe.help()
 end
 
 function probe.run(scenario, player)
-    out("== conch_test kronos detail " .. scenario.key .. ": " .. scenario.about .. " ==")
+    out("== cb test kronos detail " .. scenario.key .. ": " .. scenario.about .. " ==")
     ensureKronos(player)
     for _, entry in ipairs(scenario.give or {}) do
         give(player, entry[1], entry[2])
@@ -316,7 +316,7 @@ function probe.run(scenario, player)
 end
 
 -- ------------------------------------------------------------------ automatic run
--- The plan below is run by scripts/dev/test_bench.lua: `conch_test kronos detail` restarts
+-- The plan below is run by scripts/dev/test_bench.lua: `cb test kronos detail` restarts
 -- the run, walks every feature on its own (gives familiars, fires tears, takes
 -- hits, uses the temporary-familiar sources, reloads the room for The Twins),
 -- prints PASS/FAIL/SKIP and LOOK lines, and restarts the run again.
@@ -1504,12 +1504,12 @@ local function buildPlan(plan)
     end)
 end
 
--- Manual setups and helpers, reached as `conch_test kronos detail <action>`.
+-- Manual setups and helpers, reached as `cb test kronos detail <action>`.
 local function handleCommand(action, words, player)
     local scenario = findScenario(action)
     if action == "aura" then
         probe._auraOnly = true
-        if not TestBench.start("conch_test kronos detail", true) then probe._auraOnly = nil end
+        if not TestBench.start("cb test kronos detail", true) then probe._auraOnly = nil end
     elseif scenario then
         probe.run(scenario, player)
     elseif action == "grid" then
@@ -1556,7 +1556,7 @@ local function handleCommand(action, words, player)
         spawnEnemies("fatty", math.max(1, math.floor(tonumber(words[2]) or 3)))
     elseif action == "give" then
         local id = tonumber(words[2])
-        if not id then out("usage: conch_test kronos detail give <id> [count]") return true end
+        if not id then out("usage: cb test kronos detail give <id> [count]") return true end
         give(player, id, math.max(1, math.floor(tonumber(words[3]) or 1)))
     elseif action == "drop" then
         while player:HasCollectible(KRONOS_ID, true) do
@@ -1570,7 +1570,7 @@ local function handleCommand(action, words, player)
 end
 
 TestBench.register({
-    command = "conch_test kronos detail",
+    command = "cb test kronos detail",
     tag = "KronosProbe",
     duration = "about 2 minutes",
     build = buildPlan,

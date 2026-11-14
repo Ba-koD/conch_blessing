@@ -3,7 +3,7 @@
 The real Death Certificate adapter (death_certificate_gallery_rooms.lua) runs on
 a fake dimension-2 room list, and the shipped item module converts its rooms.
 These doubles cannot show the engine's own item order, its way home or the
-pedestals' look; `conch_test conch_certificate` covers those in game.
+pedestals' look; `cb test conch_certificate` covers those in game.
 """
 from pathlib import Path
 import unittest

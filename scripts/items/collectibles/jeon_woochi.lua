@@ -52,7 +52,7 @@ local RNG_SHIFT = 35
 -- front of him first, then to the sides, then behind.
 local ANGLES = { 60, 120, 0, 180, 30, 150, 90, 240, 300, 210, 330, 270 }
 -- Sounds at the animation's events: (sound, volume, pitch). He comes and goes
--- the way Isaac teleports: measured with `conch_test jeon_woochi
+-- the way Isaac teleports: measured with `cb test jeon_woochi
 -- teleport_sound` (2026-11-13), Teleport!, Teleport 2.0 and Telepills all
 -- play HELL_PORTAL2 as Isaac leaves and HELL_PORTAL1 as he arrives, then
 -- SUMMON_POOF. Streak has no anm2 event: it plays when the show starts.

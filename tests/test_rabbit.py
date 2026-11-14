@@ -9,7 +9,7 @@ made up, how Raw Livers become livers (only while holding Rabbit, at most
 four), what the ladder does with the floor's crawlspace, which cell takes the
 rock, an older save's livers, and the floor
 graph's door distances. The revive itself, the rock, the ladder, the crawlspace
-passage and the black market's Raw Liver need the engine: `conch_test rabbit`
+passage and the black market's Raw Liver need the engine: `cb test rabbit`
 covers those in game.
 """
 from pathlib import Path

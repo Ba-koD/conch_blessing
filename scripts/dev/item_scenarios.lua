@@ -1,5 +1,5 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
--- Isolated behavior scenarios appended to conch_test's lifecycle matrix.
+-- Isolated behavior scenarios appended to cb test's lifecycle matrix.
 local Bench = require("scripts.dev.test_bench")
 local H = require("scripts.dev.item_test_support")
 local Isolation = require("scripts.dev.test_isolation")
@@ -7,7 +7,7 @@ local S = { rows = {}, coverage = {} }
 
 function S.add(key, name, groups, build, synergyNames)
     local parameter = name:gsub("^synergy_", "")
-    local command = "conch_test " .. string.lower(key) .. " " .. parameter
+    local command = "cb test " .. string.lower(key) .. " " .. parameter
     local row = { key = key, name = parameter, command = command, groups = groups, build = build }
     local reusable,resetReason = Isolation.scenario(key,parameter)
     S.rows[#S.rows + 1] = row
@@ -97,7 +97,7 @@ function S.sequenceBundle(key, name, groups, members, before, after)
     return S.bundle(key,name,groups,function(plan,id)
         for index, child in ipairs(builders) do
             plan.act(function(_,ctx)
-                ctx.retryCommand="conch_test "..string.lower(key).." "..child.name
+                ctx.retryCommand="cb test "..string.lower(key).." "..child.name
                 ctx.caseCtx={rooms=ctx.rooms,cleanupFns={}}
                 ctx.bundleRemaining={}
                 for i=index+1,#builders do ctx.bundleRemaining[#ctx.bundleRemaining+1]=key.." / "..builders[i].name end

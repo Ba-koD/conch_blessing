@@ -337,7 +337,7 @@ end
 -- A room converted before: the engine restored it from its own room save. A
 -- collectible that is not one of the certificate's (by seed) goes. Only what
 -- the player took stays gone: the engine empties the room an item was taken
--- from (measured 2026-11-13 with `conch_test conch_certificate dc_revisit`,
+-- from (measured 2026-11-13 with `cb test conch_certificate dc_revisit`,
 -- vanilla Death Certificate used twice: 18 pedestals, then 0, while a room
 -- merely looked into kept all of its own), so every other entry of ours that
 -- is missing is put back on its slot with its own seed.

@@ -3,7 +3,7 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- `__CBQ__CMD|<console command>` (or `__CBQ__MSG|<text>`) appended to this mod's
 -- save file (data/conch_blessing/save1.dat) runs during play: watch.sh queues
 -- `luamod conch_blessing` this way, and benches are started with
--- `__CBQ__CMD|conch_test ...` (AGENTS.md, Verification). Checking means reading
+-- `__CBQ__CMD|cb test ...` (AGENTS.md, Verification). Checking means reading
 -- the whole save file from disk, every RUNTIME_POLL_INTERVAL render frames, so
 -- it stays out of the released mod. SaveManager drops those lines when it
 -- loads the file. After a queued `luamod`, the next run shows "Reloaded".

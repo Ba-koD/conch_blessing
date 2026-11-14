@@ -2,7 +2,7 @@
 
 Used in a room, every monster that dies there gives the user +0.05 damage for
 good (each further use there adds the reward again); a new room ends it and
-hits take nothing away. `conch_test uruz` covers real kills and stats in game.
+hits take nothing away. `cb test uruz` covers real kills and stats in game.
 """
 from pathlib import Path
 import unittest

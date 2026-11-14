@@ -82,7 +82,7 @@ Viewer.stop = stop
 
 local function start(index)
     if TestBench.isRunning() then
-        log("Finish or stop conch_test before opening the visual viewer.")
+        log("Finish or stop cb test before opening the visual viewer.")
         return false
     end
     if Game():GetNumPlayers() < 1 then log("Start a run first."); return false end

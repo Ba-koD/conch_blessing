@@ -1,7 +1,7 @@
 """Production functions: the shared player-hit rule, its dispatcher and the hit icon.
 
 Engine doubles only; which flags the engine really sets for each damage source is
-measured in game by `conch_test two_faced_penny hit_kinds`.
+measured in game by `cb test two_faced_penny hit_kinds`.
 """
 from pathlib import Path
 import unittest

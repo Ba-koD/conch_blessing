@@ -7,8 +7,8 @@ SPEC = importlib.util.spec_from_file_location("cycle_compare_report", Path(__fil
 REPORT = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(REPORT)
 
-START = "== conch_test severed_oath compare START: 50 benches ==\n"
-END = "== conch_test severed_oath compare END: 9 PASS, 1 FAIL, 2 SKIP ==\n"
+START = "== cb test severed_oath compare START: 50 benches ==\n"
+END = "== cb test severed_oath compare END: 9 PASS, 1 FAIL, 2 SKIP ==\n"
 
 
 def measurement(arm="native", status="PASS"):
@@ -28,7 +28,7 @@ class ReportTests(unittest.TestCase):
 
     def test_failure_outside_measurement_overrides_successful_grant(self):
         text = START + measurement() + "FAIL full queue consumes pool\n"
-        text += "== conch_test severed_oath compare_capacity0_native END: 8 PASS, 1 FAIL, 0 SKIP ==\n" + END
+        text += "== cb test severed_oath compare_capacity0_native END: 8 PASS, 1 FAIL, 0 SKIP ==\n" + END
         result = REPORT.render_report(text)
         self.assertIn("FAIL (8/1/0)", result)
         self.assertIn("1/50", result)
@@ -36,7 +36,7 @@ class ReportTests(unittest.TestCase):
 
     def test_room_source_and_new_overlap_review_remain_visible(self):
         diag = measurement().replace("reason=done", "expectedPool=3 source=REVIEW newSame=1 newCross=2 reason=done")
-        text = START + diag + "== conch_test severed_oath compare_capacity0_native END: 8 PASS, 0 FAIL, 2 SKIP ==\n" + END
+        text = START + diag + "== cb test severed_oath compare_capacity0_native END: 8 PASS, 0 FAIL, 2 SKIP ==\n" + END
         result = REPORT.render_report(text)
         self.assertIn("방풀 REVIEW", result)
         self.assertIn("내부 1 / 다른 받침대 2", result)
@@ -55,7 +55,7 @@ class ReportTests(unittest.TestCase):
         self.assertIn(check.strip(), failures)
 
     def test_duplicate_end_summaries_are_not_double_counted_and_skip_not_pass(self):
-        member = "== conch_test severed_oath compare_golden0_oath END: 0 PASS, 0 FAIL, 1 SKIP ==\n"
+        member = "== cb test severed_oath compare_golden0_oath END: 0 PASS, 0 FAIL, 1 SKIP ==\n"
         rows, benches, complete, _ = REPORT.parse_log(START + member * 2 + END + measurement())
         self.assertTrue(complete)
         self.assertEqual(len(benches), 1)

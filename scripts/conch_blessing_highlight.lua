@@ -265,7 +265,7 @@ local function debugOn()
     return ConchBlessing.Config and ConchBlessing.Config.debugMode and type(ConchBlessing.printDebug) == "function"
 end
 
--- Runtime evidence only (never saved): conch_test evolution reads it, and
+-- Runtime evidence only (never saved): cb test evolution reads it, and
 -- debug mode mirrors it to the log.
 local function record(event, rec, detail)
     local events = UpgradeHighlight._previewEvents
@@ -554,7 +554,7 @@ function UpgradeHighlight.StopForPickup(pickup)
     if rec then endPreview(hash, rec, "stopped", pickup) end
 end
 
---- Read-only evidence for conch_test evolution.
+--- Read-only evidence for cb test evolution.
 function UpgradeHighlight.previewFor(pickup)
     return pickup and UpgradeHighlight._previews[getPickupHash(pickup)] or nil
 end

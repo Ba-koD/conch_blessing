@@ -587,7 +587,7 @@ end
 -- Family Combo against vanilla Binge Eater (user request 2026-11-07: it must
 -- work the way Binge Eater does, which measured exactly like Birthright).
 -- Every case runs once with Binge Eater (the control) and once with Family
--- Combo, each on a fresh run (conch_test kids_menu parity).
+-- Combo, each on a fresh run (cb test kids_menu parity).
 M.kidsCommands = {}
 for _, case in ipairs({"first_visit", "seen_room", "mid_room", "swap_while_held", "dice", "copy",
     "death_certificate", "damocles", "removal", "special_items", "stack", "upgrade_held"}) do
@@ -602,7 +602,7 @@ end
 
 for _, arm in ipairs({"native", "oath"}) do
     local name = "combo_tainted_isaac_" .. arm
-    local command = "conch_test severed_oath " .. name
+    local command = "cb test severed_oath " .. name
     S.rows[#S.rows + 1] = {key = "SEVERED_OATH", name = name, command = command,
         groups = {conditions = true, birthright_parity = true}, build = function(plan) taintedIsaac(plan, arm) end}
     require("scripts.dev.test_bench").register({command = command, tag = "ItemTest:SEVERED_OATH",

@@ -1,5 +1,5 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
--- conch_test evolution: the evolution preview on real, bench-owned pickups in
+-- cb test evolution: the evolution preview on real, bench-owned pickups in
 -- a clean run. It checks through the shipped highlight module that a tree
 -- opens for a nearby player, stays open, closes when they leave, that the item
 -- hops (its item layer only) while nobody is near, that an upgrade ends the
@@ -422,7 +422,7 @@ local function stageCycle(plan)
     plan.section("rotating pedestal (two-level tree)",
         "the pedestal keeps turning Dead Eye, Libra and Sad Onion; up close a trunk splits to small Dead Eye and Libra icons, Dead Eye grows green Live Eye, Libra grows Ceil, Round and Floor; the tree does not restart or flicker as the pedestal turns")
     spawnFixture(plan, "rotating Dead Eye", "LIVE_EYE")
-    -- Like conch_test morph cycle: the circle is built after native init.
+    -- Like cb test morph cycle: the circle is built after native init.
     plan.act(function(_, ctx)
         local pickup = assert(live(ctx), "fixture disappeared")
         ctx.cycleApi = type(pickup.GetCollectibleCycle) == "function" and type(pickup.AddCollectibleCycle) == "function"
@@ -733,7 +733,7 @@ local function cleanup(ctx)
     end
 end
 
-TestBench.register({ command = "conch_test evolution", tag = "EvolutionProbe", duration = "about a minute",
+TestBench.register({ command = "cb test evolution", tag = "EvolutionProbe", duration = "about a minute",
     cleanup = cleanup, build = build })
 
 return { expectedResults = expectedResults }

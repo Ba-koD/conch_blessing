@@ -1,5 +1,5 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
--- conch_test uruz [CASE | list | give [N] | spawn | earned]
+-- cb test uruz [CASE | list | give [N] | spawn | earned]
 -- Tyrfing's rune, used for real through EntityPlayer:UseCard (and Clear Rune).
 -- For the room it is used in, every monster death gives the user +0.05 damage
 -- for good; hits never take it away and leaving the room ends it. Kills are
@@ -58,7 +58,7 @@ local function roomEntry(plan)
 end
 
 local function case(name, title, build)
-    local command = "conch_test uruz " .. name
+    local command = "cb test uruz " .. name
     Probe.cases[name] = command
     Probe.order[#Probe.order + 1] = name
     TestBench.register({
@@ -199,10 +199,10 @@ function Probe.helper(name, words, player)
 end
 
 function Probe.list()
-    local lines = { "conch_test uruz  -> every case below, each from a clean run" }
+    local lines = { "cb test uruz  -> every case below, each from a clean run" }
     for _, name in ipairs(Probe.order) do lines[#lines + 1] = "  " .. Probe.cases[name] end
-    lines[#lines + 1] = "Manual helpers on the current run: conch_test uruz give [N] | spawn | earned"
-    lines[#lines + 1] = "Continue check: kill with Uruz, save and quit, continue, then conch_test uruz earned"
+    lines[#lines + 1] = "Manual helpers on the current run: cb test uruz give [N] | spawn | earned"
+    lines[#lines + 1] = "Continue check: kill with Uruz, save and quit, continue, then cb test uruz earned"
     return lines
 end
 

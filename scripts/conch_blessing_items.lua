@@ -2273,5 +2273,5 @@ end)
 -- Ensure minus chain evolution logic is loaded
 pcall(function() require("scripts.items.trinkets.minus_chain") end)
 
--- Dev tooling (the conch_test benches and probes) loads from scripts/dev/init.lua,
+-- Dev tooling (the cb test benches and probes) loads from scripts/dev/init.lua,
 -- which core loads last; the Workshop package leaves it out.

@@ -10,17 +10,17 @@ end
 
 load("runtime_queue")      -- __CBQ__ command queue (watch.sh, queued benches)
 load("morph_viewer")       -- conch_morph: previews an upgrade presentation
-load("rng_probe")          -- conch_test rng
-load("stat_rounding_probe") -- conch_test rounding
-load("kronos_probe")       -- conch_test kronos detail
-load("liveeye_probe")      -- conch_test live_eye detail
+load("rng_probe")          -- cb test rng
+load("stat_rounding_probe") -- cb test rounding
+load("kronos_probe")       -- cb test kronos detail
+load("liveeye_probe")      -- cb test live_eye detail
 for _, probe in ipairs({ "thurisaz_probe", "conch_ticket_probe", "uruz_probe" }) do load(probe) end
-load("locale_probe")       -- conch_test locale
-load("morph_probe")        -- conch_test morph
-load("evolution_probe")    -- conch_test evolution
-load("april_fools_probe")  -- conch_test april_fools
-load("appraisal_probe")    -- conch_test appraisal detail
--- Last, so conch_test can include the detailed benches above in its suite.
+load("locale_probe")       -- cb test locale
+load("morph_probe")        -- cb test morph
+load("evolution_probe")    -- cb test evolution
+load("april_fools_probe")  -- cb test april_fools
+load("appraisal_probe")    -- cb test appraisal detail
+-- Last, so cb test can include the detailed benches above in its suite.
 load("item_probe")
 
 return {}

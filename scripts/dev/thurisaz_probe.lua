@@ -1,5 +1,5 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
--- conch_test thurisaz [CASE | list | give [N] | spawn | familiars | ledger]
+-- cb test thurisaz [CASE | list | give [N] | spawn | familiars | ledger]
 -- The Kronos rune, used for real through EntityPlayer:UseCard (and Clear Rune,
 -- and a real pocket drop). Each use devours one of the user's familiars for
 -- good: +2 damage each plus the familiar's absorbed ability, with or without
@@ -115,7 +115,7 @@ end
 
 -- ---------------------------------------------------------------- cases
 local function case(name, title, build)
-    local command = "conch_test thurisaz " .. name
+    local command = "cb test thurisaz " .. name
     Probe.cases[name] = command
     Probe.order[#Probe.order + 1] = name
     TestBench.register({
@@ -532,17 +532,17 @@ function Probe.commandFor(name) return Probe.cases[name] end
 
 function Probe.isHelper(name) return HELPERS[name] ~= nil end
 
---- Runs a manual helper; words are the lower-case console words after conch_test.
+--- Runs a manual helper; words are the lower-case console words after cb test.
 function Probe.helper(name, words, player)
     if not player then out("Start a run first.") return end
     HELPERS[name](words, player)
 end
 
 function Probe.list()
-    local lines = { "conch_test thurisaz  -> every case below, each from a clean run" }
+    local lines = { "cb test thurisaz  -> every case below, each from a clean run" }
     for _, name in ipairs(Probe.order) do lines[#lines + 1] = "  " .. Probe.cases[name] end
-    lines[#lines + 1] = "Manual helpers on the current run: conch_test thurisaz give [N] | spawn | familiars | ledger"
-    lines[#lines + 1] = "Continue check: devour, save and quit, continue, then conch_test thurisaz ledger"
+    lines[#lines + 1] = "Manual helpers on the current run: cb test thurisaz give [N] | spawn | familiars | ledger"
+    lines[#lines + 1] = "Continue check: devour, save and quit, continue, then cb test thurisaz ledger"
     return lines
 end
 

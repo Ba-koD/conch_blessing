@@ -328,7 +328,7 @@ S.add("RAT", "helper_pickups", {}, function(plan)
 end)
 
 -- ------------------------------------------------------------------ same character
--- `conch_test rat characters`: a fresh run as every selectable character, then
+-- `cb test rat characters`: a fresh run as every selectable character, then
 -- each fake against its original. Nobody's health is touched: the fake must
 -- already have exactly the original's hearts, and the original's own health
 -- must be what it was before the rat. Actives, trinkets and pocket items stay
@@ -556,7 +556,7 @@ end
 
 for _, character in ipairs(CHARACTERS) do
     local name = "same_" .. character[1]
-    local command = "conch_test rat " .. name
+    local command = "cb test rat " .. name
     S.rows[#S.rows + 1] = { key = "RAT", name = name, command = command, groups = { characters = true },
         build = function(plan) sameCharacter(plan, character) end }
     require("scripts.dev.test_bench").register({ command = command, tag = "ItemTest:RAT",
@@ -567,7 +567,7 @@ for _, character in ipairs(CHARACTERS) do
 end
 
 -- ------------------------------------------------------------------ perf
--- `conch_test rat perf` (by name only): how a run slows down as fakes are
+-- `cb test rat perf` (by name only): how a run slows down as fakes are
 -- added. With a typical loadout it holds 0, 1, 3 and 6 fakes in turn and logs,
 -- for each, the average frame time, the room's entity count and this mod's
 -- heaviest callback handlers (callback_profiler). Measurements, not checks.

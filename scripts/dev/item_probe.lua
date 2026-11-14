@@ -1,5 +1,5 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
--- conch_test [all|synergies|conditions|damage|list|status|stop|ITEM_KEY [CASE]]
+-- cb test [all|synergies|conditions|damage|list|status|stop|ITEM_KEY [CASE]]
 -- One public console command; item and scenario names are parameters.
 local TestBench = require("scripts.dev.test_bench")
 local H = require("scripts.dev.item_test_support")
@@ -21,7 +21,7 @@ end
 
 local GOLDEN = TrinketType.TRINKET_GOLDEN_FLAG
 local keys, commands = {}, {}
-local deep = { KRONOS = "conch_test kronos detail", LIVE_EYE = "conch_test live_eye detail", APPRAISAL_CERTIFICATE = "conch_test appraisal detail" }
+local deep = { KRONOS = "cb test kronos detail", LIVE_EYE = "cb test live_eye detail", APPRAISAL_CERTIFICATE = "cb test appraisal detail" }
 for key, item in pairs(ConchBlessing.ItemData) do
     if type(item) == "table" and item.type then keys[#keys + 1] = key end
 end
@@ -141,7 +141,7 @@ end
 
 for _, key in ipairs(keys) do
     local item = ConchBlessing.ItemData[key]
-    local command = "conch_test " .. string.lower(key) .. " lifecycle"
+    local command = "cb test " .. string.lower(key) .. " lifecycle"
     commands[key] = command
     TestBench.register({ command = command, tag = "ItemTest:" .. key,
         reuseGroup = (Isolation.supports(key) or item.WorkingNow == true) and Isolation.group(key) or nil,
@@ -185,7 +185,7 @@ local function suiteCommands(selected)
 end
 
 local function listItem(key)
-    local prefix = "conch_test " .. string.lower(key)
+    local prefix = "cb test " .. string.lower(key)
     out(prefix .. (ConchBlessing.ItemData[key].WorkingNow == true and " [unfinished: SKIP]" or " [all item tests]"))
     out("  " .. commands[key])
     if deep[key] then out("  " .. prefix .. " detail") end
@@ -205,12 +205,21 @@ local function listItem(key)
 end
 
 ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, params)
-    if string.lower(tostring(command)) ~= "conch_test" then return end
+    -- `cb test ...` (renamed from conch_test on 2026-11-14: Magic Conch already
+    -- answers `conch`). The console splits off the first word, so the rest
+    -- arrives as "test ..."; the old single word stays accepted for old lines.
+    command = string.lower(tostring(command))
     local words = {}
     for word in tostring(params or ""):gmatch("%S+") do words[#words + 1] = string.lower(word) end
+    if command == "cb" then
+        if words[1] ~= "test" then out("Usage: cb test [all|latest [list]|ITEM [CASE]|list|status|stop]"); return end
+        table.remove(words, 1)
+    elseif command ~= "conch_test" then
+        return
+    end
     local action, case = words[1] or "all", words[2]
     if action == "rng" or action == "rounding" then
-        if TestBench.isRunning() then out("A test is already running; use conch_test stop first."); return end
+        if TestBench.isRunning() then out("A test is already running; use cb test stop first."); return end
         local player = Isaac.GetPlayer(0)
         if not player then out("Start a test run first."); return end
         local ok, err = pcall(function()
@@ -222,8 +231,8 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
         return
     end
     if action == "locale" then
-        if case then out("Usage: conch_test locale"); return end
-        TestBench.start("conch_test locale",true); return
+        if case then out("Usage: cb test locale"); return end
+        TestBench.start("cb test locale",true); return
     end
     -- Cards and runes: their own case suites and manual helpers.
     local pocketBenches = { thurisaz = "scripts.dev.thurisaz_probe", conch_ticket = "scripts.dev.conch_ticket_probe",
@@ -232,14 +241,14 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
     if pocketBenches[action] then
         local loaded, Pocket = pcall(require, pocketBenches[action])
         if not loaded then out("FAIL " .. action .. " bench unavailable: " .. tostring(Pocket)); return end
-        local usage = "conch_test " .. action
+        local usage = "cb test " .. action
         if case == "list" or case == "help" then
             if #words > 2 then out("Usage: " .. usage .. " list"); return end
             for _, line in ipairs(Pocket.list()) do out(line) end
             return
         end
         if case and Pocket.isHelper(case) then
-            if TestBench.isRunning() then out("A test is already running; use conch_test stop first."); return end
+            if TestBench.isRunning() then out("A test is already running; use cb test stop first."); return end
             if #words > (case == "give" and 3 or 2) then out("Usage: " .. usage .. " list"); return end
             Pocket.helper(case, words, Isaac.GetPlayer(0)); return
         end
@@ -260,43 +269,43 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
             for _, line in ipairs(Morph.list()) do out(line) end
             return
         end
-        if #words > 2 then out("Usage: conch_test morph [ITEM | default | cycle | list]"); return end
+        if #words > 2 then out("Usage: cb test morph [ITEM | default | cycle | list]"); return end
         local command = Morph.commandFor(case)
-        if not command then out("No applied presentation for " .. tostring(case) .. "; use conch_test morph list."); return end
+        if not command then out("No applied presentation for " .. tostring(case) .. "; use cb test morph list."); return end
         if not singleRun() then out("Start a single-player test run first."); return end
         TestBench.start(command, true); return
     end
     if action == "perf" then
-        if case then out("Usage: conch_test perf"); return end
+        if case then out("Usage: cb test perf"); return end
         local loaded, err = pcall(require, "scripts.dev.perf_probe")
         if not loaded then out("FAIL perf bench unavailable: " .. tostring(err)); return end
         if not singleRun() then out("Start a single-player test run first."); return end
-        TestBench.start("conch_test perf", true); return
+        TestBench.start("cb test perf", true); return
     end
     if action == "april_fools" then
-        if case then out("Usage: conch_test april_fools"); return end
+        if case then out("Usage: cb test april_fools"); return end
         local loaded, err = pcall(require, "scripts.dev.april_fools_probe")
         if not loaded then out("FAIL April Fools bench unavailable: " .. tostring(err)); return end
         if not singleRun() then out("Start a single-player test run first."); return end
-        TestBench.start("conch_test april_fools", true); return
+        TestBench.start("cb test april_fools", true); return
     end
     if action == "evolution" then
-        if case then out("Usage: conch_test evolution"); return end
+        if case then out("Usage: cb test evolution"); return end
         local loaded, err = pcall(require, "scripts.dev.evolution_probe")
         if not loaded then out("FAIL evolution bench unavailable: " .. tostring(err)); return end
         if not singleRun() then out("Start a single-player test run first."); return end
-        TestBench.start("conch_test evolution", true); return
+        TestBench.start("cb test evolution", true); return
     end
     if action == "latest" then
-        if #words>2 or (case and case~="list") then out("Usage: conch_test latest [list]");return end
-        if TestBench.isRunning() then out("A test is already running; use conch_test stop first.");return end
+        if #words>2 or (case and case~="list") then out("Usage: cb test latest [list]");return end
+        if TestBench.isRunning() then out("A test is already running; use cb test stop first.");return end
         local ok,list,source=pcall(TestBench.latestCommands)
         if not ok then out("FAIL latest selection: "..tostring(list));return end
         out("Latest unresolved failures: "..#list.." scenarios ("..source..").")
         if #list==0 then out("No failed scenarios remain; no run restarted.");return end
         if case=="list" then for i,name in ipairs(list) do out(i..". "..name) end;return end
         if not singleRun() then out("Start a single-player test run first.");return end
-        local started,err=pcall(TestBench.startSuite,"conch_test latest",list)
+        local started,err=pcall(TestBench.startSuite,"cb test latest",list)
         if not started then out("FAIL latest setup: "..tostring(err)) end
         return
     end
@@ -305,23 +314,23 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
     if case == "detail" and #words > 2 then
         local def = deep[string.upper(action)] and TestBench.get(deep[string.upper(action)])
         if def and words[3]=="help" and #words==3 and def.help then def.help(); return end
-        if not (def and def.handle) then out("Unknown detailed helper; use conch_test ITEM list."); return end
-        if TestBench.isRunning() then out("A test is already running; use conch_test stop first."); return end
+        if not (def and def.handle) then out("Unknown detailed helper; use cb test ITEM list."); return end
+        if TestBench.isRunning() then out("A test is already running; use cb test stop first."); return end
         local args = {}; for i=3,#words do args[#args+1]=words[i] end
         local player=Isaac.GetPlayer(0)
         if not player then out("Start a test run first."); return end
         if not def.handle(args[1],args,player) then out("Unknown detailed helper: "..args[1]) end
         return
     end
-    if #words > 2 then out("Usage: conch_test ITEM [CASE]; use conch_test ITEM list."); return end
+    if #words > 2 then out("Usage: cb test ITEM [CASE]; use cb test ITEM list."); return end
     if case and (action == "all" or action == "status" or action == "stop"
         or action == "synergies" or action == "conditions" or action == "damage") then
-        out("Unexpected parameter: " .. case .. "; use conch_test list."); return
+        out("Unexpected parameter: " .. case .. "; use cb test list."); return
     end
     if action == "status" then out(TestBench.status()); return end
     if action == "stop" then if not TestBench.stop() then out("No test is running.") end; return end
     if action == "list" or action == "help" then
-        out("conch_test [all|latest [list]|ITEM [CASE]|synergies|conditions|damage|list|status|stop]; verified compatible cases share a run. See docs/item_testing.md.")
+        out("cb test [all|latest [list]|ITEM [CASE]|synergies|conditions|damage|list|status|stop]; verified compatible cases share a run. See docs/item_testing.md.")
         if case then
             local key = string.upper(case)
             if not commands[key] then out("Unknown item: " .. case); return end
@@ -329,37 +338,37 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
         end
         for _, key in ipairs(keys) do
             local pending = ConchBlessing.ItemData[key].WorkingNow == true
-            out("conch_test " .. string.lower(key) .. (pending and " [unfinished: SKIP]" or ""))
+            out("cb test " .. string.lower(key) .. (pending and " [unfinished: SKIP]" or ""))
         end
-        out("For individual cases: conch_test ITEM list (example: conch_test kronos list).")
-        out("Short names: conch_test appraisal, conch_test belt. Shared checks: conch_test locale, conch_test morph [ITEM | default | cycle | list], conch_test evolution, conch_test rng [samples] [luck N], conch_test perf (what this mod costs per update; a measurement).")
-        out("Pocket items: conch_test thurisaz [CASE | list | give [N] | spawn | familiars | ledger] (the Kronos rune),")
-        out("  conch_test conch_ticket [CASE | list | give [N] | spawn | queue | clear] (the Conch Ticket; short name: ticket),")
-        out("  conch_test uruz [CASE | list | give [N] | spawn | earned] (the Tyrfing rune).")
-        out("Stat math: conch_test rounding [multiplier | sweep [stacks]] [pN].")
+        out("For individual cases: cb test ITEM list (example: cb test kronos list).")
+        out("Short names: cb test appraisal, cb test belt. Shared checks: cb test locale, cb test morph [ITEM | default | cycle | list], cb test evolution, cb test rng [samples] [luck N], cb test perf (what this mod costs per update; a measurement).")
+        out("Pocket items: cb test thurisaz [CASE | list | give [N] | spawn | familiars | ledger] (the Kronos rune),")
+        out("  cb test conch_ticket [CASE | list | give [N] | spawn | queue | clear] (the Conch Ticket; short name: ticket),")
+        out("  cb test uruz [CASE | list | give [N] | spawn | earned] (the Tyrfing rune).")
+        out("Stat math: cb test rounding [multiplier | sweep [stacks]] [pN].")
         return
     end
     local key = string.upper(action)
     if commands[key] and (case == "list" or case == "help") then listItem(key); return end
     if not singleRun() then out("Start a single-player test run first."); return end
     if key == "SEVERED_OATH" and case == "compare" then
-        TestBench.startSuite("conch_test severed_oath compare", CycleCompare.commands); return
+        TestBench.startSuite("cb test severed_oath compare", CycleCompare.commands); return
     end
     if key == "SEVERED_OATH" and case == "birthright" then
-        TestBench.startSuite("conch_test severed_oath birthright", BirthrightParity.commands); return
+        TestBench.startSuite("cb test severed_oath birthright", BirthrightParity.commands); return
     end
     if key == "KIDS_MENU" and case == "parity" then
-        TestBench.startSuite("conch_test kids_menu parity", BirthrightParity.kidsCommands); return
+        TestBench.startSuite("cb test kids_menu parity", BirthrightParity.kidsCommands); return
     end
     if key == "KRONOS" and case == "characters" then
         -- A fresh run as every selectable character, each with Kronos.
-        local ok, err = pcall(TestBench.startSuite, "conch_test kronos characters", Scenarios.commands(key, "characters"))
+        local ok, err = pcall(TestBench.startSuite, "cb test kronos characters", Scenarios.commands(key, "characters"))
         if not ok then out("FAIL suite setup: " .. tostring(err)) end
         return
     end
     if key == "RAT" and case == "characters" then
         -- A fresh run as every selectable character, each fake against its original.
-        local ok, err = pcall(TestBench.startSuite, "conch_test rat characters", Scenarios.commands(key, "characters"))
+        local ok, err = pcall(TestBench.startSuite, "cb test rat characters", Scenarios.commands(key, "characters"))
         if not ok then out("FAIL suite setup: " .. tostring(err)) end
         return
     end
@@ -370,7 +379,7 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
         for _, name in ipairs({"cycle_ownership", "dice_copy_split", "cycle_stacking", "golden_cycle"}) do
             list[#list + 1] = assert(Scenarios.find(key, name), "missing Severed Oath case " .. name)
         end
-        local ok, err = pcall(TestBench.startSuite, "conch_test severed_oath cycles", list)
+        local ok, err = pcall(TestBench.startSuite, "cb test severed_oath cycles", list)
         if not ok then out("FAIL suite setup: " .. tostring(err)) end
         return
     end
@@ -383,28 +392,28 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
             for _,key in ipairs(action=="damage" and damageKeys or conditionKeys) do append(commands[key]) end
         end
         for _,command in ipairs(Scenarios.commands(nil,action)) do append(command) end
-        local ok,err=pcall(TestBench.startSuite,"conch_test " .. action,list)
+        local ok,err=pcall(TestBench.startSuite,"cb test " .. action,list)
         if not ok then out("FAIL suite setup: " .. tostring(err)) end
         return
     end
     local selected = action == "all" and keys or { key }
-    if #selected == 1 and not commands[selected[1]] then out("Unknown item: " .. action .. "; use conch_test list."); return end
+    if #selected == 1 and not commands[selected[1]] then out("Unknown item: " .. action .. "; use cb test list."); return end
     if case then
         local target = case == "lifecycle" and commands[key] or case == "detail" and deep[key] or Scenarios.find(key, case)
-        if not target then out("Unknown case: " .. case .. "; use conch_test " .. action .. " list."); return end
+        if not target then out("Unknown case: " .. case .. "; use cb test " .. action .. " list."); return end
         local ok, err = pcall(TestBench.start, target, true)
         if not ok then out("FAIL case setup: " .. tostring(err)) end
         return
     end
-    local label = action == "all" and "conch_test" or "conch_test " .. action
+    local label = action == "all" and "cb test" or "cb test " .. action
     local ok, err = pcall(function() TestBench.startSuite(label, suiteCommands(selected)) end)
     if not ok then out("FAIL suite setup: " .. tostring(err)) end
 end)
 
 -- Optional console discovery. The commands still work without REPENTOGON.
 if Console and type(Console.RegisterCommand) == "function" then
-    pcall(Console.RegisterCommand, "conch_test", "Conch item test (restarts run)",
-        "conch_test ITEM [CASE]; conch_test ITEM list for cases.", false)
+    pcall(Console.RegisterCommand, "cb", "Conch's Blessing tools: cb test (item tests, restarts run)",
+        "cb test ITEM [CASE]; cb test ITEM list for cases.", false)
 end
 
 return { keys = keys, commands = commands, contracts = contracts, scenarios = Scenarios, suiteCommands = suiteCommands }

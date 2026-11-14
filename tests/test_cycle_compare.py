@@ -129,7 +129,7 @@ class CycleCompareTests(unittest.TestCase):
             S={rows={}}; H={}; callbacks={}; callbackLists={}
             function S.add(key,name,groups,build)
                 S.rows[#S.rows+1]={key=key,name=name,groups=groups,build=build}
-                return 'conch_test severed_oath '..name
+                return 'cb test severed_oath '..name
             end
             function require(name)
                 if name=='scripts.dev.item_scenarios' then return S end
@@ -199,7 +199,7 @@ class CycleCompareTests(unittest.TestCase):
             end
             -- Tainted Isaac's own cycle is the control for the Oath stacking on it.
             for _,arm in ipairs({'native','oath'}) do
-                local def=registered['conch_test severed_oath combo_tainted_isaac_'..arm]
+                local def=registered['cb test severed_oath combo_tainted_isaac_'..arm]
                 assert(def and def.restartCommand=='restart 21' and def.finalRestartCommand=='restart 0')
                 assert(def.resetReason:find('consumes pools',1,true))
                 local checks=0

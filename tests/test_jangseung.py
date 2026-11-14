@@ -6,7 +6,7 @@ pair stands at each wall (천하대장군 left or above, just outside the frame)
 frame and flips draw it against each wall as the room's camera sees it, what lies
 inside the village's half circle, and the floor graph's red route. The statues in a real
 room, the earth and the guard on real enemies need the engine:
-`conch_test jangseung` covers those in game.
+`cb test jangseung` covers those in game.
 """
 from pathlib import Path
 import unittest

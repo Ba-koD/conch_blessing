@@ -7,7 +7,7 @@ Magic Conch upgrade is changing them, holds them as innate trinkets of its owner
 claws are full, lets go of the newest when it loses room, and, once Kronos has
 absorbed it, keeps what it held and smelts the next trinkets in hand at once.
 These doubles cannot show the engine's drop, smelt or drawing;
-`conch_test hermit_crab` covers those in game.
+`cb test hermit_crab` covers those in game.
 """
 from pathlib import Path
 import unittest

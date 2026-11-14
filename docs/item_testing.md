@@ -4,10 +4,10 @@
 
 ```text
 luamod conch_blessing
-conch_test
+cb test
 ```
 
-`conch_test`는 상태를 원복할 수 있는 검사를 먼저 묶고, 나머지 ItemData 항목은 이름순으로 실행한다. 현재 48개 항목 중
+`cb test`는 상태를 원복할 수 있는 검사를 먼저 묶고, 나머지 ItemData 항목은 이름순으로 실행한다. 현재 48개 항목 중
 40개에 동작이 연결되어 있고, 개발 중 항목 8개는 `SKIP`이다. 편측 무시의 오른쪽 일반 눈물 제한은 엔진 확인 전 시험판이다.
 크로노스·라이브 아이·감정평가서는 기존 상세 벤치까지 별도의 새 런에서 실행한다.
 생명주기·기존 상세 검사 47개에 조건·시너지·피해 시나리오를 연결하여,
@@ -17,7 +17,7 @@ conch_test
 
 MCM 디버그 ON/OFF에 관계없이 START/PASS/FAIL/SKIP/END와 기대값·실제값을 콘솔과 로그에 모두 기록한다.
 결과는 `log.txt`의 `[ConchTest]`, `[ItemTest:키]`, 상세 Probe에 남는다.
-검사 중 화면 하단 중앙에 `1/178 Test - conch_test ...` 형태의 진행 번호·명령,
+검사 중 화면 하단 중앙에 `1/178 Test - cb test ...` 형태의 진행 번호·명령,
 현재 검사 구간·단계·대기 틱과 PASS/FAIL/SKIP 수가 표시된다. 개별 실행은 `1/1`로 표시되며,
 재시작·정리 중에도 표시를 유지하고 종료 후 사라진다. MCM 디버그 설정과 무관하게 표시된다.
 방 이름과 겹치지 않도록 아래쪽에 배치하고 검은 외곽선을 적용한다. 긴 문구는 화면 폭에 맞춰 줄바꿈한다.
@@ -40,76 +40,76 @@ SOFLAM 지연·상태 이상 지속 시간과 기존 상세 벤치의 캡션 렌
 
 | 명령 | 동작 |
 | --- | --- |
-| `conch_test` / `conch_test all` | 생명주기 + 상세 + 조건 + 시너지 + 실제 피해 전체 검사 |
-| `conch_test latest` | 미해결 실패 시나리오만 준비·정리 과정과 함께 재실행 |
-| `conch_test latest list` | 재검사 목록만 출력; 런을 재시작하지 않음 |
-| `conch_test kronos` | 크로노스 생명주기 + 상세 + 각 펫 시너지·조건 검사 |
-| `conch_test damage` | 실제 적 HP 감소·범위·상태 이상·공격력 변화 검사 |
-| `conch_test conditions` | 피격·미피격·클리어·층 이동·보유 상태·시간 조건 검사 |
-| `conch_test synergies` | 설명에 등록된 시너지 152개를 연결한 검사 |
-| `conch_test perf` | 측정만 하는 검사(이름으로만 실행). 우리 아이템 없음 / 무해한 적에게 사격 / 출시된 패시브·패밀리어·장신구 전부(적 있음·없음) 네 구간에서 이 모드가 업데이트마다 쓰는 ms와 가장 무거운 콜백, 그다음 크로노스·진·반쪽 무시·Real Eyes 함수별 시간을 DIAG로 남김 |
-| `conch_test appraisal_certificate dc_vanilla` · `appraisal_return` | 측정만 하는 검사(이름으로만 실행). 진짜 사망증명서에서 아이템을 집거나 감정서에서 장신구를 집은 뒤 원래 방에 돌아올 때까지 차원·방·전환 모드·아이작 애니메이션·화면 흔들림·효과음을 업데이트와 렌더 프레임마다 바뀔 때 DIAG로 남김(감정서 귀환을 바닐라에 맞출 때 비교용) |
-| `conch_test conch_certificate dc_order` | 측정만 하는 검사(이름으로만 실행). 바닐라 사망증명서만 써서 모든 방을 돌며 받침대마다 엔진이 깐 아이템 ID를 ListIndex·배치 순서로 DIAG에 남기고, 그 순서로 ID가 오르는지 확인 |
-| `conch_test conch_certificate dc_revisit` | 측정만 하는 검사(이름으로만 실행). 바닐라 사망증명서를 한 층에서 두 번 써서, 들여다보기만 한 방과 아이템을 가져간 방에 두 번째 방문 때 받침대가 몇 개 남는지 DIAG로 남김(2026-11-13 실측: 가져간 방 18 → 0, 들여다본 방 92 → 92) |
-| `conch_test morph floor_hooks` | 측정만 하는 검사(이름으로만 실행). 평범한 방에서 배경 렌더 콜백이 60업데이트 동안 몇 번, 어떤 순서로 불리는지 DIAG로 남김(2026-11-13 실측: FLOOR·WALLS 각 120번, FLOOR > WALLS > POST_RENDER 순서, WATER·POST_PRE_RENDER_WALLS 0번) |
-| `conch_test time_money` | 지정한 ItemData 키 검사; 대소문자 무관 |
-| `conch_test realeyes` | Real Eyes 전체 검사 (`real_eyes`도 가능) |
-| `conch_test real_eyes prediction` | 예측과 실제 소라고둥 답변 비교; 테스트 런 필요 |
-| `conch_test severed_oath compare` | 엔진 아이작의 영혼과 적사단지: 25조건 × 2방식, 각 벤치 새 런으로 자동 비교 |
-| `conch_test severed_oath birthright` | 실제 아이작 생득권(대조군)과 적사단지: 7조건 × 2방식, 더럽혀진 아이작 단독/적사단지 2개, 각 벤치 새 런. 같은 받침대에서 같은 수의 추가 선택지가 나와야 한다 |
-| `conch_test severed_oath cycles` | 적사단지 회전 배열 묶음: 소유·주사위/복제/분할·중첩(글리치 왕관, 빙 이터, 아이작 생득권)·황금, 리롤마다 새 시드 받침대에 같은 방에서 다시 지급되는지 확인 |
-| `conch_test soflam lifecycle` | 해당 아이템의 생명주기 검사만 실행 |
-| `conch_test kronos box_of_friends` | 크로노스의 친구 상자 시나리오만 실행 |
-| `conch_test kronos conversions` | 지급형 48종을 함께 흡수·중첩하고 대량 반환 및 원래 아이템 보존 검사 |
-| `conch_test kronos barriers` | 차단형 22종의 개별 기여량·중첩·합산 100% 차단·반환 검사 |
-| `conch_test kronos exclusions` | 제외형 10종을 함께 1개·2개 보유하고 흡수되지 않는지 검사 |
-| `conch_test kronos transformation_before` / `_after` | 받침대에서 실제로 주운 형제 바비(샴쌍둥이 세트)가 크로노스보다 먼저/나중에 들어와 흡수돼도 엔진 카운터가 그대로이고, 크로노스를 잃어 돌려받아도 두 번 세지 않는지(엔진 `GetPlayerFormCounter`, 각각 새 런) |
-| `conch_test kronos transformation_progress` | 이미 가진 멀리건(파리 세트 1/3)에 흡수한 파리 패밀리어 2개가 더해져 3/3에서 벨제붑이 되고, 반환 뒤에도 3과 변신이 그대로인지 |
-| `conch_test kronos transformation_conversion` | 천사 세트: 헤일로 + 흡수한 세라핌 + 변환된 성심이 3으로 세라핌 변신, 반환하면 성심만큼 빠지고 세라핌의 샴쌍둥이 진행도는 유지 |
-| `conch_test kronos transformation_release` | 친구 상자·몬스터 매뉴얼의 임시 펫은 진행도를 더하지 않고, GB 버그·크로노스 상실로 돌아온 펫은 두 번 세지 않는지 |
-| `conch_test kronos transformation_sacrifice` | 희생 제단: 바닐라 대조(보유 펫 1개당 -1)를 먼저 재고, 흡수된 펫이 바쳐지면 같은 양이 빠지는지(REPENTOGON 필요) |
-| `conch_test kronos transformation_thurisaz` | 투리사즈가 먹은 펫의 진행도가 보유할 때처럼 남는지 |
-| `conch_test kronos transformation_multi` | 세트가 둘 이상인 아이템: 스카톨(똥+파리)에 크로노스의 흡수 제거·반환·소모 함수를 그대로 써서 모든 세트가 유지되고 소모 때 모두 빠지는지, 그리고 이 설치본에서 세트가 둘 이상인 패밀리어를 찾아 실제로 흡수·반환(없으면 SKIP, 목록은 DIAG) |
-| `conch_test kronos transformation_engine` | 측정 전용(이름으로만 실행): 획득·중복·`FirstTimePickingUp=false`·`RemoveFromPlayerForm`·기본 제거·제단·`IncrementPlayerFormCounter`가 카운터와 변신에 주는 영향을 DIAG로 기록 |
-| `conch_test appraisal` | 감정 평가서 생명주기·상세·아트로포스 시너지 검사 |
-| `conch_test conch_certificate` | 소라 증명서(콘솔 전용) 생명주기 + `rooms`(실제 사망증명서 방을 모두 돌며 첫 받침대부터 우리 collectible→장신구가 순서대로 놓였는지, 범위 밖 받침대와 다른 받침대가 없는지, 엔진이 원래 깐 아이템 ID가 그 순서로 오르는지) · `take_reuse`(첫 아이템을 실제로 집고 원래 방으로 귀환, 두 번째 사용에서 가져간 것만 빠짐) · `inside_blocked`(공간 안 사용 거절). 새 items.xml 반영에 게임 완전 재시작 필요 |
-| `conch_test seonnyeo` | 선녀 생명주기 + `light`(선녀를 이삭 옆·빛 가장자리 안쪽·바깥쪽에 고정해 실제 연사가 1.5배/그대로인지, 두 마리 빛에서 2.25배, 아이템을 잃으면 원래대로) · `bffs`(서큐버스처럼 BFFS는 피해 범위만 1.25배: 원래 가장자리 바로 바깥은 BFFS가 있어도 연사 그대로, 그 자리의 적은 BFFS일 때만 피해) · `light_damage`(빛 안의 적 HP가 세 틱(7업데이트 간격) 동안 틱마다 주인 연사만큼 줄고, 빛 밖은 그대로, BFFS여도 틱당 피해는 같음) · `kronos`(크로노스가 흡수하면 선녀는 사라지고 빛이 주인에게 고정: 어디서나 연사 1.5배, 주인 곁의 적만 틱 피해, 크로노스를 잃으면 선녀가 돌아옴) · `roam`(10초 동안 주인을 따라다니지 않고 벽 안에서 서큐버스 속도(4.7)로 떠다니며 방향을 틀 때만 느려짐). `succubus_probe`는 측정만 하는 검사(이름으로만 실행): 바닐라 서큐버스의 속도·방향·꺾이는 위치와 오라 피해의 틱 간격·피해량(BFFS 포함)을 DIAG로 남겨 선녀를 맞출 때 씀. `diagonal_probe`도 측정만 하는 검사로, 엔진의 `MoveDiagonally`에 여러 값을 넣었을 때 선녀의 속도·방향·꺾이는 위치를 남김(1이 서큐버스와 같음) |
-| `conch_test jeon_woochi` | 전우치 생명주기(얻을 때마다 새 Isaac의 한 세트 아이템을 그 임계점만큼 훔쳐 오는지, 받침대가 Isaac과 서로 떨어져 있는지, 잃을 때는 아무것도 훔치지 않는지) + `closest`(구피 2·밥 1에서 구피 아이템 하나, 집으면 변신 완성) + `tie`(구피 2·밥 2에서 둘 중 한 세트 아이템 하나) + `same_update`(같은 업데이트에 둘을 얻으면 각자 두 개씩) + `presentation`(시전 중엔 전우치만 있고 받침대는 연기 뒤에 섬) + `together`(세 명이 차례로 등장하고 다 같이 사라져 받침대 셋이 같은 업데이트에 섬) + `leave`(연출 중 방을 나갔다 오면 그 자리에 받침대) + `returned_copy`(처음 집은 게 아닌 사본은 훔치지 않음) + `complete`(모든 변신 완료 시 아무것도 훔치지 않음) + `thresholds`(아는 변신마다 진행도를 하나씩 올려 엔진이 완성하는 값이 임계점과 같은지 실측) + `special_counters`(특수 세트 규칙 실측: Puberty 3번에 어른, Leo·One Makes You Larger·Magic Mushroom으로 스톰피, 네크로맨서는 중복 제외·장신구 포함, 거지 셋이 슈퍼 거지) + `special_adult`·`special_stompy`·`special_necromancer`·`special_super_bum`(하나 모자란 특수 세트에 맞는 알약·아이템·장신구를 놓고, 쓰면 변신하는지; 게임에 네크로맨서가 없으면 SKIP) |
-| `conch_test utility_belt` / `conch_test belt` | 벨트 생명주기 + 제외 액티브 7개 양쪽 획득 순서를 한 묶음으로 검사 |
-| `conch_test kronos attacks` | 공격·상태 이상 펫 13종을 같은 런에서 순차 검사 |
-| `conch_test kronos auras` | 오라·추가 발사 펫 7종을 같은 런에서 순차 검사 |
-| `conch_test kronos abilities` | 스탯·피격 능력 펫 10종을 같은 런에서 순차 검사 |
-| `conch_test conch_pearl` | 소라 진주 생명주기 + draws(풀 뽑기 판정·개수당 10% 변환율·풀 우선) + exclusions(보유 제외·중첩 상한) + empty_pool(빈 풀의 아침밥 유지) + pedestal(실제 받침대·흩어지는 아이콘) |
-| `conch_test ox` | 축 생명주기 + ahead(머물러 있어도 소가 계속 걸으며 지도가 한 방씩 드러남) + route(보스방까지 가장 짧은 길로 한 방 나아가고 그 방이 지도에 드러남) + furrow(길의 바위를 부수고 지나간 길에만 쟁기 선, 4분의 1칸 조각마다 바닥에 한 번만 찍힘) + ground(길에 생긴 구덩이를 돌아감) + shut(싸움으로 닫힌 문을 열지 않고 지나감) + rice(고랑과 도랑이 만나는 곳의 벼 위에서 x2·x2, 벗어나도 2초간 유지) + growth(고랑 위에서만 데미지 x2, 도랑 위에서만 연사 x2, 벗어나면 곧바로 원래대로) + secret(검은소가 비밀방 벽을 열고 들어감) + jealous(누렁소만 있는 방에서 소라고둥 긍정에 검은소가 빨간 방을 뚫어 울트라 비밀방으로) + lost(보유 중에는 길 잃은 자의 저주가 없음: 이미 걸린 저주, 건망증 알약, 새 층) + rat(자와 함께: 분신이 걷는 누렁소에 타서 적을 쏘고, 누렁소가 잠들면 돌아옴) |
-| `conch_test tiger` | 인 생명주기 + kill_proc(내 처치로 창귀 1마리) + other_kills(남의 처치·출처 없는 피해·직접 Kill()은 창귀 없음) + explosion(실제 HP 3배 1회·3초 공포) + chain(창귀의 처치로 다음 창귀) + odds(복사본 1·2·3개의 처치 36번씩) |
-| `conch_test rabbit` | 묘 생명주기 + liver(묘를 가진 채 얻은 생간만 간이 되고 최대 4개) + revive(실제 치명타에 간이 1UP보다 먼저 쓰여 그 방에서 반 칸·무적 4초로 살아남) + rock(시작 방에서 문 4개 떨어진 방의 원래 장애물 하나에 토끼 발자국, 깨면 사다리, 블랙마켓 통로 크롤스페이스를 지나 블랙마켓의 생간을 하트로 사서 간 1개) + fallback(배치에 돌이 없는 방이면 문에서 2칸 떨어진 곳에 돌을 새로 놓음) + no_room(돌도 놓을 자리도 없는 방이면 다른 방으로 옮김) + floors(1~11층과 1c~6c층 모두에서 그 방의 돌·항아리·버섯·해골 등 원래 장애물에 발자국이 얹히고 깨면 사다리) + dragon(진과 함께 간 4개에서 생간을 또 얻을 때마다 그 층 동안 공격력 배수 +0.4, 1.4배 다음 1.8배) + visited(이미 다녀온 크롤스페이스는 배치를 유지하고 사다리가 블랙마켓으로 보냄) + floor(새 층에 새 바위, 간은 따라감) + loss(묘를 잃어도 간은 저장, 되찾으면 돌아옴) + control(묘 없이는 1UP만, 바위 없음) |
-| `conch_test jangseung` | 장승 생명주기 + doors(보물방 문 양옆 한 쌍, 흙바닥 한 번) + secret(숨은 비밀방 벽에도 한 쌍) + red(빨간 열쇠 길의 벽에 빨간 천 쌍) + guard(보통 적은 밀려나 겁에 질리고 적 탄은 사라지며 보스는 막지 않음) + shelter(장승 앞 2칸 안에서는 자해 말고는 다치지 않고 발밑에 금줄) + door_stop(문받침이 있으면 들어온 문에도 한 쌍) + not_held(없으면 아무것도 없음) |
-| `conch_test hermit_crab` | 소라게 생명주기 + take(주인이 2칸 안에 있으면 손대지 않고, 주인이 떠나면 먼 구석에서 걸어가 내재 장신구로 1개 듦) + floor_ignored(방이 만든 장신구는 안 듦) + wander(주인을 따라다니지 않고 방을 거닐다 쉼) + gone(도착 전에 사라진 장신구는 포기) + upgrade(떨군 장신구를 실제 소라고둥 긍정으로 진화시키는 동안 기다렸다가 진화한 것을 듦) + protected(소라게가 든 완벽은 실제로 맞아도 안 깨지고 행운 +10 유지) + swap(가득 차면 가장 오래된 것을 내려놓고 다시 줍지 않음) + many(소라게 세 마리: 집은 소라게가 그 장신구를 그리고, 빈 손이 있는 소라게가 먼저 가며, 가득 찬 소라게는 제 것만 바꿈) + golden(황금 그대로) + bffs(한 마리가 2개, BFFS를 잃으면 새것부터 놓음) + loss(소라게를 잃으면 바닥에 돌려줌) + kronos(흡수되면 든 장신구 유지, 남은 몫만큼 손의 장신구 즉시 흡수) + partner_trinkets(시너지 장신구를 소라게가 들어도 시너지가 켜짐) |
-| `conch_test wrong_answer_note` | 오답노트 생명주기 + hit_noted(실제 피격에 공격 파리 종류 기록·머리 위 아이콘, 빨간 하트 자해는 기록 안 함) + damage(기록 전 10, 한 번 맞은 뒤 같은 종류 15·다른 종류 10, 두 번 뒤 20) + golden(황금 한 번에 20) + floor(맞지 않은 층 뒤 모든 적 12.5, 맞은 층은 안 늘어남) + not_held(없으면 기록·추가 피해 없음) + marker(같은 종류 새 적 위에 빨간 +50%, 잠깐 뒤 사라짐) |
-| `conch_test locale` | 언어·설명·EID 검증 |
-| `conch_test thurisaz` | 투리사즈 룬 사례 전체(각각 새 런, 한 번 쓰면 펫 한 마리): basic, more, flies, temporary, kronos, stand_ins, exclusions, conversion, gb_bug, clear_rune, card, drop, pool(게임의 무작위 룬·카드 뽑기에 나오는지) |
-| `conch_test thurisaz CASE` / `list` | 사례 하나만 실행 / 사례 목록 |
-| `conch_test conch_ticket` / `ticket` | 소라 예약권 사례 전체(각각 새 런): pick(머리 위 선택창·화살표·Q 확정·예약), rooms(방·층을 옮겨도 예약 유지), use(실제 소라고둥이 예약한 순서대로 대답·소진), card(카드 등록과 타로 종류·떨굴 때 모션), pool(게임의 무작위 카드 뽑기 2만 번에서 타로 카드 한 장 평균의 3분의 1 이내로 나오는지), tarot_cloth(타로 천 없이 한 번 쓰면 선택창 하나, 타로 천을 들고 쓰면 엔진이 알린 사용 횟수만큼 선택창이 열리는지) |
-| `conch_test conch_ticket give [N]` / `spawn` / `queue` / `clear` | 수동 확인용: 주머니에 예약권 넣기, 바닥에 놓기, 대기열·소라고둥 예약 출력(이어하기 확인용), 대기열 비우기 |
-| `conch_test thurisaz give [N]` / `spawn` / `familiars` / `ledger` | 수동 확인용: 주머니에 룬 넣기, 바닥에 룬 놓기, 펫 세트 주기, 룬 장부 출력(이어하기 확인용) |
-| `conch_test uruz` | 우루즈 룬 사례 전체(각각 새 런): kills(쓰기 전 처치는 0, 쓴 뒤 처치마다 +0.05), stack(한 방에서 두 번 쓰면 처치당 +0.10), room_ends(방을 옮기면 끝나고 번 것은 유지), hit_keeps(실제 피격에도 유지), clear_rune(클리어 룬 복사도 같음), card(룬 설정·주머니) |
-| `conch_test uruz give [N]` / `spawn` / `earned` | 수동 확인용: 주머니에 룬 넣기, 바닥에 룬 놓기, 플레이어별 번 공격력 출력 |
-| `conch_test morph [아이템 \| default \| list]` | 강화 연출 자동 검사: 적용 연출 13종과 기본 긍정·중립·부정 애니메이션을 실제 강화 처리로 재생하고 효과음·프레임·색 복원을 확인 |
-| `conch_test evolution` | 진화 미리보기 자동 검사: 가까이 가면 결과 나무가 열려 유지되고(빛 알갱이·톡 튀기) 멀어지면 접힘, 멀리서는 아이템 그림만 제자리에서 계속 뛰고 정확히 복원, 강화 시작 시 즉시 종료, 숨겨진(?) 받침대 비공개, 회전 받침대 두 단계 나무, D6 재굴림 |
-| `conch_test rng [샘플 수] [luck 행운]` | 확률 함수·분포 검증 |
-| `conch_test rounding [sweep] [숫자]` | 반올림/올림/내림의 배율 계산 및 복원 검증 |
-| `conch_test kronos detail` | 기존 크로노스 상세 벤치만 실행 |
-| `conch_test kronos list` | 해당 아이템의 개별 시나리오 목록 |
-| `conch_test list` | 전체 아이템 키와 개발 중 항목 목록 |
-| `conch_test status` | 현재 벤치·검사 단계·전체 진행 개수 |
-| `conch_test stop` | 남은 테스트 취소. 현재 검사를 취소로 기록하고 정리용 런 재시작 1회 후 종료 |
+| `cb test` / `cb test all` | 생명주기 + 상세 + 조건 + 시너지 + 실제 피해 전체 검사 |
+| `cb test latest` | 미해결 실패 시나리오만 준비·정리 과정과 함께 재실행 |
+| `cb test latest list` | 재검사 목록만 출력; 런을 재시작하지 않음 |
+| `cb test kronos` | 크로노스 생명주기 + 상세 + 각 펫 시너지·조건 검사 |
+| `cb test damage` | 실제 적 HP 감소·범위·상태 이상·공격력 변화 검사 |
+| `cb test conditions` | 피격·미피격·클리어·층 이동·보유 상태·시간 조건 검사 |
+| `cb test synergies` | 설명에 등록된 시너지 152개를 연결한 검사 |
+| `cb test perf` | 측정만 하는 검사(이름으로만 실행). 우리 아이템 없음 / 무해한 적에게 사격 / 출시된 패시브·패밀리어·장신구 전부(적 있음·없음) 네 구간에서 이 모드가 업데이트마다 쓰는 ms와 가장 무거운 콜백, 그다음 크로노스·진·반쪽 무시·Real Eyes 함수별 시간을 DIAG로 남김 |
+| `cb test appraisal_certificate dc_vanilla` · `appraisal_return` | 측정만 하는 검사(이름으로만 실행). 진짜 사망증명서에서 아이템을 집거나 감정서에서 장신구를 집은 뒤 원래 방에 돌아올 때까지 차원·방·전환 모드·아이작 애니메이션·화면 흔들림·효과음을 업데이트와 렌더 프레임마다 바뀔 때 DIAG로 남김(감정서 귀환을 바닐라에 맞출 때 비교용) |
+| `cb test conch_certificate dc_order` | 측정만 하는 검사(이름으로만 실행). 바닐라 사망증명서만 써서 모든 방을 돌며 받침대마다 엔진이 깐 아이템 ID를 ListIndex·배치 순서로 DIAG에 남기고, 그 순서로 ID가 오르는지 확인 |
+| `cb test conch_certificate dc_revisit` | 측정만 하는 검사(이름으로만 실행). 바닐라 사망증명서를 한 층에서 두 번 써서, 들여다보기만 한 방과 아이템을 가져간 방에 두 번째 방문 때 받침대가 몇 개 남는지 DIAG로 남김(2026-11-13 실측: 가져간 방 18 → 0, 들여다본 방 92 → 92) |
+| `cb test morph floor_hooks` | 측정만 하는 검사(이름으로만 실행). 평범한 방에서 배경 렌더 콜백이 60업데이트 동안 몇 번, 어떤 순서로 불리는지 DIAG로 남김(2026-11-13 실측: FLOOR·WALLS 각 120번, FLOOR > WALLS > POST_RENDER 순서, WATER·POST_PRE_RENDER_WALLS 0번) |
+| `cb test time_money` | 지정한 ItemData 키 검사; 대소문자 무관 |
+| `cb test realeyes` | Real Eyes 전체 검사 (`real_eyes`도 가능) |
+| `cb test real_eyes prediction` | 예측과 실제 소라고둥 답변 비교; 테스트 런 필요 |
+| `cb test severed_oath compare` | 엔진 아이작의 영혼과 적사단지: 25조건 × 2방식, 각 벤치 새 런으로 자동 비교 |
+| `cb test severed_oath birthright` | 실제 아이작 생득권(대조군)과 적사단지: 7조건 × 2방식, 더럽혀진 아이작 단독/적사단지 2개, 각 벤치 새 런. 같은 받침대에서 같은 수의 추가 선택지가 나와야 한다 |
+| `cb test severed_oath cycles` | 적사단지 회전 배열 묶음: 소유·주사위/복제/분할·중첩(글리치 왕관, 빙 이터, 아이작 생득권)·황금, 리롤마다 새 시드 받침대에 같은 방에서 다시 지급되는지 확인 |
+| `cb test soflam lifecycle` | 해당 아이템의 생명주기 검사만 실행 |
+| `cb test kronos box_of_friends` | 크로노스의 친구 상자 시나리오만 실행 |
+| `cb test kronos conversions` | 지급형 48종을 함께 흡수·중첩하고 대량 반환 및 원래 아이템 보존 검사 |
+| `cb test kronos barriers` | 차단형 22종의 개별 기여량·중첩·합산 100% 차단·반환 검사 |
+| `cb test kronos exclusions` | 제외형 10종을 함께 1개·2개 보유하고 흡수되지 않는지 검사 |
+| `cb test kronos transformation_before` / `_after` | 받침대에서 실제로 주운 형제 바비(샴쌍둥이 세트)가 크로노스보다 먼저/나중에 들어와 흡수돼도 엔진 카운터가 그대로이고, 크로노스를 잃어 돌려받아도 두 번 세지 않는지(엔진 `GetPlayerFormCounter`, 각각 새 런) |
+| `cb test kronos transformation_progress` | 이미 가진 멀리건(파리 세트 1/3)에 흡수한 파리 패밀리어 2개가 더해져 3/3에서 벨제붑이 되고, 반환 뒤에도 3과 변신이 그대로인지 |
+| `cb test kronos transformation_conversion` | 천사 세트: 헤일로 + 흡수한 세라핌 + 변환된 성심이 3으로 세라핌 변신, 반환하면 성심만큼 빠지고 세라핌의 샴쌍둥이 진행도는 유지 |
+| `cb test kronos transformation_release` | 친구 상자·몬스터 매뉴얼의 임시 펫은 진행도를 더하지 않고, GB 버그·크로노스 상실로 돌아온 펫은 두 번 세지 않는지 |
+| `cb test kronos transformation_sacrifice` | 희생 제단: 바닐라 대조(보유 펫 1개당 -1)를 먼저 재고, 흡수된 펫이 바쳐지면 같은 양이 빠지는지(REPENTOGON 필요) |
+| `cb test kronos transformation_thurisaz` | 투리사즈가 먹은 펫의 진행도가 보유할 때처럼 남는지 |
+| `cb test kronos transformation_multi` | 세트가 둘 이상인 아이템: 스카톨(똥+파리)에 크로노스의 흡수 제거·반환·소모 함수를 그대로 써서 모든 세트가 유지되고 소모 때 모두 빠지는지, 그리고 이 설치본에서 세트가 둘 이상인 패밀리어를 찾아 실제로 흡수·반환(없으면 SKIP, 목록은 DIAG) |
+| `cb test kronos transformation_engine` | 측정 전용(이름으로만 실행): 획득·중복·`FirstTimePickingUp=false`·`RemoveFromPlayerForm`·기본 제거·제단·`IncrementPlayerFormCounter`가 카운터와 변신에 주는 영향을 DIAG로 기록 |
+| `cb test appraisal` | 감정 평가서 생명주기·상세·아트로포스 시너지 검사 |
+| `cb test conch_certificate` | 소라 증명서(콘솔 전용) 생명주기 + `rooms`(실제 사망증명서 방을 모두 돌며 첫 받침대부터 우리 collectible→장신구가 순서대로 놓였는지, 범위 밖 받침대와 다른 받침대가 없는지, 엔진이 원래 깐 아이템 ID가 그 순서로 오르는지) · `take_reuse`(첫 아이템을 실제로 집고 원래 방으로 귀환, 두 번째 사용에서 가져간 것만 빠짐) · `inside_blocked`(공간 안 사용 거절). 새 items.xml 반영에 게임 완전 재시작 필요 |
+| `cb test seonnyeo` | 선녀 생명주기 + `light`(선녀를 이삭 옆·빛 가장자리 안쪽·바깥쪽에 고정해 실제 연사가 1.5배/그대로인지, 두 마리 빛에서 2.25배, 아이템을 잃으면 원래대로) · `bffs`(서큐버스처럼 BFFS는 피해 범위만 1.25배: 원래 가장자리 바로 바깥은 BFFS가 있어도 연사 그대로, 그 자리의 적은 BFFS일 때만 피해) · `light_damage`(빛 안의 적 HP가 세 틱(7업데이트 간격) 동안 틱마다 주인 연사만큼 줄고, 빛 밖은 그대로, BFFS여도 틱당 피해는 같음) · `kronos`(크로노스가 흡수하면 선녀는 사라지고 빛이 주인에게 고정: 어디서나 연사 1.5배, 주인 곁의 적만 틱 피해, 크로노스를 잃으면 선녀가 돌아옴) · `roam`(10초 동안 주인을 따라다니지 않고 벽 안에서 서큐버스 속도(4.7)로 떠다니며 방향을 틀 때만 느려짐). `succubus_probe`는 측정만 하는 검사(이름으로만 실행): 바닐라 서큐버스의 속도·방향·꺾이는 위치와 오라 피해의 틱 간격·피해량(BFFS 포함)을 DIAG로 남겨 선녀를 맞출 때 씀. `diagonal_probe`도 측정만 하는 검사로, 엔진의 `MoveDiagonally`에 여러 값을 넣었을 때 선녀의 속도·방향·꺾이는 위치를 남김(1이 서큐버스와 같음) |
+| `cb test jeon_woochi` | 전우치 생명주기(얻을 때마다 새 Isaac의 한 세트 아이템을 그 임계점만큼 훔쳐 오는지, 받침대가 Isaac과 서로 떨어져 있는지, 잃을 때는 아무것도 훔치지 않는지) + `closest`(구피 2·밥 1에서 구피 아이템 하나, 집으면 변신 완성) + `tie`(구피 2·밥 2에서 둘 중 한 세트 아이템 하나) + `same_update`(같은 업데이트에 둘을 얻으면 각자 두 개씩) + `presentation`(시전 중엔 전우치만 있고 받침대는 연기 뒤에 섬) + `together`(세 명이 차례로 등장하고 다 같이 사라져 받침대 셋이 같은 업데이트에 섬) + `leave`(연출 중 방을 나갔다 오면 그 자리에 받침대) + `returned_copy`(처음 집은 게 아닌 사본은 훔치지 않음) + `complete`(모든 변신 완료 시 아무것도 훔치지 않음) + `thresholds`(아는 변신마다 진행도를 하나씩 올려 엔진이 완성하는 값이 임계점과 같은지 실측) + `special_counters`(특수 세트 규칙 실측: Puberty 3번에 어른, Leo·One Makes You Larger·Magic Mushroom으로 스톰피, 네크로맨서는 중복 제외·장신구 포함, 거지 셋이 슈퍼 거지) + `special_adult`·`special_stompy`·`special_necromancer`·`special_super_bum`(하나 모자란 특수 세트에 맞는 알약·아이템·장신구를 놓고, 쓰면 변신하는지; 게임에 네크로맨서가 없으면 SKIP) |
+| `cb test utility_belt` / `cb test belt` | 벨트 생명주기 + 제외 액티브 7개 양쪽 획득 순서를 한 묶음으로 검사 |
+| `cb test kronos attacks` | 공격·상태 이상 펫 13종을 같은 런에서 순차 검사 |
+| `cb test kronos auras` | 오라·추가 발사 펫 7종을 같은 런에서 순차 검사 |
+| `cb test kronos abilities` | 스탯·피격 능력 펫 10종을 같은 런에서 순차 검사 |
+| `cb test conch_pearl` | 소라 진주 생명주기 + draws(풀 뽑기 판정·개수당 10% 변환율·풀 우선) + exclusions(보유 제외·중첩 상한) + empty_pool(빈 풀의 아침밥 유지) + pedestal(실제 받침대·흩어지는 아이콘) |
+| `cb test ox` | 축 생명주기 + ahead(머물러 있어도 소가 계속 걸으며 지도가 한 방씩 드러남) + route(보스방까지 가장 짧은 길로 한 방 나아가고 그 방이 지도에 드러남) + furrow(길의 바위를 부수고 지나간 길에만 쟁기 선, 4분의 1칸 조각마다 바닥에 한 번만 찍힘) + ground(길에 생긴 구덩이를 돌아감) + shut(싸움으로 닫힌 문을 열지 않고 지나감) + rice(고랑과 도랑이 만나는 곳의 벼 위에서 x2·x2, 벗어나도 2초간 유지) + growth(고랑 위에서만 데미지 x2, 도랑 위에서만 연사 x2, 벗어나면 곧바로 원래대로) + secret(검은소가 비밀방 벽을 열고 들어감) + jealous(누렁소만 있는 방에서 소라고둥 긍정에 검은소가 빨간 방을 뚫어 울트라 비밀방으로) + lost(보유 중에는 길 잃은 자의 저주가 없음: 이미 걸린 저주, 건망증 알약, 새 층) + rat(자와 함께: 분신이 걷는 누렁소에 타서 적을 쏘고, 누렁소가 잠들면 돌아옴) |
+| `cb test tiger` | 인 생명주기 + kill_proc(내 처치로 창귀 1마리) + other_kills(남의 처치·출처 없는 피해·직접 Kill()은 창귀 없음) + explosion(실제 HP 3배 1회·3초 공포) + chain(창귀의 처치로 다음 창귀) + odds(복사본 1·2·3개의 처치 36번씩) |
+| `cb test rabbit` | 묘 생명주기 + liver(묘를 가진 채 얻은 생간만 간이 되고 최대 4개) + revive(실제 치명타에 간이 1UP보다 먼저 쓰여 그 방에서 반 칸·무적 4초로 살아남) + rock(시작 방에서 문 4개 떨어진 방의 원래 장애물 하나에 토끼 발자국, 깨면 사다리, 블랙마켓 통로 크롤스페이스를 지나 블랙마켓의 생간을 하트로 사서 간 1개) + fallback(배치에 돌이 없는 방이면 문에서 2칸 떨어진 곳에 돌을 새로 놓음) + no_room(돌도 놓을 자리도 없는 방이면 다른 방으로 옮김) + floors(1~11층과 1c~6c층 모두에서 그 방의 돌·항아리·버섯·해골 등 원래 장애물에 발자국이 얹히고 깨면 사다리) + dragon(진과 함께 간 4개에서 생간을 또 얻을 때마다 그 층 동안 공격력 배수 +0.4, 1.4배 다음 1.8배) + visited(이미 다녀온 크롤스페이스는 배치를 유지하고 사다리가 블랙마켓으로 보냄) + floor(새 층에 새 바위, 간은 따라감) + loss(묘를 잃어도 간은 저장, 되찾으면 돌아옴) + control(묘 없이는 1UP만, 바위 없음) |
+| `cb test jangseung` | 장승 생명주기 + doors(보물방 문 양옆 한 쌍, 흙바닥 한 번) + secret(숨은 비밀방 벽에도 한 쌍) + red(빨간 열쇠 길의 벽에 빨간 천 쌍) + guard(보통 적은 밀려나 겁에 질리고 적 탄은 사라지며 보스는 막지 않음) + shelter(장승 앞 2칸 안에서는 자해 말고는 다치지 않고 발밑에 금줄) + door_stop(문받침이 있으면 들어온 문에도 한 쌍) + not_held(없으면 아무것도 없음) |
+| `cb test hermit_crab` | 소라게 생명주기 + take(주인이 2칸 안에 있으면 손대지 않고, 주인이 떠나면 먼 구석에서 걸어가 내재 장신구로 1개 듦) + floor_ignored(방이 만든 장신구는 안 듦) + wander(주인을 따라다니지 않고 방을 거닐다 쉼) + gone(도착 전에 사라진 장신구는 포기) + upgrade(떨군 장신구를 실제 소라고둥 긍정으로 진화시키는 동안 기다렸다가 진화한 것을 듦) + protected(소라게가 든 완벽은 실제로 맞아도 안 깨지고 행운 +10 유지) + swap(가득 차면 가장 오래된 것을 내려놓고 다시 줍지 않음) + many(소라게 세 마리: 집은 소라게가 그 장신구를 그리고, 빈 손이 있는 소라게가 먼저 가며, 가득 찬 소라게는 제 것만 바꿈) + golden(황금 그대로) + bffs(한 마리가 2개, BFFS를 잃으면 새것부터 놓음) + loss(소라게를 잃으면 바닥에 돌려줌) + kronos(흡수되면 든 장신구 유지, 남은 몫만큼 손의 장신구 즉시 흡수) + partner_trinkets(시너지 장신구를 소라게가 들어도 시너지가 켜짐) |
+| `cb test wrong_answer_note` | 오답노트 생명주기 + hit_noted(실제 피격에 공격 파리 종류 기록·머리 위 아이콘, 빨간 하트 자해는 기록 안 함) + damage(기록 전 10, 한 번 맞은 뒤 같은 종류 15·다른 종류 10, 두 번 뒤 20) + golden(황금 한 번에 20) + floor(맞지 않은 층 뒤 모든 적 12.5, 맞은 층은 안 늘어남) + not_held(없으면 기록·추가 피해 없음) + marker(같은 종류 새 적 위에 빨간 +50%, 잠깐 뒤 사라짐) |
+| `cb test locale` | 언어·설명·EID 검증 |
+| `cb test thurisaz` | 투리사즈 룬 사례 전체(각각 새 런, 한 번 쓰면 펫 한 마리): basic, more, flies, temporary, kronos, stand_ins, exclusions, conversion, gb_bug, clear_rune, card, drop, pool(게임의 무작위 룬·카드 뽑기에 나오는지) |
+| `cb test thurisaz CASE` / `list` | 사례 하나만 실행 / 사례 목록 |
+| `cb test conch_ticket` / `ticket` | 소라 예약권 사례 전체(각각 새 런): pick(머리 위 선택창·화살표·Q 확정·예약), rooms(방·층을 옮겨도 예약 유지), use(실제 소라고둥이 예약한 순서대로 대답·소진), card(카드 등록과 타로 종류·떨굴 때 모션), pool(게임의 무작위 카드 뽑기 2만 번에서 타로 카드 한 장 평균의 3분의 1 이내로 나오는지), tarot_cloth(타로 천 없이 한 번 쓰면 선택창 하나, 타로 천을 들고 쓰면 엔진이 알린 사용 횟수만큼 선택창이 열리는지) |
+| `cb test conch_ticket give [N]` / `spawn` / `queue` / `clear` | 수동 확인용: 주머니에 예약권 넣기, 바닥에 놓기, 대기열·소라고둥 예약 출력(이어하기 확인용), 대기열 비우기 |
+| `cb test thurisaz give [N]` / `spawn` / `familiars` / `ledger` | 수동 확인용: 주머니에 룬 넣기, 바닥에 룬 놓기, 펫 세트 주기, 룬 장부 출력(이어하기 확인용) |
+| `cb test uruz` | 우루즈 룬 사례 전체(각각 새 런): kills(쓰기 전 처치는 0, 쓴 뒤 처치마다 +0.05), stack(한 방에서 두 번 쓰면 처치당 +0.10), room_ends(방을 옮기면 끝나고 번 것은 유지), hit_keeps(실제 피격에도 유지), clear_rune(클리어 룬 복사도 같음), card(룬 설정·주머니) |
+| `cb test uruz give [N]` / `spawn` / `earned` | 수동 확인용: 주머니에 룬 넣기, 바닥에 룬 놓기, 플레이어별 번 공격력 출력 |
+| `cb test morph [아이템 \| default \| list]` | 강화 연출 자동 검사: 적용 연출 13종과 기본 긍정·중립·부정 애니메이션을 실제 강화 처리로 재생하고 효과음·프레임·색 복원을 확인 |
+| `cb test evolution` | 진화 미리보기 자동 검사: 가까이 가면 결과 나무가 열려 유지되고(빛 알갱이·톡 튀기) 멀어지면 접힘, 멀리서는 아이템 그림만 제자리에서 계속 뛰고 정확히 복원, 강화 시작 시 즉시 종료, 숨겨진(?) 받침대 비공개, 회전 받침대 두 단계 나무, D6 재굴림 |
+| `cb test rng [샘플 수] [luck 행운]` | 확률 함수·분포 검증 |
+| `cb test rounding [sweep] [숫자]` | 반올림/올림/내림의 배율 계산 및 복원 검증 |
+| `cb test kronos detail` | 기존 크로노스 상세 벤치만 실행 |
+| `cb test kronos list` | 해당 아이템의 개별 시나리오 목록 |
+| `cb test list` | 전체 아이템 키와 개발 중 항목 목록 |
+| `cb test status` | 현재 벤치·검사 단계·전체 진행 개수 |
+| `cb test stop` | 남은 테스트 취소. 현재 검사를 취소로 기록하고 정리용 런 재시작 1회 후 종료 |
 
 ## 실패 항목 재검사
 
 ```text
 luamod conch_blessing
-conch_test latest list
-conch_test latest
+cb test latest list
+cb test latest
 ```
 
 첫 목록은 검토한 2026-10-09 전체 실행의 28개 FAIL을 **13개 시나리오**로 묶은 것이다.
@@ -120,7 +120,7 @@ Lua가 운영체제의 `log.txt`를 읽는 방식은 아니다. 이후 실행 �
 목록이 비면 안내만 하고 재시작하지 않는다. `latest list`도 재시작하지 않는다.
 호환되는 검사끼리는 기존 원복 검증을 거쳐 같은 런을 공유한다.
 
-| 초기 재검사 시나리오 (`conch_test` 뒤에 입력) | 확인할 내용 |
+| 초기 재검사 시나리오 (`cb test` 뒤에 입력) | 확인할 내용 |
 | --- | --- |
 | `kronos guardian_angel` | +2/+4·이속·반환, 자연 소멸 중인 효과를 포함한 원복 |
 | `kronos twisted_pair` | 2회 흡수에 앵커 4개, 소유자·하위 종류·생성 수명·추적 수, 재생성·공격·반환 |
@@ -153,19 +153,19 @@ Lua가 운영체제의 `log.txt`를 읽는 방식은 아니다. 이후 실행 �
 검사를 통과시키려고 반복 삭제하지 않는다. 소멸하지 않으면 해당 엔티티의 나이·피해량과 함께 실패한다.
 이전 묶음 중단으로 `NOT RUN`이었던 9개는 실패 재검사 목록에 넣지 않았다. 이들의 검증은 별도로 남아 있다.
 
-`conch_test atropos death_certificate`는 선택한 아이템이 획득 대기열에 들어간 즉시 받침대가 지워지는지 먼저 확인한다.
+`cb test atropos death_certificate`는 선택한 아이템이 획득 대기열에 들어간 즉시 받침대가 지워지는지 먼저 확인한다.
 그 뒤 획득 완료 후 같은 방·차원에 남고 귀환 전환도 시작되지 않았는지,
 선택한 아이템을 정확히 하나 얻고 그 방의 나머지 받침대는 사라졌는지 따로 검사한다.
 다른 방을 먼저 방문해 진열 상태를 기록한 뒤 선택 후에도 그대로인지 비교하며,
 선택을 마친 방의 재방문에서도 빈 상태를 확인한다. DC 진입 후 아트로포스를 얻어도 문이 생기고 카드가 늘지 않는지, 마지막 장신구를 제거한 후에도 문으로 원래 방에 돌아오는지 검사한다.
 이 보강 검사는 게임 재실행 전에는 구현된 검사일 뿐 실행 통과로 취급하지 않는다.
 
-상세 검사도 `conch_test kronos detail`, `conch_test live_eye detail`, `conch_test appraisal detail`로 실행한다.
-`conch_test kronos detail`은 2026-11-07에 82 PASS / 5 FAIL이었다. Bloodshot Eye 수정을 되돌려도 똑같은 5건이 나와 원래 있던 실패였고, 둘 다 벤치 문제였다.
+상세 검사도 `cb test kronos detail`, `cb test live_eye detail`, `cb test appraisal detail`로 실행한다.
+`cb test kronos detail`은 2026-11-07에 82 PASS / 5 FAIL이었다. Bloodshot Eye 수정을 되돌려도 똑같은 5건이 나와 원래 있던 실패였고, 둘 다 벤치 문제였다.
 투사체 무시 2건은 플레이어 뒤를 따라다니는 바닐라 Tonsil(앞 구간에서 생김)이 탄을 먼저 먹었기 때문이다(충돌 대상 3.103.0, 플레이어 피해 콜백 0회). 이제 탄을 쏘기 전에 플레이어를 모든 펫·적에서 가장 먼 빈 자리로 옮기고, 60px 안에 아무것도 없을 때만 진행한다.
 보스 러시 별 오라 3건은 기준 공격력이 3.5가 아니라 5.25였기 때문이다. 앞 구간에서 크로노스를 잃을 때 돌려받은 펫 효과(Succubus 417 등)를 벤치가 지워도, 엔진이 방에 들어갈 때마다 다시 넣어 Succubus 오라(×1.5)가 되살아났다. 이제 보스 러시에 도착한 뒤 다시 지우고, 펫 효과와 오라 펫이 없는지 확인한 다음 잰다. 고친 뒤 **89 PASS / 0 FAIL**(아래 Tonsil 수정 뒤 90).
 Tonsil 구간이 피해 무적 시간이 180업데이트 동안 끝나지 않아 멈춘 적이 세 번 있었다(베들레헴의 별 효과는 없었다: 오라 남은 시간 0, 별 펫 0). 원인은 테스트 표적 Fatty였다. 정지(FREEZE)는 시간이 지나면 풀리는 상태라, 135프레임쯤부터 Fatty가 걸어와 플레이어를 계속 때렸다(통과한 실행에서도 6~7회). 이제 표적을 매 업데이트 제자리에 고정하고, Tonsil 구간에서 테스트가 넣지 않은 피해가 있으면 테스트 준비 실패로 멈춘다. 고친 뒤 세 번 연속 **90 PASS / 0 FAIL**, 외부 피해 0.
-캡션 미리보기는 `conch_test kronos detail caption`이다. 이전 별도 접두사 명령은 등록하지 않는다.
+캡션 미리보기는 `cb test kronos detail caption`이다. 이전 별도 접두사 명령은 등록하지 않는다.
 텍스트·통계 분포·반올림 도구는 아이템 생명주기 전체 실행에 포함하지 않는다.
 
 ## 대기·재시작·배열 검사 개선
@@ -224,13 +224,13 @@ Tonsil 구간이 피해 무적 시간이 180업데이트 동안 끝나지 않아
 
 | 이번 보강 / 실행 명령 | 검사하는 동작 |
 | --- | --- |
-| `conch_test fire_breath lifecycle`, `ice_breath lifecycle` | 행운 0→5→13→14→15→20에서 실제 발사 15/10/2/1/1/1회 간격; 연사 고정 |
+| `cb test fire_breath lifecycle`, `ice_breath lifecycle` | 행운 0→5→13→14→15→20에서 실제 발사 15/10/2/1/1/1회 간격; 연사 고정 |
 | 같은 생명주기 내부 연사 검사 | 행운 14 고정, 슬픈 양파 0→1→0으로 실제 연사와 불꽃 수 증가·복원; 각 단계 실제 적 HP 피해 |
 | 같은 생명주기 중첩·제거 검사 | 행운 14에서 빠르게 1개→2개→1개→0개→재획득→0개; 공격력 비례 피해·불꽃 수·미보유 발사 없음 |
-| `conch_test fire_breath status_conditions`, `ice_breath status_conditions` | 0%→100%→0% 실제 명중 시 화상/빙결 여부와 지속·만료; 중간 확률은 분포 검증으로 주장하지 않음 |
-| `conch_test kronos conversions` | 지급형 전종 두 개씩 + 최초 1회/무제한 지급형 각각 128개 추가, 총 352개 흡수·반환; +2 합계·공유 지급 아이템 기준 수량·반환 후 잔여량 |
+| `cb test fire_breath status_conditions`, `ice_breath status_conditions` | 0%→100%→0% 실제 명중 시 화상/빙결 여부와 지속·만료; 중간 확률은 분포 검증으로 주장하지 않음 |
+| `cb test kronos conversions` | 지급형 전종 두 개씩 + 최초 1회/무제한 지급형 각각 128개 추가, 총 352개 흡수·반환; +2 합계·공유 지급 아이템 기준 수량·반환 후 잔여량 |
 | 같은 대량 반환 검사 | 실제 반환 개수와 독립적으로 반환 연출 1개·대표 아이콘 최대 12개, 남아 있던 흡수 연출 제거; 걸린 업데이트 수 로그 |
-| `conch_test atropos death_certificate` | 실제 문 스프라이트가 EXIT ANM2를 로딩했는지 추가 확인; 화면상 색·가독성은 별도 시각 검증 |
+| `cb test atropos death_certificate` | 실제 문 스프라이트가 EXIT ANM2를 로딩했는지 추가 확인; 화면상 색·가독성은 별도 시각 검증 |
 
 2026-10-09에 확인한 기존 로그에서는 두 브레스 모두 기본 불꽃 생성·개수·피해 속성까지 PASS였지만,
 기본 불꽃에 존재하지 않는 `maxDistance`를 요구하여 실패한 뒤 테스트기가 플레이어 사망으로 판정했다.
@@ -246,18 +246,18 @@ Tonsil 구간이 피해 무적 시간이 180업데이트 동안 끝나지 않아
 
 | 대상 / 실행 명령 | 검사하는 동작 |
 | --- | --- |
-| `conch_test time_power hit_pause_resume`, `time_tear`, `time_luck` 동일 시나리오 | 실제 피격 후 1799틱 정지, 1800틱 성장 재개, 1801틱 정상 1회 성장; 두 번 반복; 제거 후 성장 중단·누적 보존 |
-| `conch_test time_money bffs_period_and_penalty` | 최초 5개, 1799틱 미지급·1800틱 지급·1801틱 중복 미지급; BFFS 0/1/2, 피격 페널티, 최소 1개, 마지막 제거 |
-| `conch_test angels_crown dice_pool` | 실제 천사 배열 출처, D6 두 번·D100·왕관 제거 후 D6, 개별 코인 가격·상점 소유권·재방문 |
-| `conch_test inf_d6 dice_pool` | 연속 사용 세 번의 실제 보물방 배열 출처·재사용 가능, 제거 후 바닐라 D6 대조, 재방문 |
-| `conch_test severed_oath dice_copy_split` | D6 두 번·D100·복제(복제품은 새 받침대로 자기 선택지 1개)·Morph 후 선택지 중복 추가 방지, 재방문, 정확한 순환 목록 분리·추가 배열 소모 없음, 선택지 그룹 보존, 재사용 복제 방지, 제거·재획득 |
-| `conch_test severed_oath cycle_stacking` | Glitched Crown·Binge Eater·둘의 조합·일반 아이작 Birthright: 바닐라 배열 먼저 관찰, 적사단지 보유 후 재입장해도 이미 본 받침대는 그대로, 보유 중 새로 만든 받침대는 바닐라 수 +1, 반복 방문·D6·제거 후 기존 선택지 보존 |
-| `conch_test severed_oath cycle_ownership` | 보유 중 만든 받침대의 가득 찬 배열 무차감 → 공간 확보 후 +1, 정상 중복 보존, 실제 Diplopia(복제품은 표시된 항목 + 자기 선택지 1개) 후 한쪽만 같은 시드로 Morph/배열 변환, 이전 ID 부활·다른 복제품 변경·추가 추첨 없음, 재방문, AstroItems와 같은 아이작의 영혼 호출 후 보존 (구현, 게임 실행 대기) |
-| `conch_test severed_oath golden_cycle` | 보유 액티브의 공개 `SetGoldenItem`/`ExaustGoldenItem`으로 일반→황금→D6→황금 해제→제거→재획득→실제 분리를 한 런에서 검사. 이미 본 받침대는 그대로, 보유 중 새로 만든 받침대의 회전 배열에 +1/+2, 기존 선택지 보존, 제공자 상태 원복 |
-| `conch_test atropos dice_options` | D6·D100·반복 D6 후 선택지 독립, 제거 시 원래 그룹 복원, 재방문·재획득·복제·Morph의 선택지 연결 |
-| `conch_test atropos death_certificate` | 실제 접근 가능한 왼쪽 벽의 귀환문 좌표와 도보 통과; 방별 하나 획득 후 자동 귀환 없음 |
-| `conch_test eternal_flame lifecycle` | 제거 순간 복사본 수로 영구 보상 확정, 중첩 변경·전부 제거·재획득에도 과거 보상 불변 |
-| `conch_test sealed_demon_sword lifecycle` | 299킬까지 미진화, 300번째 실제 적 사망에 모든 보유 마검 진화, 전부 잃어도 처치 수 보존 |
+| `cb test time_power hit_pause_resume`, `time_tear`, `time_luck` 동일 시나리오 | 실제 피격 후 1799틱 정지, 1800틱 성장 재개, 1801틱 정상 1회 성장; 두 번 반복; 제거 후 성장 중단·누적 보존 |
+| `cb test time_money bffs_period_and_penalty` | 최초 5개, 1799틱 미지급·1800틱 지급·1801틱 중복 미지급; BFFS 0/1/2, 피격 페널티, 최소 1개, 마지막 제거 |
+| `cb test angels_crown dice_pool` | 실제 천사 배열 출처, D6 두 번·D100·왕관 제거 후 D6, 개별 코인 가격·상점 소유권·재방문 |
+| `cb test inf_d6 dice_pool` | 연속 사용 세 번의 실제 보물방 배열 출처·재사용 가능, 제거 후 바닐라 D6 대조, 재방문 |
+| `cb test severed_oath dice_copy_split` | D6 두 번·D100·복제(복제품은 새 받침대로 자기 선택지 1개)·Morph 후 선택지 중복 추가 방지, 재방문, 정확한 순환 목록 분리·추가 배열 소모 없음, 선택지 그룹 보존, 재사용 복제 방지, 제거·재획득 |
+| `cb test severed_oath cycle_stacking` | Glitched Crown·Binge Eater·둘의 조합·일반 아이작 Birthright: 바닐라 배열 먼저 관찰, 적사단지 보유 후 재입장해도 이미 본 받침대는 그대로, 보유 중 새로 만든 받침대는 바닐라 수 +1, 반복 방문·D6·제거 후 기존 선택지 보존 |
+| `cb test severed_oath cycle_ownership` | 보유 중 만든 받침대의 가득 찬 배열 무차감 → 공간 확보 후 +1, 정상 중복 보존, 실제 Diplopia(복제품은 표시된 항목 + 자기 선택지 1개) 후 한쪽만 같은 시드로 Morph/배열 변환, 이전 ID 부활·다른 복제품 변경·추가 추첨 없음, 재방문, AstroItems와 같은 아이작의 영혼 호출 후 보존 (구현, 게임 실행 대기) |
+| `cb test severed_oath golden_cycle` | 보유 액티브의 공개 `SetGoldenItem`/`ExaustGoldenItem`으로 일반→황금→D6→황금 해제→제거→재획득→실제 분리를 한 런에서 검사. 이미 본 받침대는 그대로, 보유 중 새로 만든 받침대의 회전 배열에 +1/+2, 기존 선택지 보존, 제공자 상태 원복 |
+| `cb test atropos dice_options` | D6·D100·반복 D6 후 선택지 독립, 제거 시 원래 그룹 복원, 재방문·재획득·복제·Morph의 선택지 연결 |
+| `cb test atropos death_certificate` | 실제 접근 가능한 왼쪽 벽의 귀환문 좌표와 도보 통과; 방별 하나 획득 후 자동 귀환 없음 |
+| `cb test eternal_flame lifecycle` | 제거 순간 복사본 수로 영구 보상 확정, 중첩 변경·전부 제거·재획득에도 과거 보상 불변 |
+| `cb test sealed_demon_sword lifecycle` | 299킬까지 미진화, 300번째 실제 적 사망에 모든 보유 마검 진화, 전부 잃어도 처치 수 보존 |
 
 긴 시간 검사는 타이머용 시계만 이동시키고 실제 업데이트·피격·생성 콜백으로 판정한다.
 성장량을 대신 적립하거나 게임 전체 프레임을 변경하지 않는다. 완료·취소·오류·게임 종료·모드 해제 때
@@ -278,7 +278,7 @@ Tonsil 구간이 피해 무적 시간이 180업데이트 동안 끝나지 않아
 
 ```text
 luamod conch_blessing
-conch_test severed_oath compare
+cb test severed_oath compare
 ```
 
 테스트 런에서 실행하고 콘솔을 닫으면 **50개 벤치**를 자동 실행한다. 현재 런은 재시작된다.
@@ -304,10 +304,10 @@ conch_test severed_oath compare
 개별 재실행 예시:
 
 ```text
-conch_test severed_oath compare_copy_native
-conch_test severed_oath compare_copy_oath
-conch_test severed_oath compare_capacity8_oath
-conch_test severed_oath list
+cb test severed_oath compare_copy_native
+cb test severed_oath compare_copy_oath
+cb test severed_oath compare_capacity8_oath
+cb test severed_oath list
 ```
 
 가장 먼저 보는 판정은 **방의 풀 출처 / 새 선택지의 겹침 / 기존 배열 소실·중복 지급**이다.
@@ -388,7 +388,7 @@ POST LATE 전에 제거됐다. Lua 호출 스택은 이 실행 환경에서 제�
 설치된 실제 `EvalRemoveGeneric`를 별도 Lua 환경에서 해당 저장 규칙으로 실행해 `Remove` 1회를 확인했다.
 이는 비교용 공통 Sad Onion 받침대를 외부 규칙이 변환·제거하는 준비 충돌이며, 회전 보너스 자체의 결과가 아니다.
 다른 모드 파일·설정은 변경하지 않았다. 사용자가 해당 Da Rules 규칙을 일시 해제한 뒤
-`conch_test severed_oath compare`를 실행해야 실제 방 풀·중복·소실 비교가 진행된다.
+`cb test severed_oath compare`를 실행해야 실제 방 풀·중복·소실 비교가 진행된다.
 고정 아이템을 바꾸거나 외부 규칙을 코드로 무시해 준비 실패를 숨기지 않는다.
 
 2026-10-15 14:18 전체 재실행 로그(5,557,379바이트)의 START·END와 개별 종료 결과를 확인했다.
@@ -406,7 +406,7 @@ POST LATE 전에 제거됐다. Lua 호출 스택은 이 실행 환경에서 제�
 받침대 포인터·시드 및 회전 배열은 동일하다. 적사단지 미보유인 엔진 비교군의 관측이므로 적사단지 버그로 귀속하지 않으며,
 플래그를 바꾼 엔진/외부 콜백의 주체도 이 로그만으로 확정하지 않는다. 메타데이터 FAIL을 임의로 PASS로 바꾸지 않는다.
 이는 보물방·단일 받침대·빈 추가 대기열의 엔진 경로 한 건이며, 다중 받침대 간 겹침과 적사단지 경로의 검증을 대체하지 않는다.
-준비 장애가 해소됐으므로 다음 단계는 `conch_test severed_oath compare` 전체 비교다.
+준비 장애가 해소됐으므로 다음 단계는 `cb test severed_oath compare` 전체 비교다.
 
 2026-10-15 앞선 전체 실행은 같은 경로의 로그(6,004,803바이트)에서 START·END와 50개 개별 종료 결과를 확인했다.
 전체 **302 PASS / 50 FAIL / 1 SKIP**, `CYCLE_COMPARE` **104건**이며, 반복 출력된 END는 한 번만 집계했다.
@@ -461,9 +461,9 @@ Diplopia 양쪽에서 원본 5개 배열은 그대로이고 복제품은 당시 
 
 ```text
 luamod conch_blessing
-conch_test severed_oath compare_copy_native
-conch_test severed_oath compare_copy_oath
-conch_test severed_oath compare_room_secret_oath
+cb test severed_oath compare_copy_native
+cb test severed_oath compare_copy_oath
+cb test severed_oath compare_room_secret_oath
 ```
 
 각 개별 명령의 END까지 기다린 뒤 다음 명령을 실행한다. 마지막 비밀방 검사는 최종 ID 반환 콜백이
@@ -487,7 +487,7 @@ conch_test severed_oath compare_room_secret_oath
 이번 확인에서는 런타임 코드를 변경하지 않았다.
 
 기존 `cycle_ownership`의 **가득 찬 배열에서 공간 확보 후 재시도**, `golden_cycle`의 **일반↔황금 보충·강등·분리**,
-`dice_copy_split`의 **실제 액티브 분리와 옵션 그룹** 검사는 `conch_test severed_oath` 전체 실행에 계속 포함된다.
+`dice_copy_split`의 **실제 액티브 분리와 옵션 그룹** 검사는 `cb test severed_oath` 전체 실행에 계속 포함된다.
 배포 전 `cycle_ownership`의 복제 전제도 위 로그에 맞춰 원본 전체 배열 + 표시 아이템 1개 복제로 수정했다.
 복제 전 포인터·시드로 원본을 식별하므로 열거 순서나 공유 시드로 원본/복제품이 바뀌지 않는다.
 이 테스트 수정의 오프라인 검증은 위 게임 실행 결과와 구분하며, 수정된 기존 시나리오의 게임 재실행을 뜻하지 않는다.
@@ -495,7 +495,7 @@ conch_test severed_oath compare_room_secret_oath
 ### 아이작 생득권 대조
 
 ```text
-conch_test severed_oath birthright
+cb test severed_oath birthright
 ```
 
 적사단지는 아이작 생득권과 똑같아야 한다(사용자 결정 2026-10-28). 각 조건을 새 아이작 런에서 두 번 실행한다:
@@ -557,7 +557,7 @@ conch_test severed_oath birthright
 범위/단일 타격 검사는 실제 생성된 공격 하나만 남기고 표적을 배치하며, 공격의 피해량이나
 수명을 바꾸지 않는다. 방 보상은 실제 적 사망에 의한 클리어와 엔진의 보상 API를 모두
 거친다. 아이템 콜백 뒤·바닐라 보상 생성 전의 관찰 경계에서 모드가 만든 픽업을 센다.
-추가된 개별 시나리오는 `conch_test <키> list`에 출력된다.
+추가된 개별 시나리오는 `cb test <키> list`에 출력된다.
 아이템 이름만 입력하면 전체 아이템 검사를, 뒤에 시나리오를 붙이면 그 검사만 실행한다.
 잘못된 시나리오나 불필요한 인수는 오류 안내만 표시하며 런을 재시작하지 않는다.
 로그는 사용자가 완료를 알린 뒤 확인한다. 자동 주기 감시는 중단되어 있다.
@@ -585,18 +585,18 @@ conch_test severed_oath birthright
 | `KRONOS` | 가디언 엔젤 두 마리 각각 +2, 크로노스 중복으로 재적립하지 않기, 마지막 제거 시 패밀리어 반환 |
 | `TIME_MONEY` | 보유 수와 살아 있는 소유 패밀리어 수 일치, 마지막 제거 후 0마리 |
 | `LIVE_EYE` | 실제 사격·충돌에 의한 배율 증가(보유 수에 따른 범위 안에서), 중복 배율 방지, 제거 후 추적 중단 |
-| `DRAGON` | 진 날씨: 소지 중 적이 있으면 초당 `연사/5×보유 개수`번 번개가 저절로 적 근처(40px 안)에 떨어짐. 표적을 서로 멀리 두어 번개 하나가 표적 하나만 맞게 하고, 5초 동안 실제 낙뢰 수를 계산값과 ±1로 대조. 번개 1회 = 공격력 1배, HP 감소가 기록과 일치. 2개 이상에서는 용오름 확률을 이 검사 동안만 1로 두고 솟은 자리 유지·끌어당김·틱당 5%·동시 최대 5개를 확인(5% 자체는 `conch_test rng`). 비·어두운 막·번개 그림·소리는 눈과 귀로 확인 |
+| `DRAGON` | 진 날씨: 소지 중 적이 있으면 초당 `연사/5×보유 개수`번 번개가 저절로 적 근처(40px 안)에 떨어짐. 표적을 서로 멀리 두어 번개 하나가 표적 하나만 맞게 하고, 5초 동안 실제 낙뢰 수를 계산값과 ±1로 대조. 번개 1회 = 공격력 1배, HP 감소가 기록과 일치. 2개 이상에서는 용오름 확률을 이 검사 동안만 1로 두고 솟은 자리 유지·끌어당김·틱당 5%·동시 최대 5개를 확인(5% 자체는 `cb test rng`). 비·어두운 막·번개 그림·소리는 눈과 귀로 확인 |
 | `AZURE_DRAGON` | 청룡(콘솔 전용): 비행·관통 없음, 복사본마다 용 1마리, 용이 적들을 차례로 꿰뚫으며 주둥이가 닿은 적마다 공격력 55% 번개(기록된 용의 타격으로 번개와 몸 접촉을 구분하고 HP 감소가 기록과 일치), 같은 용은 같은 적에게 5 / 연사 초에 한 번까지, 몸에 붙인 적이 매 틱 공격력의 5% 피해. 몸을 따라 튀는 전류는 그림뿐이라 눈으로 확인 |
 | `FIRE_BREATH`, `ICE_BREATH` | 실제 사격 발동, 남은 복사본에 따른 불꽃 피해, 제거 후 발동·카운터 중단 |
 | `VOID_DAGGER`, `SOFLAM` | 행운 100% 경계에서 실제 공격 피해당 발동 1회, 같은 공격 재적중 중복 방지, 제거 후 발동 중단; SOFLAM 무기 원복 |
 | `UTILITY_BELT` | 액티브 이동·충전량 보존, 중복 이동 방지, 잃은 뒤 새 액티브 이동 중단, 재획득 |
-| `OX` | 축: 층 상태상 이 방에 있는 소만 걷고 복사본이 늘어도 한 쌍, 누렁소 목적지는 보스방, 아이템이 없으면 소가 없고 자란 것이 0. 개별 경우는 아래 [축 검사](#축-소-검사-conch_test-ox) |
-| `TIGER` | 인: 처치 확률이 복사본마다 1/3(3개부터 100%), 아이템이 없을 때 실제 처치로 창귀가 생기지 않음. 개별 경우는 아래 [인 검사](#인-호랑이-검사-conch_test-tiger) |
-| `RABBIT` | 묘: 들고만 있으면 간이 생기지 않음(간 0, 일시 효과 0). 개별 경우는 아래 [묘 검사](#묘-토끼-검사-conch_test-rabbit) |
-| `JANGSEUNG` | 장승: 들고 있으면 이 방의 특수방 문(빨간 길 벽 포함)마다 장승 한 쌍, 없으면 하나도 없음. 개별 경우는 아래 [장승 검사](#장승-검사-conch_test-jangseung) |
-| `HERMIT_CRAB` | 소라게: 복사본마다 소라게 1마리, 마리당 1개를 들 수 있고 든 것이 없음. 개별 경우는 아래 [소라게 검사](#소라게-검사-conch_test-hermit_crab) |
-| `WRONG_ANSWER_NOTE` | 오답노트: 노트의 세기가 엔진의 장신구 배수와 같고, 맞기 전에는 아무것도 기록되지 않음. 개별 경우는 아래 [오답노트 검사](#오답노트-검사-conch_test-wrong_answer_note) |
-| `RAT` | 자: 복사본마다 가짜 1명. 가짜가 주인과 같은 캐릭터·컨트롤러이고 `Parent`가 주인이며, 그 순간 주인의 패시브만(쥐·액티브 제외)과 주인과 똑같은 체력을 가지고, 시작 액티브·장신구·카드·알약 없음, 공용 동전·폭탄·열쇠 변화 없음. 아이템을 잃어 사라진 가짜는 쓰러짐으로 세지 않음. 개별 경우는 아래 [자 검사](#자-쥐-검사-conch_test-rat) |
+| `OX` | 축: 층 상태상 이 방에 있는 소만 걷고 복사본이 늘어도 한 쌍, 누렁소 목적지는 보스방, 아이템이 없으면 소가 없고 자란 것이 0. 개별 경우는 아래 [축 검사](#축-소-검사-cb test-ox) |
+| `TIGER` | 인: 처치 확률이 복사본마다 1/3(3개부터 100%), 아이템이 없을 때 실제 처치로 창귀가 생기지 않음. 개별 경우는 아래 [인 검사](#인-호랑이-검사-cb test-tiger) |
+| `RABBIT` | 묘: 들고만 있으면 간이 생기지 않음(간 0, 일시 효과 0). 개별 경우는 아래 [묘 검사](#묘-토끼-검사-cb test-rabbit) |
+| `JANGSEUNG` | 장승: 들고 있으면 이 방의 특수방 문(빨간 길 벽 포함)마다 장승 한 쌍, 없으면 하나도 없음. 개별 경우는 아래 [장승 검사](#장승-검사-cb test-jangseung) |
+| `HERMIT_CRAB` | 소라게: 복사본마다 소라게 1마리, 마리당 1개를 들 수 있고 든 것이 없음. 개별 경우는 아래 [소라게 검사](#소라게-검사-cb test-hermit_crab) |
+| `WRONG_ANSWER_NOTE` | 오답노트: 노트의 세기가 엔진의 장신구 배수와 같고, 맞기 전에는 아무것도 기록되지 않음. 개별 경우는 아래 [오답노트 검사](#오답노트-검사-cb test-wrong_answer_note) |
+| `RAT` | 자: 복사본마다 가짜 1명. 가짜가 주인과 같은 캐릭터·컨트롤러이고 `Parent`가 주인이며, 그 순간 주인의 패시브만(쥐·액티브 제외)과 주인과 똑같은 체력을 가지고, 시작 액티브·장신구·카드·알약 없음, 공용 동전·폭탄·열쇠 변화 없음. 아이템을 잃어 사라진 가짜는 쓰러짐으로 세지 않음. 개별 경우는 아래 [자 검사](#자-쥐-검사-cb test-rat) |
 | `TWO_FACED_PENNY` | 새 복사본만 다음 비액티브 획득 보상, 액티브 무시·예약 보존, 보상 재귀 복제 방지, 부분 제거 시 슬롯 회수, 지급 완료 아이템 유지 |
 | `INF_D6` | 두 슬롯 보유 중에도 사용당 바닐라 D6 한 번, 재사용과 슬롯 제거 |
 | `SEVERED_OATH` | 보유 중 새 받침대 선택지 하나 추가, 사용 시 두 선택지 분리, 잃은 뒤 새 받침대 효과 중단 |
@@ -731,9 +731,9 @@ conch_test severed_oath birthright
 자동 수행한다고 표기하지 않는다. 이전 계획과 새 구현 범위는 [추가 검사표](synergy_testing.md)를
 함께 참고한다. 실행·화면·Continue 결과가 없는 항목은 계속 미검증이다.
 
-## 자 (쥐) 검사 (`conch_test rat`)
+## 자 (쥐) 검사 (`cb test rat`)
 
-`conch_test rat`은 생명주기와 아래 경우를 각각 새 런에서 실행한다. 모든 경우가 REPENTOGON의
+`cb test rat`은 생명주기와 아래 경우를 각각 새 런에서 실행한다. 모든 경우가 REPENTOGON의
 `PlayerManager.SpawnCoPlayer2`·`RemoveCoPlayer`와 사망 콜백을 요구하며, 없으면 첫 확인에서 SKIP한다.
 가짜는 실제 플레이어이므로 검사는 플레이어 목록을 직접 세고, 정리 단계에서 남은 가짜를 모두 제거한다.
 
@@ -759,7 +759,7 @@ conch_test severed_oath birthright
 직접 보고 확인한다. 달아나는 쥐의 그림·방향·흐려짐은 오프라인 검사(`tests/test_rat.py`의 그림 파일·프레임 검사 포함)와
 `fall`의 LOOK으로 확인한다.
 
-## 소라 진주 검사 (`conch_test conch_pearl`)
+## 소라 진주 검사 (`cb test conch_pearl`)
 
 모든 뽑기는 게임의 `ItemPool:GetCollectible`을 그대로 거치므로, 실제 받침대와 똑같이 아이템의
 `MC_POST_GET_COLLECTIBLE`이 실행된다. 미리보기 뽑기(`decrease = false`)는 풀을 바꾸지 않는다. 각 경우는 새 런에서 시작한다.
@@ -783,9 +783,9 @@ conch_test severed_oath birthright
 자동 검사 밖: D6 등 재굴림 받침대 위의 흩어지는 아이콘(엔진이 Morph에서 `MC_POST_PICKUP_INIT`을 부르는지에 달림), 회전 받침대의
 꼬리 선택지 변환 표시, 실제 Continue, 사람 둘의 협동은 직접 보고 확인한다.
 
-## 축 (소) 검사 (`conch_test ox`)
+## 축 (소) 검사 (`cb test ox`)
 
-`conch_test ox`는 생명주기와 아래 경우를 각각 새 런에서 실행한다. 소는 엔진의 실제 층을 걷는다: 길은 층의 실제 방으로,
+`cb test ox`는 생명주기와 아래 경우를 각각 새 런에서 실행한다. 소는 엔진의 실제 층을 걷는다: 길은 층의 실제 방으로,
 부서진 바위는 방의 그리드로, 지도는 방의 표시 플래그로, 자라는 힘은 보유자의 실제 데미지와 연사로 확인한다.
 
 | 경우 | 확인하는 것 |
@@ -813,9 +813,9 @@ conch_test severed_oath birthright
 
 자동 검사 밖: 소의 걷는 모습과 고랑 그림(얼마나 눈에 띄는지), 저주가 풀린 뒤 지도 모습, 분신이 소 등에 앉은 모습과 뛰어오르내리는 모습, 충전형 무기(혈사포 등)로 쏘는 분신, 보스방 도착 뒤의 모습, 여러 방을 따라가는 긴 길, 협동, 실제 Continue는 직접 보고 확인한다.
 
-## 인 (호랑이) 검사 (`conch_test tiger`)
+## 인 (호랑이) 검사 (`cb test tiger`)
 
-`conch_test tiger`는 생명주기와 아래 경우를 각각 새 런에서 실행한다. 처치는 모두 엔진의 실제 피해 경로를 지나는 치명타이고,
+`cb test tiger`는 생명주기와 아래 경우를 각각 새 런에서 실행한다. 처치는 모두 엔진의 실제 피해 경로를 지나는 치명타이고,
 창귀는 엔진의 Purgatory 혼(1000.189.1)이며, 폭발은 적의 실제 HP로 잰다.
 
 | 경우 | 확인하는 것 |
@@ -825,7 +825,7 @@ conch_test severed_oath birthright
 | `other_kills` | 3개를 들고: 다른 적의 피해, 출처 없는 피해, 내가 때린 적의 직접 `Kill()`(HP가 남은 죽음)은 창귀를 만들지 않고 굴리지도 않음. 같은 런에서 내 처치는 1마리를 만듦(대조) |
 | `explosion` | 남은 적 하나에게 창귀가 날아가 터지면 그 적의 HP가 정확히 공격력 × 3만큼 한 번 줄어듦(바닐라 폭발의 2배 틱 4번은 모두 취소), 공포가 걸리고 2.5초 뒤에도 걸려 있다가 3초쯤 풀림. 날아가 터지는 모습은 LOOK |
 | `chain` | 첫 창귀의 폭발이 두 번째 적(HP = 공격력 × 2)을 죽이면(HP 0 이하) 그 처치로 다음 창귀가 생겨 마지막 적을 공격력 × 3만큼 때림 |
-| `odds` | 복사본 1·2·3개로 각각 적 36마리를 한꺼번에 죽여 굴림 36번: 1개 4–20마리, 2개 16–32마리(1/3·2/3의 3σ), 3개 36마리. 정확한 확률은 `conch_test rng` |
+| `odds` | 복사본 1·2·3개로 각각 적 36마리를 한꺼번에 죽여 굴림 36번: 1개 4–20마리, 2개 16–32마리(1/3·2/3의 3σ), 3개 36마리. 정확한 확률은 `cb test rng` |
 | `ghost_native` | 측정 전용(이름으로만 실행): 아이템 없이 바닐라 혼을 플레이어가 소환했을 때의 비행·폭발 틱(출처 없음, 공격력 2배, 폭발의 0·3·8·13프레임)과 치명타·직접 `Kill()`의 콜백 순서와 HP를 DIAG로 기록 |
 
 오프라인 `tests/test_tiger.py`는 같은 생산 함수를 엔진 대역으로 검사한다: 확률(0개 0, 개수당 1/3, 3개부터 1, 굴림은 확률 미만일 때만),
@@ -836,9 +836,9 @@ conch_test severed_oath birthright
 
 자동 검사 밖: 혼이 어느 적을 고르는지(엔진), 폭발이 닿는 범위(엔진), 협동에서 두 보유자, 실제 Continue는 직접 보고 확인한다.
 
-## 묘 (토끼) 검사 (`conch_test rabbit`)
+## 묘 (토끼) 검사 (`cb test rabbit`)
 
-`conch_test rabbit`은 생명주기와 아래 경우를 각각 새 런에서 실행한다. 죽음은 모두 반 칸에서 엔진의 실제 피해로 맞는 치명타이고,
+`cb test rabbit`은 생명주기와 아래 경우를 각각 새 런에서 실행한다. 죽음은 모두 반 칸에서 엔진의 실제 피해로 맞는 치명타이고,
 부활은 REPENTOGON의 `MC_PRE_TRIGGER_PLAYER_DEATH`, 생간은 엔진의 획득, 방 이동은 실제 방 전환, 바위는 엔진의 `Room:DestroyGrid`로 부순다.
 사다리는 생긴 직후에는 아무도 데려가지 않고 그 위에 계속 서 있던 사람도 데려가지 않으므로(엔진의 보호), 두 칸 떨어져 기다렸다가 걸어서 올라선다.
 블랙마켓의 생간은 닿아서 산다.
@@ -866,9 +866,9 @@ conch_test severed_oath birthright
 
 자동 검사 밖: 실제 이어하기(Continue), 협동, 발자국이 실제 게임 화면에서 어떻게 보이는지는 직접 확인한다.
 
-## 장승 검사 (`conch_test jangseung`)
+## 장승 검사 (`cb test jangseung`)
 
-`conch_test jangseung`은 생명주기와 아래 경우를 각각 새 런에서 실행한다. 방은 실제 방 전환으로 가고, 문은 엔진의 문에서 읽으며,
+`cb test jangseung`은 생명주기와 아래 경우를 각각 새 런에서 실행한다. 방은 실제 방 전환으로 가고, 문은 엔진의 문에서 읽으며,
 빨간 길은 `LevelRooms.redStep`으로 따로 계산해 맞춘다.
 
 | 경우 | 확인하는 것 |
@@ -887,9 +887,9 @@ conch_test severed_oath birthright
 
 자동 검사 밖: 장승·흙바닥이 여러 층 바닥에서 어떻게 보이는지, 큰 방·L자 방의 문, 협동은 직접 보고 확인한다.
 
-## 오답노트 검사 (`conch_test wrong_answer_note`)
+## 오답노트 검사 (`cb test wrong_answer_note`)
 
-`conch_test wrong_answer_note`는 생명주기와 아래 경우를 각각 새 런에서 실행한다. 피격은 `H.hit`(살아 있는 공격 파리에게 실제로 맞음, 종류 18.0으로 기록)이고, 추가 피해는 플레이어가 공격 파리와 구더기 표적(체력 100000, 접촉 피해 0)에 각각 10을 준 뒤 실제 체력 감소로 잰다. 층은 `stage` 명령으로 실제로 넘긴다.
+`cb test wrong_answer_note`는 생명주기와 아래 경우를 각각 새 런에서 실행한다. 피격은 `H.hit`(살아 있는 공격 파리에게 실제로 맞음, 종류 18.0으로 기록)이고, 추가 피해는 플레이어가 공격 파리와 구더기 표적(체력 100000, 접촉 피해 0)에 각각 10을 준 뒤 실제 체력 감소로 잰다. 층은 `stage` 명령으로 실제로 넘긴다.
 
 | 경우 | 확인하는 것 |
 | --- | --- |
@@ -904,9 +904,9 @@ conch_test severed_oath birthright
 
 자동 검사 밖: 표시 숫자의 실제 모습과 위치, 그림(초안, 사용자 검토 전), 실제 Continue는 직접 보고 확인한다.
 
-## 소라게 검사 (`conch_test hermit_crab`)
+## 소라게 검사 (`cb test hermit_crab`)
 
-`conch_test hermit_crab`은 생명주기와 아래 경우를 각각 새 런에서 실행한다. 장신구는 모두 `EntityPlayer:DropTrinket`으로 실제로 떨어뜨린다
+`cb test hermit_crab`은 생명주기와 아래 경우를 각각 새 런에서 실행한다. 장신구는 모두 `EntityPlayer:DropTrinket`으로 실제로 떨어뜨린다
 (엔진이 떨어뜨린 플레이어를 생성자로 붙인다, 2026-11-09 측정). 확인은 REPENTOGON의 내재 개수(`GetInnateTrinketCount`, 소라게 전용 그룹)와 흡수 개수(`GetSmeltedTrinkets`), 방의 실제 픽업으로 한다.
 
 | 경우 | 확인하는 것 |
@@ -933,7 +933,7 @@ conch_test severed_oath birthright
 
 자동 검사 밖: 소라게와 든 장신구가 그려지는 모습(크기·위치·BFFS)과 거닐다 걸어가는 모습, 실제 떨어뜨리기 키, 협동에서 두 주인, 실제 Continue는 직접 보고 확인한다.
 
-### 패밀리 세트 · 폭식가 대조 (`conch_test kids_menu parity`)
+### 패밀리 세트 · 폭식가 대조 (`cb test kids_menu parity`)
 
 패밀리 세트는 폭식가(Binge Eater)처럼 동작해야 한다(사용자 요청 2026-11-07). 폭식가가 받침대 단위인지 방 단위인지 먼저 측정했다:
 2026-11-07 폭식가 팔만 생득권 규칙으로 돌린 결과 **37 PASS / 0 FAIL** — 생득권과 똑같이 받침대 단위다(보유 중 새로 생긴 받침대만 +1, 이미 본·방 안 기존·내려놓은 받침대 0, D6·Diplopia 복제품은 새 받침대, 사망 증명서 0, Damocles 추가 받침대 1, 잃어도 기존 선택지 유지). 음식(아침식사)·퀘스트(폴라로이드·열쇠 조각 1) 받침대에도 음식이 붙었다.
@@ -948,9 +948,9 @@ conch_test severed_oath birthright
 
 2026-11-07 재시작 후 실행: 25벤치 115 PASS / 5 FAIL. FAIL 5건은 모두 검사 쪽 오류로, 받침대가 이미 돌아 패밀리어가 표시 중이고 대기열에 원래 아이템이 있던 경우를 "대기열 마지막"만 보고 판정했다. 배열 전체에서 패밀리어를 찾도록 고친 뒤 해당 3벤치 재실행 26/26·5/5·6/6 PASS. 개수는 모든 조건에서 폭식가와 같았다(중첩 1개, 음식·퀘스트 받침대 1개, 강화 고정 후 같은 패밀리어 유지 포함). 설치된 모드의 패밀리어(예: 916)도 뽑힌다.
 
-`conch_test kids_menu lifecycle`은 획득·중첩·일부 제거·최종 제거·재획득마다 새 받침대의 패밀리어 선택지 1개(없으면 0개)와 처음 받은 받침대의 선택지 유지를 확인한다. 오프라인 `tests/test_kids_menu.py`는 목록(숨김·퀘스트·잠김 제외), 시드별 고정·중복 허용·아이템 풀 미사용, 첫 방문·이미 본·방 안 획득·내려놓은 액티브·사망 증명서·리롤·회전·복제·강화 고정·가득 찬 배열·적사단지 분리·잃음·사망/유령·Continue를 Lua 대역으로 검사한다.
+`cb test kids_menu lifecycle`은 획득·중첩·일부 제거·최종 제거·재획득마다 새 받침대의 패밀리어 선택지 1개(없으면 0개)와 처음 받은 받침대의 선택지 유지를 확인한다. 오프라인 `tests/test_kids_menu.py`는 목록(숨김·퀘스트·잠김 제외), 시드별 고정·중복 허용·아이템 풀 미사용, 첫 방문·이미 본·방 안 획득·내려놓은 액티브·사망 증명서·리롤·회전·복제·강화 고정·가득 찬 배열·적사단지 분리·잃음·사망/유령·Continue를 Lua 대역으로 검사한다.
 
-## 크로노스 전 캐릭터 검사 (`conch_test kronos characters`)
+## 크로노스 전 캐릭터 검사 (`cb test kronos characters`)
 
 선택 가능한 34캐릭터를 각각 새 런으로 실행한다. 직접 공격하지 않는 캐릭터(릴리스의 인큐버스, 더럽혀진 릴리스의 젤로, 포가튼 뼈몽둥이, 더럽혀진 포가튼 몸 던지기, 아자젤 충전 혈사, 두 몸 캐릭터)에서 크로노스가 몰래 소환하는 안 보이는 펫이 실제 펫처럼 동작하는지 본다(사용자 요청 2026-11-07).
 
@@ -961,11 +961,11 @@ conch_test severed_oath birthright
 
 피해는 REPENTOGON 피해 후 콜백으로 출처(앵커·진짜 펫·플레이어)별로 나누고, 발사된 공격도 쏜 쪽별로 센다(안 쏜 것과 빗나간 것을 구별). 공격 창마다 모든 몸을 시작 위치로 되돌린다. 방의 문은 닫아 두고(표적이 살아 있는 동안 방은 클리어되지 않은 상태), 각 창 앞뒤로 시작한 방인지, 표적이 살아서 제자리에 있는지, 모든 몸이 시작 위치에 있는지 확인한다. 하나라도 어긋나면 크로노스 FAIL이 아니라 테스트 준비 실패로 그 캐릭터를 멈춘다. 2026-11-07 첫 전체 실행 536 PASS / 73 FAIL: 흡수된 Bloodshot Eye가 모든 캐릭터에서 한 번도 쏘지 않았다(33건, 실제 버그), Twisted Pair 앵커 위치 기준 8px가 너무 좁았다(34건, 조준 반대편으로 약 9px 떨어지는 것이 정상), 더럽혀진 포가튼 5건. Bloodshot Eye는 플레이어 바깥쪽으로 쏘는데 크로노스가 플레이어 위에 고정해 쏘지 못했다. 이제 숨긴 채 충돌 없이 자기 궤도를 돈다(아이작·릴리스 18/18 PASS). 수정 후 재실행: **604 PASS / 5 FAIL / 3 SKIP**, 34캐릭터 중 32캐릭터 전부 통과. 더럽혀진 이브 1건은 자기 혈괴가 실행 중 2→3개로 늘어난 것을 정확한 펫 수로 비교한 검사 오류였다(테스트 펫만 보도록 고친 뒤 17 PASS / 0 FAIL). 더럽혀진 포가튼 4건도 벤치 문제였다: 진짜 펫 구간에서 영혼이 시작 방의 열린 왼쪽 문으로 밀려 나가 방이 바뀌었고, 표적이 죽지 않고 제거되어(HP 99,916, 죽음 콜백 없음) 그 뒤 모든 공격이 허공을 쳤다(사용자가 화면에서 방 이동을 보고 지적). 처음에는 영혼이 몸을 놓쳐서라고 잘못 짚었으나, `GetHeldEntity`로 보니 매 창마다 몸을 들고 있었다. 문을 닫고 위 확인을 넣은 뒤 더럽혀진 포가튼 **21 PASS / 0 FAIL / 1 SKIP**: 크로노스가 있으면 몸 던지기 한 타가 10.4에서 20.7로 세지고, 흡수된 Incubus·Twisted Pair도 표적을 맞힌다. 문 닫기·준비 확인을 넣은 뒤 34캐릭터 전체 재실행: **881 PASS / 0 FAIL / 3 SKIP**(SKIP 3건은 그 캐릭터에서 진짜 펫부터 표적을 맞히지 못해 비교할 것이 없는 경우).
 
-`conch_test kronos bloodshot_probe`(이름으로만 실행, 측정)는 Bloodshot Eye를 그냥 소환·숨김·충돌 없음·플레이어 고정·크로노스 방식으로 각각 소환해 진짜 아이템과 발사 수를 비교한다.
+`cb test kronos bloodshot_probe`(이름으로만 실행, 측정)는 Bloodshot Eye를 그냥 소환·숨김·충돌 없음·플레이어 고정·크로노스 방식으로 각각 소환해 진짜 아이템과 발사 수를 비교한다.
 
-## 강화 연출 검사 (`conch_test morph`)
+## 강화 연출 검사 (`cb test morph`)
 
-`conch_test morph`는 런을 새로 시작한 뒤, 벤치가 직접 만든 받침대에 실제 강화 처리(`ConchBlessing.upgrade.queuePickup`)를 걸어 적용 연출 13종과 기본 긍정·중립·부정 애니메이션을 차례로 재생한다. `conch_morph` 뷰어와 달리 입력을 기다리지 않고 PASS/FAIL/SKIP을 남긴다. 기대값은 승인된 연출 결정(AGENTS.md, docs/previews/README.md)에서 왔고 렌더러 표를 복사하지 않는다.
+`cb test morph`는 런을 새로 시작한 뒤, 벤치가 직접 만든 받침대에 실제 강화 처리(`ConchBlessing.upgrade.queuePickup`)를 걸어 적용 연출 13종과 기본 긍정·중립·부정 애니메이션을 차례로 재생한다. `conch_morph` 뷰어와 달리 입력을 기다리지 않고 PASS/FAIL/SKIP을 남긴다. 기대값은 승인된 연출 결정(AGENTS.md, docs/previews/README.md)에서 왔고 렌더러 표를 복사하지 않는다.
 
 | 검사 | 근거 |
 | --- | --- |
@@ -979,18 +979,18 @@ conch_test severed_oath birthright
 | 효과별 곡선 | 진 암막 상승·유지·번개 순간 해제와 엔진이 결과 표시, 크로노스 대역 펫 3마리·70프레임부터 하얘짐·45프레임 동안 서서히 색 복원(프레임당 0.05 이하), 비의 젖음·변환 뒤 45프레임 동안 서서히 마름·바닥 물 오버레이, 공허 구름 밀도 유지 후 3프레임 내 소멸, 불꽃의 가림·공개, 왕관 하양·복원, 편측무시 왼쪽 절반 서서히 검게·유지·서서히 복원과 화면 가운데 경계 |
 | 기본 애니메이션 | 기본 연출 사용, `SOUND_HOLY`/`SOUND_POWERUP_SPEWER` 재생, 변환 전까지 색 유지 후 서서히 복원, 변환 |
 
-화면에 실제로 어떻게 보이는지는 각 구역의 LOOK 줄로 사용자가 확인한다. 개별 실행은 `conch_test morph kronos`처럼 아이템 키를 붙이고, `conch_test morph list`로 목록을 본다.
+화면에 실제로 어떻게 보이는지는 각 구역의 LOOK 줄로 사용자가 확인한다. 개별 실행은 `cb test morph kronos`처럼 아이템 키를 붙이고, `cb test morph list`로 목록을 본다.
 
-회전 받침대(`conch_test morph cycle`): 답이 나오는 순간 배열이 비워져 Dead Eye에 고정되고, 변환 전까지 한 번도 돌지 않으며(2026-11-07 실측 61업데이트, 회전 0회), 변환 순간 Live Eye 뒤에 원래 대기열이 그대로 순서대로 붙고, 이후 다시 돈다(첫 회전은 변환 28업데이트 뒤). 11 PASS.
-방 나가기(`conch_test morph return`): 회전 받침대와 일반 받침대를 강화 중에 방을 나갔다 돌아오면 둘 다 연출 없이 Live Eye로 와 있고 기록이 남지 않는다. 방이 로드된 직후 엔진은 모든 회전 받침대를 첫 몇 업데이트 안에 한두 번 돌리므로(같은 방의 손대지 않은 대조 받침대도 똑같음), 첫 업데이트에 다른 선택지가 보일 수 있다. 12 PASS. 실제 게임 종료·Continue는 수동 확인 항목이다.
+회전 받침대(`cb test morph cycle`): 답이 나오는 순간 배열이 비워져 Dead Eye에 고정되고, 변환 전까지 한 번도 돌지 않으며(2026-11-07 실측 61업데이트, 회전 0회), 변환 순간 Live Eye 뒤에 원래 대기열이 그대로 순서대로 붙고, 이후 다시 돈다(첫 회전은 변환 28업데이트 뒤). 11 PASS.
+방 나가기(`cb test morph return`): 회전 받침대와 일반 받침대를 강화 중에 방을 나갔다 돌아오면 둘 다 연출 없이 Live Eye로 와 있고 기록이 남지 않는다. 방이 로드된 직후 엔진은 모든 회전 받침대를 첫 몇 업데이트 안에 한두 번 돌리므로(같은 방의 손대지 않은 대조 받침대도 똑같음), 첫 업데이트에 다른 선택지가 보일 수 있다. 12 PASS. 실제 게임 종료·Continue는 수동 확인 항목이다.
 
 디버그 모드를 켜면 실제 Magic Conch 강화와 `conch_morph`에서도 같은 기록이 log.txt에 남는다: `[ConchMorph] SCENE`(효과·프레임·펫·바닥 칸), `BEGIN`/`COMMIT`(단계·렌더러·원래 색), `MARK`(단계 도달과 그때의 암막·하양·젖음 값), `SOUND`(효과음 ID·예정/실제 프레임·볼륨·피치·`playing=직후/다음`), `FLOOR`(바닥 오버레이 첫 그리기), `SUMMARY`(종료 이유·효과음 수와 실제 재생 수·그린 프레임과 빠진 프레임·도달 단계 수), `[Upgrade] RESTORE`(복원 색), `[Upgrade] SOUND`(기본 애니메이션 효과음). SOFLAM 실제 공격은 `[SOFLAM]` 줄로 조준음·공격 대기·로켓 낙하·폭탄 폭발·엔진 경고음 취소·정리를 남긴다.
 
 오프라인 `tests/test_upgrade_presentations.py`는 같은 렌더러를 실제 강화 순서(이전 단계→변환→이후 단계)로 돌려 효과음 일정, 마지막 프레임, 단계 프레임, 늦은 변환 시 선행음 재생 금지, 효과별 곡선, 디버그 기록과 이 벤치 검사들이 결함(즉시 색 복원, 빠진 효과음, 다른 프레임, 작은 볼륨, 재생 안 됨, 잘린 장면, 빠진 프레임 등)을 실제로 잡는지 확인한다. 엔진 화면 증거는 아니다.
 
-## 진화 미리보기 검사 (`conch_test evolution`)
+## 진화 미리보기 검사 (`cb test evolution`)
 
-`conch_test evolution`은 런을 새로 시작한 뒤 벤치가 직접 만든 진화 가능 픽업으로, 실제 강화 가능 표시 모듈(`scripts/conch_blessing_highlight.lua`)이 만든 기록과 그린 결과를 확인한다(약 40초, 입력 없음). 기대 결과는 `ConchBlessing.ItemData`의 `origin`/`flag` 선언에서 직접 모으며 미리보기의 표를 복사하지 않는다.
+`cb test evolution`은 런을 새로 시작한 뒤 벤치가 직접 만든 진화 가능 픽업으로, 실제 강화 가능 표시 모듈(`scripts/conch_blessing_highlight.lua`)이 만든 기록과 그린 결과를 확인한다(약 40초, 입력 없음). 기대 결과는 `ConchBlessing.ItemData`의 `origin`/`flag` 선언에서 직접 모으며 미리보기의 표를 복사하지 않는다.
 
 | 구역 | 검사 |
 | --- | --- |
@@ -1006,7 +1006,7 @@ REPENTOGON 레이어·순환·`SetForceBlind` 기능이 없으면 해당 검사�
 ## 결과 확인
 
 `log.txt`의 `[ConchTest]`, `[ItemTest:<키>]`와 해당 상세 벤치 태그를 읽는다.
-각 검사에 `PASS`, `FAIL`, `SKIP`이 찍히고, 마지막 `conch_test END`는 전체 합계를 표시한다.
+각 검사에 `PASS`, `FAIL`, `SKIP`이 찍히고, 마지막 `cb test END`는 전체 합계를 표시한다.
 필요 API가 없으면 해당 검사만 `SKIP`이며, 성공으로 계산하지 않는다.
 로드 실패·예외·전환 시간 초과는 `FAIL`이며 해당 벤치의 후속 동작을 중단하고
 깨끗한 런에서 다음 벤치를 실행한다. `FAIL` 벤치는 뒤의 검사까지 완료했다는 뜻이 아니다.
@@ -1020,7 +1020,7 @@ C:\Users\rudgh\Documents\My Games\Binding of Isaac Repentance+\log.txt
 
 ## Real Eyes
 
-새 XML과 아이콘을 읽으려면 게임을 완전히 재실행한 뒤 `conch_test realeyes`를 실행한다.
+새 XML과 아이콘을 읽으려면 게임을 완전히 재실행한 뒤 `cb test realeyes`를 실행한다.
 `conch_morph real_eyes`는 구피의 눈 받침대가 긍정 강화로 변하는 과정만 보여준다.
 
 | 검사 | 기대 동작 | 검증 경로 |
@@ -1055,15 +1055,15 @@ Isaac 엔진 검증을 대신하지 않는다.
 
 | 명령 | 검사 | 상태 |
 |---|---|---|
-| `conch_test realeyes` | 1→2→1→0→1→0 보유, 읽기 무소비, 실제 소라고둥 사용의 예측 일치 | 구현, 게임 실행 대기 |
-| `conch_test ar` | 실제 받침대 획득 시 12칸 중 6칸, 보유/중첩/제거마다 사용 1회당 선택창 1개·소라고둥 무소비(lifecycle), 선택창에서 부정→긍정→중립을 액티브 키로 확정한 뒤 일반 실행의 실제 결과와 사용 1회 증가·카드 키로는 확정되지 않음·영구 강제 설정 무변경(choice), 엔진의 실제 액티브 키 사용이 충전 전부 소모·선택창이 열린 동안 다시 충전하고 눌러도 아무것도 쓰지 않음(active_key) | 2026-11-09 액티브로 재구현, 오프라인 통과, 게임 실행 대기 |
-| `conch_test neglect` | 일반 눈물·네발·양눈·안약·고연사 각각 0→1→2→0 보유, 오른쪽 출력 제거·왼쪽 출력과 발사 주기 유지, 실제 적 HP 감소 | 시험판과 검사 구현, 게임 실행 대기 |
-| `conch_test locale` | 세 언어 설명과 EID, 반쪽 문장의 앞 공백 보존 | 오프라인 통과, 게임 실행 대기 |
+| `cb test realeyes` | 1→2→1→0→1→0 보유, 읽기 무소비, 실제 소라고둥 사용의 예측 일치 | 구현, 게임 실행 대기 |
+| `cb test ar` | 실제 받침대 획득 시 12칸 중 6칸, 보유/중첩/제거마다 사용 1회당 선택창 1개·소라고둥 무소비(lifecycle), 선택창에서 부정→긍정→중립을 액티브 키로 확정한 뒤 일반 실행의 실제 결과와 사용 1회 증가·카드 키로는 확정되지 않음·영구 강제 설정 무변경(choice), 엔진의 실제 액티브 키 사용이 충전 전부 소모·선택창이 열린 동안 다시 충전하고 눌러도 아무것도 쓰지 않음(active_key) | 2026-11-09 액티브로 재구현, 오프라인 통과, 게임 실행 대기 |
+| `cb test neglect` | 일반 눈물·네발·양눈·안약·고연사 각각 0→1→2→0 보유, 오른쪽 출력 제거·왼쪽 출력과 발사 주기 유지, 실제 적 HP 감소 | 시험판과 검사 구현, 게임 실행 대기 |
+| `cb test locale` | 세 언어 설명과 EID, 반쪽 문장의 앞 공백 보존 | 오프라인 통과, 게임 실행 대기 |
 | 수동 화면/Continue | 32×32 아이콘, 반쪽 문장, 오른쪽 아래 예측 위치, AR 안경 선택창과 실제 Space 확정, Ctrl 길게 눌러 버리기, 실제 재접속 후 소유 효과와 열린 선택창 | 미실행 |
 
 편측 무시는 사용자 요청에 따라 **일반 눈물만** 제한한다. 오른쪽으로 눈을 강제 이동하거나 연사 스탯을 낮추지 않는다. 오른쪽 `TearParams`에 전용 눈물 종류를 지정해 생성 직후 제거한다. 레이저·혈사포·칼·폭탄 등 다른 무기 종류와 패밀리어 발사는 그대로 둔다. 몬스트로의 폐·루도비코·C Section처럼 별도 `WeaponType`을 쓰는 무기도 이 시험판의 제한 대상이 아니다. 피해 배율은 기존대로 보유 개수마다 ×2다.
 
-`conch_test neglect right_eye`는 한 런에서 위 다섯 조건을 연속 검사한다. 각 조건의 아이템 없는 실제 출력 수를 기준으로 보유 시 절반만 남는지, 차단된 눈물이 제거됐는지, 여섯 번 발사의 소요 틱이 유지되는지 비교한다. 0→1→2→0 보유의 실제 적 HP 감소도 별도 검사한다. 오프라인으로 왼눈/가운데/다른 무기/패밀리어/다른 플레이어 무변경, 생성 중 무음 처리, 첫 업데이트 전 제거, 분열 자식 차단, 보유 해제, API/XML 누락을 검사한다. 다른 모드가 이미 실행한 발사 콜백까지 되돌리지는 않는다.
+`cb test neglect right_eye`는 한 런에서 위 다섯 조건을 연속 검사한다. 각 조건의 아이템 없는 실제 출력 수를 기준으로 보유 시 절반만 남는지, 차단된 눈물이 제거됐는지, 여섯 번 발사의 소요 틱이 유지되는지 비교한다. 0→1→2→0 보유의 실제 적 HP 감소도 별도 검사한다. 오프라인으로 왼눈/가운데/다른 무기/패밀리어/다른 플레이어 무변경, 생성 중 무음 처리, 첫 업데이트 전 제거, 분열 자식 차단, 보유 해제, API/XML 누락을 검사한다. 다른 모드가 이미 실행한 발사 콜백까지 되돌리지는 않는다.
 
 전용 눈물 종류가 `content/entities2.xml`에 추가되므로 **게임을 완전히 재시작한 뒤** 실행한다. Lua 재적재만으로는 종류가 등록되지 않으며, 이때는 잘못된 눈물을 지우지 않고 로그에 필요한 재시작/기능을 남긴다. 실제 화면과 엔진 검사는 아직 통과 판정하지 않는다.
 
@@ -1078,12 +1078,12 @@ AR Glasses 조작(2026-11-09 액티브로 재구현): 12칸 충전 액티브이�
 ## 양면 동전 예약·층 보상 검사 (2026-10-21)
 
 사용자 보고: 동전 뒤에 아이템 두 개를 먹은 다음, 무피격 층 보상으로 다른 아이템이 들어오는 경우가 있었다.
-`conch_test two_faced_penny`는 생명주기와 아래 사례를 각각 새 런에서 실행한다(27벤치).
+`cb test two_faced_penny`는 생명주기와 아래 사례를 각각 새 런에서 실행한다(27벤치).
 판정은 EID 기준이다. 동전을 얻은 뒤 처음 얻은 비액티브 아이템이 그 동전의 아이템이고, 즉시 1개, 피격 없는 층마다 1개씩 더 받는다.
 실제 받침대 줍기, 직접 지급, 제거, 동전 추가를 섞고, 기대값과 인벤토리 실제 개수를 비교한다.
 각 사례 끝에 그 사이의 모든 획득 이벤트(`~` 재획득, `@` 줍는 중인 아이템, `w` 위습·내장)와 동전별 예약을 `DIAG`로 남긴다.
 
-| 사례 (`conch_test two_faced_penny` 뒤에 입력) | 검사 |
+| 사례 (`cb test two_faced_penny` 뒤에 입력) | 검사 |
 | --- | --- |
 | `pickup_order` | 받침대에서 동전 → A → B. A만 2개, 층마다 A만 +1, 보상 뒤에 주운 아이템도 복사하지 않음 |
 | `direct_order`, `active_pedestal` | 액티브(D6)를 먼저 얻어도 예약하지 않고 다음 패시브를 복사·지급 |
@@ -1131,7 +1131,7 @@ REPENTOGON에서는 실제로 들어간 피해(`MC_POST_ENTITY_TAKE_DMG`)만 센
 아이템이 피격으로 처리하면 머리 위에 그 아이템 아이콘이 작게 1초 떴다가 사라진다. 여러 아이템이면 나란히 뜬다.
 크로노스가 흡수한 펫의 피격 반응은 바닐라 펫 동작을 따르므로 이 규칙에 넣지 않았다.
 
-`conch_test two_faced_penny hit_kinds` 실측 (21 PASS / 0 FAIL):
+`cb test two_faced_penny hit_kinds` 실측 (21 PASS / 0 FAIL):
 
 | 피해원 | 엔진 플래그 / 출처 | 판정 | 층 보상 |
 | --- | --- | --- | --- |

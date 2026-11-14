@@ -1,14 +1,14 @@
 -- RNG probe: measures the expected value of every random mechanic in the mod by
 -- sampling the shipped functions, not copies of them.
 --
--- Console:  conch_test rng            run every probe with 100000 samples
---           conch_test rng 500000     custom sample count
---           conch_test rng luck 20    run the luck-dependent probes at Luck 20
+-- Console:  cb test rng            run every probe with 100000 samples
+--           cb test rng 500000     custom sample count
+--           cb test rng luck 20    run the luck-dependent probes at Luck 20
 --
 -- Deterministic probes (proc chances) are evaluated, not sampled, because they are
 -- pure functions of Luck and MaxFireDelay. Distribution probes are sampled.
 --
--- Dev tooling, dispatched only through conch_test by item_probe.lua.
+-- Dev tooling, dispatched only through cb test by item_probe.lua.
 
 local probe = {}
 
@@ -519,7 +519,7 @@ function probe.run(params)
     local luck = Isaac.GetPlayer(0).Luck
     local samplesSeen, luckSeen = false, false
     local function invalid()
-        out("Usage: conch_test rng [positive integer samples] [luck finite-number]")
+        out("Usage: cb test rng [positive integer samples] [luck finite-number]")
     end
     local i = 1
     while i <= #args do
@@ -536,7 +536,7 @@ function probe.run(params)
         end
     end
 
-    out(string.format("conch_test rng: %d samples, Luck %s", samples, tostring(luck)))
+    out(string.format("cb test rng: %d samples, Luck %s", samples, tostring(luck)))
     probe.statRolls(samples)
     probe.stacking(samples)
     probe.voidDagger()
@@ -552,7 +552,7 @@ function probe.run(params)
     probe.tiger(samples)
     probe.injectableDeath()
     out("")
-    out("conch_test rng: done")
+    out("cb test rng: done")
 end
 
 ConchBlessing.rngProbe = probe

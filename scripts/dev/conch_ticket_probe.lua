@@ -1,5 +1,5 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
--- conch_test conch_ticket [CASE | list | give [N] | spawn | queue | clear]
+-- cb test conch_ticket [CASE | list | give [N] | spawn | queue | clear]
 -- The Conch Ticket used for real through EntityPlayer:UseCard. Its picker reads
 -- the shooting and card keys with Input.IsActionPressed, which MC_INPUT_ACTION
 -- cannot fake (measured in game 2026-10-12), so the bench holds keys through the
@@ -95,7 +95,7 @@ local function lastAnswer() local r = results[#results]; return r and r.type, r 
 
 -- ---------------------------------------------------------------- cases
 local function case(name, title, build)
-    local command = "conch_test conch_ticket " .. name
+    local command = "cb test conch_ticket " .. name
     Probe.cases[name] = command
     Probe.order[#Probe.order + 1] = name
     TestBench.register({
@@ -357,10 +357,10 @@ function Probe.helper(name, words, player)
     HELPERS[name](words, player)
 end
 function Probe.list()
-    local lines = { "conch_test conch_ticket  -> every case below, each from a clean run" }
+    local lines = { "cb test conch_ticket  -> every case below, each from a clean run" }
     for _, name in ipairs(Probe.order) do lines[#lines + 1] = "  " .. Probe.cases[name] end
-    lines[#lines + 1] = "Manual helpers on the current run: conch_test conch_ticket give [N] | spawn | queue | clear"
-    lines[#lines + 1] = "Continue check: confirm an answer, save and quit, continue, then conch_test conch_ticket queue"
+    lines[#lines + 1] = "Manual helpers on the current run: cb test conch_ticket give [N] | spawn | queue | clear"
+    lines[#lines + 1] = "Continue check: confirm an answer, save and quit, continue, then cb test conch_ticket queue"
     return lines
 end
 

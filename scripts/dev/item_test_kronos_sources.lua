@@ -178,7 +178,7 @@ S.add("KRONOS","synergy_trinket_the_twins",{synergies=true,conditions=true},func
         end)
     end
     plan.check("both stochastic outcomes observed",function(_,ctx)
-        if not ctx.doubled or not ctx.normal then return nil,"24 entries inconclusive; probability calibration belongs to conch_test rng" end
+        if not ctx.doubled or not ctx.normal then return nil,"24 entries inconclusive; probability calibration belongs to cb test rng" end
         return true,"both actual outcomes; this is not a statistical proof of 50%"
     end)
     plan.act(function(player) player:TryRemoveTrinket(TrinketType.TRINKET_THE_TWINS) end)

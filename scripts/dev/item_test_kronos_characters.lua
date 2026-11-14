@@ -1,5 +1,5 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
--- `conch_test kronos characters`: a fresh run as every selectable character,
+-- `cb test kronos characters`: a fresh run as every selectable character,
 -- with Kronos on characters that do not attack the ordinary way (Lilith's
 -- Incubus, Tainted Lilith's Gello, the Forgotten's club, Tainted Forgotten's
 -- thrown body, Azazel's charged beam, two bodies, ...) and with every kind of
@@ -570,7 +570,7 @@ M._category = category
 
 for _, character in ipairs(CHARACTERS) do
     local name = "character_" .. character[1]
-    local command = "conch_test kronos " .. name
+    local command = "cb test kronos " .. name
     S.rows[#S.rows + 1] = { key = "KRONOS", name = name, command = command, groups = { characters = true },
         build = function(plan) characterCase(plan, character) end }
     require("scripts.dev.test_bench").register({ command = command, tag = "ItemTest:KRONOS",

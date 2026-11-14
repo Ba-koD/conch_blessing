@@ -150,16 +150,16 @@ class ReuseLeaseTests(unittest.TestCase):
         self.run_lua("""
             for _,name in ipairs({'abilities','attacks','auras','barriers','lifecycle','gb_bug',
                 'brother_bobby','guardian_angel','rotten_baby','succubus','censer','paschal_candle','relic','trinket_the_twins'}) do
-                assert(bench.get('conch_test kronos '..name).reuseGroup=='kronos_reversible',name)
+                assert(bench.get('cb test kronos '..name).reuseGroup=='kronos_reversible',name)
             end
             for _,name in ipairs({'lifecycle','excluded_actives','book_of_virtues','d_infinity'}) do
-                assert(bench.get('conch_test utility_belt '..name).reuseGroup=='belt_reversible',name)
+                assert(bench.get('cb test utility_belt '..name).reuseGroup=='belt_reversible',name)
             end
             for _,name in ipairs({'manual_before','manual_after','lost_soul','sacrificial_altar','hallowed_ground','exclusions'}) do
-                local def=bench.get('conch_test kronos '..name)
+                local def=bench.get('cb test kronos '..name)
                 assert(not def.reuseGroup and #def.resetReason>10,name..' missing actual isolation reason')
             end
-            bench.register({command='conch_test kronos detail',build=function() end})
+            bench.register({command='cb test kronos detail',build=function() end})
             local names=probe.suiteCommands({'KRONOS','UTILITY_BELT','MONEY_TEAR'})
             local closed,last={},nil
             for _,name in ipairs(names) do

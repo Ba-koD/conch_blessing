@@ -1,5 +1,5 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
--- conch_test morph: runs every applied upgrade presentation, plus one default
+-- cb test morph: runs every applied upgrade presentation, plus one default
 -- flag animation per flag and a rotating pedestal, through the real upgrade
 -- transaction on a bench-owned pedestal, and checks what the engine actually did.
 --
@@ -946,40 +946,40 @@ local function cleanup(ctx)
     removeFixture(ctx)
 end
 
-TestBench.register({ command = "conch_test morph", tag = "MorphProbe", duration = "about 75 seconds",
+TestBench.register({ command = "cb test morph", tag = "MorphProbe", duration = "about 75 seconds",
     cleanup = cleanup, build = function(plan) build(plan) end })
-TestBench.register({ command = "conch_test morph default", tag = "MorphProbe", duration = "about 15 seconds",
+TestBench.register({ command = "cb test morph default", tag = "MorphProbe", duration = "about 15 seconds",
     cleanup = cleanup, build = function(plan) build(plan, "default") end })
-TestBench.register({ command = "conch_test morph cycle", tag = "MorphProbe", duration = "about 25 seconds",
+TestBench.register({ command = "cb test morph cycle", tag = "MorphProbe", duration = "about 25 seconds",
     cleanup = cleanup, build = function(plan) build(plan, "cycle") end })
-TestBench.register({ command = "conch_test morph return", tag = "MorphProbe", duration = "about 15 seconds",
+TestBench.register({ command = "cb test morph return", tag = "MorphProbe", duration = "about 15 seconds",
     cleanup = cleanup, build = function(plan) build(plan, "return") end })
-TestBench.register({ command = "conch_test morph floor_hooks", tag = "MorphProbe", duration = "about 3 seconds",
+TestBench.register({ command = "cb test morph floor_hooks", tag = "MorphProbe", duration = "about 3 seconds",
     cleanup = cleanup, build = function(plan) stageFloorHooks(plan) end })
 for _, row in ipairs(Visuals.catalog) do
     if row.effect then
-        TestBench.register({ command = "conch_test morph " .. string.lower(row.key), tag = "MorphProbe",
+        TestBench.register({ command = "cb test morph " .. string.lower(row.key), tag = "MorphProbe",
             duration = "about 10 seconds", cleanup = cleanup, build = function(plan) build(plan, row.key) end })
     end
 end
 
--- Commands for item_probe's dispatcher and conch_test morph list.
+-- Commands for item_probe's dispatcher and cb test morph list.
 function Probe.commandFor(word)
-    if not word then return "conch_test morph" end
-    if word == "default" then return "conch_test morph default" end
-    if word == "cycle" then return "conch_test morph cycle" end
-    if word == "return" then return "conch_test morph return" end
-    if word == "floor_hooks" then return "conch_test morph floor_hooks" end
+    if not word then return "cb test morph" end
+    if word == "default" then return "cb test morph default" end
+    if word == "cycle" then return "cb test morph cycle" end
+    if word == "return" then return "cb test morph return" end
+    if word == "floor_hooks" then return "cb test morph floor_hooks" end
     local key = Visuals.resolveKey(word)
-    if key and Visuals.isApplied(key) then return "conch_test morph " .. string.lower(key) end
+    if key and Visuals.isApplied(key) then return "cb test morph " .. string.lower(key) end
 end
 function Probe.list()
-    local lines = { "conch_test morph [all applied presentations + default flags + rotating pedestal]",
-        "conch_test morph default", "conch_test morph cycle (a rotating pedestal held on its evolving choice)",
-        "conch_test morph return (leaving the room before the change)",
-        "conch_test morph floor_hooks (measurement: how often each backdrop render hook runs)" }
+    local lines = { "cb test morph [all applied presentations + default flags + rotating pedestal]",
+        "cb test morph default", "cb test morph cycle (a rotating pedestal held on its evolving choice)",
+        "cb test morph return (leaving the room before the change)",
+        "cb test morph floor_hooks (measurement: how often each backdrop render hook runs)" }
     for _, row in ipairs(Visuals.catalog) do
-        if row.effect then lines[#lines + 1] = "conch_test morph " .. string.lower(row.key) .. " (" .. row.effect .. ")" end
+        if row.effect then lines[#lines + 1] = "cb test morph " .. string.lower(row.key) .. " (" .. row.effect .. ")" end
     end
     return lines
 end

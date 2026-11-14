@@ -12,7 +12,7 @@ Forms.TAGS = { GUPPY = "GUPPY", LORD_OF_THE_FLIES = "FLY", MUSHROOM = "MUSHROOM"
 
 -- The counter at which the engine completes a transformation. playerforms.xml
 -- names no such number and REPENTOGON exposes none, so it is the engine's own
--- rule, measured for every tagged transformation by `conch_test jeon_woochi
+-- rule, measured for every tagged transformation by `cb test jeon_woochi
 -- thresholds`; Forms.threshold is the one place that answers it.
 Forms.THRESHOLD = 3
 
@@ -90,7 +90,7 @@ end
 -- The transformations no tag describes (wiki.gg, checked 2026-11-13): how
 -- their progress is read and what fills them. Neither the engine nor
 -- playerforms.xml says either, so this table is the one place for them, and
--- `conch_test jeon_woochi special_counters` measures each rule in game.
+-- `cb test jeon_woochi special_counters` measures each rule in game.
 --   pill: one use of that pill effect counts, so a pill may come again
 --   unique: one of each piece; a second copy does not count
 --   held: no engine counter; progress is the pieces held at once
