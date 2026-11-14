@@ -1556,6 +1556,9 @@ do
     if not ok then ConchBlessing.printError("[Pockets] load failed: " .. tostring(err)) end
 end
 
+-- Runes that share an item's EID synergy lines (Thurisaz shares Kronos's).
+local PocketSynergies = require("scripts.lib.pocket_synergies")
+
 -- automatically load scripts and callbacks based on ItemData
 local function loadAllItems()
     ConchBlessing.printDebug("Loading scripts and callbacks based on ItemData...")
@@ -1845,6 +1848,27 @@ local function loadAllItems()
                 return cfg:GetTrinket(id) ~= nil
             end
 
+            -- A synergy line opens with the icon of the other item of the pair:
+            -- the held one that makes the synergy, never the item being described.
+            -- Bob's Brain read while holding Kronos shows Kronos's icon, and Kronos
+            -- read while holding Bob's Brain shows Bob's Brain's (user, 2026-10-14).
+            -- A line that already opens with that icon keeps a single one.
+            local function appendSynergyLines(descObj, lang, iconToken, text)
+                local t = expandDynamicTokens((type(text) == "table" and (text[lang] or text.en)) or text)
+                local lines = type(t) == "table" and t or { t }
+                local msg = ""
+                for i = 1, #lines do
+                    -- strip leading # to avoid double newlines
+                    local line = (tostring(lines[i] or ""):gsub("^#+", ""))
+                    if line:sub(1, #iconToken) ~= iconToken then line = iconToken .. " " .. line end
+                    msg = msg .. "#" .. line
+                end
+                EID:appendToDescription(descObj, msg)
+            end
+            local function itemIcon(id, isTrinket)
+                return (isTrinket and "{{Trinket" or "{{Collectible") .. tostring(id) .. "}}"
+            end
+
             -- EID description modifiers run every render frame, so an unconditional
             -- printDebug here repeats the same line thousands of times a minute.
             -- Messages carry their own ids, so one line per distinct message is enough.
@@ -1979,25 +2003,25 @@ local function loadAllItems()
                             return true
                         end
 
-                        -- A synergy line opens with the icon of the other item of the pair:
-                        -- the held one that makes the synergy, never the item being described.
-                        -- Bob's Brain read while holding Kronos shows Kronos's icon, and Kronos
-                        -- read while holding Bob's Brain shows Bob's Brain's (user, 2026-10-14).
-                        -- A line that already opens with that icon keeps a single one.
                         local function appendSynergy(iconToken, text)
-                            local t = expandDynamicTokens((type(text) == "table" and (text[lang] or text.en)) or text)
-                            local lines = type(t) == "table" and t or { t }
-                            local msg = ""
-                            for i = 1, #lines do
-                                -- strip leading # to avoid double newlines
-                                local line = (tostring(lines[i] or ""):gsub("^#+", ""))
-                                if line:sub(1, #iconToken) ~= iconToken then line = iconToken .. " " .. line end
-                                msg = msg .. "#" .. line
-                            end
-                            EID:appendToDescription(descObj, msg)
+                            appendSynergyLines(descObj, lang, iconToken, text)
                         end
-                        local function itemIcon(id, isTrinket)
-                            return (isTrinket and "{{Trinket" or "{{Collectible") .. tostring(id) .. "}}"
+                        local describedIsTrinket = descObj.ObjVariant == 350
+                        -- A held rune that shares an item's lines (Thurisaz, Kronos's) shows the
+                        -- line after its own icon, but only while nobody holds the item itself:
+                        -- then the item's line alone shows (user, 2026-11-14). The item is the
+                        -- mod item `itemKey`, or the collectible `itemId`.
+                        local function appendRuneLines(itemKey, itemId, text)
+                            for _, rune in ipairs(PocketSynergies.held()) do
+                                local item = PocketSynergies.item(rune)
+                                if item and (rune.synergyItem == itemKey
+                                    or (itemId and item.id == itemId and item.type ~= "trinket")) then
+                                    local runeText = PocketSynergies.text(rune, subId, describedIsTrinket, text)
+                                    if runeText and shouldAppendSynergy("K" .. rune.id, subId) then
+                                        appendSynergy(PocketSynergies.icon(rune), runeText)
+                                    end
+                                end
+                            end
                         end
 
                         -- The described item is a synergy target: its lines name the held mod item.
@@ -2008,8 +2032,14 @@ local function loadAllItems()
                                 local typeMatches = entry.targetIsTrinket == nil
                                     or (entry.targetIsTrinket == true and descObj.ObjVariant == 350)
                                     or (entry.targetIsTrinket == false and descObj.ObjVariant == 100)
-                                if typeMatches and d and d.id and anyPlayerHas(d.id) and shouldAppendSynergy(d.id, subId) then
-                                    appendSynergy(itemIcon(d.id, d.type == "trinket"), entry.text)
+                                if typeMatches and d and d.id then
+                                    if anyPlayerHas(d.id) then
+                                        if shouldAppendSynergy(d.id, subId) then
+                                            appendSynergy(itemIcon(d.id, d.type == "trinket"), entry.text)
+                                        end
+                                    else
+                                        appendRuneLines(entry.key, nil, entry.text)
+                                    end
                                 end
                             end
                         end
@@ -2018,14 +2048,58 @@ local function loadAllItems()
                         local asMod = ConchBlessing._synergyByMod and ConchBlessing._synergyByMod[subId]
                         if asMod then
                             for _, entry in ipairs(asMod) do
-                                if anyPlayerHas(entry.target, entry.targetIsTrinket) and shouldAppendSynergy(subId, entry.target) then
-                                    -- Use the synergy's declared type; detect it only when none was given.
-                                    local isTrinket = entry.targetIsTrinket
-                                    if isTrinket == nil then isTrinket = isTrinketId(entry.target) end
-                                    eidDebugOnce("[EID Synergy] target " .. tostring(entry.target) .. " shown as "
-                                        .. (isTrinket and "trinket" or "collectible"))
-                                    appendSynergy(itemIcon(entry.target, isTrinket), entry.text)
+                                if anyPlayerHas(entry.target, entry.targetIsTrinket) then
+                                    if shouldAppendSynergy(subId, entry.target) then
+                                        -- Use the synergy's declared type; detect it only when none was given.
+                                        local isTrinket = entry.targetIsTrinket
+                                        if isTrinket == nil then isTrinket = isTrinketId(entry.target) end
+                                        eidDebugOnce("[EID Synergy] target " .. tostring(entry.target) .. " shown as "
+                                            .. (isTrinket and "trinket" or "collectible"))
+                                        appendSynergy(itemIcon(entry.target, isTrinket), entry.text)
+                                    end
+                                elseif entry.targetIsTrinket ~= true then
+                                    -- A mod familiar's own line about Kronos (Seonnyeo, the Hermit Crab).
+                                    appendRuneLines(nil, entry.target, entry.text)
                                 end
+                            end
+                        end
+                        return descObj
+                    end
+                )
+
+                -- A rune that shares an item's lines (Thurisaz, Kronos's) lists on its own
+                -- description every held item's line, as that item's description does
+                -- (user, 2026-11-14). Each line opens with the held item's icon.
+                EID:addDescriptionModifier(
+                    "ConchBlessing_RuneSynergies",
+                    function(descObj)
+                        return descObj.ObjType == 5 and descObj.ObjVariant == 300
+                            and PocketSynergies.byCard(descObj.ObjSubType) ~= nil
+                    end,
+                    function(descObj)
+                        local rune = PocketSynergies.byCard(descObj.ObjSubType)
+                        local item = rune and PocketSynergies.item(rune)
+                        if not (item and type(item.id) == "number" and item.id > 0) then return descObj end
+                        local lang = resolveModLang()
+                        -- The item's own lines, one for each held target.
+                        local own = ConchBlessing._synergyByMod and ConchBlessing._synergyByMod[item.id]
+                        for _, entry in ipairs(own or {}) do
+                            if anyPlayerHas(entry.target, entry.targetIsTrinket) then
+                                local isTrinket = entry.targetIsTrinket
+                                if isTrinket == nil then isTrinket = isTrinketId(entry.target) end
+                                local text = PocketSynergies.text(rune, entry.target, isTrinket, entry.text)
+                                if text then appendSynergyLines(descObj, lang, itemIcon(entry.target, isTrinket), text) end
+                            end
+                        end
+                        -- Other mod items' lines about the item, one for each held item
+                        -- (Seonnyeo's and the Hermit Crab's about Kronos).
+                        local about = ConchBlessing._synergyByTarget and ConchBlessing._synergyByTarget[item.id]
+                        for _, entry in ipairs(about or {}) do
+                            local d = ConchBlessing.ItemData[entry.key]
+                            local isTrinket = d and d.type == "trinket"
+                            if entry.targetIsTrinket ~= true and d and d.id and anyPlayerHas(d.id, isTrinket) then
+                                local text = PocketSynergies.text(rune, d.id, isTrinket, entry.text)
+                                if text then appendSynergyLines(descObj, lang, itemIcon(d.id, isTrinket), text) end
                             end
                         end
                         return descObj

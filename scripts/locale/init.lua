@@ -213,6 +213,19 @@ function Locale.applyPocketData(pocketData)
                 end
                 if next(byLang) then data[field] = byLang end
             end
+            -- A rune's own synergy lines (pockets.<KEY>.synergies.<line>), by line
+            -- and then language like ItemData's (scripts/lib/pocket_synergies.lua).
+            local lines = {}
+            for lang, tbl in pairs(Locale.tables) do
+                local entry = type(tbl.pockets) == "table" and tbl.pockets[key] or nil
+                if entry and type(entry.synergies) == "table" then
+                    for line, text in pairs(entry.synergies) do
+                        lines[line] = lines[line] or {}
+                        lines[line][lang] = expandDeep(text)
+                    end
+                end
+            end
+            if next(lines) then data.synergies = lines end
             if not (type(data.name) == "table" and data.name[Locale.FALLBACK]) then
                 printError(key .. " has no English name under pockets in scripts/locale/en.lua")
             end

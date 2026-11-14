@@ -843,6 +843,9 @@ return {
                 "#삼킨 길동무마다 {{Damage}} 때리는 힘 +2와 그 길동무만의 힘을 영영 얻습니다 (크로노스가 없어도 남습니다)",
                 "#{{Warning}} 덧붙임 도우미(REPENTOGON)를 쓰면 좋습니다",
             },
+            synergies = {
+                not_absorbed = "투리사즈에 삼켜지지 않습니다.",
+            },
         },
         CONCH_TICKET = {
             name = "소라 예약권",

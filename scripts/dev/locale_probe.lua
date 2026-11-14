@@ -2,7 +2,8 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- Locale test bench: `conch_test locale` restarts the run, checks that every item's
 -- text came from scripts/locale (all three languages loaded, no icon token left,
 -- every icon a real item), that EID holds and renders the selected mod locale
--- (descriptions, conch-mode lines, synergy lines and the live lines items add),
+-- (descriptions, conch-mode lines, synergy lines, the Kronos lines Thurisaz
+-- shows while held, and the live lines items add),
 -- and that Mod Config Menu reads its text, then restarts the run again
 -- (scripts/dev/test_bench.lua). Only this mod's language preference is switched;
 -- EID's native/global language remains untouched. Cleanup also restores the
@@ -46,6 +47,21 @@ end
 
 local function contains(text, part)
     return text:find(part, 1, true) ~= nil
+end
+
+local function describeCard(id)
+    return EID:getDescriptionObj(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_TAROTCARD, id).Description or ""
+end
+
+-- A synergy line as the renderer writes it: after the held item's icon, which
+-- a line already opening with it keeps once.
+local function synergyLine(icon, text)
+    local line = (Locale.expandIcons(text):gsub("^#+", ""))
+    return "#" .. (line:sub(1, #icon) == icon and line or icon .. " " .. line)
+end
+
+local function runeIcon()
+    return "{{Card" .. tostring(ConchBlessing.PocketData.THURISAZ.id) .. "}}"
 end
 
 local function listed(prefix, names)
@@ -138,8 +154,16 @@ local function build(plan)
     plan.section("EID text by language", nil)
     plan.act(function(player)
         player:AddCollectible(ConchBlessing.ItemData.LIVE_EYE.id, 0, false)
+        -- Thurisaz in a pocket slot and Bob's Brain held, Kronos not yet.
+        player:AddCard(ConchBlessing.PocketData.THURISAZ.id)
+        player:AddCollectible(CollectibleType.COLLECTIBLE_BOBS_BRAIN, 0, false)
     end)
     plan.wait(5)
+    plan.check("Thurisaz sits in a pocket slot and nobody holds Kronos", function(player)
+        local card = player:GetCard(0)
+        return card == ConchBlessing.PocketData.THURISAZ.id and not player:HasCollectible(ConchBlessing.ItemData.KRONOS.id),
+            "pocket card " .. tostring(card)
+    end)
     for _, lang in ipairs({ "en", "kr", "urimal", "kr_standard" }) do
         plan.act(function(_, ctx)
             assert(Config.SetLanguage(lang), "could not select locale " .. lang)
@@ -207,6 +231,29 @@ local function build(plan)
             local expected = "#" .. (line:sub(1, #icon) == icon and line or icon .. " " .. line)
             return contains(describe(CollectibleType.COLLECTIBLE_ROCK_BOTTOM), expected), expected
         end)
+        plan.check(lang .. ": with Thurisaz held, Bob's Brain shows Kronos's line after the rune's icon", function(_, ctx)
+            if not EID then return nil, "EID is not installed" end
+            local expected = synergyLine(runeIcon(), Locale.get("items.KRONOS.synergies.bobs_brain", ctx.localeLanguage))
+            return contains(describe(CollectibleType.COLLECTIBLE_BOBS_BRAIN), expected), expected
+        end)
+        plan.check(lang .. ": 1UP shows Thurisaz's own line instead of Kronos's", function(_, ctx)
+            if not EID then return nil, "EID is not installed" end
+            local expected = synergyLine(runeIcon(), Locale.get("pockets.THURISAZ.synergies.not_absorbed", ctx.localeLanguage))
+            local kronos = synergyLine(runeIcon(), Locale.get("items.KRONOS.synergies.1up", ctx.localeLanguage))
+            local text = describe(CollectibleType.COLLECTIBLE_1UP)
+            return contains(text, expected) and not contains(text, kronos), expected
+        end)
+        plan.check(lang .. ": Box of Friends, a Kronos-only source, shows no Thurisaz line", function()
+            if not EID then return nil, "EID is not installed" end
+            local text = describe(CollectibleType.COLLECTIBLE_BOX_OF_FRIENDS)
+            return not contains(text, runeIcon()), text
+        end)
+        plan.check(lang .. ": Thurisaz's description lists held Bob's Brain's line", function(_, ctx)
+            if not EID then return nil, "EID is not installed" end
+            local icon = "{{Collectible" .. tostring(CollectibleType.COLLECTIBLE_BOBS_BRAIN) .. "}}"
+            local expected = synergyLine(icon, Locale.get("items.KRONOS.synergies.bobs_brain", ctx.localeLanguage))
+            return contains(describeCard(ConchBlessing.PocketData.THURISAZ.id), expected), expected
+        end)
         for _, live in ipairs(LIVE_LINES) do
             plan.check(lang .. ": " .. live.item .. " adds its live line", function(_, ctx)
                 if not EID then return nil, "EID is not installed" end
@@ -238,6 +285,20 @@ local function build(plan)
     end)
     plan.check("EID's global language still matches the player's setting", function(_, ctx)
         return eidLanguageUnchanged(ctx)
+    end)
+
+    plan.section("Thurisaz with Kronos", "while someone holds Kronos, only Kronos's line shows")
+    plan.act(function(player)
+        player:AddCollectible(ConchBlessing.ItemData.KRONOS.id, 0, false)
+    end)
+    plan.check("with Kronos held too, Bob's Brain shows Kronos's line and no rune line", function(player)
+        if not EID then return nil, "EID is not installed" end
+        local kronosId = ConchBlessing.ItemData.KRONOS.id
+        if not player:HasCollectible(kronosId) then return false, "Kronos was not added" end
+        local line = Locale.get("items.KRONOS.synergies.bobs_brain", Config.GetCurrentLanguage())
+        local expected = synergyLine("{{Collectible" .. tostring(kronosId) .. "}}", line)
+        local text = describe(CollectibleType.COLLECTIBLE_BOBS_BRAIN)
+        return contains(text, expected) and not contains(text, runeIcon()), expected
     end)
 
     plan.section("Mod Config Menu", nil)

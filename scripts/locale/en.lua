@@ -857,6 +857,11 @@ return {
                 "#Each absorbed familiar permanently grants {{Damage}} +2 damage and its unique ability, even without Kronos",
                 "#{{Warning}} REPENTOGON recommended",
             },
+            -- While held it shows Kronos's synergy lines; this line replaces
+            -- Kronos's on the familiars it never devours.
+            synergies = {
+                not_absorbed = "Cannot be absorbed by Thurisaz.",
+            },
         },
         CONCH_TICKET = {
             name = "Conch Ticket",

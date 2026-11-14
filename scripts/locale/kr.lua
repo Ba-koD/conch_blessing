@@ -842,6 +842,9 @@ return {
                 "#흡수한 펫마다 {{Damage}} 공격력 +2와 그 펫의 고유 능력을 영구히 얻습니다 (크로노스가 없어도 유지)",
                 "#{{Warning}} REPENTOGON 권장",
             },
+            synergies = {
+                not_absorbed = "투리사즈에 흡수되지 않습니다.",
+            },
         },
         CONCH_TICKET = {
             name = "소라 예약권",

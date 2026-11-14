@@ -39,7 +39,8 @@ FALLBACK = "en"
 ENGLISH_ONLY = ("ui.mcm",)
 ITEM_FIELDS = ("name", "description", "eid", "synergies", "specials")
 POCKETS_PATH = os.path.join(ROOT, "scripts", "items", "cards", "definitions.lua")
-POCKET_FIELDS = ("name", "description", "eid")
+# synergies: a rune's own lines that replace a shared item's (scripts/lib/pocket_synergies.lua)
+POCKET_FIELDS = ("name", "description", "eid", "synergies")
 ICON = re.compile(r"\{(\w+):([^{}]+)\}")
 DYNAMIC = re.compile(r"%([A-Z_]+)%")
 ENUM_TABLES = {"c": ("CollectibleType", "COLLECTIBLE_"), "t": ("TrinketType", "TRINKET_"), "card": ("Card", "CARD_")}
