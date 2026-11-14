@@ -54,10 +54,11 @@ local function getGalleryManager()
     return nil
 end
 
--- The separate Death Certificate Exit mod opens the same way back on every
--- visit. While it takes this one home, Atropos leaves the wall to its door.
+-- The separate Let Me Out! mod opens the same way back on every visit (unless
+-- it is turned off there). While it takes this one home, Atropos leaves the
+-- wall to its door.
 local function exitModHandlesVisit()
-    local exitMod = rawget(_G, "DeathCertificateExit")
+    local exitMod = rawget(_G, "LetMeOut")
     if type(exitMod) ~= "table" or type(exitMod.HandlesWayBack) ~= "function" then
         return false
     end
