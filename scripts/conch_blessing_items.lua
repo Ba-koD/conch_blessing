@@ -1868,8 +1868,9 @@ local function loadAllItems()
                         -- the player has no synergy item yet.
                         descObj.Description = expandDynamicTokens(descObj.Description)
                         -- 0) Dynamic specials scaling for our items (EID text):
-                        --    If this is our item and it has specials, multiply matching numbers by scale
-                        --    Scale rules (trinket): Golden +1x, Mom's Box +1x; both => x3. Only exact specials values are scaled.
+                        --    Golden +1x, Mom's Box +1x; both => x3. Only exact `specials.normal` values,
+                        --    and only where EID's own golden modifier left the text alone
+                        --    (ConchBlessing.EID.scaleSpecialsText, scripts/eid_language.lua).
                         do
                             local rawSub = descObj.ObjSubType or -1
                             local isTrinketPickup = (descObj.ObjVariant == 350)
@@ -1897,38 +1898,9 @@ local function loadAllItems()
                                     if goldenPickup then scale = scale + 1 end
                                     if anyPlayerHas(CollectibleType.COLLECTIBLE_MOMS_BOX) then scale = scale + 1 end
                                 end
-                                if scale > 1 then
-                                    -- Flatten specials list from { normal = X or {..} }
-                                    local values = {}
-                                    local function pushVal(v)
-                                        if type(v) == "number" then table.insert(values, v) end
-                                    end
-                                    if type(itemData.specials.normal) == "table" then
-                                        for _, v in ipairs(itemData.specials.normal) do pushVal(v) end
-                                    else
-                                        pushVal(itemData.specials.normal)
-                                    end
-                                    -- Replace exact tokens in Description
-                                    local text = descObj.Description
-                                    -- Only replace decimal tokens (e.g., 4.0), never plain integers (e.g., 4)
-                                    for _, v in ipairs(values) do
-                                        local sDec = string.format("%.1f", v)
-                                        local patDec = "%f[%d]" .. sDec:gsub('%.', '%%.') .. "%f[^%d]"
-                                        if text:find(patDec) then
-                                            local rep = string.format("%.1f", v * scale)
-                                            rep = "{{ColorYellow}}" .. rep .. "{{CR}}"
-                                            text = text:gsub(patDec, rep)
-                                        else
-                                            local sInt = tostring(math.floor(v + 0.0))
-                                            local patInt = "%f[%d]" .. sInt .. "%f[^%d]"
-                                            -- Only replace integer tokens when decimal form is not present
-                                            text = text:gsub(patInt, function(match)
-                                                local repInt = tostring(math.floor(v * scale + 0.0))
-                                                return "{{ColorYellow}}" .. repInt .. "{{CR}}"
-                                            end)
-                                        end
-                                    end
-                                    descObj.Description = text
+                                local scaleText = ConchBlessing.EID and ConchBlessing.EID.scaleSpecialsText
+                                if scale > 1 and type(scaleText) == "function" then
+                                    descObj.Description = scaleText(descObj.Description, itemData.specials, lang, scale)
                                 end
                             end
                         end

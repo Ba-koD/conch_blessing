@@ -207,6 +207,58 @@ ConchBlessing.EID.AddEIDCollectible = function(id, name, description, eidDescrip
     }
 end
 
+-- A trinket's golden / Mom's Box `specials` for one language, as registration
+-- reads them: that language's own table (Locale.applyItemData keeps it as
+-- specials.<lang>), else English's, and each key else ItemData's own.
+local function specialsPicker(specials, langCode)
+    local own = type(specials[langCode]) == "table" and specials[langCode]
+        or type(specials.en) == "table" and specials.en or nil
+    return function(key)
+        if own and own[key] ~= nil then return own[key] end
+        return specials[key]
+    end
+end
+
+-- Our EID description modifier (conch_blessing_items.lua) scales a trinket's
+-- `specials.normal` numbers for a golden copy (+1) and Mom's Box (+1). EID's own
+-- golden trinket modifier runs before ours and has already rewritten the text of
+-- every other form: per-state arrays or strings put their numbers in place,
+-- `append` adds a line and a plain number (Time =, F-) is multiplied by EID
+-- itself. Scaling those again counts them twice (a golden Wrong Answer Note read
+-- 200%/100% instead of 100%/50%) or breaks EID's colour (Time = Power's 0.012 lost
+-- its gold after the 0). Only a `normal` list with no per-state lists is scaled
+-- here, as C-/B-/A- use it: its registration puts each number back unchanged.
+ConchBlessing.EID.scaleSpecialsText = function(text, specials, langCode, scale)
+    if type(text) ~= "string" or type(specials) ~= "table" or type(scale) ~= "number" or scale <= 1 then
+        return text
+    end
+    local pick = specialsPicker(specials, langCode)
+    local normal = pick("normal")
+    if type(normal) ~= "table" or pick("append") ~= nil or pick("moms_box") ~= nil or pick("both") ~= nil then
+        return text
+    end
+    local values = {}
+    for _, v in ipairs(normal) do
+        if type(v) == "number" then values[#values + 1] = v end
+    end
+    -- Replace exact tokens: a decimal form (4.0) when the text has one, else the
+    -- whole number (4), never a digit inside a longer number.
+    for _, v in ipairs(values) do
+        local sDec = string.format("%.1f", v)
+        local patDec = "%f[%d]" .. sDec:gsub('%.', '%%.') .. "%f[^%d]"
+        if text:find(patDec) then
+            local rep = "{{ColorYellow}}" .. string.format("%.1f", v * scale) .. "{{CR}}"
+            text = text:gsub(patDec, rep)
+        else
+            local patInt = "%f[%d]" .. tostring(math.floor(v + 0.0)) .. "%f[^%d]"
+            text = text:gsub(patInt, function()
+                return "{{ColorYellow}}" .. tostring(math.floor(v * scale + 0.0)) .. "{{CR}}"
+            end)
+        end
+    end
+    return text
+end
+
 -- Register all items with EID
 ConchBlessing.EID.registerAllItems = function()
     ConchBlessing.printDebug("Registering all items with EID...")
@@ -379,13 +431,7 @@ ConchBlessing.EID.registerAllItems = function()
             -- Register for each supported language
             for _, language in ipairs(languages) do
                 local langCode, targetEidLang = language.source, language.target
-                local specLang = type(specTop[langCode]) == "table" and specTop[langCode]
-                    or type(specTop.en) == "table" and specTop.en or nil
-                
-                local function pick(k)
-                    if specLang and specLang[k] ~= nil then return specLang[k] end
-                    return specTop[k]
-                end
+                local pick = specialsPicker(specTop, langCode)
                 local aVal = pick("append")
                 local nVal = pick("normal")
                 local mVal = pick("moms_box")
