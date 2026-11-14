@@ -143,6 +143,20 @@ class AtroposReturnTests(unittest.TestCase):
             transitionFails=false;M.test.sync();assert(open);M.test.use(savedDoor.PersistData);assert(transitionCalls==2)
         ''')
 
+    def test_death_certificate_exit_mod_takes_the_wall_while_it_handles_the_visit(self):
+        # The separate Death Certificate Exit mod's door comes first (user decision 2026-11-14).
+        self.lua.execute('handles=true; DeathCertificateExit={HandlesWayBack=function() return handles end}')
+        self.enter()
+        self.lua.execute('''
+            assert(spawnCount==0 and saved.active and saved.origin.roomIndex==84)
+            M.onPostUpdate(); assert(spawnCount==0)
+            handles=false; M.test.sync(); assert(spawnCount==1 and open)
+            handles=true; M.test.sync(); assert(savedDoor==nil and #doors==0 and open==false)
+            DeathCertificateExit.HandlesWayBack=function() error('broken') end
+            M.test.sync(); assert(spawnCount==2 and open, 'a broken answer keeps Atropos door')
+            DeathCertificateExit=nil; M.test.sync(); assert(spawnCount==2 and open)
+        ''')
+
     def test_removed_door_entity_is_rebuilt_but_foreign_doors_and_appraisal_are_untouched(self):
         self.enter()
         self.lua.execute('''

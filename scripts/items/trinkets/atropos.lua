@@ -54,6 +54,17 @@ local function getGalleryManager()
     return nil
 end
 
+-- The separate Death Certificate Exit mod opens the same way back on every
+-- visit. While it takes this one home, Atropos leaves the wall to its door.
+local function exitModHandlesVisit()
+    local exitMod = rawget(_G, "DeathCertificateExit")
+    if type(exitMod) ~= "table" or type(exitMod.HandlesWayBack) ~= "function" then
+        return false
+    end
+    local ok, handles = pcall(exitMod.HandlesWayBack)
+    return ok and handles == true
+end
+
 local function isAppraisalOrigin(origin)
     return type(origin) == "table" and origin.kind == APPRAISAL_ORIGIN_KIND
 end
@@ -932,6 +943,11 @@ end
 
 local function syncReturnDoorInner()
     if getCurrentDimension() ~= DC_DIMENSION or isAppraisalGalleryRoom() then return end
+    if exitModHandlesVisit() then
+        -- Also retires a door an earlier visit saved in StageAPI's room data.
+        removeOwnedReturnDoor(nil)
+        return
+    end
 
     local state = getState()
     local nativeSave = state.nativeSessionReady == true and getNativeSave(false) or nil
