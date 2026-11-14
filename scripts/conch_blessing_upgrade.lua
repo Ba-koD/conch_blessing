@@ -1317,6 +1317,13 @@ local function deletePickupWithEffect(entity)
     ConchBlessing.printDebug("Delete Mode: Item removed at position " .. tostring(entity.Position.X) .. ", " .. tostring(entity.Position.Y))
 end
 
+-- The Conch Debris a failed evolution leaves behind (scripts/items/trinkets/conch_debris.lua).
+local function isConchDebris(entity)
+    local debris = ConchBlessing.conchdebris
+    return entity.Variant == PickupVariant.PICKUP_TRINKET and debris ~= nil
+        and type(debris.isDebris) == "function" and debris.isDebris(entity.SubType)
+end
+
 -- Magic Conch result handling function
 local function queueResult(result, explicitPickups)
     if type(result) ~= "table" or not VALID_UPGRADE_FLAGS[result.type] then
@@ -1348,6 +1355,7 @@ local function queueResult(result, explicitPickups)
     -- Collect items for upgrade and delete
     local upgradeableItems = {}
     local deleteableItems = {}
+    local failedItems = {}
     local viewer = ConchBlessing.morphViewer
     local function ownedByViewer(entity)
         return viewer ~= nil and type(viewer.ownsPickup) == "function" and viewer.ownsPickup(entity) == true
@@ -1429,17 +1437,19 @@ local function queueResult(result, explicitPickups)
                             isTrinketPickup = isTrinketPickup,
                         })
                     else
-                        -- Flag does NOT match - if Delete Mode is on, delete the item
+                        -- Flag does NOT match: a failed evolution. In Delete Mode the
+                        -- item is deleted and a Conch Debris lies where it stood.
                         ConchBlessing.printDebug("Flag does not match. No conversion.")
                         if deleteModeActive then
                             ConchBlessing.printDebug("Delete Mode: Item has evolution but result type doesn't match any flag. Marking for deletion.")
-                            table.insert(deleteableItems, entity)
+                            table.insert(failedItems, entity)
                         end
                     end
                 else
                     -- This item has NO evolution possibilities in ConchBlessing
                     -- If Delete Mode is on and result is "negative", delete the item
-                    if deleteModeActive and resultType == "negative" then
+                    -- (the debris failed evolutions leave behind is never deleted).
+                    if deleteModeActive and resultType == "negative" and not isConchDebris(entity) then
                         ConchBlessing.printDebug("Delete Mode: Item has no evolution and result is negative. Marking for deletion.")
                         table.insert(deleteableItems, entity)
                     end
@@ -1515,7 +1525,20 @@ local function queueResult(result, explicitPickups)
         end
         ConchBlessing.printDebug("Delete Mode: Total " .. deleteCount .. " items deleted!")
     end
-    
+
+    -- Failed evolutions (Delete Mode): each is deleted and leaves one Conch
+    -- Debris on its spot, free whatever the item cost.
+    for _, entity in ipairs(failedItems) do
+        local position, seed = Vector(entity.Position.X, entity.Position.Y), entity.InitSeed
+        deletePickupWithEffect(entity)
+        deleteCount = deleteCount + 1
+        local debris = ConchBlessing.conchdebris
+        if debris and type(debris.dropAt) == "function" then
+            local ok, err = pcall(debris.dropAt, position, seed)
+            if not ok then ConchBlessing.printError("[Upgrade] Conch Debris drop failed: " .. tostring(err)) end
+        end
+    end
+
     if not transformed and deleteCount == 0 then
         ConchBlessing.printDebug("No convertible field item found or conditions not met.")
     end

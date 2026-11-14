@@ -16,6 +16,7 @@ Prints every problem and exits 1 if there is one. It checks that
   * each synergy entry in ItemData names an English line, and each English line is used
   * icon tokens resolve: {c:}, {t:} and {card:} names exist in the game's enums.lua
     (checked when the mod sits in the game's mods folder), {own:KEY} is an ItemData key
+    and {pocket:KEY} a card or rune in scripts/items/cards/definitions.lua
   * %TOKEN% values in item text are registered in ConchBlessing.EIDDynamicTokens
   * ui strings mirror English (ui.mcm is English-only), use only %s and %% as
     format directives, and take as many %s arguments as English does
@@ -266,6 +267,7 @@ def main():
     dynamic = read_dynamic_tokens()
     english = tables[FALLBACK]
     en_items = english.get("items", {})
+    pocket_keys = set(lua_data.load(POCKETS_PATH))
 
     for key, info in registry.items():
         entry = en_items.get(key)
@@ -315,12 +317,15 @@ def main():
                 if kind == "own":
                     if name not in registry:
                         error("%s.lua: %s: {own:%s} is not an ItemData key" % (lang, path, name))
+                elif kind == "pocket":
+                    if name not in pocket_keys:
+                        error("%s.lua: %s: {pocket:%s} is not a card in scripts/items/cards/definitions.lua" % (lang, path, name))
                 elif kind in ENUM_TABLES:
                     if enums is not None and name not in enums[kind]:
                         table_name, prefix = ENUM_TABLES[kind]
                         error("%s.lua: %s: {%s:%s} - %s.%s%s does not exist" % (lang, path, kind, name, table_name, prefix, name))
                 else:
-                    error("%s.lua: %s: unknown icon token {%s:%s} (use c, t, card or own)" % (lang, path, kind, name))
+                    error("%s.lua: %s: unknown icon token {%s:%s} (use c, t, card, own or pocket)" % (lang, path, kind, name))
             if path.startswith("items."):
                 for name in DYNAMIC.findall(text):
                     if name not in dynamic:

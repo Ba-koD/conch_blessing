@@ -14,6 +14,7 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 --   {t:NAME}     vanilla trinket     TrinketType.TRINKET_NAME         -> "{{Trinket<id>}}"
 --   {card:NAME}  card                Card.CARD_NAME                    -> "{{Card<id>}}"
 --   {own:KEY}    this mod's item ConchBlessing.ItemData.KEY, collectible or trinket by its type
+--   {pocket:KEY} this mod's card or rune ConchBlessing.PocketData.KEY     -> "{{Card<id>}}"
 -- An unknown token becomes "" and is reported through ConchBlessing.printError.
 -- %TOKEN% placeholders in synergy lines (live EID values) are left for the EID renderer.
 
@@ -68,11 +69,22 @@ local function ownItem(key)
     return data.type == "trinket" and "Trinket" or "Collectible", data.id
 end
 
+-- This mod's card or rune by its PocketData key, looked up by its English name:
+-- item text is filled before the pocket registry loads.
+local function ownPocket(key)
+    local name = Locale.get("pockets." .. key .. ".name", Locale.FALLBACK)
+    if type(name) ~= "string" or type(Isaac) ~= "table" or type(Isaac.GetCardIdByName) ~= "function" then
+        return "Card", nil
+    end
+    return "Card", Isaac.GetCardIdByName(name)
+end
+
 local ICON_KINDS = {
     c = function(name) return "Collectible", CollectibleType["COLLECTIBLE_" .. name] end,
     t = function(name) return "Trinket", TrinketType["TRINKET_" .. name] end,
     card = function(name) return "Card", Card["CARD_" .. name] end,
     own = ownItem,
+    pocket = ownPocket,
 }
 
 function Locale.expandIcons(text)

@@ -817,6 +817,15 @@ return {
             -- in order: golden, Mom's Box, both
             specials = { normal = { 10, 10 }, moms_box = { 10, 10 }, both = { 15, 15 } },
         },
+        CONCH_DEBRIS = {
+            name = "소라 부스러기",
+            description = "다시 물어보세요",
+            eid = {
+                "소라고둥으로 거듭나지 못하면 나오는 부스러기",
+                "#줍자마자 삼켜지며 3개를 모으면 {pocket:CONCH_TICKET} 소라 예약권 1장으로 바뀝니다",
+                "#{{Warning}} 덧붙임 도우미(REPENTOGON)가 있어야 합니다!",
+            },
+        },
         ANGELS_CROWN = {
             name = "천사의 머리테",
             description = "하늘에서 값을 치르다",

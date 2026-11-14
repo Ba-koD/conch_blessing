@@ -405,6 +405,11 @@
     "detail": "gfx/items/trinkets/c_minus_af3d.png"
   },
   {
+    "source": "gfx/items/trinkets/conch_debris.png",
+    "status": "preserved",
+    "detail": "new item, 3D model pending: original kept"
+  },
+  {
     "source": "gfx/items/trinkets/f_minus.png",
     "status": "modelled",
     "detail": "gfx/items/trinkets/f_minus_af3d.png"

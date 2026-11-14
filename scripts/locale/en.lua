@@ -8,8 +8,8 @@
 --   specials            language-specific golden/Mom's Box text (see the specials notes
 --                       at the top of conch_blessing_items.lua)
 -- Item text is shown as written. Icons: {c:SAD_ONION} vanilla collectible, {t:NAME}
--- vanilla trinket, {card:NAME} card, {own:KEY} this mod's item; a token is the icon
--- alone, so write the space after it. %TOKEN% in a synergy line is a live EID value.
+-- vanilla trinket, {card:NAME} card, {own:KEY} this mod's item, {pocket:KEY} this
+-- mod's card or rune; a token is the icon alone, so write the space after it. %TOKEN% in a synergy line is a live EID value.
 --
 -- ui.* strings are string.format templates for code: %s takes an argument and a
 -- literal percent sign is written %%. ui.mcm is English-only: Mod Config Menu reads
@@ -830,6 +830,15 @@ return {
             },
             -- numbers in order: golden, Mom's Box, both
             specials = { normal = { 100, 50 }, moms_box = { 100, 50 }, both = { 150, 75 } },
+        },
+        CONCH_DEBRIS = {
+            name = "Conch Debris",
+            description = "Ask again later",
+            eid = {
+                "Byproduct of a failed Magic Conch evolution",
+                "#Absorbed on pickup; collecting 3 replaces them with 1 {pocket:CONCH_TICKET} Conch Ticket",
+                "#{{Warning}} Requires REPENTOGON!",
+            },
         },
         ANGELS_CROWN = {
             name = "Angel's Crown",

@@ -55,4 +55,5 @@
     <trinket id="52" name="Atropos" gfx="atropos.png" tags="utility" shopprice="15"/>
     <trinket id="53" name="Angel's Crown" gfx="angels_crown.png" tags="utility" shopprice="15"/>
     <trinket id="54" name="Wrong Answer Note" gfx="wrong_answer_note.png" tags="offensive" shopprice="15"/>
+    <trinket id="55" name="Conch Debris" gfx="conch_debris.png" tags="utility" hidden="true"/>
 </items>

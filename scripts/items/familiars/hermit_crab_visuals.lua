@@ -63,6 +63,7 @@ return {
         ["atropos.png"] = { 16, 2, 30 },
         ["b_minus.png"] = { 15.5, 7, 29 },
         ["c_minus.png"] = { 15.5, 7, 29 },
+        ["conch_debris.png"] = { 16, 6, 25 },
         ["f_minus.png"] = { 15.5, 7, 29 },
         ["time_luck.png"] = { 16, 4, 28 },
         ["time_power.png"] = { 16.5, 2, 30 },

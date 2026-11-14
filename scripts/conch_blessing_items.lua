@@ -1541,6 +1541,27 @@ ConchBlessing.ItemData = {
         synergies = {
         }
     },
+    CONCH_DEBRIS = {
+        -- 소라 잔해: what is left when a Magic Conch evolution fails in the
+        -- Magic Conch's Delete Mode (user design 2026-11-15). Smelted the moment
+        -- it is picked up; three smelted copies turn into one Conch Ticket. It
+        -- comes only from failed evolutions, never from a pool, so it is hidden
+        -- like C-/B-/A-. Not stackable: copies only count toward the ticket.
+        type = "trinket",
+        id = Isaac.GetTrinketIdByName("Conch Debris"),
+        gfx = "conch_debris.png",
+        tags = "utility",
+        hidden = true,
+        script = "scripts/items/trinkets/conch_debris",
+        callbacks = {
+            gameStarted = "conchdebris.onGameStarted",
+            preGameExit = "conchdebris.onGameExit",
+            prePickupCollision = "conchdebris.onPrePickupCollision",
+            postPEffectUpdate = "conchdebris.onPEffectUpdate",
+        },
+        synergies = {
+        }
+    },
 
 }
 

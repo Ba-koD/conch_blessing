@@ -12,7 +12,7 @@ end
 local CycleCompare = require("scripts.dev.item_test_cycle_compare")
 local BirthrightParity = require("scripts.dev.item_test_birthright_parity")
 local contracts = {}
-for _, module in ipairs({ "stats", "combat", "special", "rat", "conch_pearl", "tiger", "ox", "kids_menu", "hermit_crab", "wrong_answer_note", "rabbit", "jangseung", "conch_certificate", "seonnyeo", "jeon_woochi" }) do
+for _, module in ipairs({ "stats", "combat", "special", "rat", "conch_pearl", "tiger", "ox", "kids_menu", "hermit_crab", "wrong_answer_note", "rabbit", "jangseung", "conch_certificate", "seonnyeo", "jeon_woochi", "conch_debris" }) do
     for key, contract in pairs(require("scripts.dev.item_test_" .. module)) do
         assert(not contracts[key], "duplicate item contract: " .. key)
         contracts[key] = contract
@@ -85,7 +85,7 @@ local function buildItem(plan, key, item)
     plan.act(function(player, ctx)
         assert(Game():GetNumPlayers() == 1, "single-player test run required")
         assert(player:GetPlayerType() == PlayerType.PLAYER_ISAAC, "bench restart must select Isaac")
-        assert(count(player, item) == 0, "test item already present in starting inventory")
+        assert((contract.count or count)(player, item) == 0, "test item already present in starting inventory")
         local active = player:GetActiveItem(ActiveSlot.SLOT_PRIMARY)
         if active > 0 then player:RemoveCollectible(active, true, ActiveSlot.SLOT_PRIMARY) end
         for slot = 0, 1 do
@@ -113,12 +113,14 @@ local function buildItem(plan, key, item)
         plan.section(key .. " / " .. labels[index])
         plan.act(function(player, ctx)
             if contract.beforeChange then contract.beforeChange(player, ctx, n) end
-            change(player, item, previous, n)
+            -- An item that never stays in the hand (Conch Debris is smelted on
+            -- pickup) supplies its own way to gain, lose and count copies.
+            ;(contract.change or change)(player, item, previous, n)
         end)
         -- Let the production update/cache callbacks react before checking them.
         -- Do not repair stale effects with a test-side cache update here.
         plan.wait(4)
-        plan.check("inventory has expected copies", function(player) return H.expect(count(player, item), n) end)
+        plan.check("inventory has expected copies", function(player) return H.expect((contract.count or count)(player, item), n) end)
         contract.stage(plan, item.id, n, index)
         if index == 1 then Dynamic.build(plan, key, item.id, n, contract) end
         if n == 0 and not contract.permanent then

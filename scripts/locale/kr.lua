@@ -816,6 +816,16 @@ return {
             -- numbers in order: golden, Mom's Box, both
             specials = { normal = { 100, 50 }, moms_box = { 100, 50 }, both = { 150, 75 } },
         },
+        CONCH_DEBRIS = {
+            name = "소라 잔해",
+            description = "다시 물어보세요",
+            -- user-designated copy (2026-11-15), kept verbatim apart from the ticket's icon
+            eid = {
+                "소라고둥 진화 실패시 나오는 부산물",
+                "#획득 즉시 흡수되며 3개를 모으면 {pocket:CONCH_TICKET} 소라 예약권 1개로 치환됩니다",
+                "#{{Warning}} REPENTOGON이 필요합니다!",
+            },
+        },
         ANGELS_CROWN = {
             name = "천사의 왕관",
             description = "천상의 거래",
