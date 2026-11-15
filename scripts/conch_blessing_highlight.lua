@@ -421,11 +421,68 @@ local function hudOffset()
     return ok and type(value) == "number" and value or 0
 end
 
+-- Where EID draws (or is about to draw) its description of `pickup`, as a
+-- screen box, or nil without EID or while it is hidden (user request
+-- 2026-11-15: keep the trees off EID's text as far as possible). The place is
+-- EID's own: its text position in the default mode, under the item in Local
+-- Mode the way EID:PositionLocalMode puts it. The height is this pickup's
+-- plain description broken into lines with EID's own fitTextToWidth, plus its
+-- name line and two lines for what description modifiers add. Modifiers are
+-- not run here: they belong to EID's own drawing and to other mods' code,
+-- which need not expect to run while a tree opens. EID draws the closest
+-- pickup's description, which is this one when a player stands by it.
+-- Anything EID does not offer leaves the box out.
+local function eidBox(pickup)
+    if type(EID) ~= "table" or type(EID.Config) ~= "table" or EID.isHidden then return nil end
+    local ok, box = pcall(function()
+        local config = EID.Config
+        local localMode = config.DisplayMode == "local"
+        local scale = tonumber(localMode and config.LocalModeSize or config.Size) or 1
+        local width = tonumber(config.TextboxWidth) or 130
+        local lineHeight = tonumber(config.LineHeight) or tonumber(EID.lineHeight) or 11
+        local desc = EID:getDescriptionObj(pickup.Type, pickup.Variant, pickup.SubType, nil, false)
+        local text = desc and desc.Description or ""
+        for _, step in ipairs({ "replaceNameMarkupStrings", "replaceShortMarkupStrings", "replaceMarkupSize" }) do
+            if type(EID[step]) == "function" then text = EID[step](EID, text) end
+        end
+        local breaks = EID.BreakUtf8CharsLanguage and EID.BreakUtf8CharsLanguage[EID:getLanguage()]
+        local lines = 3 -- the item's name, and room for modifier lines
+        for segment in string.gmatch(text, "([^#]+)") do
+            lines = lines + #EID:fitTextToWidth(segment, width, breaks)
+        end
+        local x, y
+        if localMode then
+            local half = config.LocalModeCentered and width / 2 * scale or -30
+            local offset = EID.LocalModePositionOffset and EID.LocalModePositionOffset.Default or Vector(0, 20)
+            for _, shift in pairs(EID.LocalModePositionOffset or {}) do
+                if type(shift) == "function" then
+                    offset = shift(pickup) or offset
+                    break
+                end
+            end
+            local at = Isaac.WorldToScreen(Vector(pickup.Position.X - half + offset.X, pickup.Position.Y + offset.Y))
+            x, y = at.X, at.Y
+        else
+            x, y = tonumber(config.XPosition) or 60, tonumber(config.YPosition) or 45
+            for _, modifier in pairs(EID.PositionModifiers or {}) do x, y = x + modifier.X, y + modifier.Y end
+        end
+        -- The item icon sits a little above and left of the text; bullets
+        -- and text run 12 px right of the bullet column.
+        return { x - 4 * scale, y - 6 * scale, x + (width + 14) * scale, y + (lines * lineHeight + 4) * scale }
+    end)
+    if ok and type(box) == "table" then return box end
+    return nil
+end
+UpgradeHighlight._eidBox = eidBox
+
 -- How this tree grows, decided as it starts to open and kept until it has
 -- closed, so a moving camera never flips it (user choice 2026-11-14): up when
 -- that fits, else beside or below the item, clear of the screen edges, the
--- trees already open, every other item and the HUD (Preview.place).
-local function choosePlacement(rec, pickup)
+-- trees already open, every other item, EID's text and the HUD (Preview.place).
+-- `chosen` holds the places of trees opening in this same update that a joint
+-- try has already placed ([hash] = place); trees still waiting for theirs
+-- (`rec.placing`) are left out. Returns the place and its cost.
+local function placementFor(rec, pickup, chosen)
     local w, h = screenSize()
     local kind, x, y = Preview.kind(pickup), Preview.base(pickup)
     local scene
@@ -448,17 +505,77 @@ local function choosePlacement(rec, pickup)
             if otherPickup then
                 local ox, oy = Preview.base(otherPickup)
                 if math.abs(oy - y) < 60 and (not nearest or math.abs(ox - x) < math.abs(nearest - x)) then nearest = ox end
-                if other.place and other.t > 0 then
-                    local tx, ty = Preview.anchor(otherPickup, other.place.dir)
-                    scene.trees[#scene.trees + 1] = { parts = other.place.parts, x = tx, y = ty }
+                -- A tree that chose its place this same update (several open
+                -- together) counts too, so the order they open in cannot
+                -- put two trees in one spot.
+                local place = chosen and chosen[hash]
+                if not place and not other.placing and other.place and other.t > 0 then place = other.place end
+                if place then
+                    local tx, ty = Preview.anchor(otherPickup, place.dir)
+                    scene.trees[#scene.trees + 1] = { parts = place.parts, x = tx, y = ty }
                 end
             end
         end
         scene.neighbour = nearest
+        -- EID's text: kept as clear as possible, but never at the cost of
+        -- leaving the screen or covering a tree or another item
+        -- (Preview.place weighs it by the share of the tree over it).
+        local eid = eidBox(pickup)
+        scene.eid = eid and { eid } or nil
     end
-    local layout, _, _, dir = Preview.place(rec.groups, rec.layout.tree, kind, x, y, scene)
-    rec.place = { layout = layout, dir = dir, parts = Preview.parts(layout) }
-    record("PLACE", rec, dir .. (layout.shift ~= 0 and (" " .. tostring(layout.shift)) or ""))
+    local layout, _, _, dir, cost = Preview.place(rec.groups, rec.layout.tree, kind, x, y, scene)
+    return { layout = layout, dir = dir, parts = Preview.parts(layout) }, cost or 0
+end
+
+local function setPlace(rec, place)
+    rec.place, rec.placing = place, nil
+    record("PLACE", rec, place.dir .. (place.layout.shift ~= 0 and (" " .. tostring(place.layout.shift)) or ""))
+end
+
+-- Trees that start to open in the same update are placed together: one by
+-- one in every order (up to JOINT_MAX of them), keeping the order whose total
+-- cost is lowest, so the first tree never takes the only spot the next one
+-- had (measured 2026-11-15: three trees in a row, the first grew down to stay
+-- off EID's text and left the second nowhere). More than that are placed one
+-- by one as they come.
+local JOINT_MAX = 4
+local function permutations(list)
+    local out = {}
+    local function walk(prefix, rest)
+        if #rest == 0 then out[#out + 1] = prefix return end
+        for i = 1, #rest do
+            local nextPrefix, nextRest = { table.unpack(prefix) }, { table.unpack(rest) }
+            nextPrefix[#nextPrefix + 1] = table.remove(nextRest, i)
+            walk(nextPrefix, nextRest)
+        end
+    end
+    walk({}, list)
+    return out
+end
+
+local function placeTogether(entries)
+    if #entries == 1 or #entries > JOINT_MAX then
+        for _, entry in ipairs(entries) do
+            local ok, place = pcall(placementFor, entry.rec, entry.pickup)
+            if ok then setPlace(entry.rec, place)
+            else
+                entry.rec.place, entry.rec.placing = nil, nil
+                ConchBlessing.printError("[EvolutionPreview] placement failed for " .. tostring(entry.rec.identity) .. ": " .. tostring(place))
+            end
+        end
+        return
+    end
+    local best
+    for _, order in ipairs(permutations(entries)) do
+        local chosen, total = {}, 0
+        for _, entry in ipairs(order) do
+            local place, cost = placementFor(entry.rec, entry.pickup, chosen)
+            chosen[entry.rec.hash], total = place, total + cost
+        end
+        if not best or total < best.total then best = { chosen = chosen, total = total } end
+        if total == 0 then break end
+    end
+    for _, entry in ipairs(entries) do setPlace(entry.rec, best.chosen[entry.rec.hash]) end
 end
 
 local function stepPreview(rec, pickup, clock)
@@ -471,13 +588,7 @@ local function stepPreview(rec, pickup, clock)
         rec.open = true
         rec.opens = rec.opens + 1
         record("OPEN", rec)
-        if rec.t <= 0 or not rec.place then
-            local ok, err = pcall(choosePlacement, rec, pickup)
-            if not ok then
-                rec.place = nil
-                ConchBlessing.printError("[EvolutionPreview] placement failed for " .. tostring(rec.identity) .. ": " .. tostring(err))
-            end
-        end
+        if rec.t <= 0 or not rec.place then rec.placing = true end
     end
     if rec.open then
         rec.t = math.min(rec.layout.openEnd, rec.t + 1)
@@ -504,7 +615,7 @@ local function updatePreviews()
     if not tableHasEntries(previews) then return end
     UpgradeHighlight._previewClock = UpgradeHighlight._previewClock + 1
     local clock = UpgradeHighlight._previewClock
-    local replaced = {}
+    local replaced, placing = {}, {}
     -- Only here, after every entity has updated, is a pickup judged changed: a
     -- rotating pedestal's native turn passes through inconsistent cycle states
     -- inside its own init callback (measured 2026-10-23).
@@ -529,7 +640,15 @@ local function updatePreviews()
                 if reason == "changed" and info then replaced[#replaced + 1] = { pickup, info } end
             else
                 stepPreview(rec, pickup, clock)
+                if rec.placing then placing[#placing + 1] = { rec = rec, pickup = pickup } end
             end
+        end
+    end
+    if #placing > 0 then
+        local ok, err = pcall(placeTogether, placing)
+        if not ok then
+            for _, entry in ipairs(placing) do entry.rec.placing = nil end
+            ConchBlessing.printError("[EvolutionPreview] placement failed: " .. tostring(err))
         end
     end
     for _, entry in ipairs(replaced) do trackPreview(entry[1], entry[2]) end

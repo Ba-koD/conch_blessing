@@ -310,6 +310,47 @@ class EvolutionPreviewTests(unittest.TestCase):
             assert(r.place~=first and r.place.dir=='up', r.place.dir)
         ''')
 
+    def test_trees_keep_off_eid_text_when_another_way_fits(self):
+        # User request 2026-11-15: as little overlap with EID's text as possible.
+        self.lua.execute('''
+            Isaac.GetScreenWidth=function() return 480 end
+            Isaac.GetScreenHeight=function() return 270 end
+            Isaac.FindByType=function(_,variant)
+                local out={}
+                for _,e in ipairs(entities) do if e:Exists() and e.Variant==variant then out[#out+1]=e end end
+                return out
+            end
+            -- EID double: default mode at (60,45), six text lines of a 130 px box.
+            EID={Config={DisplayMode='default',Size=1,TextboxWidth=130,LineHeight=11,XPosition=60,YPosition=45},
+                lineHeight=11,PositionModifiers={},isHidden=false}
+            function EID:getDescriptionObj(t,v,s,entity,modifiers)
+                assert(entity==nil and modifiers==false, 'no modifiers run')
+                return {Description='one#two#three#four#five'}
+            end
+            function EID:getLanguage() return 'en' end
+            function EID:fitTextToWidth(s) return {s} end
+            local box=H._eidBox(spawn(100,304,400,240))
+            assert(box[1]==56 and box[2]==39 and box[3]==60+144 and box[4]==45+(8*11+4), table.concat(box,','))
+            -- A pedestal right under EID's text: up would cover it, so the tree turns.
+            local pl=player(120,500); local p=spawn(100,304,120,170); H.ScanRoom(frame); tick(5)
+            local r=H.previewFor(p)
+            pl.Position=Vector(120,200); tick(40)
+            assert(r.open and r.place and r.place.dir~='up', r.place and r.place.dir)
+            -- Hidden, or without the API it needs, EID adds no box.
+            EID.isHidden=true; assert(H._eidBox(p)==nil)
+            EID.isHidden=false; EID.getDescriptionObj=nil; assert(H._eidBox(p)==nil)
+            -- Local Mode: the box hangs under the item it describes.
+            EID={Config={DisplayMode='local',LocalModeSize=0.5,LocalModeCentered=true,TextboxWidth=130,LineHeight=11},
+                LocalModePositionOffset={Default=Vector(0,20)},isHidden=false}
+            function EID:getDescriptionObj() return {Description='one'} end
+            function EID:getLanguage() return 'en' end
+            function EID:fitTextToWidth(s) return {s} end
+            local q=spawn(100,304,300,200)
+            local lb=H._eidBox(q)
+            assert(lb[1]==300-32.5-2 and lb[2]==220-3, table.concat(lb,','))
+            EID=nil
+        ''')
+
     def test_render_draws_only_grown_parts_borders_first(self):
         self.lua.execute('''
             local L=P.layout({{results={{flag='positive',id=801},{flag='neutral',id=802},{flag='negative',id=803}}}},false)
@@ -650,7 +691,7 @@ class EvolutionPreviewTests(unittest.TestCase):
                 return function(a,b) ops=ops+1; if kind=='section' then sections[#sections+1]=a end end
             end})
             defs[1].build(plan)
-            assert(#sections==13 and ops>60, #sections..' sections, '..ops..' steps')
+            assert(#sections==14 and ops>60, #sections..' sections, '..ops..' steps')
             -- The oracle reads ItemData declarations, in answer order.
             ConchBlessing.ItemData.ROUND={id=802,flag='neutral',type='passive',origin={},originId=304}
             local list=probe.expectedResults(100,304)

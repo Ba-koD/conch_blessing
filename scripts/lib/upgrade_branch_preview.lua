@@ -331,6 +331,19 @@ local function partsHit(parts, rx, ry, box)
     return false
 end
 
+-- The share (0-1) of a tree's drawn area that lies over `box`.
+local function partsShare(parts, rx, ry, box)
+    local total, over = 0, 0
+    for _, p in ipairs(parts) do
+        local x0, y0, x1, y1 = rx + p[1], ry + p[2], rx + p[3], ry + p[4]
+        total = total + (x1 - x0) * (y1 - y0)
+        local w = math.min(x1, box[3]) - math.max(x0, box[1])
+        local h = math.min(y1, box[4]) - math.max(y0, box[2])
+        if w > 0 and h > 0 then over = over + w * h end
+    end
+    return total > 0 and over / total or 0
+end
+
 --- Screen boxes of the HUD a tree should not cover, at the player's HUD
 --- offset: active item, hearts, coins/bombs/keys, minimap, trinket and pocket
 --- slots. Approximate by design; a tree only prefers to stay clear of them.
@@ -354,17 +367,20 @@ end
 --- column sideways, tries down before the sides. Each try pushes its results
 --- along their spread to stay on screen, and a try is good when nothing leaves
 --- the screen and no drawn part covers a box in scene.boxes (other pickups), a
---- part of a tree in scene.trees ({ parts, x, y }) or a box in scene.hud. When
---- no try is good the least bad wins: leaving the screen loses results and is
---- worst, covering another tree or item next, covering the HUD least (measured
---- 2026-11-14: in the top-left corner every other way brushed the HUD, and up
---- lost 24px). Without a scene it grows up.
---- scene = { w, h, boxes, trees, hud, neighbour = screen x | nil }.
---- Returns the layout, its root and its direction.
+--- part of a tree in scene.trees ({ parts, x, y }), EID's text (scene.eid) or
+--- a box in scene.hud. When no try is good the least bad wins: leaving the
+--- screen loses results and is worst, covering another tree or item next, then
+--- EID's text by the share of the tree over it (user request 2026-11-15: as
+--- little as possible; an item already under the text still picks the way
+--- that covers least), the HUD least (measured 2026-11-14: in
+--- the top-left corner every other way brushed the HUD, and up lost 24px).
+--- Without a scene it grows up.
+--- scene = { w, h, boxes, trees, eid, hud, neighbour = screen x | nil }.
+--- Returns the layout, its root, its direction and its cost (0 when good).
 function Preview.place(groups, tree, kind, x, y, scene)
     if not scene or not scene.w or not scene.h then
         local rx, ry = Preview.root(kind, x, y, "up")
-        return Preview.layout(groups, tree), rx, ry, "up"
+        return Preview.layout(groups, tree), rx, ry, "up", 0
     end
     local first
     if scene.neighbour then first = scene.neighbour > x and "left" or "right"
@@ -406,11 +422,16 @@ function Preview.place(groups, tree, kind, x, y, scene)
         for _, box in ipairs(scene.hud or {}) do
             if partsHit(parts, rx, ry, box) then hud = hud + 1 end
         end
-        local cost = off * 1000 + hits * 100 + hud * 10
-        if cost == 0 then return layout, rx, ry, dir end
+        -- EID's text (user request 2026-11-15): the less of the tree lies over
+        -- it the better, up to the cost of covering the HUD three times, but
+        -- covering it is always better than covering a tree or another item.
+        local eid = 0
+        for _, box in ipairs(scene.eid or {}) do eid = eid + partsShare(parts, rx, ry, box) end
+        local cost = off * 1000 + hits * 100 + eid * 30 + hud * 10
+        if cost == 0 then return layout, rx, ry, dir, 0 end
         if not best or cost < best.cost then best = { layout = layout, x = rx, y = ry, dir = dir, cost = cost } end
     end
-    return best.layout, best.x, best.y, best.dir
+    return best.layout, best.x, best.y, best.dir, best.cost
 end
 
 local function pathLength(path)

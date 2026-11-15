@@ -581,9 +581,12 @@ local EDGE_CASES = {
         { { key = "CEIL", col = 4, row = 3 }, { key = "TIME_LUCK", col = 6, row = 3 }, { key = "LIVE_EYE", col = 8, row = 3 } }, { 6, 4.25 } },
     { "three in the top row, two tiles apart", "the same three in the top row: every tree on screen and none over another",
         { { key = "CEIL", col = 4, row = 0 }, { key = "TIME_LUCK", col = 6, row = 0 }, { key = "LIVE_EYE", col = 8, row = 0 } }, { 6, 1.25 } },
+    -- User request 2026-11-15: keep the trees off EID's text where possible.
+    { "under EID's text", "Libra just below EID's description in the top left: its tree grows away from the text instead of over it",
+        { { key = "CEIL", col = 2, row = 4 } }, { 2, 5.25 }, { eid = true } },
 }
 local function stageEdgeCase(plan, case)
-    local title, look, items, standAt = case[1], case[2], case[3], case[4]
+    local title, look, items, standAt, flags = case[1], case[2], case[3], case[4], case[5] or {}
     local cycled = false
     for _, item in ipairs(items) do cycled = cycled or item.cycle ~= nil end
     plan.section("edge: " .. title, look)
@@ -699,6 +702,20 @@ local function stageEdgeCase(plan, case)
         end
         return true, #all .. " trees clear"
     end)
+    if flags.eid then
+        plan.check(title .. ": the tree keeps off EID's text", function(_, ctx)
+            if ctx.edgeSkip then return nil, ctx.edgeSkip end
+            if type(EID) ~= "table" then return nil, "EID is not installed" end
+            local pickup = edgePickup(ctx.edges[1])
+            local box = H()._eidBox(pickup)
+            if not box then return nil, "EID is hidden or its text position is unknown" end
+            local r = H().previewFor(pickup)
+            local parts = screenParts(pickup, r)
+            return parts ~= nil and not covers(parts, box),
+                string.format("dir=%s EID box %.0f,%.0f..%.0f,%.0f mode=%s", tostring(r.place and r.place.dir),
+                    box[1], box[2], box[3], box[4], tostring(EID.Config and EID.Config.DisplayMode))
+        end)
+    end
     plan.act(function(_, ctx) removeEdges(ctx); ctx.fixturePos = nil end)
 end
 
