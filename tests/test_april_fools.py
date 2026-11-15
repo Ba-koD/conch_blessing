@@ -294,6 +294,10 @@ class AssetTests(unittest.TestCase):
         self.assertFalse([r for r in audit if r['status']=='MISSING'])
         for group in ['items','actors','extras']:
             for row in json.loads((SOURCE/f'{group}.json').read_text()):
+                if 'sourceSha256' in row:
+                    import hashlib
+                    self.assertEqual(row['sourceSha256'],hashlib.sha256((ROOT/'resources'/row['source']).read_bytes()).hexdigest(),
+                                     (row['source'],'source changed: rebuild its 3D alternative'))
                 with Image.open(ROOT/'resources'/row['source']) as a, Image.open(ROOT/'resources'/row['still']) as b:
                     self.assertEqual(a.size,b.size,row['source'])
                 if 'spin' in row:

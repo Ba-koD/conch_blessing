@@ -30,6 +30,9 @@ python -m unittest discover -s tests -p test_april_fools.py -v
 ```
 
 `objects.py` owns component construction and geometry-conforming source ink.
+`additions.py` constructs Seonnyeo, Jeon Woo-chi and Conch Debris; `new_actors.py`
+uses the project's original Jeon Woo-chi animation score for feet, timing,
+poses and light cues, rendering the figure, fan, talisman and smoke as meshes.
 `recipes.py` supplies mesh helpers and the smaller all-around object recipes.
 `build.py` exports GLB sources and 32-frame item turntables. `actors.py`
 poses actual body parts into the original ANM2 crop rectangles, timing and
@@ -44,6 +47,13 @@ axis. Paper/coins have thin profiles, while containers and anatomy have
 substantial sides. `items.json` records each camera pitch, axis and any
 uniform inset required to keep the complete turn inside the 32×32 canvas.
 The native preview frames are the actual runtime PNGs.
+
+To refresh only changed sources, pass item keys to `build.py` and relative
+ANM2 paths to `actors.py`. Their manifests merge with existing rows and record
+each rebuilt source PNG's SHA-256; the asset test reports a later source change.
+Run `catalogue.py` and `review.py` afterward. `inspection.py key ...` produces
+selected front/side/back comparisons and a native rotation GIF, in addition
+to the all-frame inspection pages. No source icon, ANM2 or gameplay is changed.
 
 The actual tool is this repository's Python mesh builder/software rasterizer,
 **not Blender, an installed art skill, or a trained image model**. GLB carries
@@ -78,10 +88,12 @@ covered. Additive flashes, shadows and light filaments too thin to form a
 solid retain their original light imagery. Native HUD surfaces whose sprites the engine does not expose retain
 their normal icons; there is no unsafe ItemConfig/global texture mutation.
 
-`coverage.json` accounts for all 88 original PNGs under active `resources/gfx`:
-76 have generated alternatives; 10 are fonts, transparent controls, a drawing
-pixel/light falloff, or retired/template sheets; 2 (선녀's icon and familiar
-sheet, 2026-11-13) are new art whose model is still to be authored. It is an **asset audit**, not
+`coverage.json` accounts for all 91 original PNGs under active `resources/gfx`:
+81 have generated alternatives; 10 are fonts, transparent controls, a drawing
+pixel/light falloff, or retired/template sheets. The November 15 refresh adds
+Seonnyeo (icon and eight-frame familiar), Jeon Woo-chi (icon and 64-frame effect),
+Conch Debris, and updates the Thurisaz rune's bold thorn glyph. All 57 item
+models have 32-frame turntables. It is an **asset audit**, not
 a claim that every engine-controlled HUD surface can be intercepted. Vanilla
 referenced art and third-party assets are never copied or changed. Original
 PNGs remain byte-for-byte intact. `_af3d.png` / `_af3d_spin.png` files ship;

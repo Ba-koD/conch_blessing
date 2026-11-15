@@ -4,6 +4,8 @@ Render into the shipped ANM2 rectangles. Pivots, timing, layers and collision
 remain owned by the original animation/gameplay. Closed volumes, not billboards.
 """
 import json
+import hashlib
+import sys
 import math
 from pathlib import Path
 import xml.etree.ElementTree as ET
@@ -131,6 +133,13 @@ def actor_frame(src,name,i,rect,sheet):
 def primitive_actor_frame(src,name,i,rect,sheet):
     x,y,w,h=rect;phase=2*math.pi*i/8
     stem=sheet.stem
+    if stem=='familiar_seonnyeo':
+        from additions import seonnyeo
+        m=seonnyeo(familiar=True,phase=phase)
+        return native(m,w,h,16,16),m
+    if stem=='conch_jeonwoochi':
+        from new_actors import jeon_effect
+        return jeon_effect().crop((x,y,x+w,y+h)),None
     if 'hermit_crab' in stem:
         big='Bffs' in name;held=2 if 'Two' in name else 1 if 'One' in name else 0
         grip='grip' in stem
@@ -173,7 +182,11 @@ def primitive_actor_frame(src,name,i,rect,sheet):
         else:
             m=Model().plate([(-5,-8),(-7,-1),(-5,6),(0,10),(5,6),(7,-1),(3,-9)],4,'iron',bevel=.5)
             if 'uruz' in stem:pts=[(-3,-2,-4),(-3,-2,5),(3,-2,2),(3,-2,-4)]
-            else:pts=[(-2,-2,-6),(-2,-2,6),(-2,-2,4),(3,-2,1),(-2,-2,-1)]
+            else:
+                # Updated source: a bold, continuous thorn stem with a closed
+                # triangular bowl. Sit it wholly on the stone's front surface.
+                m.tube([(-2.4,-2.5,-6),(-2.4,-2.5,6)],.72,'gold')
+                pts=[(-2.4,-2.5,3.8),(2.7,-2.5,1),(-2.4,-2.5,-1.8)]
             m.tube(pts,.65,'gold')
         return fitted(m,src,w,h),m
     raise ValueError((stem,name))
@@ -181,12 +194,13 @@ def primitive_actor_frame(src,name,i,rect,sheet):
 
 ANIMATIONS=['hermit_crab.anm2','dragon.anm2','time_money.anm2','effects/conch_ox.anm2',
             'effects/conch_ox_rice.anm2','effects/conch_rat_run.anm2','effects/conch_jangseung_ward.anm2',
-            'effects/conch_rabbit_tracks.anm2','005.300_conch_ticket.anm2','005.300_thurisaz.anm2','005.300_uruz.anm2']
+            'effects/conch_rabbit_tracks.anm2','005.300_conch_ticket.anm2','005.300_thurisaz.anm2','005.300_uruz.anm2',
+            'seonnyeo.anm2','effects/conch_jeonwoochi.anm2']
 
 
-def main():
+def main(selected=None):
     rows=[];views=[]
-    for anm2 in ANIMATIONS:
+    for anm2 in selected or ANIMATIONS:
         for sheet,records in frame_records(anm2).items():
             original=Image.open(sheet).convert('RGBA');out=Image.new('RGBA',original.size)
             for rect,(name,i,attrs) in records.items():
@@ -194,18 +208,21 @@ def main():
                 if not sub.getbbox():continue
                 frame,m=actor_frame(sub,name,i,rect,sheet)
                 out.paste(frame,(x,y))
+                if sheet.stem=='conch_jeonwoochi' and i in (8,23,37):
+                    views.append((sheet.stem+' '+str(i),sub,frame))
                 if i==0 and m and len(m.parts):
                     directory=OUT/'models/entities';directory.mkdir(parents=True,exist_ok=True)
                     export_glb(clean(m.parts),m.materials,directory/f'{sheet.stem}_{name}.glb')
                     if not name.startswith('Grip') and len(views)<30:views.append((sheet.stem+' '+name,sub,frame))
             dest=sheet.with_stem(sheet.stem+'_af3d');out.save(dest)
             rows.append({'source':sheet.relative_to(ROOT/'resources').as_posix(),
+                         'sourceSha256':hashlib.sha256(sheet.read_bytes()).hexdigest(),
                          'still':dest.relative_to(ROOT/'resources').as_posix(),'anm2':'gfx/'+anm2})
             print(sheet.name,len(records),'poses',flush=True)
     # Jangseung already has authored, camera-specific 3D geometry. Its frames
     # must be remapped because its high-resolution preview ANM2 uses different crops.
-    src_records=frame_records('effects/notused/conch_jangseung_aprilfools.anm2')
-    target_records=frame_records('effects/conch_jangseung.anm2')
+    src_records=frame_records('effects/notused/conch_jangseung_aprilfools.anm2') if not selected else {}
+    target_records=frame_records('effects/conch_jangseung.anm2') if not selected else {}
     byname={}
     for sheet,records in src_records.items():
         im=Image.open(sheet)
@@ -216,7 +233,11 @@ def main():
             out.paste(byname[name].resize((w,h),Image.Resampling.LANCZOS),(x,y))
         dest=sheet.with_stem(sheet.stem+'_af3d');out.save(dest)
         rows.append({'source':sheet.relative_to(ROOT/'resources').as_posix(),'still':dest.relative_to(ROOT/'resources').as_posix(),'anm2':'gfx/effects/conch_jangseung.anm2'})
+    if selected:
+        previous={r['source']:r for r in json.loads((OUT/'actors.json').read_text(encoding='utf-8'))}
+        previous.update({r['source']:r for r in rows});rows=list(previous.values())
     (OUT/'actors.json').write_text(json.dumps(rows,indent=2)+'\n',encoding='utf-8')
+    if not views:return
     preview=Image.new('RGBA',(900,((len(views)+3)//4)*130),(38,36,40));d=ImageDraw.Draw(preview)
     for i,(name,a,b) in enumerate(views):
         x=(i%4)*225;y=(i//4)*130
@@ -228,4 +249,4 @@ def main():
     preview.save(PREVIEW/'actors_comparison.png')
 
 
-if __name__=='__main__':main()
+if __name__=='__main__':main(sys.argv[1:])

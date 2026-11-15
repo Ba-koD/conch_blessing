@@ -554,6 +554,57 @@
     ]
   },
   {
+    "key": "jeon_woochi",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/jeon_woochi.png",
+    "sourceSha256": "0873492754cd104216e0a7097d84ebbc808ff103622c689904a2052838fd2960",
+    "still": "gfx/items/collectibles/jeon_woochi_af3d.png",
+    "spin": "gfx/items/collectibles/jeon_woochi_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 15124,
+    "parts": 71,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "head, hair and deep hat shadow over hidden eyes",
+        "start": 0,
+        "end": 7
+      },
+      {
+        "name": "thin circular gat brim and tapered cylindrical crown",
+        "start": 7,
+        "end": 10
+      },
+      {
+        "name": "closed robe, overlapping collar, hem folds and shoes",
+        "start": 10,
+        "end": 17
+      },
+      {
+        "name": "posed broad sleeves, hands and held talisman",
+        "start": 17,
+        "end": 18
+      },
+      {
+        "name": "pleated folding fan with bamboo reverse ribs",
+        "start": 18,
+        "end": 56
+      },
+      {
+        "name": "hanging beaded gat strings",
+        "start": 56,
+        "end": 71
+      }
+    ]
+  },
+  {
     "key": "kids_menu",
     "kind": "collectibles",
     "source": "gfx/items/collectibles/kids_menu.png",
@@ -1084,6 +1135,47 @@
     ]
   },
   {
+    "key": "seonnyeo",
+    "kind": "collectibles",
+    "source": "gfx/items/collectibles/seonnyeo.png",
+    "sourceSha256": "50d635257cc6a0ec5f51a3085026cf361f5b9eb0db0b6485fbeb890cdeb69661",
+    "still": "gfx/items/collectibles/seonnyeo_af3d.png",
+    "spin": "gfx/items/collectibles/seonnyeo_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 20136,
+    "parts": 44,
+    "sourceScale": 0.93378,
+    "rotationAxis": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "maiden head",
+        "start": 0,
+        "end": 22
+      },
+      {
+        "name": "neck and pink hanbok bust",
+        "start": 22,
+        "end": 32
+      },
+      {
+        "name": "silk behind shoulders",
+        "start": 32,
+        "end": 36
+      },
+      {
+        "name": "silk behind shoulders",
+        "start": 36,
+        "end": 40
+      }
+    ]
+  },
+  {
     "key": "severed_oath",
     "kind": "collectibles",
     "source": "gfx/items/collectibles/severed_oath.png",
@@ -1480,6 +1572,82 @@
         "name": "thin paper with a real reverse and edge",
         "start": 0,
         "end": 2
+      }
+    ]
+  },
+  {
+    "key": "conch_debris",
+    "kind": "trinkets",
+    "source": "gfx/items/trinkets/conch_debris.png",
+    "sourceSha256": "75bb5d9e9225e8e402be4669ff4714bd3141e8d167a557443365dd9dfb00cfaa",
+    "still": "gfx/items/trinkets/conch_debris_af3d.png",
+    "spin": "gfx/items/trinkets/conch_debris_af3d_spin.png",
+    "frames": 32,
+    "delay": 2,
+    "triangles": 6928,
+    "parts": 39,
+    "sourceScale": 1,
+    "rotationAxis": [
+      0.0,
+      0,
+      0
+    ],
+    "cameraPitch": 0,
+    "construction": [
+      {
+        "name": "tall broken outer wall with visible shell thickness",
+        "start": 0,
+        "end": 12
+      },
+      {
+        "name": "detached three-whorl spire and fracture base",
+        "start": 12,
+        "end": 16
+      },
+      {
+        "name": "left pink aperture fragment",
+        "start": 16,
+        "end": 19
+      },
+      {
+        "name": "right pink aperture fragment",
+        "start": 19,
+        "end": 22
+      },
+      {
+        "name": "curled rim on the right",
+        "start": 22,
+        "end": 25
+      },
+      {
+        "name": "rear shell shard",
+        "start": 25,
+        "end": 28
+      },
+      {
+        "name": "foreground wedge",
+        "start": 28,
+        "end": 31
+      },
+      {
+        "name": "loose shell chip",
+        "start": 31,
+        "end": 33
+      },
+      {
+        "name": "loose shell chip",
+        "start": 33,
+        "end": 35
+      },
+      {
+        "name": "loose shell chip",
+        "start": 35,
+        "end": 37
+      },
+      {
+        "name": "loose shell chip",
+        "start": 37,
+        "end": 39
       }
     ]
   },

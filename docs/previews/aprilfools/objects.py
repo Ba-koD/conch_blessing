@@ -486,6 +486,9 @@ def family():
 
 
 def constructed(key,path):
+    if key in {'seonnyeo','jeon_woochi','conch_debris'}:
+        from additions import seonnyeo,jeon_woochi,conch_debris
+        return {'seonnyeo':seonnyeo,'jeon_woochi':lambda:jeon_woochi(bust=True),'conch_debris':conch_debris}[key]()
     if key in ['ox','dog','tiger','pig','dragon','azure_dragon']:return head(key,True)
     if key=='horse':return horse()
     if key=='goat':return sheep()
@@ -544,6 +547,7 @@ def align(m,path):
 
 
 INK_KEYS={'ox','dog','tiger','pig','monkey','rabbit',
+          'seonnyeo',
           'dragon','azure_dragon','kids_menu','a_minus','b_minus','c_minus','f_minus',
           'appraisal_certificate','conch_certificate','wrong_answer_note','two_faced_penny','jangseung','hemispatial_neglect'}
 
@@ -598,6 +602,16 @@ def surface_ink(m,path,key):
         ink[near((26,20,34))&inside&top]=1
     if key=='two_faced_penny':
         ink[:]=0;ink[(lum<110)&(ndimage.distance_transform_edt(mask)>3)]=4
+    if key=='seonnyeo':
+        # Exact eyelids, soft brows, gonji and small level mouth; none of the
+        # black hair/outline becomes paint on her face or its reverse.
+        ink[:]=0
+        def near(*cols):
+            return np.any([np.abs(rgb-c).max(axis=2)<4 for c in cols],axis=0)&mask
+        ink[near((74,46,52))]=9
+        ink[near((150,110,112))]=4
+        ink[near((222,56,70),(214,52,70),(236,118,128))]=10
+        ink[near((246,194,192),(234,170,166))]=8
     up=4;size=32*up;cam=Camera(yaw=0,pitch=getattr(m,'camera_pitch',0),dist=100,ortho=32)
     _,depth=render(m.parts,m.materials,cam,size=size,ss=1,return_depth=True)
     allowed=np.ones(depth.shape,bool)
@@ -620,7 +634,7 @@ def surface_ink(m,path,key):
             faces.extend([(p,r,q),(q,r,s)]);materials.extend([mat,mat])
     if not faces:return
     faces=np.asarray(faces);materials=np.asarray(materials);verts=v.reshape(-1,3)
-    for i,name in [(1,'ink_black'),(2,'ink_white'),(3,'ink_red'),(4,'ink_brown'),(5,'ink_gold'),(6,'ink_violet'),(7,'ink_lavender'),(8,'ink_pink')]:
+    for i,name in [(1,'ink_black'),(2,'ink_white'),(3,'ink_red'),(4,'ink_brown'),(5,'ink_gold'),(6,'ink_violet'),(7,'ink_lavender'),(8,'ink_pink'),(9,'eyepaint'),(10,'lip')]:
         f=faces[materials==i]
         if not len(f):continue
         used=np.unique(f);remap=np.full(len(verts),-1,np.int32);remap[used]=np.arange(len(used))

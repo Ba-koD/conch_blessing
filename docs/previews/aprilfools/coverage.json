@@ -26,8 +26,8 @@
   },
   {
     "source": "gfx/effects/conch_jeonwoochi.png",
-    "status": "preserved",
-    "detail": "new effect, 3D model pending: original kept"
+    "status": "modelled",
+    "detail": "gfx/effects/conch_jeonwoochi_af3d.png"
   },
   {
     "source": "gfx/effects/conch_ox.png",
@@ -106,8 +106,8 @@
   },
   {
     "source": "gfx/familiar/familiar_seonnyeo.png",
-    "status": "preserved",
-    "detail": "new item, 3D model pending: original kept"
+    "status": "modelled",
+    "detail": "gfx/familiar/familiar_seonnyeo_af3d.png"
   },
   {
     "source": "gfx/familiar/familiar_time_money.png",
@@ -231,8 +231,8 @@
   },
   {
     "source": "gfx/items/collectibles/jeon_woochi.png",
-    "status": "preserved",
-    "detail": "new item, 3D model pending: original kept"
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/jeon_woochi_af3d.png"
   },
   {
     "source": "gfx/items/collectibles/kids_menu.png",
@@ -311,8 +311,8 @@
   },
   {
     "source": "gfx/items/collectibles/seonnyeo.png",
-    "status": "preserved",
-    "detail": "new item, 3D model pending: original kept"
+    "status": "modelled",
+    "detail": "gfx/items/collectibles/seonnyeo_af3d.png"
   },
   {
     "source": "gfx/items/collectibles/severed_oath.png",
@@ -406,8 +406,8 @@
   },
   {
     "source": "gfx/items/trinkets/conch_debris.png",
-    "status": "preserved",
-    "detail": "new item, 3D model pending: original kept"
+    "status": "modelled",
+    "detail": "gfx/items/trinkets/conch_debris_af3d.png"
   },
   {
     "source": "gfx/items/trinkets/f_minus.png",

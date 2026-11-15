@@ -5,6 +5,7 @@ Generated assets live beside their vanilla-layout counterparts, with an
 _af3d suffix. Legacy experiments under notused are never runtime inputs.
 """
 import json
+import hashlib
 import sys
 import time
 from pathlib import Path
@@ -82,6 +83,7 @@ def build(key, kind, path):
     hero.save(PREVIEW/f'{key}_hero.png')
     print(f'{key}: {triangles} triangles, {len(model.parts)} parts ({time.time()-start:.1f}s)',flush=True)
     return {'key':key,'kind':kind,'source':path.relative_to(ROOT/'resources').as_posix(),
+            'sourceSha256':hashlib.sha256(path.read_bytes()).hexdigest(),
             'still':dest.relative_to(ROOT/'resources').as_posix(),
             'spin':path.with_stem(path.stem+'_af3d_spin').relative_to(ROOT/'resources').as_posix(),
             'frames':FRAMES,'delay':DELAY,'triangles':triangles,'parts':len(model.parts),
@@ -96,7 +98,8 @@ def preview(rows):
     for i,row in enumerate(rows):
         x=i%cols*tw;y=i//cols*th
         orig=Image.open(ROOT/'resources'/row['source']).convert('RGBA').resize((64,64),Image.Resampling.NEAREST)
-        hero=Image.open(PREVIEW/f"{row['key']}_hero.png").resize((136,136),Image.Resampling.LANCZOS)
+        hero_path=PREVIEW/f"{row['key']}_hero.png"
+        hero=Image.open(hero_path if hero_path.exists() else ROOT/'resources'/row['still']).resize((136,136),Image.Resampling.LANCZOS)
         still=Image.open(ROOT/'resources'/row['still']).convert('RGBA').resize((64,64),Image.Resampling.NEAREST)
         out.paste(orig,(x+4,y+5),orig);out.paste(still,(x+4,y+76),still);out.paste(hero,(x+73,y+3),hero)
         d.text((x+5,y+152),row['key'],fill=(240,230,210))

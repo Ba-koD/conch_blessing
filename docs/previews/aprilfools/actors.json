@@ -56,6 +56,7 @@
   },
   {
     "source": "gfx/items/pick ups/pickup_thurisaz.png",
+    "sourceSha256": "e96872f1e722c49226821f9ca685f54a173e59745c6756ef381b966c1827eeeb",
     "still": "gfx/items/pick ups/pickup_thurisaz_af3d.png",
     "anm2": "gfx/005.300_thurisaz.anm2"
   },
@@ -68,5 +69,17 @@
     "source": "gfx/effects/conch_jangseung.png",
     "still": "gfx/effects/conch_jangseung_af3d.png",
     "anm2": "gfx/effects/conch_jangseung.anm2"
+  },
+  {
+    "source": "gfx/familiar/familiar_seonnyeo.png",
+    "sourceSha256": "49d4098c77b65cd8688494ea5c364632da7a0e056f00436cc08ddc96f612abe2",
+    "still": "gfx/familiar/familiar_seonnyeo_af3d.png",
+    "anm2": "gfx/seonnyeo.anm2"
+  },
+  {
+    "source": "gfx/effects/conch_jeonwoochi.png",
+    "sourceSha256": "3dc844b4547712c9dabe5fd5fa8f4c0755b24cb3a9a78f31fc18e398cc35eb44",
+    "still": "gfx/effects/conch_jeonwoochi_af3d.png",
+    "anm2": "gfx/effects/conch_jeonwoochi.anm2"
   }
 ]
