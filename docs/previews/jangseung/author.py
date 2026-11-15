@@ -1,4 +1,5 @@
-"""Builds 장승's art: the pair of statues, the trodden earth and the item icon.
+"""Builds 장승's art: the pair of statues, the 금줄 strung between them, the
+trodden earth and the item icon.
 
 Authored directly on the native grid (AGENTS.md: no larger concept resized
 down). The statues are wooden posts as they stand at a village mouth, seen as
@@ -6,11 +7,11 @@ each wall shows them (see the block above `CHEONHA_HEAD`): 천하대장군 with 
 winged official's cap, round bulging eyes under angry brows, a fist nose, bared
 teeth with tusks and a carved beard; 지하여장군 with a topknot, round eyes, red
 cheeks and lips. Below the face each post carries its name as carved marks.
-The red-route pair (where a Red Key opens toward the ultra secret room) wears
-a red cloth tied round the post. The earth is a half circle two tiles (80
-world units) in radius, half transparent so it darkens whatever floor it lies
-on: packed village dirt with a wandering rim, a trodden path, pebbles and
-hairline cracks. The icon is the two front statues, cut short to fit.
+A 금줄 is strung between the pair's heads across the door (see `rope_frame`),
+with the room's own minimap icon hanging from its middle on a short string. The earth is a half circle two tiles (80 world units) in radius, half
+transparent so it darkens whatever floor it lies on: packed village dirt with
+a wandering rim, a trodden path, pebbles and hairline cracks. The icon is the
+two front statues, cut short to fit.
 
 Run from the repository root; it writes the runtime PNGs and ANM2 files and a
 preview under .tmp/jangseung:
@@ -18,6 +19,7 @@ preview under .tmp/jangseung:
     python docs/previews/jangseung/author.py
 """
 import math
+import re
 from pathlib import Path
 from PIL import Image
 
@@ -25,6 +27,14 @@ ROOT = Path(__file__).resolve().parents[3]
 EFFECTS = ROOT / 'resources/gfx/effects'
 ICON = ROOT / 'resources/gfx/items/collectibles/jangseung.png'
 PREVIEW = ROOT / '.tmp/jangseung'
+LUA = ROOT / 'scripts/items/collectibles/jangseung.lua'
+SCALE = 26 / 40  # world units to screen pixels
+
+
+def lua_data():
+    """jangseung.lua's M.data numbers: where the game stands the pair and hangs the rope."""
+    block = LUA.read_text(encoding='utf-8').split('M.data = {')[1].split('\n}')[0]
+    return {k: float(v) for k, v in re.findall(r'^\s+(\w+) = (-?[\d.]+),', block, re.M)}
 
 PALETTE = {
     '.': None,
@@ -37,12 +47,13 @@ PALETTE = {
     'M': (138, 96, 60, 255),    # wood
     'L': (178, 132, 84, 255),   # wood lit
     'S': (210, 170, 116, 255),  # wood highlight
+    'D': (74, 48, 32, 255),     # wood, the core of the shadow (the top wall's rounded posts)
     'E': (238, 230, 208, 255),  # eye white, fangs
     'e': (190, 182, 164, 255),  # eye white and teeth in shadow
     'T': (70, 44, 30, 255),     # carved marks
-    'R': (178, 46, 38, 255),    # red cloth / cheeks
+    'R': (178, 46, 38, 255),    # cheeks, lips
     'r': (122, 30, 28, 255),    # red shadow
-    'o': (214, 96, 72, 255),    # red cloth light
+    'o': (214, 96, 72, 255),    # red light
 }
 
 # 장승 as the room's own camera shows it against each wall (user decisions
@@ -141,32 +152,32 @@ CHEONHA_WALL = [
     "......KHHHggggggHHHHK......",
     ".....KLHHHHHHHHHHHHHMK.....",
     ".....KLLHHHHHHHHHHHLMK.....",
-    ".....KLLLHHHHHHHHHLMWK.....",
-    ".....KLLLLKKKKKKKLLMWK.....",
-    ".....KLSSLLLLLLLLLLMWK.....",
+    ".....KLLLHHHHHHHHHLDWK.....",
+    ".....KLLLLKKKKKKKLLDWK.....",
+    ".....KLSSLLLLLLLLLLDWK.....",
     ".....KKKKLLLLLLLLLKKKK.....",
-    ".....KLLKKKKLLLKKKKMWK.....",
+    ".....KLLKKKKLLLKKKKDWK.....",
     ".....KKEEEKKLLLKKEEEKK.....",
     ".....KKEKKEKLMLKEKKEKK.....",
     ".....KKEKKeKLMLKEKKeKK.....",
     ".....KKEEEeKLMLKEEEeKK.....",
     ".....KLKKKKLLMLLKKKKWK.....",
-    ".....KLLLLKSLLLMKLMMWK.....",
-    ".....KLLLKSLLLLMWKMMWK.....",
-    ".....KLLLKKKLMLKKKMMWK.....",
+    ".....KLSLLKSLLLMKLMDWK.....",
+    ".....KLSLKSLLLLMWKMDWK.....",
+    ".....KLSLKKKLMLKKKMDWK.....",
     ".....KLKKKKKKKKKKKKKWK.....",
     ".....KLKEEKEEEEeKEEKWK.....",
     ".....KLKEKKKKKKKKKEKWK.....",
     ".....KLKEKKKKKKKKKeKWK.....",
-    ".....KLLKKKKKKKKKKKMWK.....",
-    ".....KLLLTLTLLLTMTMWWK.....",
-    ".....KLLLTLTLLLTMTMWWK.....",
-    ".....KLLLLTLLLLLTMMWWK.....",
-    ".....KMLLLLTTMMMMMWWWK.....",
-    ".....KMLLLLMTMMMMMWWWK.....",
-    ".....KMLLLTTMMMMMMWWWK.....",
-    "......KMLLLMTMMMMWWWK......",
-    ".......KMLLTTMMMWWWK.......",
+    ".....KLLKKKKKKKKKKKDWK.....",
+    ".....KLSLTLTLLLTMTMDWK.....",
+    ".....KLSLTLTLLLTMTMDWK.....",
+    ".....KLSLLTLLLLLTMMDWK.....",
+    ".....KMLLLLTTMMMMMWDWK.....",
+    ".....KMLLLLMTMMMMMWDWK.....",
+    ".....KMLLLTTMMMMMMWDWK.....",
+    "......KMLLLMTMMMMWDWK......",
+    ".......KMLLTTMMMWDWK.......",
     "........KKKKKKKKKKK........",
 ]
 
@@ -187,29 +198,25 @@ JIHA_WALL = [
     "..KHHHgggggggHHHHHK..",
     "..KHSLLLLLLLLLLLHHK..",
     "..KHLKKKLLLLLKKKMHK..",
-    "..KLLKEEKLLLKEEKMWK..",
+    "..KLLKEEKLLLKEEKDWK..",
     "..KLKEKKEKLKEKKEKWK..",
     "..KLKEKKeKLKEKKeKWK..",
-    "..KLLKEeKLLLKEeKMWK..",
+    "..KLLKEeKLLLKEeKDWK..",
     "..KRRLLLKSLMKLLRrWK..",
-    "..KLLLLLKKMKKLLMMWK..",
-    "..KLLLKKKKKKKKKMMWK..",
-    "..KLLLKEKKKKKeKMMWK..",
-    "..KLLLLoRRRRRrMMWWK..",
-    "..KLLLLLLMMMMMMMWWK..",
-    "..KLLLLTTMMMMMMMWWK..",
-    "..KLLLLLTMMMMMMMWWK..",
-    "..KMLLLTTMMMMMMWWWK..",
-    "..KMLLLLTMMMMMMWWWK..",
-    "..KMLLLTTMMMMMMWWWK..",
-    "...KMLLTTMMMMMWWWK...",
-    "....KMLLTMMMMWWWK....",
+    "..KLSLLLKKMKKLLMDWK..",
+    "..KLSLKKKKKKKKKMDWK..",
+    "..KLSLKEKKKKKeKMDWK..",
+    "..KLSLLoRRRRRrMMDWK..",
+    "..KLSLLLLMMMMMMMDWK..",
+    "..KLSLLTTMMMMMMMDWK..",
+    "..KLSLLLTMMMMMMMDWK..",
+    "..KMSLLTTMMMMMMWDWK..",
+    "..KMSLLLTMMMMMMWDWK..",
+    "..KMLLLTTMMMMMMWDWK..",
+    "...KMLLTTMMMMMWDWK...",
+    "....KMLLTMMMMWDWK....",
     ".....KKKKKKKKKKK.....",
 ]
-
-# The red-route pair's cloth: rows of each wall map, from the lip down, that
-# become a red band with a knot hanging off its right side.
-CLOTH_ROWS = {'Cheonha': 33, 'Jiha': 23}
 
 # The right wall's pair, drawn for that wall (user correction 2026-11-10: the
 # top wall's picture turned and lengthened did not match the 3D render). Drawn
@@ -344,9 +351,6 @@ JIHA_SIDE = [
     "....KKKKKKKKKKKKK....",
 ]
 
-# Where each side map's red cloth goes: the first post row below the face.
-SIDE_CLOTH_ROWS = {'Cheonha': 45, 'Jiha': 35}
-
 # The slant (user corrections 2026-11-10: the angle should match the render,
 # and bend as much at the head as at the foot). Seen from above the room's
 # middle, the pair on a side wall leans in toward the door from the cap to the
@@ -358,28 +362,48 @@ SIDE_CLOTH_ROWS = {'Cheonha': 45, 'Jiha': 35}
 SIDE_STEPS = {'Cheonha': ((4, 12, 20, 29, 37, 45, 53), 1), 'Jiha': ((6, 13, 19, 25, 34, 41, 48), -1)}
 
 
+# The top wall's pair leans with the wall's view angle (user request
+# 2026-11-16: "built into the wall", the side walls kept as they are): the
+# doorway between them narrows toward the room, so each post leans out at its
+# cap, 천하대장군 (on the left) to the left and 지하여장군 to the right, about one
+# pixel in five. Each step is a row above which the post sits one pixel
+# further out. The steps run evenly from the base's bottom to the cap's top,
+# four or five rows apart, so the post rises in one straight line (user
+# correction: steps only between the face's bands, with none in the base, bent
+# it), and each falls between the picture's bands or inside a smooth one (the
+# cap, the hair, the carved name), never through an eye, a nose or the teeth.
+# The bottom wall draws this upside down.
+TOP_STEPS = {'Cheonha': ((4, 9, 13, 17, 21, 25, 30, 34), -1), 'Jiha': ((3, 8, 12, 17, 22, 27), 1)}
+
+
+def lean_offsets(height, steps, sign):
+    """How far right each row of a leaning frame is drawn: each row above a
+    step one pixel further out (sign -1 to the left, 1 to the right)."""
+    n = len(steps)
+    shifts = [sum(1 for s in steps if y < s) for y in range(height)]
+    return [n - s if sign < 0 else s for s in shifts]
+
+
+def lean(rows, steps, sign):
+    """Leans a top-wall frame. Returns the rows and each row's offset."""
+    n = len(steps)
+    offsets = lean_offsets(len(rows), steps, sign)
+    return ['.' * o + row + '.' * (n - o) for o, row in zip(offsets, rows)], offsets
+
+
+def lean_image(img, steps, sign):
+    """The same lean on a picture of the unleaned frame (the April Fools
+    sheet's renders, docs/previews/aprilfools/actors.py)."""
+    offsets = lean_offsets(img.height, steps, sign)
+    out = Image.new('RGBA', (img.width + len(steps), img.height))
+    for y, o in enumerate(offsets):
+        out.paste(img.crop((0, y, img.width, y + 1)), (o, y))
+    return out
+
+
 def wall_rows(who):
     rows = list(CHEONHA_WALL if who == 'Cheonha' else JIHA_WALL)
     assert all(len(r) == len(rows[0]) for r in rows), (who, [len(r) for r in rows])
-    return rows
-
-
-def add_cloth(rows, y):
-    """A red band three rows deep from row `y`, its knot hanging off the right."""
-    rows, width = list(rows), len(rows[0])
-    for k in range(3):
-        row = list(rows[y + k])
-        left, right = row.index('K'), len(row) - 1 - row[::-1].index('K')
-        n = right - left - 1
-        row[left + 1:right] = list(('o' + 'R' * (n - 2) + 'r', 'R' * (n - 1) + 'r', 'r' * n)[k])
-        rows[y + k] = ''.join(row)
-    for k, knot in enumerate(('K', 'RK', 'rK')):
-        row = list(rows[y + 1 + k])
-        right = len(row) - 1 - row[::-1].index('K')
-        for j, ch in enumerate(knot):
-            if right + 1 + j < width:
-                row[right + 1 + j] = ch
-        rows[y + 1 + k] = ''.join(row)
     return rows
 
 
@@ -405,22 +429,22 @@ def turn_cw(rows):
     return [''.join(rows[h - 1 - y][x] for y in range(h)) for x in range(w)]
 
 
-def wall_frame(who, side=False, red=False):
+def wall_frame(who, side=False):
     """(image, foot pixel): the top wall's view, or the right wall's (its cap
     to the right); the game mirrors these for the bottom and left walls."""
     if side:
         rows = list(CHEONHA_SIDE if who == 'Cheonha' else JIHA_SIDE)
-        if red:
-            rows = add_cloth(rows, SIDE_CLOTH_ROWS[who])
         starts, sign = SIDE_STEPS[who]
         rows, foot = slant(turn_cw(rows), tuple(len(rows) - r for r in starts), sign)
         return paint(rows), foot
-    rows, cloth = wall_rows(who), CLOTH_ROWS[who]
-    if red:
-        rows = add_cloth(rows, cloth)
+    rows = wall_rows(who)
+    width = len(rows[0])
+    steps, sign = TOP_STEPS[who]
+    rows, offsets = lean(rows, steps, sign)
     # the foot (the post's base centre) sits a little above the outline's
     # lowest point, which is the base's near edge (model3d.py)
-    return paint(rows), (len(rows[0]) // 2, len(rows) - 6)
+    foot = len(rows) - 6
+    return paint(rows), (width // 2 + offsets[foot], foot)
 
 
 # Each view: (width, height, post's right outline column, heads)
@@ -450,22 +474,11 @@ def body(width, post_right, first, rows, carved=True):
     return out
 
 
-def statue(view, who, red=False):
+def statue(view, who):
     width, height, post_right = SIZES[view]
     head = HEADS[view][0 if who == 'Cheonha' else 1]
     rows = list(head) + body(width, post_right, len(head), height - len(head))
     assert len(rows) == height and all(len(r) == width for r in rows), (view, who, [len(r) for r in rows])
-    if red:
-        y = len(head) + 1
-        n = post_right - 3
-        for k, fill in enumerate(('o' + 'R' * (n - 2) + 'r', 'R' * (n - 1) + 'r', 'r' * n)):
-            row = list(rows[y + k])
-            row[3:3 + n] = fill
-            rows[y + k] = ''.join(row)
-        for k, knot in enumerate(('K', 'RK', 'rK')):
-            row = list(rows[y + 1 + k])
-            row[post_right + 1:post_right + 1 + len(knot)] = knot
-            rows[y + 1 + k] = ''.join(row[:width])
     return paint(rows)
 
 
@@ -485,15 +498,16 @@ def paint(rows):
     return img
 
 
-# Runtime frames: each statue's top-wall and right-wall views, plain and red-clothed.
-NAMES = [f'{who}{view}{red}' for red in ('', 'Red') for view in ('Top', 'Side') for who in ('Cheonha', 'Jiha')]
+# Runtime frames: each statue's top-wall and right-wall views. (The red-route
+# pair's red cloth went on 2026-11-15: the 금줄 between the pair marks it now.)
+NAMES = [f'{who}{view}' for view in ('Top', 'Side') for who in ('Cheonha', 'Jiha')]
 
 
 def statues():
     frames = []
     for name in NAMES:
         who = 'Cheonha' if name.startswith('Cheonha') else 'Jiha'
-        frames.append(wall_frame(who, 'Side' in name, name.endswith('Red')))
+        frames.append(wall_frame(who, 'Side' in name))
     sheet = Image.new('RGBA', (sum(f.width for f, _ in frames), max(f.height for f, _ in frames)))
     x = 0
     for frame, _ in frames:
@@ -532,6 +546,230 @@ def statue_anm2(frames, sheet='conch_jangseung.png'):
     <Events />
   </Content>
   <Animations DefaultAnimation="CheonhaTop">
+{chr(10).join(anims)}
+  </Animations>
+</AnimatedActor>
+'''
+
+
+# ------------------------------------------------------------------ the 금줄
+
+# The 금줄 strung between the pair across the door (user request 2026-11-15,
+# replacing the red-route pair's red cloth): a twisted straw rope tied round
+# each post high on the head, sagging a little toward the room's middle
+# (from the room's camera above, "down" points that way, as the caps point at
+# the wall), with a red pepper and a lump of charcoal hung near each post, and
+# in its middle a short straw string from which the room's own minimap icon
+# hangs, turned with its wall so its top faces the rope (jangseung.lua draws
+# it; a room with no icon gets no rope). No paper tag behind the
+# icon and nothing else in front of the doorway, so the door stays in sight
+# (user request 2026-11-16). The red rope, straw twisted with red, marks a way a
+# Red Key opened or opens: a red special room, the ultra secret room and the
+# wall to dig toward it.
+#
+# The rope is drawn in (along, down) pixels: `along` runs with the wall,
+# 천하대장군's end first, and `down` from the wall into the room, both from the
+# hook, the pixel the icon's near edge hangs on at the string's end, whose
+# corner is each frame's pivot. jangseung.lua stands that pivot `hangTop` or
+# `hangSide` world units in from the wall's middle, half way between the pair;
+# the game mirrors the top frame for the bottom wall and the side frame for the
+# left wall, as it does the statues, which only flips `down`.
+# Tied high, round the cap's band and the top of the hair, and drawn two
+# pixels thick with a small sag: the game draws a door 15 pixels in from its
+# slot, so the doorway reaches down to the pair's feet, and a rope tied lower
+# or thicker hid most of it (user report 2026-11-16).
+TOP_TIE_ROWS = {'Cheonha': 8, 'Jiha': 3}
+SIDE_TIE_COLS = {'Cheonha': 48, 'Jiha': 46}    # ...on the side wall's frames too
+ROPE_SAG = 2
+ROPE_DEPTH = (0, 1)  # pixels across the rope, from its wall side
+STRING = 2   # pixels of straw string between the rope and the icon
+ROPE = {'K': (58, 40, 22), 'd': (122, 88, 42), 'm': (176, 136, 70), 'l': (220, 186, 112)}
+ROPE_RED = {'K': (64, 16, 14), 'd': (122, 30, 28), 'm': (178, 46, 38), 'l': (214, 96, 72)}
+HUNG = {
+    'R': (192, 36, 28), 'r': (132, 24, 22), 'g': (70, 118, 44),   # a red pepper and its stalk
+    'C': (34, 30, 32), 'c': (78, 72, 74),                          # charcoal
+}
+# Hung along the rope near each post, `along` pixels from its middle, clear of
+# the doorway; each row lies across the rope and the rows hang down from it.
+HANGINGS = [
+    (16, ['g', 'R', 'RR', 'Rr', '.r']),    # a red pepper on its stalk
+    (19, ['C', 'Cc', 'CC']),               # a lump of charcoal
+]
+
+
+def rope_ends(view, data):
+    """Where the rope is tied, in screen pixels from the pair's feet midpoint:
+    the edge of each post facing the door, just under the head."""
+    half = round(data['spread'] * SCALE)
+    ends = []
+    for who, foot in (('Cheonha', -half), ('Jiha', half)):
+        img, (px, py) = wall_frame(who, view == 'Side')
+        if view == 'Top':
+            row = TOP_TIE_ROWS[who]
+            xs = [x for x in range(img.width) if img.getpixel((x, row))[3]]
+            ends.append((foot + (max(xs) if who == 'Cheonha' else min(xs)) + 0.5 - px, row + 0.5 - py))
+        else:
+            col = SIDE_TIE_COLS[who]
+            ys = [y for y in range(img.height) if img.getpixel((col, y))[3]]
+            ends.append((col + 0.5 - px, foot + (max(ys) if who == 'Cheonha' else min(ys)) + 0.5 - py))
+    return ends
+
+
+def hook_offset(view, data):
+    """How far, in pixels, the hook (the frame's pivot) stands from the feet's line into the room."""
+    return round((data['hang' + view] - data['stand']) * SCALE)
+
+
+def rope_canvas(view, red, data):
+    """{(along, down): colour} for one frame, the hook at (0, 0)."""
+    def to_rope(x, y):  # screen pixels from the feet midpoint -> (along, down) from that line
+        return (x, y) if view == 'Top' else (y, -x)
+    a, b = (to_rope(*end) for end in rope_ends(view, data))
+    c = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2 + 2 * ROPE_SAG)
+    samples, s, last = [], 0.0, None
+    for i in range(801):
+        t = i / 800
+        p = tuple((1 - t) ** 2 * a[k] + 2 * (1 - t) * t * c[k] + t * t * b[k] for k in (0, 1))
+        if last:
+            s += math.hypot(p[0] - last[0], p[1] - last[1])
+        samples.append((p, s))
+        last = p
+    palette = ROPE_RED if red else ROPE
+    canvas = {}
+    for (al, dn), s in samples:
+        # two pixels deep, the strands crossing on a slant, lit on the side
+        # away from the room (the wall's light) and shaded toward it
+        for k in ROPE_DEPTH:
+            phase = math.floor(s + 1.2 * k) % 4
+            tone = 'd' if phase == 0 else ('l' if k < 1 else 'm') if phase == 1 else ('m' if k < 1 else 'd')
+            colours = ROPE_RED if red and phase >= 2 else ROPE
+            canvas[(math.floor(al), math.floor(dn) + k)] = colours[tone]
+    for (al, dn) in list(canvas):
+        for q in ((al + 1, dn), (al - 1, dn), (al, dn + 1), (al, dn - 1)):
+            if q not in canvas:
+                canvas[q] = palette['K'] if red else ROPE['K']
+    bottom = {}
+    for (al, dn) in canvas:
+        bottom[al] = max(bottom.get(al, dn), dn)
+    for along, rows in HANGINGS:
+        for sign in (-1, 1):
+            at = sign * along
+            for i, row in enumerate(rows):
+                for j, ch in enumerate(row):
+                    if ch != '.':
+                        x = at + j - len(row) // 2
+                        canvas[(x, bottom[at] + i)] = HUNG[ch]
+    hook = bottom[0] + 1 + STRING
+    for i, dn in enumerate(range(bottom[0] + 1, hook)):  # the string: a strand of plain straw, as the icon's rim
+        canvas[(0, dn)] = ROPE['l' if i % 2 == 0 else 'm']
+    wanted = hook_offset(view, data)
+    assert hook == wanted, (view, 'the hook hangs %d pixels from the feet line, the Lua says %d: set hang%s = %.2f'
+                            % (hook, wanted, view, data['stand'] + hook / SCALE))
+    return {(al, dn - hook): colour for (al, dn), colour in canvas.items()}
+
+
+def rope_frame(view, red, data):
+    """(image, pivot): one frame in screen pixels, the pivot at the hook's corner."""
+    canvas = rope_canvas(view, red, data)
+    pixels = {}
+    for (al, dn), colour in canvas.items():
+        # a pixel covers [al, al + 1) x [dn, dn + 1); on the side wall `down`
+        # runs to the left, so it covers [-dn - 1, -dn) across the screen
+        pixels[(al, dn) if view == 'Top' else (-dn - 1, al)] = colour
+    x0, y0 = min(p[0] for p in pixels), min(p[1] for p in pixels)
+    x1, y1 = max(p[0] for p in pixels), max(p[1] for p in pixels)
+    img = Image.new('RGBA', (x1 - x0 + 1, y1 - y0 + 1))
+    for (x, y), colour in pixels.items():
+        img.putpixel((x - x0, y - y0), colour + (255,))
+    return img, (-x0, -y0)
+
+
+ROPE_NAMES = ['RopeTop', 'RopeSide', 'RopeTopRed', 'RopeSideRed']
+
+
+def rope_parts(name):
+    """(view, red) of one rope animation."""
+    return ('Side' if 'Side' in name else 'Top'), 'Red' in name
+
+
+def ropes(data=None):
+    data = data or lua_data()
+    frames = [rope_frame(*rope_parts(name), data) for name in ROPE_NAMES]
+    sheet = Image.new('RGBA', (sum(f.width for f, _ in frames), max(f.height for f, _ in frames)))
+    x = 0
+    for frame, _ in frames:
+        sheet.paste(frame, (x, 0))
+        x += frame.width
+    return frames, sheet
+
+
+def icon_boxes():
+    """jangseung.lua's ICON_BOX: each minimap icon's opaque box (x0, y0, x1, y1) in its frame."""
+    block = LUA.read_text(encoding='utf-8').split('local ICON_BOX = {')[1].split('\n}')[0]
+    return {name: tuple(int(v) for v in box.split(','))
+            for name, box in re.findall(r'(\w+) = \{ *([-\d, ]+?) *\}', block)}
+
+
+def icon_pose(box, view, flip):
+    """(rotation, dx, dy) as jangseung.lua's `iconPose`: the icon turned with its
+    wall so its top faces the rope (0 on the top wall, 180 on the bottom, 90
+    clockwise on the right wall, -90 on the left) and rendered at the hook plus
+    (dx, dy), its frame's pivot being its top-left corner, so the middle pixel
+    of its top edge lands on the hook's pixel."""
+    x0, y0, x1, y1 = box
+    ax, ay = x0 + (x1 - x0 - 1) // 2, y0
+    if view == 'Top':
+        return (180, ax + 1, ay) if flip else (0, -ax, -ay)
+    return (-90, -ay, ax + 1) if flip else (90, ay, -ax)
+
+
+def icon_pixels(icon, box, view, flip):
+    """{(x, y): rgba} the icon's opaque pixels on screen from the hook, turned and
+    placed as the game draws them (a pixel's centre turned about the render
+    point, clockwise for a positive rotation, screen y pointing down)."""
+    rotation, dx, dy = icon_pose(box, view, flip)
+    cos, sin = round(math.cos(math.radians(rotation))), round(math.sin(math.radians(rotation)))
+    out = {}
+    for y in range(icon.height):
+        for x in range(icon.width):
+            colour = icon.getpixel((x, y))
+            if colour[3]:
+                cx, cy = x + 0.5, y + 0.5
+                sx, sy = dx + cx * cos - cy * sin, dy + cx * sin + cy * cos
+                out[(math.floor(sx), math.floor(sy))] = colour
+    return out
+
+
+def rope_anm2(frames):
+    anims, x = [], 0
+    for name, (frame, pivot) in zip(ROPE_NAMES, frames):
+        w, h = frame.size
+        anims.append(f'''    <Animation Name="{name}" FrameNum="1" Loop="false">
+      <RootAnimation>
+        <Frame XPosition="0" YPosition="0" XScale="100" YScale="100" Delay="1" Visible="true" RedTint="255" GreenTint="255" BlueTint="255" AlphaTint="255" RedOffset="0" GreenOffset="0" BlueOffset="0" Rotation="0" Interpolated="false" />
+      </RootAnimation>
+      <LayerAnimations>
+        <LayerAnimation LayerId="0" Visible="true">
+          <Frame XPosition="0" YPosition="0" XScale="100" YScale="100" Delay="1" Visible="true" RedTint="255" GreenTint="255" BlueTint="255" AlphaTint="255" RedOffset="0" GreenOffset="0" BlueOffset="0" Rotation="0" Interpolated="false" XCrop="{x}" YCrop="0" Width="{w}" Height="{h}" XPivot="{pivot[0]}" YPivot="{pivot[1]}" />
+        </LayerAnimation>
+      </LayerAnimations>
+      <NullAnimations />
+      <Triggers />
+    </Animation>''')
+        x += w
+    return f'''<AnimatedActor>
+  <Info CreatedBy="ConchBlessing" Version="20" Fps="30" />
+  <Content>
+    <Spritesheets>
+      <Spritesheet Id="0" Path="conch_jangseung_rope.png" />
+    </Spritesheets>
+    <Layers>
+      <Layer Id="0" Name="rope" SpritesheetId="0" />
+    </Layers>
+    <Nulls />
+    <Events />
+  </Content>
+  <Animations DefaultAnimation="RopeTop">
 {chr(10).join(anims)}
   </Animations>
 </AnimatedActor>
@@ -666,14 +904,14 @@ def icon(frames):
     return img
 
 
-def preview(sheet, earth, item):
+def preview(*parts):
     scale = 8
     pad = 8
-    width = max(sheet.width, earth.width, item.width) * scale + pad * 2
-    height = (sheet.height + earth.height + item.height) * scale + pad * 4
+    width = max(part.width for part in parts) * scale + pad * 2
+    height = sum(part.height for part in parts) * scale + pad * (len(parts) + 1)
     out = Image.new('RGBA', (width, height), (58, 50, 44, 255))
     y = pad
-    for part in (sheet, earth, item):
+    for part in parts:
         big = part.resize((part.width * scale, part.height * scale), Image.NEAREST)
         out.alpha_composite(big, (pad, y))
         y += big.height + pad
@@ -682,16 +920,19 @@ def preview(sheet, earth, item):
 
 def main():
     frames, sheet = statues()
+    rope_frames, rope_sheet = ropes()
     earth = ground()
     item = icon(frames)
     EFFECTS.mkdir(parents=True, exist_ok=True)
     sheet.save(EFFECTS / 'conch_jangseung.png')
     (EFFECTS / 'conch_jangseung.anm2').write_text(statue_anm2(frames), encoding='utf-8')
+    rope_sheet.save(EFFECTS / 'conch_jangseung_rope.png')
+    (EFFECTS / 'conch_jangseung_rope.anm2').write_text(rope_anm2(rope_frames), encoding='utf-8')
     earth.save(EFFECTS / 'conch_jangseung_ground.png')
     (EFFECTS / 'conch_jangseung_ground.anm2').write_text(ground_anm2(), encoding='utf-8')
     item.save(ICON)
     PREVIEW.mkdir(parents=True, exist_ok=True)
-    preview(sheet, earth, item).save(PREVIEW / 'preview.png')
+    preview(sheet, rope_sheet, earth, item).save(PREVIEW / 'preview.png')
     print('wrote', EFFECTS / 'conch_jangseung.png', ICON, PREVIEW / 'preview.png')
 
 

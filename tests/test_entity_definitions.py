@@ -22,7 +22,7 @@ class EntityDefinitionsTests(unittest.TestCase):
             generate_xml.create_entities2_xml(items, str(path), definitions, {})
             self.assertEqual(first, path.read_bytes())
             rows = ET.parse(path).getroot().findall('entity')
-            self.assertEqual(len(rows), 10)
+            self.assertEqual(len(rows), 11)
             self.assertEqual((rows[0].get('id'), rows[0].get('variant')), ('3', '777'))
             marker = rows[1]
             ox = rows[2]
@@ -58,6 +58,11 @@ class EntityDefinitionsTests(unittest.TestCase):
             self.assertEqual((mine.get('name'), mine.get('variant'), mine.get('shadowSize')),
                              (definitions['LANDMINE']['name'], '7790', '0'))
             self.assertTrue((Path('resources/gfx') / mine.get('anm2path')).is_file())
+            # 장승's 금줄 between the pair, its tag's icon in the SubType (2026-11-15).
+            rope = rows[10]
+            self.assertEqual((rope.get('name'), rope.get('variant'), rope.get('shadowSize')),
+                             (definitions['JANGSEUNG_ROPE']['name'], '7791', '0'))
+            self.assertTrue((Path('resources/gfx') / rope.get('anm2path')).is_file())
             self.assertTrue((Path('resources/gfx') / tracks.get('anm2path')).is_file())
             self.assertEqual(marker.get('id'), '2')
             self.assertEqual(marker.get('name'), definitions['NEGLECT_TEAR']['name'])

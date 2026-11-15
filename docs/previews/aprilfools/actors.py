@@ -198,9 +198,38 @@ ANIMATIONS=['hermit_crab.anm2','dragon.anm2','time_money.anm2','effects/conch_ox
             'seonnyeo.anm2','effects/conch_jeonwoochi.anm2']
 
 
+def jangseung():
+    """Jangseung already has authored, camera-specific 3D geometry. Its frames
+    are remapped because its high-resolution preview ANM2 uses different crops;
+    the top wall's frames lean as the shipped ones do (TOP_STEPS), so the render
+    is fitted to the unleaned frame and then leaned."""
+    import importlib.util
+    spec=importlib.util.spec_from_file_location('jangseung_author',ROOT/'docs/previews/jangseung/author.py')
+    author=importlib.util.module_from_spec(spec);spec.loader.exec_module(author)
+    src_records=frame_records('effects/notused/conch_jangseung_aprilfools.anm2')
+    target_records=frame_records('effects/conch_jangseung.anm2')
+    byname={};rows=[]
+    for sheet,records in src_records.items():
+        im=Image.open(sheet)
+        for (x,y,w,h),(name,i,_) in records.items():byname[name]=im.crop((x,y,x+w,y+h))
+    for sheet,records in target_records.items():
+        out=Image.new('RGBA',Image.open(sheet).size)
+        for (x,y,w,h),(name,i,_) in records.items():
+            who=name.replace('Top','') if name.endswith('Top') else None
+            if who in author.TOP_STEPS:
+                steps,sign=author.TOP_STEPS[who]
+                fitted=byname[name].resize((w-len(steps),h),Image.Resampling.LANCZOS)
+                out.paste(author.lean_image(fitted,steps,sign),(x,y))
+            else:
+                out.paste(byname[name].resize((w,h),Image.Resampling.LANCZOS),(x,y))
+        dest=sheet.with_stem(sheet.stem+'_af3d');out.save(dest)
+        rows.append({'source':sheet.relative_to(ROOT/'resources').as_posix(),'still':dest.relative_to(ROOT/'resources').as_posix(),'anm2':'gfx/effects/conch_jangseung.anm2'})
+    return rows
+
+
 def main(selected=None):
     rows=[];views=[]
-    for anm2 in selected or ANIMATIONS:
+    for anm2 in [a for a in selected if a!='jangseung'] if selected else ANIMATIONS:
         for sheet,records in frame_records(anm2).items():
             original=Image.open(sheet).convert('RGBA');out=Image.new('RGBA',original.size)
             for rect,(name,i,attrs) in records.items():
@@ -219,20 +248,7 @@ def main(selected=None):
                          'sourceSha256':hashlib.sha256(sheet.read_bytes()).hexdigest(),
                          'still':dest.relative_to(ROOT/'resources').as_posix(),'anm2':'gfx/'+anm2})
             print(sheet.name,len(records),'poses',flush=True)
-    # Jangseung already has authored, camera-specific 3D geometry. Its frames
-    # must be remapped because its high-resolution preview ANM2 uses different crops.
-    src_records=frame_records('effects/notused/conch_jangseung_aprilfools.anm2') if not selected else {}
-    target_records=frame_records('effects/conch_jangseung.anm2') if not selected else {}
-    byname={}
-    for sheet,records in src_records.items():
-        im=Image.open(sheet)
-        for (x,y,w,h),(name,i,_) in records.items():byname[name]=im.crop((x,y,x+w,y+h))
-    for sheet,records in target_records.items():
-        out=Image.new('RGBA',Image.open(sheet).size)
-        for (x,y,w,h),(name,i,_) in records.items():
-            out.paste(byname[name].resize((w,h),Image.Resampling.LANCZOS),(x,y))
-        dest=sheet.with_stem(sheet.stem+'_af3d');out.save(dest)
-        rows.append({'source':sheet.relative_to(ROOT/'resources').as_posix(),'still':dest.relative_to(ROOT/'resources').as_posix(),'anm2':'gfx/effects/conch_jangseung.anm2'})
+    if not selected or 'jangseung' in selected:rows+=jangseung()
     if selected:
         previous={r['source']:r for r in json.loads((OUT/'actors.json').read_text(encoding='utf-8'))}
         previous.update({r['source']:r for r in rows});rows=list(previous.values())

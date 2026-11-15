@@ -654,8 +654,8 @@ return {
             name = "Jangseung",
             description = "Great General of Heaven, Lady General of the Earth",
             eid = {
-                "A pair of jangseung stands on either side of every door into a special room.",
-                "#A door that can lead to the Ultra Secret Room gets a red cord",
+                "A pair of jangseung stands on either side of every special room's door, with a geumjul bearing that room's mark between them",
+                "#{c:RED_KEY} The way the Red Key opens gets a red geumjul",
                 "#Within 2 tiles in front of them you are invincible, and enemies other than bosses flee in fear",
                 "#{{Warning}} REPENTOGON recommended",
             },

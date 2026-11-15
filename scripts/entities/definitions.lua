@@ -31,8 +31,7 @@ return {
         collisionDamage = 0, collisionMass = 0, collisionRadius = 0,
         friction = 1, numGridCollisionPoints = 0, shadowSize = 0,
     },
-    -- 장승's statues (subtype 0 a special room's pair, 1 the red-room route's
-    -- pair, which wears a red cloth). They only stand and draw.
+    -- 장승's statues. They only stand and draw.
     JANGSEUNG = {
         name = "Conch Blessing Jangseung", id = 1000, variant = 7786,
         anm2path = "effects/conch_jangseung.anm2",
@@ -66,6 +65,14 @@ return {
     LANDMINE = {
         name = "Conch Blessing Landmine", id = 1000, variant = 7790,
         anm2path = "effects/conch_landmine.anm2",
+        collisionDamage = 0, collisionMass = 0, collisionRadius = 0,
+        friction = 1, numGridCollisionPoints = 0, shadowSize = 0,
+    },
+    -- The 금줄 strung between a 장승 pair (subtype: its tag's icon number * 2,
+    -- plus 1 for a red rope). It only hangs and draws.
+    JANGSEUNG_ROPE = {
+        name = "Conch Blessing Jangseung Rope", id = 1000, variant = 7791,
+        anm2path = "effects/conch_jangseung_rope.anm2",
         collisionDamage = 0, collisionMass = 0, collisionRadius = 0,
         friction = 1, numGridCollisionPoints = 0, shadowSize = 0,
     },

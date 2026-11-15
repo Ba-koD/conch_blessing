@@ -1,9 +1,10 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- 장승 (Jangseung): the lifecycle contract and its isolated cases. Every room
 -- is reached by a real room transition, every door read from the engine's own
--- doors, the red route checked against LevelRooms.redStep, and the guard
--- watched on real enemies and enemy shots. How the statues and the earth look
--- stays a LOOK check.
+-- doors, the red route checked against LevelRooms.redStep, each 금줄's icon
+-- against the room behind its door, a Red Key's door against the engine's own
+-- MakeRedRoomDoor, and the guard watched on real enemies and enemy shots. How
+-- the statues, the ropes, their icons and the earth look stays a LOOK check.
 local S = require("scripts.dev.item_scenarios")
 local H = require("scripts.dev.item_test_support")
 local LevelRooms = require("scripts.lib.level_rooms")
@@ -43,7 +44,7 @@ end
 
 local function markedSlots()
     local slots = {}
-    for _, marker in ipairs(jangseung().markers()) do slots[marker.slot] = marker.red and "red" or "door" end
+    for _, marker in ipairs(jangseung().markers()) do slots[marker.slot] = marker.route and "red" or "door" end
     return slots
 end
 
@@ -58,21 +59,88 @@ local function same(a, b)
     return true
 end
 
+local function count(slots)
+    local n = 0
+    for _ in pairs(slots) do n = n + 1 end
+    return n
+end
+
+-- The live ropes in the room (NO_QUERY included).
+local function ropes()
+    local list = {}
+    for _, entity in ipairs(Isaac.GetRoomEntities()) do
+        if entity.Type == EntityType.ENTITY_EFFECT and entity.Variant == T().ropeVariant() and entity:Exists() then
+            list[#list + 1] = entity
+        end
+    end
+    return list
+end
+
+-- What each marked slot's 금줄 should carry, read from the door and the room
+-- behind it: "<icon>" or "<icon>/red"; a slot whose room no icon fits has no
+-- rope (user request 2026-11-16) and is left out.
+local function expectedTags()
+    local level, room = Game():GetLevel(), Game():GetRoom()
+    local tags = {}
+    for slot, kind in pairs(expectedSlots()) do
+        if kind == "red" then
+            tags[slot] = "IconUltraSecretRoom/red"
+        else
+            local door = room:GetDoor(slot)
+            local target = door and level:GetRoomByIdx(door.TargetRoomIndex)
+            local icon, red = T().tagFor(door.TargetRoomType, target and target.Flags,
+                target and target.Data and target.Data.Subtype)
+            if icon then tags[slot] = icon .. (red and "/red" or "") end
+        end
+    end
+    return tags
+end
+
+-- What each slot's live rope carries (its SubType's icon and colour), and the
+-- slots whose animation disagrees with that colour or the wall's frame, or
+-- whose rope carries no icon (a room without one gets no rope).
+local function ropeTags()
+    local tags, wrong = {}, {}
+    for _, marker in ipairs(jangseung().markers()) do
+        local x, y = T().ropePlace(marker.wall, marker.inward.X, marker.inward.Y)
+        for _, rope in ipairs(ropes()) do
+            if rope.Position:Distance(Vector(x, y)) < 1 then
+                local icon, red = T().ropeIcon(rope.SubType)
+                tags[marker.slot] = (icon or "-") .. (red and "/red" or "")
+                local view = T().frameOf(marker.inward.X, marker.inward.Y)
+                local anim = rope:GetSprite():GetAnimation()
+                if not icon or anim ~= "Rope" .. view .. (red and "Red" or "") then
+                    wrong[#wrong + 1] = marker.slot .. ":" .. anim
+                end
+            end
+        end
+    end
+    return tags, wrong
+end
+
+local function describeTags(tags)
+    local parts = {}
+    for slot = 0, 7 do if tags[slot] then parts[#parts + 1] = slot .. ":" .. tags[slot] end end
+    return "{" .. table.concat(parts, ",") .. "}"
+end
+
 C.JANGSEUNG = { stage = function(plan, _, n)
     plan.wait(2)
     plan.check(n > 0 and "a pair at each special door of the room" or "no statue without the item", function()
         local expected = n > 0 and expectedSlots() or {}
-        local count = 0
-        for _ in pairs(expected) do count = count + 1 end
-        return same(markedSlots(), expected) and #statues() == count * 2,
-            string.format("expected %s marked %s statues=%d", describe(expected), describe(markedSlots()), #statues())
+        local wanted = count(expected)
+        local hung = n > 0 and count(expectedTags()) or 0
+        return same(markedSlots(), expected) and #statues() == wanted * 2 and #ropes() == hung,
+            string.format("expected %s marked %s statues=%d ropes=%d", describe(expected), describe(markedSlots()),
+                #statues(), #ropes())
     end)
 end }
 
 local function requireModule(plan)
     plan.require("Jangseung module and its effects", function()
         local module = jangseung()
-        return module and module._test and T().statueVariant() > 0 and T().groundVariant() > 0 and true or nil,
+        return module and module._test and T().statueVariant() > 0 and T().groundVariant() > 0
+            and T().ropeVariant() > 0 and true or nil,
             "module or effect variants missing (restart after entities2.xml changes)"
     end)
 end
@@ -103,6 +171,28 @@ local function besideRoom(level, pick)
     return nil
 end
 
+-- The room's own hostile NPCs ("Type.Variant"), appearing ones included.
+local function hostiles()
+    local list = {}
+    for _, entity in ipairs(Isaac.GetRoomEntities()) do
+        local npc = entity:ToNPC()
+        if npc and npc:Exists() and not npc:IsDead() and (npc:IsEnemy() or npc:IsActiveEnemy(true))
+            and not npc:HasEntityFlags(EntityFlag.FLAG_FRIENDLY) then
+            list[#list + 1] = npc.Type .. "." .. npc.Variant
+        end
+    end
+    return list
+end
+
+local function clearEnemies()
+    for _, entity in ipairs(Isaac.GetRoomEntities()) do
+        local npc = entity:ToNPC()
+        if npc and (npc:IsEnemy() or npc:IsActiveEnemy(true)) and not npc:HasEntityFlags(EntityFlag.FLAG_FRIENDLY) then
+            npc:Remove()
+        end
+    end
+end
+
 local function goTo(plan, label, find)
     plan.require(label .. ": a room to test in", function(_, ctx)
         local why
@@ -119,13 +209,18 @@ local function goTo(plan, label, find)
         return Game():GetLevel():GetCurrentRoomDesc().SafeGridIndex == ctx.goal and RoomTransition.GetTransitionMode() == 0
     end, 240, label)
     plan.act(function(player)
-        for _, entity in ipairs(Isaac.GetRoomEntities()) do
-            local npc = entity:ToNPC()
-            if npc and npc:IsActiveEnemy(false) then npc:Remove() end
-        end
+        clearEnemies()
         player.Position = Game():GetRoom():GetCenterPos()
     end)
     plan.wait(6)
+    -- the room's own enemies go, including ones still appearing (not yet
+    -- "active"): a Ragling and a Fat Sack left that way killed Isaac once he
+    -- stepped out of the village in shelter (2026-11-16)
+    plan.require(label .. ": none of the room's own enemies left", function()
+        clearEnemies()
+        local left = hostiles()
+        return #left == 0 or nil, #left == 0 and "room empty" or ("still here: " .. table.concat(left, ","))
+    end)
 end
 
 local function besideType(name)
@@ -146,16 +241,27 @@ S.add("JANGSEUNG", "doors", { conditions = true }, function(plan, id)
             local door = room:GetDoor(slot)
             if door and door.TargetRoomType == RoomType.ROOM_TREASURE and marked[slot] == "door" then treasure = true end
         end
-        local count = 0
-        for _ in pairs(expected) do count = count + 1 end
-        return treasure and same(marked, expected) and #statues() == count * 2,
+        return treasure and same(marked, expected) and #statues() == count(expected) * 2,
             string.format("expected %s marked %s statues=%d", describe(expected), describe(marked), #statues())
+    end)
+    plan.check("a 금줄 hangs at every pair, its icon the room behind the door", function()
+        local expected = expectedTags()
+        local got, wrong = ropeTags()
+        local treasure = false
+        for _, tag in pairs(got) do if tag:find("^IconTreasureRoom") then treasure = true end end
+        return treasure and same(got, expected) and #wrong == 0 and #ropes() == count(expected),
+            string.format("expected %s ropes %s wrong=%s ropes=%d", describeTags(expected), describeTags(got),
+                table.concat(wrong, ","), #ropes())
     end)
     plan.check("each pair's earth is stamped once", function()
         local e = T().evidence()
         return e.stamps == #jangseung().markers(), string.format("stamps=%d markers=%d", e.stamps, #jangseung().markers())
     end)
-    plan.note("LOOK", function() return "the pair (hatted 천하대장군 left/above) and the trodden earth in front of the treasure door" end)
+    plan.note("LOOK", function()
+        return "the pair (hatted 천하대장군 left/above), the 금줄 between their heads with the treasure room's crown "
+            .. "hanging from its middle by a short string (straw rim, no paper behind it, the doorway in sight), and "
+            .. "the trodden earth in front of the treasure door"
+    end)
 end)
 
 -- A hidden secret room's wall gets its pair too.
@@ -175,7 +281,8 @@ S.add("JANGSEUNG", "secret", { conditions = true }, function(plan, id)
     end)
 end)
 
--- The wall a Red Key opens toward the ultra secret room gets a red-clothed pair.
+-- The wall a Red Key opens toward the ultra secret room gets a pair whose 금줄
+-- is red and carries the ultra secret room's icon; digging it follows at once.
 S.add("JANGSEUNG", "red", { conditions = true }, function(plan, id)
     setup(plan, id, true)
     goTo(plan, "a room where the red route starts", function(level)
@@ -200,16 +307,46 @@ S.add("JANGSEUNG", "red", { conditions = true }, function(plan, id)
         end
         return found, found == nil and "no room on this floor starts the dig" or nil
     end)
-    plan.check("a red-clothed pair stands at the wall to dig", function()
+    plan.check("a pair with a red 금줄 and the ultra secret room's icon stands at the wall to dig", function()
         local expected, marked = expectedSlots(), markedSlots()
         local red
         for slot = 0, 7 do if expected[slot] == "red" then red = slot end end
-        local redStatues = 0
-        for _, statue in ipairs(statues()) do
-            if statue.SubType == 1 and statue:GetSprite():GetAnimation():find("Red") then redStatues = redStatues + 1 end
-        end
-        return red ~= nil and marked[red] == "red" and redStatues == 2,
-            string.format("expected %s marked %s red statues=%d", describe(expected), describe(marked), redStatues)
+        local tags, wrong = ropeTags()
+        return red ~= nil and marked[red] == "red" and tags[red] == "IconUltraSecretRoom/red" and #wrong == 0
+                and #statues() == count(expected) * 2,
+            string.format("expected %s marked %s ropes %s wrong=%s statues=%d", describe(expected), describe(marked),
+                describeTags(tags), table.concat(wrong, ","), #statues())
+    end)
+    -- A Red Key's door made while the player stands in the room: the pairs
+    -- follow at once, without leaving (the engine's own MakeRedRoomDoor, as
+    -- the Red Key and 축's black ox use it).
+    plan.act(function(_, ctx)
+        local level = Game():GetLevel()
+        local desc = LevelRooms.mainRoom(level)
+        for slot = 0, 7 do if expectedSlots()[slot] == "red" then ctx.dig = slot end end
+        T().resetEvidence()
+        local ok, made = pcall(level.MakeRedRoomDoor, level, desc.SafeGridIndex, ctx.dig)
+        ctx.made = ok and made
+    end)
+    plan.wait(3)
+    plan.check("the dug door's pairs stand at once, each 금줄 the room behind its door", function(_, ctx)
+        local expected, marked = expectedSlots(), markedSlots()
+        local tags, wrong = ropeTags()
+        local wanted = expectedTags()
+        local door = ctx.dig and Game():GetRoom():GetDoor(ctx.dig)
+        local behind = door and Game():GetLevel():GetRoomByIdx(door.TargetRoomIndex)
+        local redFlag = RoomDescriptor.FLAG_RED_ROOM or (1 << 10)
+        return ctx.made and door ~= nil and T().evidence().resurveys >= 1 and same(marked, expected)
+                and same(tags, wanted) and #wrong == 0 and #statues() == count(expected) * 2
+                and #ropes() == count(wanted),
+            string.format("made=%s door=%s behind type=%s red=%s resurveys=%d expected %s marked %s ropes %s/%s wrong=%s",
+                tostring(ctx.made), tostring(door ~= nil), tostring(door and door.TargetRoomType),
+                tostring(behind ~= nil and behind.Flags & redFlag ~= 0), T().evidence().resurveys, describe(expected),
+                describe(marked), describeTags(tags), describeTags(wanted), table.concat(wrong, ","))
+    end)
+    plan.note("LOOK", function()
+        return "the red 금줄 with the ultra secret room's icon at the wall to dig; after the dig, the dug door's "
+            .. "pair (if it leads to a special room) with its room's icon on a red rope"
     end)
 end)
 
@@ -251,6 +388,9 @@ S.add("JANGSEUNG", "guard", { conditions = true }, function(plan, id)
     end)
     plan.act(function(_, ctx)
         local m = ctx.marker
+        -- the common enemy goes first: feared, it may wander back in and be
+        -- pushed again, which would count against the boss (2026-11-16)
+        if ctx.npc and ctx.npc:Exists() then ctx.npc:Remove() end
         local boss = Isaac.Spawn(EntityType.ENTITY_MONSTRO, 0, 0, m.center + m.inward * 30, Vector.Zero, nil):ToNPC()
         boss:AddEntityFlags(EntityFlag.FLAG_FREEZE)
         ctx.boss = boss
@@ -285,8 +425,14 @@ S.add("JANGSEUNG", "shelter", { conditions = true }, function(plan, id)
     end)
     plan.act(function(player, ctx)
         local m = jangseung().markers()[1]
-        local npc = Isaac.Spawn(EntityType.ENTITY_GAPER, 0, 0, ctx.outside + Vector(0, 60), Vector.Zero, nil):ToNPC()
+        -- only the hits' source: in a corner, away from every village and from
+        -- the player, and harmless to touch. Near a door it was pushed out of that
+        -- village into the player, and with No Hit Delay its contact killed him
+        -- (2026-11-16).
+        local corner = Game():GetRoom():GetTopLeftPos() + Vector(20, 20)
+        local npc = Isaac.Spawn(EntityType.ENTITY_GAPER, 0, 0, corner, Vector.Zero, nil):ToNPC()
         npc:AddEntityFlags(EntityFlag.FLAG_FREEZE)
+        npc.CollisionDamage = 0
         ctx.npc, ctx.creeps = npc, {}
         ctx.cleanupFns = ctx.cleanupFns or {}
         table.insert(ctx.cleanupFns, function()
@@ -350,7 +496,13 @@ S.add("JANGSEUNG", "shelter", { conditions = true }, function(plan, id)
         ctx.before = health(player)
         creepUnder(player, ctx)
     end)
-    plan.wait(30)
+    -- the creep goes as soon as it has hurt once: with No Hit Delay (an
+    -- installed mod that removes the invincibility after a hit) it hurts every
+    -- update and killed Isaac in five (2026-11-16)
+    plan.waitUntil(function(player, ctx) return health(player) < ctx.before end, 30, "the creep's first hit outside")
+    plan.act(function(_, ctx)
+        for _, creep in ipairs(ctx.creeps) do if creep:Exists() then creep:Remove() end end
+    end)
     plan.check("outside the village the same creep hurts", function(player, ctx)
         return not jangseung().shelters(player) and health(player) < ctx.before and T().evidence().blocked == 0,
             string.format("sheltered=%s health %d -> %d blocked=%d", tostring(jangseung().shelters(player)), ctx.before,
@@ -401,13 +553,13 @@ S.add("JANGSEUNG", "door_stop", { conditions = true, synergies = true }, functio
     plan.check("with Door Stop the door come in by has a pair", function(_, ctx)
         local expected, marked = expectedSlots(), markedSlots()
         if ctx.entry ~= nil then expected[ctx.entry] = expected[ctx.entry] or "door" end
-        local count = 0
-        for _ in pairs(expected) do count = count + 1 end
+        local wanted = count(expected)
         local flagged = false
         for _, marker in ipairs(jangseung().markers()) do
             if marker.slot == ctx.entry and marker.entry then flagged = true end
         end
-        return ctx.entry ~= nil and flagged and same(marked, expected) and #statues() == count * 2,
+        return ctx.entry ~= nil and flagged and same(marked, expected) and #statues() == wanted * 2
+                and #ropes() == count(expectedTags()), -- the door come in by: a rope only if its room has an icon
             string.format("entry=%s EnterDoor=%s expected %s marked %s statues=%d", tostring(ctx.entry),
                 tostring(ctx.enterDoor), describe(expected), describe(marked), #statues())
     end)
@@ -422,10 +574,11 @@ end, { "trinket_door_stop" })
 S.add("JANGSEUNG", "not_held", { conditions = true }, function(plan, id)
     setup(plan, id, false)
     goTo(plan, "the room beside the treasure room", besideType("ROOM_TREASURE"))
-    plan.check("no statue, no earth, no guard without the item", function()
+    plan.check("no statue, no rope, no earth, no guard without the item", function()
         local e = T().evidence()
-        return #statues() == 0 and #jangseung().markers() == 0 and e.stamps == 0,
-            string.format("statues=%d markers=%d stamps=%d", #statues(), #jangseung().markers(), e.stamps)
+        return #statues() == 0 and #ropes() == 0 and #jangseung().markers() == 0 and e.stamps == 0,
+            string.format("statues=%d ropes=%d markers=%d stamps=%d", #statues(), #ropes(), #jangseung().markers(),
+                e.stamps)
     end)
 end)
 

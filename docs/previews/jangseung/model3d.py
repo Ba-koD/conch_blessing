@@ -7,7 +7,8 @@ Each statue is a round wooden post with its features made of solids:
 at the back), angry brows, bulging eyes with dark pupils, a fist nose, an open
 mouth with a row of teeth and two corner tusks, a carved beard and his name
 carved down the post; 지하여장군 has her hair and topknot, round eyes, red
-cheeks and lips and small fangs. The red-route pair wears a red cloth. Each
+cheeks and lips and small fangs. The red-route pair wore a red cloth until
+2026-11-15 (a 금줄 marks it now; the cloth stays here only for comparisons). Each
 post stands on the floor beside a door, facing into the room, and leans back
 until its head rests on the wall.
 

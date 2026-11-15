@@ -23,6 +23,7 @@ PENDING={
  'gfx/items/collectibles/landmine.png':'3D model not built yet (Landmine, added 2026-11-15)',
  'gfx/effects/conch_landmine.png':'3D model not built yet (Landmine mine, added 2026-11-15)',
  'gfx/items/collectibles/underdog.png':'3D model not built yet (Underdog, added 2026-11-15)',
+ 'gfx/effects/conch_jangseung_rope.png':'3D model not built yet (Jangseung 금줄, added 2026-11-15)',
 }
 
 

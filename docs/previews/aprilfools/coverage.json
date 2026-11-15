@@ -20,6 +20,11 @@
     "detail": "gfx/effects/conch_jangseung_ground_af3d.png"
   },
   {
+    "source": "gfx/effects/conch_jangseung_rope.png",
+    "status": "pending",
+    "detail": "3D model not built yet (Jangseung \uae08\uc904, added 2026-11-15)"
+  },
+  {
     "source": "gfx/effects/conch_jangseung_ward.png",
     "status": "modelled",
     "detail": "gfx/effects/conch_jangseung_ward_af3d.png"
