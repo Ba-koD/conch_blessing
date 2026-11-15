@@ -684,6 +684,29 @@ return {
                 "#{{Warning}} Requires REPENTOGON!",
             },
         },
+        LANDMINE = {
+            name = "Landmine",
+            description = "Watch your step",
+            eid = {
+                "A tear that falls to the floor or strikes a wall without hitting an enemy leaves a mine there",
+                "#An enemy stepping on a mine sets it off, dealing twice that tear's damage to enemies around it",
+                "#Other mines caught in the blast go off too",
+                "#Up to 10 mines at a time; they never hurt you",
+                "#{{Warning}} Requires REPENTOGON!",
+            },
+        },
+        UNDERDOG = {
+            name = "Underdog",
+            description = "Every dog has its day",
+            eid = {
+                "Every item you hold gives a stat by its quality",
+                "#{{Quality0}}: {{Damage}} +1 Damage",
+                "#{{Quality1}}: {{Tears}} +0.3 Tears",
+                "#{{Quality2}}: {{Range}} +0.5 Range",
+                "#{{Quality3}}: {{Luck}} -0.5 Luck",
+                "#{{Quality4}}: {{Speed}} -0.1 Speed",
+            },
+        },
 
         -- Familiars
         TIME_MONEY = {
@@ -936,6 +959,13 @@ return {
         },
         jeon_woochi = {
             summon_count = "#{{ColorYellow}}Items summoned: %s{{CR}}",
+        },
+        underdog = {
+            q0 = "#{{Collectible%s}} On pickup: {{Damage}} %s Damage",
+            q1 = "#{{Collectible%s}} On pickup: {{Tears}} %s Tears",
+            q2 = "#{{Collectible%s}} On pickup: {{Range}} %s Range",
+            q3 = "#{{Collectible%s}} On pickup: {{Luck}} %s Luck",
+            q4 = "#{{Collectible%s}} On pickup: {{Speed}} %s Speed",
         },
         tyrfing = {
             accumulated_damage = "#{{Damage}} Accumulated damage: +%s",

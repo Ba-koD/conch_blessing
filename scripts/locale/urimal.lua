@@ -669,6 +669,29 @@ return {
                 "#{{Warning}} 덧붙임 도우미(REPENTOGON)가 있어야 합니다!",
             },
         },
+        LANDMINE = {
+            name = "지뢰",
+            description = "발밑 조심",
+            eid = {
+                "적에게 맞지 않은 눈물이 바닥에 떨어지거나 벽에 부딪히면 그 자리에 지뢰가 묻힙니다",
+                "#적이 지뢰를 밟으면 터지며 둘레의 적에게 그 눈물 때리는 힘의 2배만큼 아프게 합니다",
+                "#터짐에 휩쓸린 다른 지뢰도 함께 터집니다",
+                "#지뢰는 한 번에 10개까지 묻히고, 나는 다치지 않습니다",
+                "#{{Warning}} 덧붙임 도우미(REPENTOGON)가 있어야 합니다!",
+            },
+        },
+        UNDERDOG = {
+            name = "언더독",
+            description = "쥐구멍에도 볕 들 날 있다",
+            eid = {
+                "가진 아이템마다 등급에 따라 아래 능력을 얻습니다",
+                "#{{Quality0}}: {{Damage}} 때리는 힘 +1",
+                "#{{Quality1}}: {{Tears}} 쏘는 빠르기 +0.3",
+                "#{{Quality2}}: {{Range}} 닿는 거리 +0.5",
+                "#{{Quality3}}: {{Luck}} 행운 -0.5",
+                "#{{Quality4}}: {{Speed}} 움직이는 빠르기 -0.1",
+            },
+        },
 
         -- Familiars
         TIME_MONEY = {
@@ -920,6 +943,13 @@ return {
         },
         jeon_woochi = {
             summon_count = "#{{ColorYellow}}불러낼 아이템 : %s개{{CR}}",
+        },
+        underdog = {
+            q0 = "#{{Collectible%s}} 얻으면 {{Damage}} 때리는 힘 %s",
+            q1 = "#{{Collectible%s}} 얻으면 {{Tears}} 쏘는 빠르기 %s",
+            q2 = "#{{Collectible%s}} 얻으면 {{Range}} 닿는 거리 %s",
+            q3 = "#{{Collectible%s}} 얻으면 {{Luck}} 행운 %s",
+            q4 = "#{{Collectible%s}} 얻으면 {{Speed}} 움직이는 빠르기 %s",
         },
         tyrfing = {
             accumulated_damage = "#{{Damage}} 쌓인 때리는 힘: +%s",

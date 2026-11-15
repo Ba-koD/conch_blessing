@@ -49,4 +49,6 @@ return {
     { key = "WRONG_ANSWER_NOTE" },
     { key = "SEONNYEO" },
     { key = "JEON_WOOCHI" },
+    { key = "LANDMINE" },
+    { key = "UNDERDOG" },
 }

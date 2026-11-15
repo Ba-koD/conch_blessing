@@ -17,6 +17,13 @@ EXCEPTIONS={
  'gfx/items/trinkets/tmp.png':'unused template',
  'gfx/items/trinkets/time_template.png':'unused template',
 }
+# Physical objects whose 3D model is not built yet: April Fools keeps their 2D
+# art until one is (each named with the day it was added).
+PENDING={
+ 'gfx/items/collectibles/landmine.png':'3D model not built yet (Landmine, added 2026-11-15)',
+ 'gfx/effects/conch_landmine.png':'3D model not built yet (Landmine mine, added 2026-11-15)',
+ 'gfx/items/collectibles/underdog.png':'3D model not built yet (Underdog, added 2026-11-15)',
+}
 
 
 def main():
@@ -38,6 +45,7 @@ def main():
         row=mapping.get(relative.lower())
         if row:status='modelled';detail=row['still']
         elif relative in EXCEPTIONS:status='preserved';detail=EXCEPTIONS[relative]
+        elif relative in PENDING:status='pending';detail=PENDING[relative]
         else:status='MISSING';detail='';missing.append(relative)
         audit.append({'source':relative,'status':status,'detail':detail})
     (OUT/'coverage.json').write_text(json.dumps(audit,indent=2)+'\n',encoding='utf-8')

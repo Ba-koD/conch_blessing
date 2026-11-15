@@ -61,4 +61,12 @@ return {
         collisionDamage = 0, collisionMass = 0, collisionRadius = 0,
         friction = 1, numGridCollisionPoints = 0, shadowSize = 0,
     },
+    -- 지뢰's mine lying on the floor where a missed tear fell; the module
+    -- finds what steps on it and deals its blast itself.
+    LANDMINE = {
+        name = "Conch Blessing Landmine", id = 1000, variant = 7790,
+        anm2path = "effects/conch_landmine.anm2",
+        collisionDamage = 0, collisionMass = 0, collisionRadius = 0,
+        friction = 1, numGridCollisionPoints = 0, shadowSize = 0,
+    },
 }

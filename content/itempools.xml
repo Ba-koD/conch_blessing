@@ -46,6 +46,8 @@
         <Item Name="Floor" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Jangseung" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Jeon Woo-chi" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Landmine" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Underdog" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Rat" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Ox" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Tiger" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>

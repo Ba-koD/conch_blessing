@@ -30,6 +30,11 @@
     "detail": "gfx/effects/conch_jeonwoochi_af3d.png"
   },
   {
+    "source": "gfx/effects/conch_landmine.png",
+    "status": "pending",
+    "detail": "3D model not built yet (Landmine mine, added 2026-11-15)"
+  },
+  {
     "source": "gfx/effects/conch_ox.png",
     "status": "preserved",
     "detail": "retired sheet; runtime conch_ox.anm2 uses directions/equipped sleep"
@@ -245,6 +250,11 @@
     "detail": "gfx/items/collectibles/kronos_af3d.png"
   },
   {
+    "source": "gfx/items/collectibles/landmine.png",
+    "status": "pending",
+    "detail": "3D model not built yet (Landmine, added 2026-11-15)"
+  },
+  {
     "source": "gfx/items/collectibles/live_eye.png",
     "status": "modelled",
     "detail": "gfx/items/collectibles/live_eye_af3d.png"
@@ -353,6 +363,11 @@
     "source": "gfx/items/collectibles/tyrfing.png",
     "status": "modelled",
     "detail": "gfx/items/collectibles/tyrfing_af3d.png"
+  },
+  {
+    "source": "gfx/items/collectibles/underdog.png",
+    "status": "pending",
+    "detail": "3D model not built yet (Underdog, added 2026-11-15)"
   },
   {
     "source": "gfx/items/collectibles/utility_belt.png",

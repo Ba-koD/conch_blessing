@@ -997,6 +997,59 @@ ConchBlessing.ItemData = {
             preModUnload = "jeonwoochi.onModUnload",
         },
     },
+    LANDMINE = {
+        -- 지뢰 (user design 2026-11-15): a tear of the holder's that falls to
+        -- the floor or strikes a wall without hitting an enemy leaves a mine
+        -- there; an enemy stepping on it sets it off. It never hurts a player.
+        type = "passive",
+        id = Isaac.GetItemIdByName("Landmine"),
+        gfx = "landmine.png",
+        tags = "offensive",
+        pool = {
+            RoomType.ROOM_TREASURE
+        },
+        quality = 2,
+        hidden = false,
+        shopprice = 15,
+        devilprice = 2,
+        origin = { id = CollectibleType.COLLECTIBLE_IPECAC, type = "collectible" },
+        flag = "neutral",
+        script = "scripts/items/collectibles/landmine",
+        callbacks = {
+            postUpdate = "landmine.onUpdate",
+            postNewRoom = "landmine.onNewRoom",
+            gameStarted = "landmine.onGameStarted",
+            preGameExit = "landmine.onGameExit",
+            preModUnload = "landmine.onModUnload",
+        },
+    },
+    UNDERDOG = {
+        -- 언더독 (user design 2026-11-15): every collectible held gives one
+        -- stat by its quality: 0 damage up, 1 tears up, 2 range up, 3 luck
+        -- down, 4 speed down. Sacred Orb's neutral answer: the orb throws
+        -- low-quality items away, this one feeds on them.
+        type = "passive",
+        id = Isaac.GetItemIdByName("Underdog"),
+        gfx = "underdog.png",
+        tags = "offensive",
+        cache = "damage firedelay range luck speed",
+        pool = {
+            RoomType.ROOM_TREASURE
+        },
+        quality = 2,
+        hidden = false,
+        shopprice = 15,
+        devilprice = 2,
+        origin = { id = CollectibleType.COLLECTIBLE_SACRED_ORB, type = "collectible" },
+        flag = "neutral",
+        script = "scripts/items/collectibles/underdog",
+        callbacks = {
+            postPEffectUpdate = "underdog.onPlayerUpdate",
+            evaluateCache = "underdog.onEvaluateCache",
+            gameStarted = "underdog.onGameStarted",
+            preGameExit = "underdog.onGameExit",
+        },
+    },
 
     -- The twelve zodiac items (십이지) close the collectible group in their own
     -- order, 자 … 해, followed by the familiars and trinkets.
