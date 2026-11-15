@@ -6,10 +6,12 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- Each hit the holder takes writes down the kind of enemy (its type and
 -- variant) that dealt it, and the holder's attacks then deal +50% damage to
 -- that kind, more with every further hit from it. A floor passed without a hit
--- adds +25% damage against every enemy. Both steps scale with the trinket
--- multiplier (golden or Mom's Box: 100% / 50%, both: 150% / 75%; more copies
--- add the same way). What was written down stays with the player for the run
--- and works while they hold (or have smelted) a note.
+-- adds +25% damage against every enemy. Each step is worth what the trinket
+-- multiplier makes it at that moment (golden or Mom's Box: 100% / 50%, both:
+-- 150% / 75%; more copies add the same way) and keeps that worth: a note made
+-- golden later makes only the later steps bigger, and losing the golden copy
+-- shrinks none (user rule 2026-11-15). What was written down stays with the
+-- player for the run and works while they hold (or have smelted) a note.
 --
 -- A hit is what scripts/lib/player_hits.lua counts. The enemy behind it is the
 -- hitting NPC itself, or whoever spawned or parents the projectile, creep or
@@ -20,11 +22,13 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- once; the base API cannot change a hit's damage, so without REPENTOGON the
 -- note does nothing (its EID says so).
 --
--- When an enemy of a written-down kind appears, a small red "+N%" (its kind's
--- bonus) pops above it for a moment; when a no-hit floor grows the all-enemy
--- bonus, a gold "+N%" pops above the holder once. The markers are cosmetic,
--- drawn with the vanilla font, and freeze while the game is paused.
+-- While a living player holds a note, every enemy of a written-down kind shows
+-- its kind's bonus in red above it, and a holder with an all-enemy bonus shows
+-- it in gold above themselves, the whole time (user request 2026-11-15; they
+-- used to pop up for a moment). A number pops in when it appears or grows. The
+-- markers are cosmetic, drawn with the vanilla font.
 local SaveManager = ConchBlessing.SaveManager or require("scripts.lib.save_manager")
+local RunSaveCache = require("scripts.lib.run_save_cache")
 local Hits = require("scripts.lib.player_hits")
 local TrinketUtils = ConchBlessing.TrinketUtils or require("scripts.lib.trinket_utils")
 local DamageProvenance = require("scripts.lib.damage_provenance")
@@ -34,29 +38,44 @@ ConchBlessing.wronganswernote = ConchBlessing.wronganswernote or {}
 local M = ConchBlessing.wronganswernote
 
 local SAVE_KEY = "wrongAnswerNote"
+-- 2: kinds and `all` hold the bonus each step was worth when it was written
+-- (before 2026-11-15 kinds held hit counts, scaled by the multiplier of the
+-- moment they were read).
+local VERSION = 2
 
 M.data = {
     kindStep = 0.5,     -- +50% per hit from a kind, per trinket multiplier
     floorStep = 0.25,   -- +25% against all enemies per no-hit floor, per multiplier
-    markerFrames = 80,  -- render frames a marker stays (pop, hold, fade)
-    -- the marker's top sits (lift + Size x sizeLift) x SpriteScale.Y px above the
+    -- A monster's number sits `gap` px above the top of what the engine draws
+    -- for it (REPENTOGON's frame data: Hush's face reaches 96 px above its
+    -- position, while its size 100 put the number 162 px up, off the screen;
+    -- user report 2026-11-15). A holder's number, and a monster's without that
+    -- data, has its top (lift + Size x sizeLift) x SpriteScale.Y px above the
     -- feet: clear of a gaper's or Isaac's head (about 33 px tall), checked in a
-    -- preview drawn with the vanilla font and sprites (2026-11-09)
+    -- preview drawn with the vanilla font and sprites (2026-11-09).
+    gap = 2,
     lift = 32,
     sizeLift = 1.3,
+    -- a number never leaves the screen: it keeps this far from its edges
+    edge = 4,
+    lineHeight = 9,     -- the vanilla mini font's line, when it cannot say
     popFrames = 6,
-    fadeFrames = 24,
+    -- a holder's gold number moves up this far while player_hits' icons show
+    -- over their head, and back down after
+    iconRaise = 14,
 }
 
 local started = false
-local markers = {}      -- { ref = EntityPtr, text, color, age }
-local endedFloor = nil  -- [GetPtrHash(player)] = true when the ending floor had no hit
+local tracked = {}      -- [GetPtrHash(npc)] = { ref = EntityPtr, key, text, age }: monsters in the room
+local heads = {}        -- [GetPtrHash(player)] = { text, age, raise }: holders' gold numbers
+local view = { frame = nil, kinds = {}, any = false, holders = {} }
+local endedFloor = nil  -- [GetPtrHash(player)] = multiplier, when the ending floor had no hit
 local font = nil
 local reported = {}
 
 local evidence
 local function resetEvidence()
-    evidence = { noted = 0, boosted = 0, floors = 0, markers = 0, lastBonus = 0, lastAmount = 0, lastDamage = 0 }
+    evidence = { noted = 0, boosted = 0, floors = 0, lastGain = 0, lastBonus = 0, lastAmount = 0, lastDamage = 0 }
 end
 resetEvidence()
 
@@ -84,18 +103,36 @@ local function alive(player)
     return not (type(player.IsCoopGhost) == "function" and player:IsCoopGhost())
 end
 
---- The player's note for the run: { kinds = { ["type.variant"] = hits }, floors = n }.
-function M.ledger(player)
-    local save = SaveManager and SaveManager.GetRunSave(player)
+-- An older note kept hit counts; each becomes the bonus it showed then, at
+-- the multiplier held now (at least one copy's worth).
+local function normalize(note, player)
+    note.kinds = type(note.kinds) == "table" and note.kinds or {}
+    note.floors = tonumber(note.floors) or 0
+    if note.v ~= VERSION then
+        local mult = math.max(1, M.multiplier(player))
+        for key, hits in pairs(note.kinds) do
+            note.kinds[key] = (tonumber(hits) or 0) * M.data.kindStep * mult
+        end
+        note.all = note.floors * M.data.floorStep * mult
+        note.v = VERSION
+    end
+    note.all = tonumber(note.all) or 0
+    return note
+end
+
+--- The player's note for the run: { kinds = { ["type.variant"] = bonus },
+--- all = bonus, floors = clean floors, v = 2 }, bonuses as fractions (0.5 =
+--- +50%). Without `create` false, a player with no note gets an empty one.
+function M.ledger(player, create)
+    local save = RunSaveCache.player(player, create ~= false)
     if type(save) ~= "table" then return nil end
     local note = save[SAVE_KEY]
     if type(note) ~= "table" then
-        note = { kinds = {}, floors = 0 }
+        if create == false then return nil end
+        note = { kinds = {}, floors = 0, all = 0, v = VERSION }
         save[SAVE_KEY] = note
     end
-    note.kinds = type(note.kinds) == "table" and note.kinds or {}
-    note.floors = tonumber(note.floors) or 0
-    return note
+    return normalize(note, player)
 end
 
 function M.kindKey(entityType, variant)
@@ -129,18 +166,11 @@ end
 
 --- The extra damage (a fraction: 0.5 = +50%) this player's attacks deal to `npc`.
 function M.bonus(player, npc)
-    local mult = M.multiplier(player)
-    if mult <= 0 then return 0 end
-    local note = M.ledger(player)
+    if M.multiplier(player) <= 0 then return 0 end
+    local note = M.ledger(player, false)
     if not note then return 0 end
-    local hits = npc and note.kinds[M.kindKey(npc.Type, npc.Variant)] or 0
-    return (hits * M.data.kindStep + note.floors * M.data.floorStep) * mult
-end
-
-local function kindBonus(player, key)
-    local note = M.ledger(player)
-    local hits = note and note.kinds[key] or 0
-    return hits * M.data.kindStep * M.multiplier(player)
+    local kind = npc and note.kinds[M.kindKey(npc.Type, npc.Variant)] or 0
+    return kind + note.all
 end
 
 local function players()
@@ -152,61 +182,76 @@ local function players()
     return list
 end
 
+local texts = {}
 local function percent(fraction)
-    return string.format("+%d%%", math.floor(fraction * 100 + 0.5))
+    local text = texts[fraction]
+    if not text then
+        text = string.format("+%d%%", math.floor(fraction * 100 + 0.5))
+        texts[fraction] = text
+    end
+    return text
 end
 
 local RED = { 1, 0.28, 0.25 }
 local GOLD = { 1, 0.82, 0.3 }
 
-local function addMarker(entity, text, color)
-    if not entity or not entity:Exists() then return end
-    local hash = GetPtrHash(entity)
-    for _, marker in ipairs(markers) do
-        if marker.hash == hash and marker.color == color then
-            marker.text, marker.age = text, 0
-            return
+-- What the markers show, worked out once a game frame (and again after a hit
+-- or a floor changes a note): each written-down kind's highest bonus among the
+-- living holders, and each holder's all-enemy bonus.
+local function currentView()
+    local frame = Game():GetFrameCount()
+    if view.frame == frame then return view end
+    local kinds, holders, any = {}, {}, false
+    for _, player in ipairs(players()) do
+        if alive(player) and M.multiplier(player) > 0 then
+            local note = M.ledger(player, false)
+            if note then
+                for key, bonus in pairs(note.kinds) do
+                    if bonus > (kinds[key] or 0) then kinds[key], any = bonus, true end
+                end
+                if note.all > 0 then holders[#holders + 1] = { player = player, bonus = note.all } end
+            end
         end
     end
-    markers[#markers + 1] = { ref = EntityPtr(entity), hash = hash, text = text, color = color, age = 0 }
-    evidence.markers = evidence.markers + 1
+    view = { frame = frame, kinds = kinds, any = any, holders = holders }
+    return view
 end
 
--- The highest kind bonus any living holder has against this enemy.
-local function shownKindBonus(npc)
-    local key, best = M.kindKey(npc.Type, npc.Variant), 0
-    for _, player in ipairs(players()) do
-        if alive(player) then best = math.max(best, kindBonus(player, key)) end
+local function changed() view.frame = nil end
+
+local function track(npc)
+    if not npc or not EnemyUtils.isMonsterKind(npc) then return end
+    local hash = GetPtrHash(npc)
+    if tracked[hash] then return end
+    tracked[hash] = { ref = EntityPtr(npc), key = M.kindKey(npc.Type, npc.Variant), age = 0 }
+end
+
+local function trackRoom()
+    tracked = {}
+    for _, entity in ipairs(Isaac.GetRoomEntities()) do
+        local npc = entity:ToNPC()
+        if npc then track(npc) end
     end
-    return best
-end
-
-local function markEnemy(npc)
-    local bonus = shownKindBonus(npc)
-    if bonus > 0 then addMarker(npc, percent(bonus), RED) end
 end
 
 -- Its clean-floor bonus breaks on any hit; on the next floor it watches again.
 Hits.watchFloor("WRONG_ANSWER_NOTE")
 
--- A hit is written down under the kind of enemy behind it.
+-- A hit is written down under the kind of enemy behind it, worth what the
+-- holder's multiplier makes it now.
 Hits.register("WRONG_ANSWER_NOTE", function(_, entity, amount, flags, source)
     local player = entity and entity:ToPlayer()
     if not started or not player or not Hits.counts(flags) then return end
-    if M.multiplier(player) <= 0 then return end
+    local mult = M.multiplier(player)
+    if mult <= 0 then return end
     local key = M.enemyKind(source)
     if not key then return end
     local note = M.ledger(player)
     if not note then return end
-    note.kinds[key] = (note.kinds[key] or 0) + 1
-    evidence.noted = evidence.noted + 1
-    -- the grown number shows over that kind's enemies in the room
-    for _, other in ipairs(Isaac.GetRoomEntities()) do
-        local npc = other:ToNPC()
-        if npc and M.kindKey(npc.Type, npc.Variant) == key and EnemyUtils.isMonsterKind(npc) and not npc:IsDead() then
-            markEnemy(npc)
-        end
-    end
+    local gain = M.data.kindStep * mult
+    note.kinds[key] = (note.kinds[key] or 0) + gain
+    evidence.noted, evidence.lastGain = evidence.noted + 1, gain
+    changed()
     return true
 end)
 
@@ -226,10 +271,10 @@ function M.onTakeDamageLate(_, entity, amount, flags, source, countdown, extraSo
     return { Damage = amount * (1 + bonus) }
 end
 
--- An enemy of a noted kind appears: its number pops above it.
+-- A monster appears: its marker shows whenever its kind is written down.
 function M.onNpcInit(_, npc)
-    if not started or not npc or not EnemyUtils.isMonsterKind(npc) then return end
-    markEnemy(npc)
+    if not started then return end
+    track(npc)
 end
 
 -- A floor passed without a hit, while holding a note, adds to the all-enemy
@@ -245,9 +290,8 @@ function M.onFloorEnding()
     end
     local result = {}
     for _, player in ipairs(players()) do
-        if alive(player) and M.multiplier(player) > 0 and chain.noHit(player) then
-            result[GetPtrHash(player)] = true
-        end
+        local mult = alive(player) and M.multiplier(player) or 0
+        if mult > 0 and chain.noHit(player) then result[GetPtrHash(player)] = mult end
     end
     endedFloor = result
 end
@@ -257,12 +301,14 @@ function M.onNewLevel()
     endedFloor = nil
     if not started or not ended then return end
     for _, player in ipairs(players()) do
-        if ended[GetPtrHash(player)] then
+        local mult = ended[GetPtrHash(player)]
+        if mult then
             local note = M.ledger(player)
             if note then
                 note.floors = note.floors + 1
+                note.all = note.all + M.data.floorStep * mult
                 evidence.floors = evidence.floors + 1
-                addMarker(player, percent(note.floors * M.data.floorStep * M.multiplier(player)), GOLD)
+                changed()
             end
         end
     end
@@ -278,59 +324,164 @@ local function loadFont()
     return font
 end
 
+-- The top of what the engine draws for `npc` this frame, in pixels above its
+-- render point before SpriteScale: the highest visible layer frame of its
+-- current animation (REPENTOGON's frame data), or nil without that data.
+-- Rotated layers are taken as upright.
+local function spriteTop(npc)
+    local sprite = npc:GetSprite()
+    if not (sprite and sprite.GetLayerCount and sprite.GetLayer and sprite.GetLayerFrameData) then return nil end
+    local top
+    for id = 0, sprite:GetLayerCount() - 1 do
+        local layer = sprite:GetLayer(id)
+        local frame = layer and (not layer.IsVisible or layer:IsVisible()) and sprite:GetLayerFrameData(id)
+        if frame and (not frame.IsVisible or frame:IsVisible()) and frame:GetHeight() > 0 then
+            local pos, pivot, scale = frame:GetPos(), frame:GetPivot(), frame:GetScale()
+            local size, shift = layer:GetSize(), layer:GetPos()
+            local y = (pos.Y - pivot.Y * scale.Y) * size.Y + shift.Y
+            if not top or y < top then top = y end
+        end
+    end
+    return top and -top or nil
+end
+
+-- How far above an entity's render point a number's top sits: just over the
+-- monster's drawn top, worked out once a game frame and eased so a hop or an
+-- attack pose does not jerk it; else the size rule.
+local function heightOf(entity, mark, f, isPlayer)
+    local data = M.data
+    local scaleY = entity.SpriteScale and entity.SpriteScale.Y or 1
+    local frame = Game():GetFrameCount()
+    if not isPlayer and mark.topFrame ~= frame then
+        mark.topFrame = frame
+        local ok, top = pcall(spriteTop, entity)
+        if ok and top then
+            local line = f.GetLineHeight and f:GetLineHeight() or data.lineHeight
+            local want = top * scaleY + data.gap + line
+            mark.height = mark.height and mark.height + (want - mark.height) * 0.35 or want
+        else
+            mark.height = nil
+        end
+    end
+    if not isPlayer and mark.height then return mark.height end
+    return (data.lift + (entity.Size or 10) * data.sizeLift) * scaleY
+end
+
+-- Where a number's top-left goes on the screen, kept inside it.
+local function placeText(entity, height, width, line)
+    local data = M.data
+    local offset = entity.SpriteOffset
+    local at = Isaac.WorldToScreen(entity.Position + entity.PositionOffset)
+    local x = at.X + (offset and offset.X or 0) - width / 2
+    local y = at.Y + (offset and offset.Y or 0) - height
+    local w = type(Isaac.GetScreenWidth) == "function" and Isaac.GetScreenWidth() or nil
+    local h = type(Isaac.GetScreenHeight) == "function" and Isaac.GetScreenHeight() or nil
+    if w then x = math.max(data.edge, math.min(w - data.edge - width, x)) end
+    if h then y = math.min(h - data.edge - line, y) end
+    return x, math.max(data.edge, y)
+end
+
+-- One marker: it pops in (drops 6 px into place and fades in at whole-pixel
+-- size: a fractional scale smears the pixel font) whenever its number changes,
+-- then stays.
+local function drawMarker(f, entity, mark, text, color, paused, raise, isPlayer)
+    if mark.text ~= text then mark.text, mark.age = text, 0 end
+    local data = M.data
+    if not paused and mark.age < data.popFrames then mark.age = mark.age + 1 end
+    local age = mark.age
+    local alpha = age < data.popFrames and 0.35 + 0.65 * age / data.popFrames or 1
+    local rise = age < data.popFrames and (data.popFrames - age) or 0
+    local line = f.GetLineHeight and f:GetLineHeight() or data.lineHeight
+    local width = f:GetStringWidth(text)
+    local x, y = placeText(entity, heightOf(entity, mark, f, isPlayer) + (raise or 0) + rise, width, line)
+    mark.x, mark.y, mark.line = x, y, line
+    f:DrawStringScaled(text, x, y, 1, 1, KColor(color[1], color[2], color[3], alpha), 0, false)
+end
+
+local function iconsShowing(player)
+    return type(Hits.iconsShowing) == "function" and Hits.iconsShowing(player) or false
+end
+
 function M.onRender()
-    if #markers == 0 then return end
-    local game = Game()
-    local paused = game:IsPaused()
+    if not started then return end
+    local v = currentView()
+    if not v.any and #v.holders == 0 then return end
     local f = loadFont()
-    local kept = {}
-    for _, marker in ipairs(markers) do
-        local entity = marker.ref.Ref
-        if entity and entity:Exists() and marker.age < M.data.markerFrames then
-            if not paused then marker.age = marker.age + 1 end
-            kept[#kept + 1] = marker
-            if f:IsLoaded() then
-                -- pop: drop 6 px into place, clear of the head, and fade in at
-                -- whole-pixel size (a fractional scale smears the pixel font),
-                -- hold, then fade out
-                local age, data = marker.age, M.data
-                local alpha = age > data.markerFrames - data.fadeFrames
-                    and (data.markerFrames - age) / data.fadeFrames
-                    or age < data.popFrames and 0.35 + 0.65 * age / data.popFrames or 1
-                local rise = age < data.popFrames and (data.popFrames - age) or 0
-                local scale = 1
-                local height = (data.lift + (entity.Size or 10) * data.sizeLift)
-                    * (entity.SpriteScale and entity.SpriteScale.Y or 1)
-                local at = Isaac.WorldToScreen(entity.Position + entity.PositionOffset)
-                local c = marker.color
-                local width = f:GetStringWidth(marker.text) * scale
-                f:DrawStringScaled(marker.text, at.X - width / 2, at.Y - height - rise, scale, scale,
-                    KColor(c[1], c[2], c[3], alpha), 0, false)
+    if not f:IsLoaded() then return end
+    local paused = Game():IsPaused()
+    if v.any then
+        for hash, mark in pairs(tracked) do
+            local npc = mark.ref.Ref
+            if not (npc and npc:Exists()) or npc:IsDead() then
+                tracked[hash] = nil
+            else
+                local bonus = v.kinds[mark.key]
+                if bonus and bonus > 0 and npc.Visible ~= false and EnemyUtils.isMonsterKind(npc) then
+                    drawMarker(f, npc, mark, percent(bonus), RED, paused, 0)
+                else
+                    mark.text = nil
+                end
             end
         end
     end
-    markers = kept
+    for _, holder in ipairs(v.holders) do
+        local player = holder.player
+        local hash = GetPtrHash(player)
+        local mark = heads[hash]
+        if not mark then
+            mark = { age = 0, raise = 0 }
+            heads[hash] = mark
+        end
+        local target = iconsShowing(player) and M.data.iconRaise or 0
+        if not paused and mark.raise ~= target then
+            mark.raise = mark.raise < target and math.min(target, mark.raise + 2) or math.max(target, mark.raise - 2)
+        end
+        drawMarker(f, player, mark, percent(holder.bonus), GOLD, paused, mark.raise, true)
+    end
 end
 
 function M.onNewRoom()
-    markers = {}
+    if not started then return end
+    heads = {}
+    trackRoom()
 end
 
 function M.onGameStarted()
     started = true
-    markers, endedFloor = {}, nil
+    endedFloor, heads = nil, {}
+    changed()
+    trackRoom()
 end
 
 function M.onGameExit()
     started = false
-    markers, endedFloor = {}, nil
+    tracked, heads, endedFloor = {}, {}, nil
+    changed()
+end
+
+-- The text a marker over `entity` shows now, or nil.
+local function shownText(entity)
+    local v = currentView()
+    local player = entity and entity.ToPlayer and entity:ToPlayer()
+    if player then
+        for _, holder in ipairs(v.holders) do
+            if GetPtrHash(holder.player) == GetPtrHash(player) then return percent(holder.bonus) end
+        end
+        return nil
+    end
+    local mark = entity and tracked[GetPtrHash(entity)]
+    local bonus = mark and v.kinds[mark.key]
+    return bonus and bonus > 0 and percent(bonus) or nil
 end
 
 M._test = {
     started = function() return started end,
     evidence = function() return evidence end,
     resetEvidence = resetEvidence,
-    markers = function() return markers end,
+    tracked = function() return tracked end,
+    heads = function() return heads end,
+    spriteTop = spriteTop,
+    shownText = shownText,
     kindKey = M.kindKey,
 }
 

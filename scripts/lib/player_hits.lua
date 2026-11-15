@@ -255,6 +255,14 @@ local function current(list, hash)
     return effect, age
 end
 
+-- True while a hit's icons or a green recovery are showing over this player
+-- (another marker over the head can make room for them).
+function Hits.iconsShowing(player)
+    if not player or (not next(effects) and not next(recoveries)) then return false end
+    local hash = GetPtrHash(player)
+    return current(effects, hash) ~= nil or current(recoveries, hash) ~= nil
+end
+
 function Hits.onPlayerRender(_, player)
     if not player or (not next(effects) and not next(recoveries)) then return end
     local hash = GetPtrHash(player)
