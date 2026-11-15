@@ -1,0 +1,20 @@
+# Every text file is stored with LF in the repository, whatever line endings
+# the working copy or the tool that saved it uses. Files once committed with
+# CRLF were never converted by core.autocrlf, so any tool saving them with LF
+# turned them into whole-file diffs (normalized 2026-11-15).
+* text=auto
+
+# Binary assets, never converted.
+*.png binary
+*.jpg binary
+*.gif binary
+*.wav binary
+*.ogg binary
+*.mp3 binary
+*.fnt binary
+*.stb binary
+*.dat binary
+*.glb binary
+*.zip binary
+*.aseprite binary
+*.ico binary
