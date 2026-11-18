@@ -692,6 +692,18 @@ return {
                 "#{{Quality4}}: {{Speed}} 이동 속도 -0.1",
             },
         },
+        JOBS_BLESSING = {
+            name = "욥의 축복",
+            -- user-designated flavor (2026-11-18): Job 42:10 in 개역개정, verbatim
+            description = "이전 모든 소유보다 갑절을 주신지라",
+            eid = {
+                "새로 획득하는 패시브 아이템과 하트·동전·열쇠·폭탄 등 픽업으로 얻는 양이 2배가 됩니다",
+                "#장신구를 흡수하면 2배로 흡수됩니다",
+                "#회복량이 2배가 됩니다",
+                "#액티브 아이템과 카드·룬·알약은 2배가 되지 않습니다",
+                "#{{Warning}} REPENTOGON이 필요합니다!",
+            },
+        },
 
         -- Familiars
         TIME_MONEY = {

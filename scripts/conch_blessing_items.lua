@@ -1050,6 +1050,35 @@ ConchBlessing.ItemData = {
             preGameExit = "underdog.onGameExit",
         },
     },
+    JOBS_BLESSING = {
+        -- 욥의 축복 (user design 2026-11-18): Damocles without the sword.
+        -- Everything its holder acquires comes twice: new passives and
+        -- familiars, every trinket absorption, the numbers every pickup absorbed
+        -- on touch adds, and every heal; nothing is spawned. Only actives,
+        -- cards, runes and pills stay single; copies never stack (always twice).
+        type = "passive",
+        id = Isaac.GetItemIdByName("Job's Blessing"),
+        gfx = "jobs_blessing.png",
+        tags = "utility",
+        pool = {
+            RoomType.ROOM_ANGEL
+        },
+        quality = 4,
+        hidden = false,
+        shopprice = 30,
+        devilprice = 2,
+        origin = { id = CollectibleType.COLLECTIBLE_DAMOCLES, type = "collectible" },
+        flag = "positive",
+        script = "scripts/items/collectibles/jobs_blessing",
+        callbacks = {
+            postPEffectUpdate = "jobsblessing.onPlayerUpdate",
+            evaluateCache = "jobsblessing.onEvaluateCache",
+            postUpdate = "jobsblessing.onUpdate",
+            postNewRoom = "jobsblessing.onNewRoom",
+            gameStarted = "jobsblessing.onGameStarted",
+            preGameExit = "jobsblessing.onGameExit",
+        },
+    },
 
     -- The twelve zodiac items (십이지) close the collectible group in their own
     -- order, 자 … 해, followed by the familiars and trinkets.

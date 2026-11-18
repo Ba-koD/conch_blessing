@@ -707,6 +707,17 @@ return {
                 "#{{Quality4}}: {{Speed}} -0.1 Speed",
             },
         },
+        JOBS_BLESSING = {
+            name = "Job's Blessing",
+            description = "Twice as much as he had before",
+            eid = {
+                "Every new passive item comes twice, and every pickup (hearts, coins, keys, bombs...) gives twice as much",
+                "#Smelting a trinket smelts it twice",
+                "#All healing is doubled",
+                "#Active items, cards, runes and pills are not doubled",
+                "#{{Warning}} Requires REPENTOGON!",
+            },
+        },
 
         -- Familiars
         TIME_MONEY = {

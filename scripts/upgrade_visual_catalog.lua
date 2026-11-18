@@ -51,4 +51,5 @@ return {
     { key = "JEON_WOOCHI" },
     { key = "LANDMINE" },
     { key = "UNDERDOG" },
+    { key = "JOBS_BLESSING" },
 }

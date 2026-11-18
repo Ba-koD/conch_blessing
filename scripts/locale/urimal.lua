@@ -692,6 +692,18 @@ return {
                 "#{{Quality4}}: {{Speed}} 움직이는 빠르기 -0.1",
             },
         },
+        JOBS_BLESSING = {
+            name = "욥의 복",
+            -- Job 42:10 in 새번역, the same verse as kr's 개역개정 flavor
+            description = "이전에 가졌던 모든 것보다 갑절을 주셨다",
+            eid = {
+                "새로 얻는 아이템과 하트·동전·열쇠·폭탄 같은 주운 것으로 얻는 양이 곱절이 됩니다",
+                "#장신구를 녹여 삼키면 곱절로 삼킵니다",
+                "#체력을 채우는 양이 곱절이 됩니다",
+                "#쓰는 아이템과 카드·룬·알약은 곱절이 되지 않습니다",
+                "#{{Warning}} 덧붙임 도우미(REPENTOGON)가 있어야 합니다!",
+            },
+        },
 
         -- Familiars
         TIME_MONEY = {

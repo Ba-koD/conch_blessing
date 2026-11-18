@@ -75,12 +75,21 @@ local function summaryLines(run)
     return lines
 end
 
+-- Wall-clock milliseconds, for timing restarts (measurement only).
+local function nowMs()
+    if type(Isaac.GetNanoTime) == "function" then return Isaac.GetNanoTime() / 1e6 end
+    if type(Isaac.GetTime) == "function" then return Isaac.GetTime() end
+    return nil
+end
+local restartClock = nil -- { issued = ms, started = ms } for the restart under way
+
 local function announceStart(run)
     out(run.def, string.format("== %s START: %d steps, %s. Stand still, press nothing. ==",
         run.def.command, #run.ops, run.def.duration or "a moment"))
 end
 
 local function buildRun(run)
+    run.startedMs = nowMs()
     local plan = newPlan()
     local ok, err = pcall(run.def.build, plan)
     run.ops = plan.ops
@@ -131,6 +140,10 @@ finish = function(run)
             or (nextDef and "next test requires a different native state baseline")
             or "isolated test has no reusable baseline contract"
         out(run.def,"RESET reason: "..reason)
+    end
+    local now = nowMs()
+    if now and run.startedMs then
+        out(run.def, string.format("TIMING bench: %.0f ms over %d updates", now - run.startedMs, run.updates or 0))
     end
     out(run.def, "")
     for _, line in ipairs(summaryLines(run)) do out(run.def, line) end
@@ -507,12 +520,14 @@ ConchBlessing:AddCallback(ModCallbacks.MC_POST_UPDATE, function()
     if run.restartPending then
         run.restartPending = false
         run.waitingForStart = true
+        restartClock = { issued = nowMs() }
         Isaac.ExecuteCommand(run.def.restartCommand or "restart")
         return
     end
     if run.endRestartPending then
         run.endRestartPending = false
         run.waitingForEnd = true
+        restartClock = { issued = nowMs() }
         Isaac.ExecuteCommand(run.endRestartCommand or "restart")
         return
     end
@@ -529,7 +544,8 @@ if ModCallbacks.MC_POST_RENDER then
         if run.endRestartPending then
             run.endRestartPending = false
             run.waitingForEnd = true
-            Isaac.ExecuteCommand(run.endRestartCommand or "restart")
+            restartClock = { issued = nowMs() }
+        Isaac.ExecuteCommand(run.endRestartCommand or "restart")
         end
     end)
 end
@@ -538,6 +554,13 @@ ConchBlessing:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, function(_, continu
     local run = active
     cleanLease=nil
     if not run or continued then return end
+    if restartClock and restartClock.issued then
+        local now = nowMs()
+        if now then
+            out(run.def, string.format("TIMING restart: %.0f ms from the restart command to the new run", now - restartClock.issued))
+        end
+        restartClock = nil
+    end
     if run.waitingForStart then
         run.waitingForStart = false
         if run.finished then completeRun(run) else buildRun(run) end

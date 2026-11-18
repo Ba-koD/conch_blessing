@@ -245,6 +245,11 @@
     "detail": "gfx/items/collectibles/jeon_woochi_af3d.png"
   },
   {
+    "source": "gfx/items/collectibles/jobs_blessing.png",
+    "status": "pending",
+    "detail": "3D model not built yet (Job's Blessing, added 2026-11-18)"
+  },
+  {
     "source": "gfx/items/collectibles/kids_menu.png",
     "status": "modelled",
     "detail": "gfx/items/collectibles/kids_menu_af3d.png"
