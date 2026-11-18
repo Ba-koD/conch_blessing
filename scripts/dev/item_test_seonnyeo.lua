@@ -476,7 +476,7 @@ end
 S.add("SEONNYEO", "kronos_perf", {}, function(plan, id)
     requireModule(plan)
     plan.require("callback profiler available", function()
-        return Profiler.available() or nil, "needs REPENTOGON's Isaac.GetCallbacks"
+        return Profiler.available() or nil, "needs Isaac.GetCallbacks"
     end)
     plan.act(function(player, ctx)
         player:AddCollectible(ConchBlessing.ItemData.KRONOS.id, 0, false)

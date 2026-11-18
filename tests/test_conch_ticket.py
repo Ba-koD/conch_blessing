@@ -28,7 +28,7 @@ class ConchTicketTests(unittest.TestCase):
             ButtonAction = enum({'ACTION_SHOOTLEFT','ACTION_SHOOTRIGHT','ACTION_SHOOTUP','ACTION_SHOOTDOWN','ACTION_PILLCARD','ACTION_LEFT','ACTION_ITEM'})
             InputHook = { IS_ACTION_PRESSED = 0, IS_ACTION_TRIGGERED = 1, GET_ACTION_VALUE = 2 }
             SoundEffect = { SOUND_PAPER_IN = 17, SOUND_MENU_FLIP_LIGHT = 569 }
-            CallbackPriority = { LATE = 1000 }
+            CallbackPriority = { LATE = 100 }
             sounds = {}
             function SFXManager() return { Play = function(_, id) sounds[#sounds + 1] = id end } end
             function GetPtrHash(e) return e.hash end

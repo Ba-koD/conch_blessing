@@ -248,8 +248,8 @@ function WeaponFire.FireMulti(player, direction, count, pType, sourceEntity)
     local sSpeed = player.ShotSpeed or 1.0
     local basePos = player.Position + (player.TearsOffset or Vector.Zero)
     
-    -- REPENTOGON이 있으면 GetMultiShotParams 사용
-    if REPENTOGON and player.GetMultiShotParams and player.GetMultiShotPositionVelocity then
+    -- 멀티샷 패턴 사용 (GetMultiShotParams는 Repentance+ 기본 API, 최소 빌드를 정하지 않아 가드 유지)
+    if player.GetMultiShotParams and player.GetMultiShotPositionVelocity then
         local multiParams = player:GetMultiShotParams(wType)
         local numTears = multiParams:GetNumTears()
         

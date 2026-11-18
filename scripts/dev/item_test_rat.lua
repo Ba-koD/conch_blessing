@@ -609,7 +609,7 @@ end
 S.add("RAT", "perf", {}, function(plan)
     requireApi(plan)
     plan.require("callback profiler available", function()
-        return Profiler.available() or nil, "needs REPENTOGON's Isaac.GetCallbacks"
+        return Profiler.available() or nil, "needs Isaac.GetCallbacks"
     end)
     plan.act(function(player, ctx)
         removeFakesOnCleanup(ctx)

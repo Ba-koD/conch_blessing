@@ -131,7 +131,8 @@ def build_outputs():
         lua.append(f'        ["{name}"] = {{ {c:g}, {t}, {b} }},')
     lua += ['    },', '}', '']
     # The icon sprite replaces sheet 0 independently of the familiar's sprite.
-    # A zero pivot also makes guarded GetTexel sampling use raw image coordinates.
+    # A zero pivot keeps the icon in raw image coordinates, the space the
+    # offline trinket bounds above are measured in.
     animation(anims, 'Trinket', 0, rows[:1], False, (0, 0), trinket=True)
     ET.indent(actor, space='  ')
     return {

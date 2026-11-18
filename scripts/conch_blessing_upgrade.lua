@@ -1814,7 +1814,7 @@ end
 -- REPENTOGON only. Without it a native Morph still ends the job (fail closed).
 -- PRE observes last, after any other mod had the chance to cancel the Morph.
 if ModCallbacks.MC_PRE_PICKUP_MORPH and ModCallbacks.MC_POST_PICKUP_MORPH then
-    local late = CallbackPriority and CallbackPriority.LATE or 1000
+    local late = CallbackPriority and CallbackPriority.LATE or 100
     if type(ConchBlessing.AddPriorityCallback) == "function" then
         ConchBlessing:AddPriorityCallback(ModCallbacks.MC_PRE_PICKUP_MORPH, late, _onPrePickupMorph)
     else

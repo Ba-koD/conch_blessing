@@ -574,8 +574,8 @@ M._test = {
 -- numbers are read first of all callbacks.
 if M.available then
     local priority = rawget(_G, "CallbackPriority")
-    local late = priority and priority.LATE or 1000
-    local first = priority and priority.IMPORTANT or -1000
+    local late = priority and priority.LATE or 100
+    local first = priority and priority.IMPORTANT or -200
     ConchBlessing:AddPriorityCallback(addCollectible, late, M.onAddCollectible)
     -- An item's own hearts are told apart by the add they arrive inside.
     if preAddCollectible then

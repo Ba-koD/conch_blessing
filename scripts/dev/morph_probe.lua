@@ -705,7 +705,7 @@ end
 -- What the reloaded pedestal looks like as its room loads, after the
 -- upgrade module has finished its record (registered after that module).
 local returnWatch = nil
-local LATE = CallbackPriority and CallbackPriority.LATE or 1000
+local LATE = CallbackPriority and CallbackPriority.LATE or 100
 local function onLoadWatch()
     if not returnWatch then return end
     local ring = findAt(returnWatch.seed, returnWatch.pos)

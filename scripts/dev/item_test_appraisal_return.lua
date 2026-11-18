@@ -86,7 +86,7 @@ S.add("APPRAISAL_CERTIFICATE", "dc_vanilla", {}, function(plan)
     plan.require("dimension, transition mode, shake countdown and Death Certificate", function()
         return (type(Game():GetLevel().GetDimension) == "function" and type(RoomTransition) == "table"
             and type(RoomTransition.GetTransitionMode) == "function"
-            and type(Game().GetScreenShakeCountdown) == "function") or nil, "REPENTOGON required"
+            and type(Game().GetScreenShakeCountdown) == "function") or nil, "needs REPENTOGON's dimension and transition-mode APIs and Game:GetScreenShakeCountdown"
     end)
     plan.act(function(player, ctx)
         ctx.originRoom = Game():GetLevel():GetCurrentRoomIndex()

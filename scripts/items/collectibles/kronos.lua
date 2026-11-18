@@ -2720,7 +2720,9 @@ local GEMINI_PROC_KEY = "kronos_gemini_contact"
 local BIRD_CAGE_PROC_KEY = "kronos_bird_cage"
 local STOMP_RADIUS = 50
 local STOMP_DAMAGE_MULTIPLIER = 2
-local BLEED_FRAMES = 150
+-- REPENTOGON caps AddBleeding at 4 seconds: asking 121, 150 or 300 updates all
+-- bled 120 (measured 2026-11-19, `cb test kronos bleed_probe`).
+local BLEED_FRAMES = 120
 local FREEZE_FRAMES = 60
 -- Aquarius creep deals 0.66x damage per tick; the creeps spawned here match it.
 local CREEP_DAMAGE_MULTIPLIER = 0.66
@@ -5130,11 +5132,16 @@ ConchBlessing:AddCallback(ModCallbacks.MC_PRE_USE_ITEM, onPreUseSacrificialAltar
 ConchBlessing:AddCallback(ModCallbacks.MC_USE_ITEM, onUseSacrificialAltar, CollectibleType.COLLECTIBLE_SACRIFICIAL_ALTAR)
 ConchBlessing:AddCallback(ModCallbacks.MC_USE_CARD, onUseSoulOfLilith, Card.CARD_SOUL_LILITH)
 ConchBlessing:AddCallback(ModCallbacks.MC_POST_ENTITY_REMOVE, ConchBlessing.kronos.onPlayerRemoved, EntityType.ENTITY_PLAYER)
-for _, id in ipairs({ ModCallbacks.MC_POST_NEW_ROOM, ModCallbacks.MC_POST_GAME_STARTED,
-    ModCallbacks.MC_POST_ADD_COLLECTIBLE, ModCallbacks.MC_POST_TRIGGER_COLLECTIBLE_REMOVED }) do
-    ConchBlessing:AddCallback(id, Rune.inventoryTouched)
+-- By name, so a callback missing without REPENTOGON is skipped explicitly
+-- rather than by ipairs stopping at the first nil.
+for _, name in ipairs({ "MC_POST_NEW_ROOM", "MC_POST_GAME_STARTED",
+    "MC_POST_ADD_COLLECTIBLE", "MC_POST_TRIGGER_COLLECTIBLE_REMOVED" }) do
+    if type(ModCallbacks[name]) == "number" then
+        ConchBlessing:AddCallback(ModCallbacks[name], Rune.inventoryTouched)
+    end
 end
-Rune.hooked = ModCallbacks.MC_POST_ADD_COLLECTIBLE ~= nil and ModCallbacks.MC_POST_TRIGGER_COLLECTIBLE_REMOVED ~= nil
+Rune.hooked = type(ModCallbacks.MC_POST_ADD_COLLECTIBLE) == "number"
+    and type(ModCallbacks.MC_POST_TRIGGER_COLLECTIBLE_REMOVED) == "number"
 if type(ModCallbacks.MC_PRE_USE_PILL) == "number" then
     ConchBlessing:AddCallback(ModCallbacks.MC_PRE_USE_PILL, onPreUsePrettyFly, PillEffect.PILLEFFECT_PRETTY_FLY)
 end

@@ -39,7 +39,7 @@ ModCallbacks={MC_PRE_ADD_COLLECTIBLE=1004,MC_POST_ADD_COLLECTIBLE=1005,MC_POST_T
     MC_POST_TRIGGER_TRINKET_REMOVED=1097,MC_PRE_PICKUP_COLLISION=38,MC_POST_PICKUP_COLLISION=1239,
     MC_PRE_PLAYER_ADD_HEARTS=1009,MC_POST_PLAYER_ADD_HEARTS=1010}
 CacheFlag={CACHE_LUCK=1024}
-CallbackPriority={IMPORTANT=-200,LATE=1000}
+CallbackPriority={IMPORTANT=-200,LATE=100}
 items={}
 local function item(id,kind,tags,hidden)
     local entry={Type=kind,Hidden=hidden or false,tags=tags or 0}

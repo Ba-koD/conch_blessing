@@ -491,7 +491,9 @@ do
     local mod = ConchBlessing.originalMod or ConchBlessing
     local priority = rawget(_G, "CallbackPriority")
     local LATE = type(priority) == "table" and tonumber(priority.LATE) or 100
-    if rawget(_G, "REPENTOGON") and ModCallbacks and ModCallbacks.MC_ENTITY_TAKE_DMG then
+    local repentogon = rawget(_G, "REPENTOGON")
+    if type(repentogon) == "table" and repentogon.Real == true
+        and ModCallbacks and ModCallbacks.MC_ENTITY_TAKE_DMG then
         if type(ConchBlessing.AddPriorityCallback) == "function" then
             ConchBlessing:AddPriorityCallback(ModCallbacks.MC_ENTITY_TAKE_DMG, LATE, M.onTakeDamageLate)
         else

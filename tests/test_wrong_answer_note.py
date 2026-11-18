@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 HARNESS = r"""
 package=nil
-REPENTOGON={}
+REPENTOGON={Real=true}
 EntityType={ENTITY_FIREPLACE=33,ENTITY_SLOT=6}
 EntityFlag={FLAG_FRIENDLY=1<<29}
 DamageFlag={DAMAGE_RED_HEARTS=1<<5}

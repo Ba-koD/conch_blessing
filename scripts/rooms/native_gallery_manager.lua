@@ -179,7 +179,9 @@ local function getDeathCertificateUseFlags()
 end
 
 local function getMusicManager()
-    if type(MusicManager) ~= "function" then return nil end
+    -- An engine global may be a function or a callable table: construct it
+    -- under protection rather than gating on its Lua type.
+    if MusicManager == nil then return nil end
     local ok, manager = pcall(MusicManager)
     if ok then return manager end
     return nil
@@ -202,7 +204,7 @@ local function getScreenShakeCountdown()
 end
 
 local function isSmelterSwallowPlaying()
-    if type(SMELTER_SWALLOW_SOUND) ~= "number" or type(SFXManager) ~= "function" then
+    if type(SMELTER_SWALLOW_SOUND) ~= "number" or SFXManager == nil then
         return false
     end
     local okManager, manager = pcall(SFXManager)
@@ -2644,7 +2646,7 @@ function M.onPostPickupCollision(_, pickup, collider)
     pending.collisionCompleted = true
     -- the vanilla Death Certificate answer to a taken item
     M._takenAt[pending.token] = Game():GetFrameCount()
-    if TAKEN_SOUND and type(SFXManager) == "function" then
+    if TAKEN_SOUND and SFXManager ~= nil then
         pcall(function() SFXManager():Play(TAKEN_SOUND, Sound.volume(TAKEN_SOUND_VOLUME)) end)
     end
     pcall(function() Game():ShakeScreen(TAKEN_SHAKE_FRAMES) end)

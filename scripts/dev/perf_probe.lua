@@ -91,7 +91,7 @@ end
 
 local function build(plan)
     plan.require("callback profiler available", function()
-        return Profiler.available() or nil, "needs REPENTOGON's Isaac.GetCallbacks"
+        return Profiler.available() or nil, "needs Isaac.GetCallbacks"
     end)
     plan.wait(30)
     window(plan, "plain", false)

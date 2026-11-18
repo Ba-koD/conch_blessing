@@ -1,8 +1,9 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- Dev-only: times this mod's own callback handlers for a while.
 --
--- REPENTOGON keeps every registered callback as a Lua entry { Mod, Function,
--- Priority, Param } returned by Isaac.GetCallbacks. start() swaps the Function
+-- The game keeps every registered callback as a Lua entry { Mod, Function,
+-- Priority, Param } returned by Isaac.GetCallbacks (base API, defined in the
+-- game's own resources/scripts/main.lua; REPENTOGON keeps it). start() swaps the Function
 -- of this mod's entries for a timing wrapper and stop() puts every original
 -- back, so other mods are never touched and nothing stays wrapped. Used only by
 -- cb test benches; it does nothing on runtimes without Isaac.GetCallbacks.

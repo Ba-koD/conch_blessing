@@ -260,7 +260,7 @@ end)
 -- player, so `active_key` holds the engine's active-item key here and the engine
 -- uses the item from its slot. LATE runs after the picker's own hook, so a key
 -- the picker withholds stays withheld.
-local LATE = type(callbackPriority) == "table" and tonumber(callbackPriority.LATE) or 1000
+local LATE = type(callbackPriority) == "table" and tonumber(callbackPriority.LATE) or 100
 local glassesKey = nil      -- player hash while the bench holds the engine's active-item key
 local glassesUses = 0       -- AR Glasses uses the engine reported
 local glassesHook = false

@@ -265,8 +265,17 @@ local function haloSprite()
     return halo
 end
 
+-- The water reflection pass runs the player render callbacks again; the halo
+-- is drawn once. GetRenderMode is base Repentance+ API, guarded like every
+-- API no pinned minimum build guarantees.
+local function reflecting()
+    local room = Game():GetRoom()
+    return RenderMode ~= nil and type(room.GetRenderMode) == "function"
+        and room:GetRenderMode() == RenderMode.RENDER_WATER_REFLECT
+end
+
 function M.onPlayerRender(_, player, offset)
-    if ITEM_ID <= 0 or Game():GetRoom():GetRenderMode() == RenderMode.RENDER_WATER_REFLECT then return end
+    if ITEM_ID <= 0 or reflecting() then return end
     -- Hemispatial Neglect drawing the player again into its capture
     local neglect = ConchBlessing.hemispatialneglect
     if neglect and neglect.isCapturing and neglect.isCapturing() then return end
