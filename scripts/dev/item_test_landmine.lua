@@ -64,6 +64,12 @@ local function describeMines()
         table.concat(parts, " "), e.deaths, e.hits, e.laid, e.skipped, e.trimmed, e.exploded, e.chained)
 end
 
+-- Cases that share one run per group (S.sequenceBundle below); each stays
+-- callable alone.
+local sharedConditions, sharedDamage = {}, {}
+local conditionsCase = S.caseIn(sharedConditions, "LANDMINE", { conditions = true })
+local damageCase = S.caseIn(sharedDamage, "LANDMINE", { damage = true })
+
 local function requireModule(plan)
     plan.require("Landmine module, its mine effect and REPENTOGON's tear callbacks ready", function()
         local m = M()
@@ -159,7 +165,7 @@ end }
 
 -- A tear that flies its full range and falls lays one mine where it died,
 -- owned by the shooter and holding that tear's damage.
-S.add("LANDMINE", "miss", { conditions = true }, function(plan, id)
+conditionsCase("miss", function(plan, id)
     requireModule(plan)
     plan.act(function(player, ctx)
         ctx.cleanupFns = { function() clearMines(); watched, deaths = nil, nil end }
@@ -190,7 +196,7 @@ S.add("LANDMINE", "miss", { conditions = true }, function(plan, id)
 end)
 
 -- A tear that hits an enemy lays nothing.
-S.add("LANDMINE", "hit", { conditions = true }, function(plan, id)
+conditionsCase("hit", function(plan, id)
     requireModule(plan)
     plan.act(function(player, ctx)
         ctx.cleanupFns = { function()
@@ -219,7 +225,7 @@ S.add("LANDMINE", "hit", { conditions = true }, function(plan, id)
     end)
 end)
 -- A tear that strikes the wall lays its mine inside the room, on floor.
-S.add("LANDMINE", "wall", { conditions = true }, function(plan, id)
+conditionsCase("wall", function(plan, id)
     requireModule(plan)
     plan.act(function(player, ctx)
         ctx.cleanupFns = { function() clearMines(); watched, deaths = nil, nil end }
@@ -244,7 +250,7 @@ end)
 -- An enemy walking onto an armed mine sets it off: it loses exactly twice the
 -- tear's damage; the player standing on the same mine is never hurt, does not
 -- set it off, and a rock beside it stays whole.
-S.add("LANDMINE", "trigger", { damage = true }, function(plan, id)
+damageCase("trigger", function(plan, id)
     requireModule(plan)
     plan.act(function(player, ctx)
         ctx.cleanupFns = { function()
@@ -314,7 +320,7 @@ end)
 
 -- Two tears fired the same way fall together: an enemy on one mine sets off
 -- the other a moment later, and both blasts reach it.
-S.add("LANDMINE", "chain", { damage = true }, function(plan, id)
+damageCase("chain", function(plan, id)
     requireModule(plan)
     plan.act(function(player, ctx)
         ctx.cleanupFns = { function()
@@ -360,7 +366,7 @@ S.add("LANDMINE", "chain", { damage = true }, function(plan, id)
 end)
 
 -- Twelve missed tears leave ten mines: the two oldest go.
-S.add("LANDMINE", "cap", { conditions = true }, function(plan, id)
+conditionsCase("cap", function(plan, id)
     requireModule(plan)
     plan.act(function(player, ctx)
         ctx.cleanupFns = { function() clearMines(); watched, deaths = nil, nil end }
@@ -377,7 +383,7 @@ end)
 
 -- Leaving the room leaves its mines behind, and tears dying as the room is
 -- left lay nothing in the next one.
-S.add("LANDMINE", "room_change", { conditions = true }, function(plan, id)
+conditionsCase("room_change", function(plan, id)
     requireModule(plan)
     plan.act(function(player, ctx)
         ctx.cleanupFns = { function() clearMines(); watched, deaths = nil, nil end }
@@ -404,5 +410,22 @@ S.add("LANDMINE", "room_change", { conditions = true }, function(plan, id)
         return #roomMines() == 0 and #M().mines() == 0, describeMines()
     end)
 end)
+
+-- One run per group: between cases the mines go and S.resetPlayer proves the
+-- player is where a fresh run left it. room_change walks into the next room
+-- and trigger leaves a rock, so each closes its run; chain runs before trigger.
+local function fresh(plan)
+    S.resetPlayer(plan, function()
+        clearMines()
+        watched, deaths, playerHits = nil, nil, nil
+    end, function()
+        return #M().mines() == 0 and #roomMines() == 0, describeMines()
+    end)
+    plan.act(function() T().resetEvidence() end)
+end
+S.last(sharedConditions, "room_change")
+S.last(sharedDamage, "trigger")
+S.sequenceBundle("LANDMINE", "shared_conditions", { conditions = true }, sharedConditions, function(plan) fresh(plan) end)
+S.sequenceBundle("LANDMINE", "shared_damage", { damage = true }, sharedDamage, function(plan) fresh(plan) end)
 
 return C

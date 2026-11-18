@@ -48,6 +48,10 @@ local function fixture(quality)
     return fixtures[quality]
 end
 
+-- Cases that share one run (S.sequenceBundle below); each stays callable alone.
+local shared = {}
+local case = S.caseIn(shared, "UNDERDOG", { conditions = true })
+
 local function requireModule(plan, qualities)
     plan.require("Underdog module and a fixture item of each quality used", function()
         local missing = {}
@@ -137,14 +141,14 @@ end }
 
 -- One item of each quality: 0 damage +1, 1 tears +0.3, 2 range +0.5,
 -- 3 luck -0.5, 4 speed -0.1, each moving only its own stat.
-S.add("UNDERDOG", "qualities", { conditions = true }, function(plan, id)
+case("qualities", function(plan, id)
     requireModule(plan)
     plan.act(function(player) give(player, id, 1) end)
     for quality = 0, 4 do pickQuality(plan, id, quality) end
 end)
 
 -- A real pedestal touched by Isaac counts like any held item.
-S.add("UNDERDOG", "pedestal", { conditions = true }, function(plan, id)
+case("pedestal", function(plan, id)
     requireModule(plan, { 1 })
     plan.act(function(player, ctx)
         ctx.cleanupFns = { function() if ctx.pedestal and ctx.pedestal:Exists() then ctx.pedestal:Remove() end end }
@@ -169,7 +173,7 @@ S.add("UNDERDOG", "pedestal", { conditions = true }, function(plan, id)
 end)
 
 -- Items held before Underdog count the moment it is picked up.
-S.add("UNDERDOG", "held_before", { conditions = true }, function(plan, id)
+case("held_before", function(plan, id)
     requireModule(plan, { 0, 3 })
     plan.act(function(player)
         player:AddCollectible(fixture(0), 0, true)
@@ -192,7 +196,7 @@ end)
 
 -- An item leaving takes its share: at once when the item total changes, and
 -- within the sweep when one item is swapped for another.
-S.add("UNDERDOG", "leave", { conditions = true }, function(plan, id)
+case("leave", function(plan, id)
     requireModule(plan, { 0, 1, 4 })
     plan.act(function(player)
         give(player, id, 1)
@@ -227,7 +231,7 @@ end)
 
 -- A quest item and a second Underdog count nothing, and nothing counts while
 -- it is not held.
-S.add("UNDERDOG", "not_counted", { conditions = true }, function(plan, id)
+case("not_counted", function(plan, id)
     requireModule(plan, { 0 })
     plan.act(function(player, ctx)
         give(player, id, 1)
@@ -251,7 +255,7 @@ S.add("UNDERDOG", "not_counted", { conditions = true }, function(plan, id)
 end)
 
 -- The changes leave with Underdog and come back with it.
-S.add("UNDERDOG", "loss", { conditions = true }, function(plan, id)
+case("loss", function(plan, id)
     requireModule(plan, { 0, 3 })
     plan.act(function(player, ctx)
         ctx.base = H.stats(player)
@@ -276,5 +280,10 @@ S.add("UNDERDOG", "loss", { conditions = true }, function(plan, id)
             string.format("damage %.3f luck %.3f", now.Damage, now.Luck)
     end)
 end)
+
+-- Every case only adds and removes items through the engine's own inventory
+-- and reads stat changes, so they share one run: S.resetPlayer takes every
+-- item away again and proves the stats are back where the run started.
+S.sequenceBundle("UNDERDOG", "shared", { conditions = true }, shared, function(plan) S.resetPlayer(plan) end)
 
 return C

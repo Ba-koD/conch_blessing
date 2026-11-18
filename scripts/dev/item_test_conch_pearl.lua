@@ -28,6 +28,11 @@ local function drawAll(poolType)
     return list
 end
 
+-- Cases that share one run (S.sequenceBundle below); each stays callable alone.
+local sharedDraws, sharedPools = {}, {}
+local conditionsCase = S.caseIn(sharedDraws, "CONCH_PEARL", { conditions = true })
+local poolCase = S.caseIn(sharedPools, "CONCH_PEARL", {})
+
 local function requireModule(plan)
     plan.require("Conch Pearl module, item config quality and quest tags available", function()
         local module = pearl()
@@ -70,7 +75,7 @@ C.CONCH_PEARL = { stage = function(plan, _, n)
     end)
 end }
 
-S.add("CONCH_PEARL", "draws", { conditions = true }, function(plan, id)
+conditionsCase("draws", function(plan, id)
     requireModule(plan)
     plan.act(function(_, ctx)
         -- The same seeds without a holder are the vanilla answer for each draw.
@@ -156,7 +161,7 @@ S.add("CONCH_PEARL", "draws", { conditions = true }, function(plan, id)
     end)
 end)
 
-S.add("CONCH_PEARL", "exclusions", { conditions = true }, function(plan, id)
+conditionsCase("exclusions", function(plan, id)
     requireModule(plan)
     local function ids(name)
         local data = ConchBlessing.ItemData[name]
@@ -243,7 +248,7 @@ end)
 
 -- Every pool run dry: the engine then gives Breakfast, and Conch Pearl leaves it
 -- as Sacred Orb does. Emptying the pools needs this case's own fresh run.
-S.add("CONCH_PEARL", "empty_pool", {}, function(plan, id)
+poolCase("empty_pool", function(plan, id)
     requireModule(plan)
     local DRAWS = 40
     local BREAKFAST = CollectibleType.COLLECTIBLE_BREAKFAST
@@ -302,7 +307,7 @@ S.add("CONCH_PEARL", "empty_pool", {}, function(plan, id)
     end)
 end)
 
-S.add("CONCH_PEARL", "pedestal", {}, function(plan, id)
+poolCase("pedestal", function(plan, id)
     requireModule(plan)
     plan.section("CONCH_PEARL / pedestal",
         "the replaced item's icon rises over the new pedestal, holds, then crumbles into the air")
@@ -352,5 +357,15 @@ S.add("CONCH_PEARL", "pedestal", {}, function(plan, id)
     end)
     plan.waitUntil(function() return #pearl()._test.effects() == 0 end, 200, "the dust ends after its timeline")
 end)
+
+-- draws and exclusions only preview draws (no pool is spent), so they share a
+-- run. pedestal spends the room's pool and empty_pool empties every pool and
+-- measures from that alone, so it closes their shared run.
+local function fresh(plan)
+    S.resetPlayer(plan, nil, function() return #pearl()._test.effects() == 0, "the dust is still showing" end)
+end
+S.sequenceBundle("CONCH_PEARL", "shared_draws", { conditions = true }, sharedDraws, function(plan) fresh(plan) end)
+S.last(sharedPools, "empty_pool")
+S.sequenceBundle("CONCH_PEARL", "shared_pools", {}, sharedPools, function(plan) fresh(plan) end)
 
 return C

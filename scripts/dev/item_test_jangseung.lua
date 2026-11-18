@@ -136,6 +136,10 @@ C.JANGSEUNG = { stage = function(plan, _, n)
     end)
 end }
 
+-- Cases that share one run (S.sequenceBundle below); each stays callable alone.
+local shared = {}
+local case = S.caseIn(shared, "JANGSEUNG", { conditions = true })
+
 local function requireModule(plan)
     plan.require("Jangseung module and its effects", function()
         local module = jangseung()
@@ -230,7 +234,7 @@ local function besideType(name)
 end
 
 -- A pair at the treasure room's door, on the earth.
-S.add("JANGSEUNG", "doors", { conditions = true }, function(plan, id)
+case("doors", function(plan, id)
     setup(plan, id, true)
     goTo(plan, "the room beside the treasure room", besideType("ROOM_TREASURE"))
     plan.check("a pair stands at every door into a special room", function()
@@ -265,7 +269,7 @@ S.add("JANGSEUNG", "doors", { conditions = true }, function(plan, id)
 end)
 
 -- A hidden secret room's wall gets its pair too.
-S.add("JANGSEUNG", "secret", { conditions = true }, function(plan, id)
+case("secret", function(plan, id)
     setup(plan, id, true)
     goTo(plan, "the room beside the secret room", besideType("ROOM_SECRET"))
     plan.check("the secret room's hidden wall has a pair", function()
@@ -283,7 +287,7 @@ end)
 
 -- The wall a Red Key opens toward the ultra secret room gets a pair whose 금줄
 -- is red and carries the ultra secret room's icon; digging it follows at once.
-S.add("JANGSEUNG", "red", { conditions = true }, function(plan, id)
+case("red", function(plan, id)
     setup(plan, id, true)
     goTo(plan, "a room where the red route starts", function(level)
         local ultra = LevelRooms.ultraRoom(level)
@@ -352,7 +356,7 @@ end)
 
 -- Common enemies are pushed out of the earth and feared, enemy shots vanish
 -- there, and a boss is not kept out.
-S.add("JANGSEUNG", "guard", { conditions = true }, function(plan, id)
+case("guard", function(plan, id)
     setup(plan, id, true)
     goTo(plan, "the room beside the treasure room", besideType("ROOM_TREASURE"))
     plan.act(function(player, ctx)
@@ -412,7 +416,7 @@ end)
 -- creep outside the village is the control that it hurts at all.
 local function health(player) return player:GetHearts() + player:GetSoulHearts() end
 
-S.add("JANGSEUNG", "shelter", { conditions = true }, function(plan, id)
+case("shelter", function(plan, id)
     setup(plan, id, true)
     goTo(plan, "the room beside the treasure room", besideType("ROOM_TREASURE"))
     plan.require("a pair to stand in front of, and a spot outside every village", function(_, ctx)
@@ -571,7 +575,7 @@ S.add("JANGSEUNG", "door_stop", { conditions = true, synergies = true }, functio
 end, { "trinket_door_stop" })
 
 -- Without the item nothing stands anywhere.
-S.add("JANGSEUNG", "not_held", { conditions = true }, function(plan, id)
+case("not_held", function(plan, id)
     setup(plan, id, false)
     goTo(plan, "the room beside the treasure room", besideType("ROOM_TREASURE"))
     plan.check("no statue, no rope, no earth, no guard without the item", function()
@@ -579,6 +583,19 @@ S.add("JANGSEUNG", "not_held", { conditions = true }, function(plan, id)
         return #statues() == 0 and #ropes() == 0 and #jangseung().markers() == 0 and e.stamps == 0,
             string.format("statues=%d ropes=%d markers=%d stamps=%d", #statues(), #ropes(), #jangseung().markers(),
                 e.stamps)
+    end)
+end)
+
+-- Every shared case walks to the room it needs on its own, so they share one
+-- floor: between cases the item goes (and with it every pair, rope and
+-- earth) and S.resetPlayer proves the player is where the run started. red
+-- goes last: it digs a red room into the floor. door_stop is also a synergy
+-- case and keeps its own run, so the synergy suite runs only it.
+S.last(shared, "red")
+S.sequenceBundle("JANGSEUNG", "shared", { conditions = true }, shared, function(plan)
+    S.resetPlayer(plan, nil, function()
+        return #statues() == 0 and #ropes() == 0 and #jangseung().markers() == 0,
+            string.format("statues=%d ropes=%d markers=%d", #statues(), #ropes(), #jangseung().markers())
     end)
 end)
 

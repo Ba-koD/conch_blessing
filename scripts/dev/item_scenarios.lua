@@ -98,7 +98,13 @@ function S.sequenceBundle(key, name, groups, members, before, after)
         for index, child in ipairs(builders) do
             plan.act(function(_,ctx)
                 ctx.retryCommand="cb test "..string.lower(key).." "..child.name
-                ctx.caseCtx={rooms=ctx.rooms,cleanupFns={}}
+                -- ctx.rooms stays live (a case waits on it growing); `bundle`
+                -- is the shared run's own context, where S.resetPlayer keeps
+                -- the baseline every case starts from.
+                local parent=ctx
+                ctx.caseCtx=setmetatable({cleanupFns={},bundle=parent},{__index=function(_,field)
+                    if field=="rooms" then return parent.rooms end
+                end})
                 ctx.bundleRemaining={}
                 for i=index+1,#builders do ctx.bundleRemaining[#ctx.bundleRemaining+1]=key.." / "..builders[i].name end
             end)
@@ -130,6 +136,196 @@ function S.sequenceBundle(key, name, groups, members, before, after)
             end)
         end
     end,members)
+end
+
+-- ---------------------------------------------------------------- shared runs
+-- There is no engine call that puts a run or a player back the way a restart
+-- does (measured 2026-11-19 with cb test player_reset: REPENTOGON's
+-- EntityPlayer:ResetPlayer() only re-applies the starting loadout, and Glowing
+-- Hourglass from a run's first room goes to Home and restores no inventory).
+-- So a shared run puts the player back between cases through the engine's own
+-- removal calls, which run every item's real loss callbacks, and then proves
+-- the result against what the run held when the shared run began.
+
+local function heldCollectibles(player)
+    local rows = {}
+    for id = 1, Isaac.GetItemConfig():GetCollectibles().Size - 1 do
+        local n = player:GetCollectibleNum(id, true)
+        if n > 0 then rows[id] = n end
+    end
+    return rows
+end
+
+local function smeltedList(player)
+    local rows = {}
+    if type(player.GetSmeltedTrinkets) ~= "function" then return rows end
+    local ok, list = pcall(player.GetSmeltedTrinkets, player)
+    if not ok or type(list) ~= "table" then return rows end
+    for id, entry in pairs(list) do
+        if type(entry) == "table" then
+            local normal, gold = tonumber(entry.trinketAmount) or 0, tonumber(entry.goldenTrinketAmount) or 0
+            if normal > 0 or gold > 0 then rows[#rows + 1] = { id = id, normal = normal, gold = gold } end
+        end
+    end
+    return rows
+end
+
+local function effectCount(player)
+    local effects = player:GetEffects()
+    if type(effects.GetEffectsList) ~= "function" then return 0 end
+    local list, n = effects:GetEffectsList(), 0
+    for i = 0, list.Size - 1 do
+        local e = list:Get(i)
+        if e and e.Count > 0 then n = n + 1 end
+    end
+    return n
+end
+
+local function ownFamiliars(player)
+    local n = 0
+    for _, entity in ipairs(Isaac.GetRoomEntities()) do
+        local fam = entity:ToFamiliar()
+        if fam and fam:Exists() and fam.Player and GetPtrHash(fam.Player) == GetPtrHash(player) then n = n + 1 end
+    end
+    return n
+end
+
+local function playerState(player)
+    return { counts = heldCollectibles(player), coins = player:GetNumCoins(), bombs = player:GetNumBombs(),
+        keys = player:GetNumKeys(), maxHearts = player:GetMaxHearts(), stats = H.stats(player) }
+end
+
+-- Why the player is not back at `base`, or nil when it is.
+local function baselineGap(player, base)
+    local now = heldCollectibles(player)
+    for id, n in pairs(now) do
+        if base.counts[id] ~= n then return string.format("collectible %d held %d, baseline %d", id, n, base.counts[id] or 0) end
+    end
+    for id, n in pairs(base.counts) do
+        if now[id] ~= n then return string.format("collectible %d held %d, baseline %d", id, now[id] or 0, n) end
+    end
+    for slot = 0, 1 do
+        if player:GetTrinket(slot) ~= 0 then return "trinket " .. player:GetTrinket(slot) .. " in hand" end
+    end
+    local smelted = smeltedList(player)[1]
+    if smelted then return string.format("smelted trinket %d (%d/%d)", smelted.id, smelted.normal, smelted.gold) end
+    for slot = 0, 3 do
+        if player:GetCard(slot) ~= 0 or player:GetPill(slot) ~= 0 then return "pocket item in slot " .. slot end
+    end
+    if player:GetNumCoins() ~= base.coins or player:GetNumBombs() ~= base.bombs or player:GetNumKeys() ~= base.keys then
+        return string.format("coins/bombs/keys %d/%d/%d, baseline %d/%d/%d", player:GetNumCoins(), player:GetNumBombs(),
+            player:GetNumKeys(), base.coins, base.bombs, base.keys)
+    end
+    if player:GetMaxHearts() ~= base.maxHearts or player:GetHearts() ~= base.maxHearts or player:GetSoulHearts() ~= 0
+        or player:GetBoneHearts() ~= 0 or player:GetGoldenHearts() ~= 0 or player:GetEternalHearts() ~= 0
+        or player:GetBrokenHearts() ~= 0 or player:GetRottenHearts() ~= 0 then
+        return string.format("hearts red %d/%d soul %d bone %d golden %d eternal %d broken %d rotten %d, baseline %d full red",
+            player:GetHearts(), player:GetMaxHearts(), player:GetSoulHearts(), player:GetBoneHearts(),
+            player:GetGoldenHearts(), player:GetEternalHearts(), player:GetBrokenHearts(), player:GetRottenHearts(),
+            base.maxHearts)
+    end
+    if player:GetExtraLives() ~= 0 then return "extra lives " .. player:GetExtraLives() end
+    if effectCount(player) ~= 0 then return effectCount(player) .. " temporary effects remain" end
+    if ownFamiliars(player) ~= 0 then return ownFamiliars(player) .. " familiars remain" end
+    local same, detail = H.sameStats(player, base.stats)
+    if not same then return "stats: " .. detail end
+    if player:IsDead() then return "player dead" end
+    if not player:IsItemQueueEmpty() then return "item queue not empty" end
+end
+
+-- Puts the player back between the cases of a shared run (the `before` of
+-- S.sequenceBundle), then requires the proof. The first call records the
+-- baseline: it runs right after S.add's preamble on a fresh run. `extra(player,
+-- ctx)` removes what the file's cases leave that this does not know about (its
+-- own entities, its item's floor pickups); `ready(player, ctx)` may add a
+-- file-specific condition (returns ok, detail). ctx.base is set again for the
+-- case, as S.add's preamble does.
+function S.resetPlayer(plan, extra, ready)
+    plan.act(function(player, ctx)
+        local shared = ctx.bundle or ctx
+        H.stopShooting()
+        if not shared.sharedBase then shared.sharedBase = playerState(player) end
+        local base = shared.sharedBase
+        player.Velocity = Vector.Zero
+        for id, n in pairs(heldCollectibles(player)) do
+            for _ = (base.counts[id] or 0) + 1, n do player:RemoveCollectible(id) end
+        end
+        for slot = 0, 1 do
+            local t = player:GetTrinket(slot)
+            if t ~= 0 then player:TryRemoveTrinket(t) end
+        end
+        for _, row in ipairs(smeltedList(player)) do
+            for _ = 1, row.normal do player:TryRemoveSmeltedTrinket(row.id) end
+            for _ = 1, row.gold do player:TryRemoveSmeltedTrinket(row.id | TrinketType.TRINKET_GOLDEN_FLAG) end
+        end
+        for slot = 0, 3 do
+            if player:GetCard(slot) ~= 0 then player:SetCard(slot, Card.CARD_NULL) end
+            if player:GetPill(slot) ~= 0 then player:SetPill(slot, PillColor.PILL_NULL) end
+        end
+        if extra then extra(player, ctx) end
+    end)
+    plan.wait(2) -- the items' own loss callbacks run first
+    plan.act(function(player, ctx)
+        local base = (ctx.bundle or ctx).sharedBase
+        player:GetEffects():ClearEffects()
+        player:AddCoins(base.coins - player:GetNumCoins())
+        player:AddBombs(base.bombs - player:GetNumBombs())
+        player:AddKeys(base.keys - player:GetNumKeys())
+        player:AddBrokenHearts(-player:GetBrokenHearts())
+        player:AddGoldenHearts(-player:GetGoldenHearts())
+        player:AddEternalHearts(-player:GetEternalHearts())
+        player:AddRottenHearts(-player:GetRottenHearts())
+        player:AddBoneHearts(-player:GetBoneHearts())
+        player:AddSoulHearts(-player:GetSoulHearts())
+        player:AddMaxHearts(base.maxHearts - player:GetMaxHearts(), false)
+        player:AddHearts(player:GetMaxHearts() - player:GetHearts())
+        for _, entity in ipairs(Isaac.GetRoomEntities()) do
+            local t = entity.Type
+            if t == EntityType.ENTITY_PICKUP or t == EntityType.ENTITY_TEAR or t == EntityType.ENTITY_PROJECTILE
+                or t == EntityType.ENTITY_BOMB or t == EntityType.ENTITY_LASER or (entity:IsEnemy() and not entity:ToPlayer()) then
+                entity:Remove()
+            end
+        end
+        player.Position = Game():GetRoom():GetCenterPos()
+        player.Velocity = Vector.Zero
+        -- a fresh run starts with no invincibility frames left over
+        if type(player.ResetDamageCooldown) == "function" then player:ResetDamageCooldown() end
+        H.refresh(player)
+    end)
+    plan.act(function(_, ctx) ctx.resetWait = 0 end)
+    plan.waitUntil(function(player, ctx)
+        ctx.resetWait = ctx.resetWait + 1
+        local gap = baselineGap(player, (ctx.bundle or ctx).sharedBase)
+        if not gap and ready then
+            local ok, detail = ready(player, ctx)
+            if not ok then gap = detail or "file-specific baseline not ready" end
+        end
+        ctx.resetGap = gap
+        return gap == nil or ctx.resetWait >= 90, gap
+    end, 91, "the player settles back at the shared-run baseline")
+    plan.require("player back at the shared-run baseline (else the shared run stops here)", function(_, ctx)
+        return ctx.resetGap == nil, ctx.resetGap or "inventory, pockets, resources, hearts, effects, familiars and stats restored"
+    end)
+    plan.act(function(player, ctx) ctx.base = H.stats(player) end)
+end
+
+-- Registers a case on its own (`cb test <item> <name>`, its own fresh run)
+-- and lists it in `list` for a shared run.
+function S.caseIn(list, key, groups)
+    return function(name, build, synergyNames)
+        S.add(key, name, groups, build, synergyNames)
+        list[#list + 1] = name
+    end
+end
+
+-- Moves `name` to the end of a shared-run list: a case that leaves what no
+-- reset undoes (another room, a placed rock, a stat earned for good) closes
+-- its run, and the run's closing restart clears it.
+function S.last(list, name)
+    for i, member in ipairs(list) do
+        if member == name then table.insert(list, table.remove(list, i)); return end
+    end
+    error("not in the shared run: " .. tostring(name))
 end
 
 function S.link(key,command,groups,synergyNames)

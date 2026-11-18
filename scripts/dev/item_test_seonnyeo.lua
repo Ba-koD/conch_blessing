@@ -28,6 +28,10 @@ local function give(player, id, n)
     while player:GetCollectibleNum(id) > n do player:RemoveCollectible(id) end
 end
 
+-- Cases that share one run (S.sequenceBundle below); each stays callable alone.
+local shared = {}
+local case = S.caseIn(shared, "SEONNYEO", {})
+
 local function requireModule(plan)
     plan.require("선녀 module and its familiar ready", function()
         local m = seonnyeo()
@@ -83,7 +87,7 @@ end }
 
 -- Her light: x1.5 inside it, nothing outside, two lights x2.25, and the
 -- multiplier gone once the item is.
-S.add("SEONNYEO", "light", {}, function(plan, id)
+case("light", function(plan, id)
     requireModule(plan)
     plan.act(function(player, ctx)
         H.refresh(player)
@@ -152,7 +156,7 @@ local function lightWindow(plan, label, offset, factor)
     end)
 end
 
-S.add("SEONNYEO", "light_damage", {}, function(plan, id)
+case("light_damage", function(plan, id)
     requireModule(plan)
     plan.act(function(player, ctx)
         give(player, id, 1)
@@ -184,7 +188,7 @@ end)
 -- BFFS works as Succubus's does (EID: the damaging aura grows, the
 -- damage-up aura does not): a spot just past the plain edge gets no tears
 -- either way, but an enemy there is hurt only with BFFS.
-S.add("SEONNYEO", "bffs", {}, function(plan, id)
+case("bffs", function(plan, id)
     requireModule(plan)
     plan.act(function(player, ctx)
         H.refresh(player)
@@ -216,7 +220,7 @@ end, { "bffs" })
 -- Kronos absorbs her like Succubus: her light stays on its holder. No
 -- maiden is left in the room; the holder's tears are x1.5 wherever they stand
 -- and an enemy near them loses their tears each tick, one far away nothing.
-S.add("SEONNYEO", "kronos", {}, function(plan, id)
+case("kronos", function(plan, id)
     requireModule(plan)
     plan.act(function(player, ctx)
         H.refresh(player)
@@ -279,7 +283,7 @@ end, { "kronos" })
 
 -- She roams the room on her own like Succubus: away from her owner, inside
 -- the walls, at a steady pace.
-S.add("SEONNYEO", "roam", {}, function(plan, id)
+case("roam", function(plan, id)
     requireModule(plan)
     plan.act(function(player, ctx)
         give(player, id, 1)
@@ -572,5 +576,16 @@ S.add("SEONNYEO", "diagonal_probe", {}, function(plan, id)
     plan.wait(4)
 end)
 S.rows[#S.rows].manual = true
+
+-- The cases give and take the item (and BFFS or Kronos) and read the fire
+-- rate and a fixture enemy's HP, so they share one run: S.resetPlayer takes
+-- every item and enemy away and proves the player is where the run started.
+-- kronos goes last, so a Kronos absorption never precedes another case.
+S.last(shared, "kronos")
+S.sequenceBundle("SEONNYEO", "shared", {}, shared, function(plan)
+    S.resetPlayer(plan, nil, function(player)
+        return #maidens(player) == 0 and seonnyeo().absorbed(player) == 0, "a maiden or her absorbed light remains"
+    end)
+end)
 
 return C

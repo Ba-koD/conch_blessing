@@ -52,6 +52,10 @@ local function describe(player)
         held(player), #floorDebris(), #floorTickets(), e.dropped, e.touched, e.fromHand, e.tickets)
 end
 
+-- Cases that share one run (S.sequenceBundle below); each stays callable alone.
+local shared = {}
+local case = S.caseIn(shared, "CONCH_DEBRIS", {})
+
 local function requireModule(plan)
     plan.require("Conch Debris module, REPENTOGON's smelt API and the Conch Ticket ready", function()
         local m = D()
@@ -111,7 +115,7 @@ end
 
 -- Touching a debris smelts it at once, even with a full hand: the held trinket
 -- stays and nothing is pushed onto the floor.
-S.add("CONCH_DEBRIS", "touch", {}, function(plan)
+case("touch", function(plan)
     requireModule(plan)
     plan.act(function(player, ctx)
         ctx.penny = TrinketType.TRINKET_SWALLOWED_PENNY
@@ -132,7 +136,7 @@ S.add("CONCH_DEBRIS", "touch", {}, function(plan)
 end)
 
 -- Three smelted copies become one Conch Ticket beside Isaac, and are gone.
-S.add("CONCH_DEBRIS", "ticket", {}, function(plan)
+case("ticket", function(plan)
     requireModule(plan)
     touch(plan, 80, -60, "the first debris is smelted", 1)
     touch(plan, 80, 60, "the second debris is smelted", 2)
@@ -151,7 +155,7 @@ end)
 
 -- A copy that reaches the hand (bought, given) is smelted on the next update;
 -- a golden copy counts as one.
-S.add("CONCH_DEBRIS", "hand", {}, function(plan, id)
+case("hand", function(plan, id)
     requireModule(plan)
     for index, flag in ipairs({ 0, GOLDEN, 0 }) do
         plan.act(function(player) player:AddTrinket(id | flag, false) end)
@@ -252,7 +256,7 @@ end
 -- choice and a golden trinket alike); an item with a neutral result evolves,
 -- and an item that cannot evolve stays (Delete Mode deletes those only on a
 -- negative answer).
-S.add("CONCH_DEBRIS", "drop", {}, function(plan)
+case("drop", function(plan)
     requireModule(plan)
     conchSetup(plan, true)
     plan.require("vanilla items that fail, pass and cannot evolve on a neutral answer", function(_, ctx)
@@ -311,7 +315,7 @@ end)
 -- Delete Mode, a negative answer: an item that cannot evolve is deleted with no
 -- debris, a debris already on the floor stays, and an evolvable item without a
 -- negative result leaves a debris.
-S.add("CONCH_DEBRIS", "negative", {}, function(plan)
+case("negative", function(plan)
     requireModule(plan)
     conchSetup(plan, true)
     plan.require("a vanilla collectible with no negative result", function(_, ctx)
@@ -345,7 +349,7 @@ S.add("CONCH_DEBRIS", "negative", {}, function(plan)
 end)
 
 -- Delete Mode off: a failed evolution deletes nothing and drops nothing.
-S.add("CONCH_DEBRIS", "delete_off", {}, function(plan)
+case("delete_off", function(plan)
     requireModule(plan)
     conchSetup(plan, false)
     plan.require("a vanilla collectible with no neutral result", function(_, ctx)
@@ -359,6 +363,18 @@ S.add("CONCH_DEBRIS", "delete_off", {}, function(plan)
     plan.check("the item stays as it was and no debris drops", function(player, ctx)
         return ctx.item:Exists() and ctx.item.SubType == ctx.fail and #floorDebris() == 0 and evidence().dropped == 0,
             describe(player)
+    end)
+end)
+
+-- The cases only spawn pickups, touch them, smelt copies and ask the real
+-- Magic Conch with settings each case puts back, so they share one run:
+-- S.resetPlayer takes the hand, the smelted copies and every floor pickup
+-- away and proves the player is where the run started. drop goes last: the
+-- item it evolves is still playing its upgrade when the case ends.
+S.last(shared, "drop")
+S.sequenceBundle("CONCH_DEBRIS", "shared", {}, shared, function(plan)
+    S.resetPlayer(plan, nil, function(player)
+        return #floorDebris() == 0 and #floorTickets() == 0 and smelted(player) == 0, describe(player)
     end)
 end)
 

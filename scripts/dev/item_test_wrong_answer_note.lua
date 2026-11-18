@@ -25,6 +25,13 @@ local function kinds(player)
     return "{" .. table.concat(parts, ",") .. "} all=" .. tostring(l.all) .. " floors=" .. tostring(l.floors)
 end
 
+-- Cases that share one run (S.sequenceBundle below); each stays callable alone.
+-- A hit the note writes down is earned for the run, so every case whose real
+-- hits write the note (hit_noted, damage, golden, golden_later, marker, floor)
+-- keeps a run of its own; these leave the note as empty as they found it.
+local shared = {}
+local case = S.caseIn(shared, "WRONG_ANSWER_NOTE", {})
+
 local function requireModule(plan)
     plan.require("Wrong Answer Note module and REPENTOGON's damage return ready", function()
         local m = note()
@@ -213,7 +220,7 @@ S.add("WRONG_ANSWER_NOTE", "floor", {}, function(plan, id)
 end)
 
 -- Without the note nothing is written and nothing is added.
-S.add("WRONG_ANSWER_NOTE", "not_held", {}, function(plan)
+case("not_held", function(plan)
     requireModule(plan)
     plan.act(function() T().resetEvidence() end)
     H.hit(plan)
@@ -272,7 +279,7 @@ end)
 -- (user report 2026-11-15: over Hush it was hard to see). Hush is spawned near
 -- the top wall, frozen and harmless, with its kind written into the note as a
 -- fixture; both are taken back.
-S.add("WRONG_ANSWER_NOTE", "big_marker", {}, function(plan, id)
+case("big_marker", function(plan, id)
     requireModule(plan)
     hold(plan, id)
     plan.act(function(player, ctx)
@@ -315,7 +322,7 @@ end)
 -- A huge total still multiplies real damage exactly and shows as a whole
 -- number. The totals are a fixture written into the note (+9950% against the
 -- attack fly, +500% against everything), taken back afterwards.
-S.add("WRONG_ANSWER_NOTE", "large", {}, function(plan, id)
+case("large", function(plan, id)
     requireModule(plan)
     hold(plan, id)
     plan.act(function(player)
@@ -375,7 +382,7 @@ end
 -- a fixture taken back afterwards); every tear that lands must deal its own
 -- damage x1.5.
 local TARGET = "20.0"
-S.add("WRONG_ANSWER_NOTE", "familiar", {}, function(plan, id)
+case("familiar", function(plan, id)
     requireModule(plan)
     hold(plan, id)
     plan.act(function(player, ctx)
@@ -459,7 +466,7 @@ local function hitOnce(plan, field, key, bonus)
     end)
 end
 
-S.add("WRONG_ANSWER_NOTE", "boss_armor", {}, function(plan, id)
+case("boss_armor", function(plan, id)
     requireModule(plan)
     hold(plan, id)
     plan.act(function(player, ctx)
@@ -552,6 +559,17 @@ S.add("WRONG_ANSWER_NOTE", "boss_armor", {}, function(plan, id)
         shield = nil
     end)
     plan.wait(4)
+end)
+
+-- The shared cases write only fixtures into the note and take them back, so
+-- they share one run as long as the note is still empty between them.
+-- boss_armor goes last: it leaves the room uncleared with its doors shut.
+S.last(shared, "boss_armor")
+S.sequenceBundle("WRONG_ANSWER_NOTE", "shared", {}, shared, function(plan)
+    S.resetPlayer(plan, nil, function(player)
+        local l = ledger(player)
+        return l ~= nil and next(l.kinds) == nil and l.all == 0 and l.floors == 0, "note not empty: " .. kinds(player)
+    end)
 end)
 
 return C

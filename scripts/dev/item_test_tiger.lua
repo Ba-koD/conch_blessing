@@ -118,6 +118,12 @@ local function cleanupOnExit(ctx, list)
     end)
 end
 
+-- Cases that share one run per group (S.sequenceBundle below); each stays
+-- callable alone.
+local sharedConditions, sharedDamage = {}, {}
+local conditionsCase = S.caseIn(sharedConditions, "TIGER", { conditions = true })
+local damageCase = S.caseIn(sharedDamage, "TIGER", { damage = true })
+
 local function requireModule(plan)
     plan.require("Tiger module and the vanilla Purgatory soul available", function()
         local module = tiger()
@@ -155,7 +161,7 @@ end }
 
 -- A real kill by the holder with three copies always raises one 창귀, owned by
 -- the holder, where the enemy died.
-S.add("TIGER", "kill_proc", { conditions = true }, function(plan, id)
+conditionsCase("kill_proc", function(plan, id)
     requireModule(plan)
     plan.act(function(player, ctx)
         cleanupOnExit(ctx, function(c) return { c.target } end)
@@ -184,7 +190,7 @@ end)
 -- Kills that are not the holder's raise nothing: another enemy's hit, a hit
 -- with no source, and a direct Kill() of an enemy the holder had hit. A
 -- holder's kill in the same run is the control.
-S.add("TIGER", "other_kills", { conditions = true }, function(plan, id)
+conditionsCase("other_kills", function(plan, id)
     requireModule(plan)
     plan.act(function(player, ctx)
         cleanupOnExit(ctx, function(c) return { c.byEnemy, c.killer, c.bySourceless, c.byKill, c.control } end)
@@ -230,7 +236,7 @@ end)
 
 -- The 창귀 flies to the only enemy left and bursts: that enemy loses exactly
 -- three times the holder's damage, once, and is feared for three seconds.
-S.add("TIGER", "explosion", { damage = true }, function(plan, id)
+damageCase("explosion", function(plan, id)
     requireModule(plan)
     plan.act(function(player, ctx)
         cleanupOnExit(ctx, function(c) return { c.victim, c.target } end)
@@ -272,7 +278,7 @@ end)
 
 -- A 창귀's kill is the holder's kill: with three copies it raises the next 창귀,
 -- which flies on to the last enemy.
-S.add("TIGER", "chain", { damage = true }, function(plan, id)
+damageCase("chain", function(plan, id)
     requireModule(plan)
     plan.act(function(player, ctx)
         cleanupOnExit(ctx, function(c) return { c.first, c.second, c.last } end)
@@ -308,7 +314,7 @@ end)
 
 -- Many real kills at once per copy count: about 1/3 and 2/3 of them raise a
 -- 창귀, and all of them from three copies. The exact odds are `cb test rng`.
-S.add("TIGER", "odds", { conditions = true }, function(plan, id)
+conditionsCase("odds", function(plan, id)
     local KILLS = 36
     -- Three standard deviations around n/3 of KILLS (an outside sample is a FAIL).
     local bounds = { [1] = { 4, 20 }, [2] = { 16, 32 }, [3] = { KILLS, KILLS } }
@@ -458,5 +464,16 @@ S.add("TIGER", "ghost_native", {}, function(plan)
     end
 end)
 S.rows[#S.rows].manual = true
+
+-- The cases kill fixture enemies and read the 창귀 they raise, so they share
+-- one run per group: between cases the 창귀, their explosions and every enemy
+-- go, and S.resetPlayer proves the player is where the run started.
+local function fresh(plan)
+    S.resetPlayer(plan, function() clearGhosts() end, function()
+        return #ghosts() == 0, "a 창귀 remains"
+    end)
+end
+S.sequenceBundle("TIGER", "shared_conditions", { conditions = true }, sharedConditions, function(plan) fresh(plan) end)
+S.sequenceBundle("TIGER", "shared_damage", { damage = true }, sharedDamage, function(plan) fresh(plan) end)
 
 return C

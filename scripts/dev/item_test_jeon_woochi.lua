@@ -96,6 +96,10 @@ end
 
 local function counter(player, name) return player:GetPlayerFormCounter(PlayerForm["PLAYERFORM_" .. name]) end
 
+-- Cases that share one run (S.sequenceBundle below); each stays callable alone.
+local shared = {}
+local case = S.caseIn(shared, "JEON_WOOCHI", {})
+
 local function requireModule(plan)
     plan.require("전우치 module, its effect and REPENTOGON's form counter", function(player)
         local m = jwc()
@@ -196,7 +200,7 @@ end, stage = function(plan, _, n, index)
 end, permanent = false }
 
 -- Guppy 2 and Bob 1: one Guppy item, which completes Guppy when taken.
-S.add("JEON_WOOCHI", "closest", {}, function(plan, id)
+case("closest", function(plan, id)
     requireModule(plan)
     plan.act(function(player)
         collect(player, { CollectibleType.COLLECTIBLE_GUPPYS_PAW, CollectibleType.COLLECTIBLE_GUPPYS_TAIL,
@@ -231,7 +235,7 @@ S.add("JEON_WOOCHI", "closest", {}, function(plan, id)
 end)
 
 -- Guppy 2 and Bob 2: one item of either.
-S.add("JEON_WOOCHI", "tie", {}, function(plan, id)
+case("tie", function(plan, id)
     requireModule(plan)
     plan.act(function(player)
         collect(player, { CollectibleType.COLLECTIBLE_GUPPYS_PAW, CollectibleType.COLLECTIBLE_GUPPYS_TAIL,
@@ -250,7 +254,7 @@ end)
 
 -- Guppy 1: two copies picked up in the same update steal two items each, on
 -- their own (each at random, so they may repeat one another).
-S.add("JEON_WOOCHI", "same_update", {}, function(plan, id)
+case("same_update", function(plan, id)
     requireModule(plan)
     plan.act(function(player) collect(player, { CollectibleType.COLLECTIBLE_GUPPYS_PAW }) end)
     plan.wait(4)
@@ -268,7 +272,7 @@ S.add("JEON_WOOCHI", "same_update", {}, function(plan, id)
 end)
 
 -- The show: the pedestal stands only after the smoke has risen.
-S.add("JEON_WOOCHI", "presentation", {}, function(plan, id)
+case("presentation", function(plan, id)
     requireModule(plan)
     plan.act(function(player) collect(player, { CollectibleType.COLLECTIBLE_GUPPYS_PAW, CollectibleType.COLLECTIBLE_GUPPYS_TAIL }) end)
     plan.wait(4)
@@ -286,7 +290,7 @@ S.add("JEON_WOOCHI", "presentation", {}, function(plan, id)
 end)
 
 -- Leaving the room during the show: the item stands there on the way back.
-S.add("JEON_WOOCHI", "leave", {}, function(plan, id)
+case("leave", function(plan, id)
     requireModule(plan)
     plan.act(function(player) collect(player, { CollectibleType.COLLECTIBLE_GUPPYS_PAW, CollectibleType.COLLECTIBLE_GUPPYS_TAIL }) end)
     plan.wait(4)
@@ -336,7 +340,7 @@ end)
 
 -- A copy that comes back to the inventory (AddCollectible without a first
 -- pickup, as Kronos hands items back) steals nothing.
-S.add("JEON_WOOCHI", "returned_copy", {}, function(plan, id)
+case("returned_copy", function(plan, id)
     requireModule(plan)
     mark(plan)
     plan.act(function(player) player:AddCollectible(id, 0, false) end)
@@ -415,7 +419,7 @@ end)
 
 -- Three 전우치 for a fresh Isaac's three missing items: they arrive in turn
 -- and vanish together, so every pedestal stands on the same update.
-S.add("JEON_WOOCHI", "together", {}, function(plan, id)
+case("together", function(plan, id)
     requireModule(plan)
     mark(plan)
     plan.act(function(player, ctx)
@@ -731,5 +735,37 @@ S.add("JEON_WOOCHI", "held_active", {}, function(plan)
     plan.act(function(player) player.Position = Game():GetRoom():GetCenterPos() end)
 end)
 S.rows[#S.rows].manual = true
+
+-- The shared cases give and take items through the engine's own inventory, so
+-- every transformation counter they raise goes back down when S.resetPlayer
+-- takes the items away; the reset also requires every counter at 0, no
+-- arrival on its way and no theft waiting. Cases that raise counters with
+-- IncrementPlayerFormCounter or pills (complete, thresholds, special_*) keep a
+-- run of their own. together goes first (it needs every counter at 0 and no
+-- item at all) and closest last (Isaac takes the stolen item, and a stolen
+-- active may leave his own on the floor).
+local function formsAtZero(player)
+    for name, form in pairs(PlayerForm) do
+        if type(form) == "number" and name:match("^PLAYERFORM_") and form >= 0 and form < (PlayerForm.NUM_PLAYER_FORMS or 99) then
+            local n = player:GetPlayerFormCounter(form)
+            if n ~= 0 or player:HasPlayerForm(form) then return false, string.format("%s counter %d", name, n) end
+        end
+    end
+    return true
+end
+for i, name in ipairs(shared) do
+    if name == "together" then table.insert(shared, 1, table.remove(shared, i)); break end
+end
+S.last(shared, "closest")
+S.sequenceBundle("JEON_WOOCHI", "shared", {}, shared, function(plan)
+    plan.waitUntil(function()
+        return arrivals() == 0 and pendingCount() == 0, string.format("arrivals %d, waiting %d", arrivals(), pendingCount())
+    end, 240, "no theft still on its way")
+    S.resetPlayer(plan, nil, function(player)
+        local ok, why = formsAtZero(player)
+        if not ok then return false, why end
+        return arrivals() == 0 and pendingCount() == 0, string.format("arrivals %d, waiting %d", arrivals(), pendingCount())
+    end)
+end)
 
 return C

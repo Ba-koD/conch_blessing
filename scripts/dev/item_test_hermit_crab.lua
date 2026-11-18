@@ -66,6 +66,10 @@ local function describe(player, ids)
     return "held={" .. table.concat(held(player), ",") .. "} " .. table.concat(parts, "; ")
 end
 
+-- Cases that share one run (S.sequenceBundle below); each stays callable alone.
+local shared = {}
+local case = S.caseIn(shared, "HERMIT_CRAB", {})
+
 local function requireModule(plan)
     plan.require("Hermit Crab module, its familiar and REPENTOGON's innate and smelt APIs ready", function(player)
         local m = crab()
@@ -170,7 +174,7 @@ C.HERMIT_CRAB = { stage = function(plan, id, n)
 end }
 
 -- The owner's dropped trinket is taken: gone from the floor, smelted once.
-S.add("HERMIT_CRAB", "take", {}, function(plan, id)
+case("take", function(plan, id)
     requireModule(plan)
     plan.act(function(player)
         T().resetEvidence()
@@ -219,7 +223,7 @@ S.add("HERMIT_CRAB", "take", {}, function(plan, id)
 end, { "bffs" })
 
 -- A trinket the room spawns (no player spawner) is never taken.
-S.add("HERMIT_CRAB", "floor_ignored", {}, function(plan, id)
+case("floor_ignored", function(plan, id)
     requireModule(plan)
     plan.act(function(player)
         T().resetEvidence()
@@ -239,7 +243,7 @@ S.add("HERMIT_CRAB", "floor_ignored", {}, function(plan, id)
 end)
 
 -- It strolls the room on its own while its owner stands still.
-S.add("HERMIT_CRAB", "wander", {}, function(plan, id)
+case("wander", function(plan, id)
     requireModule(plan)
     plan.act(function(player)
         T().resetEvidence()
@@ -278,7 +282,7 @@ S.add("HERMIT_CRAB", "wander", {}, function(plan, id)
 end)
 
 -- A trinket picked back up before the crab gets there is left alone.
-S.add("HERMIT_CRAB", "gone", {}, function(plan, id)
+case("gone", function(plan, id)
     requireModule(plan)
     plan.act(function(player)
         T().resetEvidence()
@@ -313,7 +317,7 @@ end)
 -- waits it out, then carries Time = Power.
 local function conch() return MagicConch and MagicConch.API end
 
-S.add("HERMIT_CRAB", "upgrade", {}, function(plan, id)
+case("upgrade", function(plan, id)
     requireModule(plan)
     plan.act(function(player, ctx)
         T().resetEvidence()
@@ -377,7 +381,7 @@ end)
 
 -- The crab protects what it holds: a hit breaks a carried Perfection, but the
 -- engine never takes an innate trinket away (user decision 2026-11-09).
-S.add("HERMIT_CRAB", "protected", {}, function(plan, id)
+case("protected", function(plan, id)
     requireModule(plan)
     plan.act(function(player)
         T().resetEvidence()
@@ -408,7 +412,7 @@ S.add("HERMIT_CRAB", "protected", {}, function(plan, id)
 end)
 
 -- With its claws full the crab puts the oldest down and takes the new one.
-S.add("HERMIT_CRAB", "swap", {}, function(plan, id)
+case("swap", function(plan, id)
     requireModule(plan)
     plan.act(function(player)
         T().resetEvidence()
@@ -475,7 +479,7 @@ local function fetchWith(plan, near, trinket, label)
     plan.wait(2)
 end
 
-S.add("HERMIT_CRAB", "many", {}, function(plan, id)
+case("many", function(plan, id)
     requireModule(plan)
     plan.act(function(player)
         T().resetEvidence()
@@ -545,7 +549,7 @@ S.add("HERMIT_CRAB", "many", {}, function(plan, id)
 end)
 
 -- A golden trinket stays golden while held.
-S.add("HERMIT_CRAB", "golden", {}, function(plan, id)
+case("golden", function(plan, id)
     requireModule(plan)
     plan.act(function(player)
         T().resetEvidence()
@@ -561,7 +565,7 @@ S.add("HERMIT_CRAB", "golden", {}, function(plan, id)
 end)
 
 -- BFFS: one crab holds two.
-S.add("HERMIT_CRAB", "bffs", {}, function(plan, id)
+case("bffs", function(plan, id)
     requireModule(plan)
     plan.act(function(player)
         T().resetEvidence()
@@ -602,7 +606,7 @@ S.add("HERMIT_CRAB", "bffs", {}, function(plan, id)
 end, { "bffs" })
 
 -- Losing the crab gives the trinket back on the floor.
-S.add("HERMIT_CRAB", "loss", {}, function(plan, id)
+case("loss", function(plan, id)
     requireModule(plan)
     plan.act(function(player)
         T().resetEvidence()
@@ -779,5 +783,27 @@ S.add("HERMIT_CRAB", "partner_trinkets", {}, function(plan, id)
         end
     end
 end)
+
+-- One run for the cases that leave nothing behind but what this puts back:
+-- the crabs go (they let go of what they held, which is then taken off the
+-- floor) and S.resetPlayer proves the player is where a fresh run left it.
+-- kronos (its absorption smelts for good and Kronos hands crabs back) and
+-- partner_trinkets (it walks into the next room) keep a run of their own.
+local function fresh(plan)
+    plan.act(function(player)
+        local id = T().itemId()
+        while player:GetCollectibleNum(id) > 0 do player:RemoveCollectible(id) end
+    end)
+    plan.waitUntil(function(player)
+        return #crabs(player) == 0 and #held(player) == 0, string.format("crabs=%d held=%d", #crabs(player), #held(player))
+    end, 60, "the crabs go and let go of what they held")
+    S.resetPlayer(plan, nil, function(player)
+        return #T().claims() == 0, "a fetch is still claimed"
+    end)
+end
+-- upgrade goes last: the crab briefly holds Time = Power, whose earned stats
+-- stay after it is dropped, so no case can follow it in the same run.
+S.last(shared, "upgrade")
+S.sequenceBundle("HERMIT_CRAB", "shared", {}, shared, function(plan) fresh(plan) end)
 
 return C

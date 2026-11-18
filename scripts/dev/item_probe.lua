@@ -277,6 +277,12 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
         if not singleRun() then out("Start a single-player test run first."); return end
         TestBench.start(command, true); return
     end
+    if action == "player_reset" then
+        -- A measurement of REPENTOGON's EntityPlayer:ResetPlayer (player_reset_probe.lua).
+        local command = "cb test player_reset" .. (case == "hourglass" and " hourglass" or "")
+        if (case and case ~= "hourglass") or not TestBench.get(command) then out("Usage: cb test player_reset [hourglass]"); return end
+        TestBench.start(command, true); return
+    end
     if action == "perf" then
         if case then out("Usage: cb test perf"); return end
         local loaded, err = pcall(require, "scripts.dev.perf_probe")

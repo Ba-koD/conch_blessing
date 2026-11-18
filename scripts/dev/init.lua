@@ -20,6 +20,7 @@ load("morph_probe")        -- cb test morph
 load("evolution_probe")    -- cb test evolution
 load("april_fools_probe")  -- cb test april_fools
 load("appraisal_probe")    -- cb test appraisal detail
+load("player_reset_probe") -- cb test player_reset (a measurement)
 -- Last, so cb test can include the detailed benches above in its suite.
 load("item_probe")
 
