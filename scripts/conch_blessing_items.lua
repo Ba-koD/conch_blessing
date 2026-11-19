@@ -998,9 +998,9 @@ ConchBlessing.ItemData = {
         },
     },
     LANDMINE = {
-        -- 지뢰 (user design 2026-11-15): a tear of the holder's that falls to
-        -- the floor or strikes a wall without hitting an enemy leaves a mine
-        -- there; an enemy stepping on it sets it off. It never hurts a player.
+        -- 지뢰 (user design 2026-11-15): every tear of the holder's leaves a
+        -- trail of mines along its flight (2026-11-19, after Auri's Blue Eye);
+        -- an enemy stepping on one sets it off. It never hurts a player.
         type = "passive",
         id = Isaac.GetItemIdByName("Landmine"),
         gfx = "landmine.png",
@@ -1017,6 +1017,7 @@ ConchBlessing.ItemData = {
         script = "scripts/items/collectibles/landmine",
         callbacks = {
             postUpdate = "landmine.onUpdate",
+            postTearUpdate = "landmine.onTearUpdate",
             postNewRoom = "landmine.onNewRoom",
             gameStarted = "landmine.onGameStarted",
             preGameExit = "landmine.onGameExit",

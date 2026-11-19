@@ -686,13 +686,12 @@ return {
         },
         LANDMINE = {
             name = "Landmine",
-            description = "Watch your step",
+            description = "Don't. Move.",
             eid = {
-                "A tear that falls to the floor or strikes a wall without hitting an enemy leaves a mine there",
+                "Tears leave a trail of mines along their flight",
                 "#An enemy stepping on a mine sets it off, dealing twice that tear's damage to enemies around it",
                 "#Other mines caught in the blast go off too",
-                "#Up to 10 mines at a time; they never hurt you",
-                "#{{Warning}} Requires REPENTOGON!",
+                "#Mines never hurt you",
             },
         },
         UNDERDOG = {

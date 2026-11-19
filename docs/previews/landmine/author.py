@@ -4,7 +4,10 @@ The icon is a round pressure mine seen a little from above: an olive top face
 lit from the top left, a red pressure button in a grey collar, a darker side
 band, sitting in a puddle of Ipecac's green (the item answers Ipecac). The
 floor mine is the same object at gameplay size with a smaller puddle, so it
-reads on dark floors too; its button blinks red once a second when armed.
+reads on dark floors too; its button blinks red once a second when armed. A
+tear drops it from its own height (user request 2026-11-19): it falls as the
+bare mine (Fall), sinks into the puddle it splashes on landing and settles
+(Land), then idles.
 Authored on the native grid (user request 2026-11-15); these text grids are
 the source. `python docs/previews/landmine/author.py` writes the runtime PNGs
 and anm2 and enlarged previews into .tmp/landmine/.
@@ -88,16 +91,10 @@ PIVOT = (8, 8)
 OFF = {"R": (150, 40, 36)}                       # the button unlit
 ON = {"R": (255, 110, 80), "r": (196, 48, 40)}   # the button lit
 GLOW = {(7, 0): (255, 132, 96), (8, 0): (255, 132, 96), (9, 0): (255, 132, 96), (7, 1): (255, 214, 190)}
-SPLATS = [
-    [".....", ".GgG.", "KgggK", ".KKK."],
-    ["..GG.....", ".GgggGg..", "KgggggggK", ".KKqqqKK.", "...KKK..."],
-]
-# The tear's splash spread into the puddle, before the mine rises from it.
-PUDDLE = [
-    "...KKKKKKKKKKK...",  # 7
-    ".KKGGgggggggqqKK.",  # 8
-    ".KKgggggggggggKK.",  # 9
-    "...KKKKKKKKKKK...",  # 10
+# The bare mine as it falls from the tear: no puddle yet, its foot closed.
+FALL_BODY = MINE[:7] + [
+    "..KKYEDyyDDzdKK..",  # 7
+    "....KKKKKKKKK....",  # 8
 ]
 
 
@@ -133,25 +130,19 @@ def mine_frame(rise=0, lit=False):
     return cell
 
 
-def splat_frame(index):
+def fall_frame():
     cell = Image.new("RGBA", CELL)
-    rows = SPLATS[index]
-    paint(cell, rows, ((CELL[0] - len(rows[0])) // 2, PIVOT[1] + 3 - len(rows)), PAL)
+    paint(cell, FALL_BODY, (0, 0), dict(PAL, **OFF))
     return cell
 
 
-def puddle_frame():
-    cell = Image.new("RGBA", CELL)
-    paint(cell, PUDDLE, (0, PUDDLE_ROWS), PAL)
-    return cell
-
-
-# Sheet cells in order. Appear plays 0-7 one update each (the mine arms as it
-# ends); Idle shows the lit button for 4 updates and the dark one for 26.
-CELLS = [splat_frame(0), splat_frame(1), puddle_frame(), mine_frame(3), mine_frame(1),
-         mine_frame(0), mine_frame(0, lit=False), mine_frame(0, lit=True)]
-APPEAR = [(i, 1) for i in range(8)]
-IDLE = [(7, 4), (6, 26)]
+# Sheet cells in order. Fall holds the bare mine while it drops; Land sinks it
+# into its puddle and lets it settle over 8 updates (the mine arms as it ends);
+# Idle shows the lit button for 4 updates and the dark one for 26.
+CELLS = [fall_frame(), mine_frame(3), mine_frame(1), mine_frame(0), mine_frame(0, lit=True)]
+FALL = [(0, 1)]
+LAND = [(1, 2), (2, 2), (3, 2), (4, 2)]
+IDLE = [(4, 4), (3, 26)]
 
 
 def frame_xml(cell, delay):
@@ -190,8 +181,9 @@ def anm2():
              '    <Nulls />',
              '    <Events />',
              '  </Content>',
-             '  <Animations DefaultAnimation="Appear">']
-    lines += animation_xml("Appear", APPEAR, False)
+             '  <Animations DefaultAnimation="Fall">']
+    lines += animation_xml("Fall", FALL, True)
+    lines += animation_xml("Land", LAND, False)
     lines += animation_xml("Idle", IDLE, True)
     lines += ['  </Animations>', '</AnimatedActor>', '']
     return "\n".join(lines)
@@ -213,7 +205,7 @@ def sheet():
 def check():
     assert len(ICON) == 32 and all(len(row) == 32 for row in ICON), "icon must be 32x32"
     assert len(MINE) == CELL[1] and all(len(row) == CELL[0] for row in MINE), "mine must fit its cell"
-    for rows in [ICON, MINE, PUDDLE] + SPLATS:
+    for rows in [ICON, MINE, FALL_BODY]:
         assert len({len(row) for row in rows}) == 1, "ragged grid"
         for row in rows:
             for ch in row:
