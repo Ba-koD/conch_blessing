@@ -27,7 +27,7 @@
     <passive id="24" name="Family Combo" gfx="kids_menu.png" quality="4" shopprice="20" devilprice="2"/>
     <passive id="25" name="Jangseung" gfx="jangseung.png" quality="3" shopprice="15" devilprice="2"/>
     <passive id="26" name="Jeon Woo-chi" gfx="jeon_woochi.png" quality="3" shopprice="15" devilprice="2"/>
-    <passive id="27" name="Landmine" gfx="landmine.png" quality="2" tags="offensive" shopprice="15" devilprice="2"/>
+    <passive id="27" name="Landmine" gfx="landmine.png" quality="3" tags="offensive" shopprice="15" devilprice="2"/>
     <passive id="28" name="Underdog" gfx="underdog.png" quality="2" tags="offensive" cache="damage firedelay range luck speed" shopprice="15" devilprice="2"/>
     <passive id="29" name="Job's Blessing" gfx="jobs_blessing.png" quality="4" tags="utility" shopprice="30" devilprice="2"/>
     <passive id="30" name="Rat" gfx="rat.png" quality="4" shopprice="20" devilprice="2"/>

@@ -1008,7 +1008,7 @@ ConchBlessing.ItemData = {
         pool = {
             RoomType.ROOM_TREASURE
         },
-        quality = 2,
+        quality = 3,
         hidden = false,
         shopprice = 15,
         devilprice = 2,
