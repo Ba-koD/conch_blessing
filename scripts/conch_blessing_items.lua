@@ -2274,7 +2274,10 @@ local function loadAllItems()
                 EID._currentMod = "Conch's Blessing"
                 EID.ModIndicator = EID.ModIndicator or {}
                 EID.ModIndicator["Conch's Blessing"] = EID.ModIndicator["Conch's Blessing"] or { Name = "Conch's Blessing", Icon = nil }
-                if EID.setModIndicatorName then
+                -- The shown name follows our language (eid_language.lua).
+                if ConchBlessing.EID and ConchBlessing.EID.applyModIndicatorName then
+                    ConchBlessing.EID.applyModIndicatorName()
+                elseif EID.setModIndicatorName then
                     EID:setModIndicatorName("Conch's Blessing")
                 end
                 if EID.setModIndicatorIcon then

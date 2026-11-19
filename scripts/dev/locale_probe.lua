@@ -49,6 +49,22 @@ local function contains(text, part)
     return text:find(part, 1, true) ~= nil
 end
 
+-- The mod name EID shows beside our items, against the locale's in `lang`:
+-- the stored name, and the rendered string when EID is set to show names.
+local function modNameShown(lang)
+    local expected = Locale.textIn(lang, "ui.eid.mod_name")
+    local obj = EID:getDescriptionObj(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_COLLECTIBLE,
+        ConchBlessing.ItemData.LIVE_EYE.id)
+    local entry = EID.ModIndicator and EID.ModIndicator[obj.ModName]
+    local display = EID.Config and EID.Config.ModIndicatorDisplay
+    local wantsName = display == "Both" or display == "Name only"
+    local shown = type(EID.getModNameString) == "function" and EID:getModNameString(obj) or ""
+    return obj.ModName == "Conch's Blessing" and entry ~= nil and entry.Name == expected
+            and (not wantsName or contains(shown, expected)),
+        string.format("mod=%s name=%s expected=%s display=%s shown=%s", tostring(obj.ModName),
+            tostring(entry and entry.Name), expected, tostring(display), shown)
+end
+
 local function describeCard(id)
     return EID:getDescriptionObj(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_TAROTCARD, id).Description or ""
 end
@@ -202,6 +218,10 @@ local function build(plan)
             return #wrong == 0 and checked > 0,
                 checked .. " entries in " .. native .. "; effective=" .. language .. listed("wrong", wrong)
         end)
+        plan.check(lang .. ": EID names the mod in that language beside our items", function(_, ctx)
+            if not EID then return nil, "EID is not installed" end
+            return modNameShown(ctx.localeLanguage)
+        end)
         plan.check(lang .. ": Live Eye's description is its locale text", function(_, ctx)
             if not EID then return nil, "EID is not installed" end
             local first = Locale.get("items.LIVE_EYE.eid", ctx.localeLanguage)[1]
@@ -285,6 +305,10 @@ local function build(plan)
     end)
     plan.check("EID's global language still matches the player's setting", function(_, ctx)
         return eidLanguageUnchanged(ctx)
+    end)
+    plan.check("EID's mod name is back in the player's language", function()
+        if not EID then return nil, "EID is not installed" end
+        return modNameShown(Config.GetCurrentLanguage())
     end)
 
     plan.section("Thurisaz with Kronos", "while someone holds Kronos, only Kronos's line shows")

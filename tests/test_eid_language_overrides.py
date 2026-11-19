@@ -107,6 +107,19 @@ class EIDLanguageTests(unittest.TestCase):
             assert(EID.descriptions.urimal==nil and EID.ItemNames.urimal==nil)
         ''')
 
+    def test_mod_name_follows_our_language(self):
+        # EID keeps one display name per mod; ours follows our language, while
+        # the key our items are tagged with stays the English one.
+        self.lua.execute('''
+            local key="Conch's Blessing"
+            assert(EID.ModIndicator[key].Name=='소라고둥의 축복',tostring(EID.ModIndicator[key].Name))
+            effective='en';tick();assert(EID.ModIndicator[key].Name==key)
+            effective='urimal';tick();assert(EID.ModIndicator[key].Name=='소라고둥의 축복')
+            effective='en';callbacks[3]();assert(EID.ModIndicator[key].Name==key,'also while paused')
+            effective='kr';tick();assert(EID.ModIndicator[key].Name=='소라고둥의 축복')
+            assert(entry('ko_kr','5.100.900')[4]==key and EID._currentMod=='Other Mod')
+        ''')
+
     def test_manual_english_then_korean_restores_canonical_entries(self):
         self.lua.execute('''
             effective='en';tick();assert(entry('ko_kr','5.100.900')[2]=='passive en')

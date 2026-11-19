@@ -909,6 +909,10 @@ return {
         },
     },
     ui = {
+        -- The mod's name EID shows beside our items.
+        eid = {
+            mod_name = "소라고둥의 축복",
+        },
         real_eyes = {
             prediction = "미리 보기: %s",
             numbered = "미리 보기 #%s: %s",

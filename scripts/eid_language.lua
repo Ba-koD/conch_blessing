@@ -3,6 +3,7 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- Handles multilingual item descriptions and names for EID mod
 
 local isc = require("scripts.lib.isaacscript-common")
+local Locale = require("scripts.locale.init")
 
 -- Effective mod language: explicit selection or the configured automatic/date policy.
 local function getCurrentLang()
@@ -11,6 +12,25 @@ local function getCurrentLang()
 end
 
 ConchBlessing.EID = ConchBlessing.EID or {}
+
+-- EID keeps one display name per mod (ModIndicator[key].Name) and reads it on
+-- every draw, so ours follows the language our descriptions are shown in:
+-- 소라고둥의 축복 in Korean (user request 2026-11-20). The key EID tags our
+-- items with stays "Conch's Blessing".
+local MOD_KEY = "Conch's Blessing"
+local MOD_NAME_PATH = "ui.eid.mod_name"
+ConchBlessing.EID.applyModIndicatorName = function()
+    if not EID then return nil end
+    EID.ModIndicator = EID.ModIndicator or {}
+    local entry = EID.ModIndicator[MOD_KEY]
+    if type(entry) ~= "table" then
+        entry = { Name = MOD_KEY, Icon = nil }
+        EID.ModIndicator[MOD_KEY] = entry
+    end
+    local name = Locale.textIn(getCurrentLang(), MOD_NAME_PATH)
+    entry.Name = (type(name) == "string" and name ~= "" and name ~= MOD_NAME_PATH) and name or MOD_KEY
+    return entry.Name
+end
 ConchBlessing._eidRegistered = ConchBlessing._eidRegistered or { } -- [type:id][native language] = text signature
 
 local function resolveItemText(itemData)
@@ -269,8 +289,7 @@ ConchBlessing.EID.registerAllItems = function()
     local prevCurrentMod = EID and EID._currentMod
     if EID then
         EID._currentMod = "Conch's Blessing"
-        EID.ModIndicator = EID.ModIndicator or {}
-        EID.ModIndicator["Conch's Blessing"] = EID.ModIndicator["Conch's Blessing"] or { Name = "Conch's Blessing", Icon = nil }
+        ConchBlessing.EID.applyModIndicatorName()
     end
 
     -- 1.75) Build separate origin mappings by type to support IDs that exist as both collectible and trinket (Separate mappings solve ID collision issues like 109 and 145)
@@ -508,11 +527,9 @@ if EID then
     -- Ensure proper mod context and ModIndicator entry (mirrors EID's own RegisterMod override pattern)
     local prevCurrentMod = EID._currentMod
     EID._currentMod = "Conch's Blessing"
-    EID.ModIndicator = EID.ModIndicator or {}
-    EID.ModIndicator["Conch's Blessing"] = EID.ModIndicator["Conch's Blessing"] or { Name = "Conch's Blessing", Icon = nil }
 
-    -- Set indicator name and icon
-    if EID.setModIndicatorName then EID:setModIndicatorName("Conch's Blessing") end
+    -- Set indicator name (in our language) and icon
+    ConchBlessing.EID.applyModIndicatorName()
     if EID.setModIndicatorIcon then
         -- Prefer dedicated mod icon; fallback to ConchMode if needed
         local ok = pcall(function() EID:setModIndicatorIcon("ConchBlessing ModIcon") end)

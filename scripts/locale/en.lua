@@ -924,6 +924,10 @@ return {
         },
     },
     ui = {
+        -- The mod's name EID shows beside our items.
+        eid = {
+            mod_name = "Conch's Blessing",
+        },
         real_eyes = {
             prediction = "Prediction: %s",
             numbered = "Prediction #%s: %s",
