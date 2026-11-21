@@ -16,6 +16,7 @@ load("kronos_probe")       -- cb test kronos detail
 load("liveeye_probe")      -- cb test live_eye detail
 for _, probe in ipairs({ "thurisaz_probe", "conch_ticket_probe", "uruz_probe" }) do load(probe) end
 load("locale_probe")       -- cb test locale
+load("eid_icon_probe")     -- cb test locale icons (a measurement)
 load("morph_probe")        -- cb test morph
 load("evolution_probe")    -- cb test evolution
 load("april_fools_probe")  -- cb test april_fools

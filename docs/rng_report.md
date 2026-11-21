@@ -478,21 +478,28 @@ enemy its explosion reaches once for 3x the holder's damage (`scripts/items/coll
 
 While a living player holds it (and nobody holds Conch Pearl), `MC_PRE_GET_COLLECTIBLE` answers every
 item pool draw itself. It peeks the same pool with `decrease = false`, so nothing is taken out, up to
-20 times (`scripts/items/collectibles/underdog.lua:35`). A quality 0-1 peek is kept at once; any other is kept when
-`RandomFloat() x 3 < 1` (`scripts/items/collectibles/underdog.lua:34`). When no peek is kept the last one (quality 2 or more) is the
-answer, and an empty pool (Breakfast) is left to the engine. Only the kept item is taken out when the
-draw takes one. With p the weight share of quality 0-1 items in the pool, a peek is kept with
-a = p + (1 - p) / 3, and the answer is quality 0-1 with
-P = (p / a)(1 - r^20), r = (1 - p)(1 - 1/3). Without the peek limit this is 3p / (3p + 1 - p), the
-same as multiplying every quality 0-1 item's weight by 3; quality 0-1 items keep their shares among
-themselves, and so do the others.
+20 x n times (`scripts/items/collectibles/underdog.lua:39`), n being the copies the living players hold together. A peek of
+quality q is kept when `RandomFloat() < (w_q / w_0)^n`, with w = 5, 4, 3, 2, 1 for quality
+0-4 (`scripts/items/collectibles/underdog.lua:38`); quality above 4 counts as 4 and below 0 as 0. When no peek is kept the last one is
+the answer. Breakfast is an item where the pool lists it and the engine's empty-pool answer elsewhere,
+which is left to the engine. Only the kept item is taken out when the draw takes one. With c_q the
+weight share of quality q in the pool, k_q = (w_q / w_0)^n and a = sum c_q k_q, the answer is quality q
+with P_q = (c_q k_q / a)(1 - (1 - a)^N) + (1 - a)^(N - 1) c_q (1 - k_q), N the peek limit. Without the
+limit this is c_q w_q^n / sum c w^n: every weight multiplied by its quality's multiplier to the power n.
+The shares c below are the vanilla pools' (extracted itempools.xml, collectibles only).
 
-| Quality 0-1 share p | Exact P (answer quality 0-1) | Measured | x3 weights | P (fallback) | Peeks per draw |
-|---|---|---|---|---|---|
-| 10% | **24.999%** | 25.003% | 25.000% | 3.66e-05 | 2.50 |
-| 20% | **42.857%** | 42.916% | 42.857% | 3.47e-06 | 2.14 |
-| 30% | **56.250%** | 56.239% | 56.250% | 2.40e-07 | 1.87 |
-| 40% | **66.667%** | 66.589% | 66.667% | 1.10e-08 | 1.67 |
-| 50% | **75.000%** | 75.074% | 75.000% | 2.87e-10 | 1.50 |
-| 60% | **81.818%** | 81.860% | 81.818% | 3.31e-12 | 1.36 |
+| Pool | Copies n | Exact P (quality 0/1/2/3/4) | Measured | Weights x w^n | P (fallback) | Peeks per draw |
+|---|---|---|---|---|---|---|
+| treasure | 1 | 21.6%/42.2%/24.3%/10.9%/1.0% | 21.7%/42.1%/24.3%/10.9%/0.9% | 21.6%/42.2%/24.3%/10.9%/1.0% | 1.19e-10 | 1.47 |
+| treasure | 2 | 29.0%/45.3%/19.6%/5.9%/0.3% | 28.9%/45.3%/19.6%/5.9%/0.3% | 29.0%/45.3%/19.6%/5.9%/0.3% | 5.07e-13 | 1.97 |
+| treasure | 3 | 36.5%/45.7%/14.8%/3.0%/0.1% | 36.4%/45.7%/14.8%/3.0%/0.1% | 36.5%/45.7%/14.8%/3.0%/0.1% | 3.77e-14 | 2.48 |
+| treasure | 4 | 43.9%/43.9%/10.7%/1.4%/0.0% | 44.0%/43.7%/10.8%/1.5%/0.0% | 43.9%/43.9%/10.7%/1.4%/0.0% | 7.00e-15 | 2.98 |
+| angel | 1 | 0.0%/41.1%/23.0%/32.0%/3.9% | 0.0%/41.0%/23.1%/32.0%/3.9% | 0.0%/41.1%/23.0%/32.0%/3.9% | 2.89e-07 | 1.89 |
+| angel | 2 | 0.0%/54.6%/22.9%/21.2%/1.3% | 0.0%/54.5%/22.9%/21.3%/1.3% | 0.0%/54.6%/22.9%/21.2%/1.3% | 2.13e-07 | 3.14 |
+| angel | 3 | 0.0%/66.0%/20.8%/12.8%/0.4% | 0.0%/66.0%/20.7%/12.9%/0.4% | 0.0%/66.0%/20.8%/12.8%/0.4% | 6.68e-07 | 4.74 |
+| angel | 4 | 0.0%/74.9%/17.7%/7.3%/0.1% | 0.0%/74.9%/17.7%/7.3%/0.1% | 0.0%/74.9%/17.7%/7.3%/0.1% | 2.55e-06 | 6.71 |
+| planetarium | 1 | 16.7%/0.0%/50.0%/33.3%/0.0% | 16.7%/0.0%/50.1%/33.2%/0.0% | 16.7%/0.0%/50.0%/33.3%/0.0% | 1.38e-07 | 1.83 |
+| planetarium | 2 | 27.8%/0.0%/50.0%/22.2%/0.0% | 27.9%/0.0%/50.0%/22.1%/0.0% | 27.8%/0.0%/50.0%/22.2%/0.0% | 1.27e-07 | 3.06 |
+| planetarium | 3 | 41.7%/0.0%/45.0%/13.3%/0.0% | 41.7%/0.0%/45.0%/13.3%/0.0% | 41.7%/0.0%/45.0%/13.3%/0.0% | 3.79e-07 | 4.58 |
+| planetarium | 4 | 56.3%/0.0%/36.5%/7.2%/0.0% | 56.4%/0.0%/36.4%/7.2%/0.0% | 56.3%/0.0%/36.5%/7.2%/0.0% | 7.51e-07 | 6.20 |
 

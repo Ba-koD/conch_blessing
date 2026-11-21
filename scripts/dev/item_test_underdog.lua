@@ -15,8 +15,8 @@ local function evidence() return U()._test.evidence() end
 
 -- What each quality moves, in displayed units (range in tiles).
 local EXPECT = {
-    [0] = { stat = "Damage", delta = 1 },
-    [1] = { stat = "Tears", delta = 0.3 },
+    [0] = { stat = "Damage", delta = 1.5 },
+    [1] = { stat = "Tears", delta = 0.4 },
     [2] = { stat = "Range", delta = 0.5 },
     [3] = { stat = "Luck", delta = -0.5 },
     [4] = { stat = "Speed", delta = -0.1 },
@@ -114,17 +114,19 @@ local function pickQuality(plan, id, quality)
     end)
 end
 
--- The lifecycle's plain quality 0 item: while held damage rises by 1, without it nothing moves.
-local function lifecyclePick(plan, counts)
+-- The lifecycle's plain quality 0 item: with n copies held damage rises by n
+-- (copies stack, user decision 2026-11-21), without it nothing moves.
+local function lifecyclePick(plan, copies)
     plan.act(function(player, ctx)
         ctx.before = H.stats(player)
         ctx.item = fixture(0)
         player:AddCollectible(ctx.item, 0, true)
     end)
     plan.wait(2)
-    plan.check(string.format("quality 0 %s damage", counts and "raises" or "leaves"), function(player, ctx)
+    plan.check(copies > 0 and string.format("quality 0 raises damage by %g with %d cop%s", copies * EXPECT[0].delta,
+        copies, copies == 1 and "y" or "ies") or "quality 0 leaves damage", function(player, ctx)
         local now = H.stats(player)
-        local expected = ctx.before.Damage + (counts and EXPECT[0].delta or 0)
+        local expected = ctx.before.Damage + copies * EXPECT[0].delta
         local same, detail = true, ""
         for stat, value in pairs(now) do
             if stat ~= "Damage" and not H.near(value, ctx.before[stat]) then same, detail = false, stat .. " moved" end
@@ -136,10 +138,10 @@ local function lifecyclePick(plan, counts)
 end
 
 C.UNDERDOG = { stage = function(plan, id, n)
-    lifecyclePick(plan, n > 0)
+    lifecyclePick(plan, n)
 end }
 
--- One item of each quality: 0 damage +1, 1 tears +0.3, 2 range +0.5,
+-- One item of each quality: 0 damage +1.5, 1 tears +0.4, 2 range +0.5,
 -- 3 luck -0.5, 4 speed -0.1, each moving only its own stat.
 case("qualities", function(plan, id)
     requireModule(plan)
@@ -165,7 +167,7 @@ case("pedestal", function(plan, id)
             "waiting for Isaac to pick it up"
     end, 120, "Isaac takes the quality 1 item from its pedestal")
     plan.wait(4)
-    plan.check("the pedestal pickup raised tears by 0.3", function(player, ctx)
+    plan.check("the pedestal pickup raised tears by 0.4", function(player, ctx)
         local now = H.stats(player)
         return H.near(now.Tears, ctx.before.Tears + EXPECT[1].delta),
             string.format("tears %.4f -> %.4f", ctx.before.Tears, now.Tears)
@@ -186,7 +188,7 @@ case("held_before", function(plan, id)
         player:AddCollectible(id, 0, true)
     end)
     plan.wait(2)
-    plan.check("two quality 0 and one quality 3 item held before, and Underdog itself (quality 2): damage +2, luck -0.5, range +0.5",
+    plan.check("two quality 0 and one quality 3 item held before, and Underdog itself (quality 2): damage +3, luck -0.5, range +0.5",
         function(player, ctx)
         local now = H.stats(player)
         return H.near(now.Damage, ctx.before.Damage + 2 * EXPECT[0].delta)
@@ -211,7 +213,7 @@ case("leave", function(plan, id)
     plan.act(function(player) player:RemoveCollectible(fixture(1)) end)
     plan.wait(2)
     measureShare(plan, id, "after")
-    plan.check("removing the quality 1 item takes its +0.3 tears", function(_, ctx)
+    plan.check("removing the quality 1 item takes its +0.4 tears", function(_, ctx)
         return H.near(ctx.after.Tears, ctx.before.Tears - EXPECT[1].delta) and H.near(ctx.after.Damage, ctx.before.Damage),
             string.format("before [%s] after [%s]", describeShare(ctx.before), describeShare(ctx.after))
     end)
@@ -222,7 +224,7 @@ case("leave", function(plan, id)
     end)
     plan.wait((U() and U().sweep or 30) + 5)
     measureShare(plan, id, "swapped")
-    plan.check("a swap that keeps the item total is caught: damage -1, speed -0.1", function(player, ctx)
+    plan.check("a swap that keeps the item total is caught: damage -1.5, speed -0.1", function(player, ctx)
         local s = ctx.swapped
         return player:GetCollectibleCount() == ctx.total
             and H.near(s.Damage, ctx.after.Damage - EXPECT[0].delta)
@@ -233,8 +235,8 @@ case("leave", function(plan, id)
 end)
 
 -- Only the quality counts (user decision 2026-11-20, "예외없이"): a quest item
--- and a second Underdog count like any other item, and nothing counts while
--- it is not held.
+-- and a second Underdog count like any other item (the second copy also doubles
+-- every stat), and nothing counts while it is not held.
 case("every_item", function(plan, id)
     requireModule(plan, { 0 })
     plan.act(function(player, ctx)
@@ -243,7 +245,7 @@ case("every_item", function(plan, id)
         player:AddCollectible(CollectibleType.COLLECTIBLE_KEY_PIECE_1, 0, true)
     end)
     plan.wait(2)
-    plan.check("a quest item (Key Piece 1, quality 0) raises damage by 1", function(player, ctx)
+    plan.check("a quest item (Key Piece 1, quality 0) raises damage by 1.5", function(player, ctx)
         local now = H.stats(player)
         return H.near(now.Damage, ctx.before.Damage + EXPECT[0].delta),
             string.format("damage %.3f -> %.3f", ctx.before.Damage, now.Damage)
@@ -253,9 +255,11 @@ case("every_item", function(plan, id)
         player:AddCollectible(id, 0, true)
     end)
     plan.wait(2)
-    plan.check("a second Underdog (quality 2) raises range by 0.5", function(player, ctx)
+    -- one copy: Key Piece damage +1.5, Underdog range +0.5; two copies: each
+    -- quality 0 item damage +3 and two quality 2 items (the copies) range +1 each
+    plan.check("a second Underdog doubles damage (+1.5 -> +3) and range (+0.5 -> +2)", function(player, ctx)
         local now = H.stats(player)
-        return H.near(now.Range, ctx.before.Range + EXPECT[2].delta) and H.near(now.Damage, ctx.before.Damage),
+        return H.near(now.Range, ctx.before.Range + 1.5) and H.near(now.Damage, ctx.before.Damage + EXPECT[0].delta),
             string.format("range %.3f -> %.3f damage %.3f -> %.3f", ctx.before.Range, now.Range,
                 ctx.before.Damage, now.Damage)
     end)
@@ -270,6 +274,37 @@ case("every_item", function(plan, id)
     end)
 end)
 
+-- Copies stack (user decision 2026-11-21): with n copies every stat is n
+-- times one copy's. One item of quality 0, 1, 3 and 4 is held; the copies are
+-- the quality 2 items, so range is 0.5 x n x n.
+case("copies", function(plan, id)
+    requireModule(plan, { 0, 1, 3, 4 })
+    plan.act(function(player, ctx)
+        give(player, id, 0)
+        for _, q in ipairs({ 0, 1, 3, 4 }) do player:AddCollectible(fixture(q), 0, true) end
+    end)
+    plan.wait(2)
+    plan.act(function(_, ctx) ctx.base = H.stats(_) end)
+    local function expectCopies(n)
+        plan.act(function(player) give(player, id, n) end)
+        plan.wait(3)
+        plan.check(string.format("%d cop%s: damage %+g, tears %+g, range %+g, luck %+g, speed %+g", n,
+            n == 1 and "y" or "ies", n * EXPECT[0].delta, n * EXPECT[1].delta, n * n * EXPECT[2].delta,
+            n * EXPECT[3].delta, n * EXPECT[4].delta), function(player, ctx)
+            local now, b = H.stats(player), ctx.base
+            return H.near(now.Damage, b.Damage + n * EXPECT[0].delta) and H.near(now.Tears, b.Tears + n * EXPECT[1].delta)
+                and H.near(now.Range, b.Range + n * n * EXPECT[2].delta) and H.near(now.Luck, b.Luck + n * EXPECT[3].delta)
+                and H.near(now.Speed, b.Speed + n * EXPECT[4].delta),
+                string.format("damage %+.3f tears %+.3f range %+.3f luck %+.3f speed %+.3f", now.Damage - b.Damage,
+                    now.Tears - b.Tears, now.Range - b.Range, now.Luck - b.Luck, now.Speed - b.Speed)
+        end)
+    end
+    expectCopies(1)
+    expectCopies(2)
+    expectCopies(3)
+    expectCopies(1)
+end)
+
 -- The changes leave with Underdog and come back with it.
 case("loss", function(plan, id)
     requireModule(plan, { 0, 3 })
@@ -280,7 +315,7 @@ case("loss", function(plan, id)
         player:AddCollectible(fixture(3), 0, true)
     end)
     plan.wait(2)
-    plan.check("damage +1 and luck -0.5 while held", function(player, ctx)
+    plan.check("damage +1.5 and luck -0.5 while held", function(player, ctx)
         local now = H.stats(player)
         return H.near(now.Damage, ctx.base.Damage + EXPECT[0].delta) and H.near(now.Luck, ctx.base.Luck + EXPECT[3].delta),
             string.format("damage %.3f luck %.3f", now.Damage, now.Luck)
@@ -298,13 +333,14 @@ case("loss", function(plan, id)
 end)
 
 -- ------------------------------------------------------------------ item pools
--- Quality 0-1 items are lowWeight (3) times as likely in item pool draws while a
--- living player holds Underdog (user decision 2026-11-21). The same seeds are
--- drawn from the real treasure pool without and with Underdog, without taking
--- anything out; the share of quality 0-1 answers must move from p to
--- 3p / (3p + 1 - p). It also records whether the engine runs MC_POST_GET_COLLECTIBLE
--- on the item Underdog's MC_PRE_GET_COLLECTIBLE answers (a measurement: other
--- mods' POST callbacks see Underdog's draws only if it does).
+-- Item pool draws weigh quality 0-4 by 5, 4, 3, 2, 1, raised to the power of
+-- the copies held, while a living player holds Underdog (user decision
+-- 2026-11-21). The same seeds are drawn from the real treasure pool without and
+-- with Underdog, without taking anything out; each quality's share must move
+-- from c_q to what those weights give (expectedShares). It also records whether
+-- the engine runs MC_POST_GET_COLLECTIBLE on the item Underdog's
+-- MC_PRE_GET_COLLECTIBLE answers (a measurement: other mods' POST callbacks see
+-- Underdog's draws only if it does).
 local POOL_SAMPLES = 1500
 local postWatch = nil -- { counts = { [id] = n } } while a draw is watched
 if ModCallbacks and ModCallbacks.MC_POST_GET_COLLECTIBLE then
@@ -344,25 +380,30 @@ local function removedSet()
     return set
 end
 
--- Draw every seed from the treasure pool without taking anything out. Returns
--- the share of quality 0-1 answers and what the answers were: how many were
--- hidden, already taken out of the pools, locked (REPENTOGON's isUnlocked), or
--- one given item (`watch`).
-local function sample(seeds, watch)
+-- Draw every seed from a pool (the treasure pool unless named) without taking
+-- anything out. Returns the share of quality 0-1 answers and what the answers
+-- were: how many were hidden, already taken out of the pools, locked
+-- (REPENTOGON's isUnlocked), or one given item (`watch`).
+local function sample(seeds, watch, pool)
+    pool = pool or ItemPoolType.POOL_TREASURE
     local itemPool, config = Game():GetItemPool(), Isaac.GetItemConfig()
     local removed, locked = removedSet(), {}
     if type(itemPool.GetCollectiblesFromPool) == "function" then
-        for _, entry in ipairs(itemPool:GetCollectiblesFromPool(ItemPoolType.POOL_TREASURE)) do
+        for _, entry in ipairs(itemPool:GetCollectiblesFromPool(pool)) do
             if entry.isUnlocked == false then locked[entry.itemID] = true end
         end
     end
     local audit = { low = 0, hidden = 0, removed = 0, locked = 0, watched = 0, distinct = 0, removedKnown = removed ~= nil,
-        hiddenIds = {}, removedIds = {} }
+        hiddenIds = {}, removedIds = {}, quality = { 0, 0, 0, 0, 0 } }
     local seen = {}
     for _, seed in ipairs(seeds) do
-        local got = itemPool:GetCollectible(ItemPoolType.POOL_TREASURE, false, seed)
+        local got = itemPool:GetCollectible(pool, false, seed)
         local item = got > 0 and config:GetCollectible(got)
         if item and (item.Quality or 0) <= 1 then audit.low = audit.low + 1 end
+        if item then
+            local q = math.max(0, math.min(4, math.floor(item.Quality or 0))) + 1
+            audit.quality[q] = audit.quality[q] + 1
+        end
         if item and item.Hidden then audit.hidden = audit.hidden + 1; audit.hiddenIds[got] = true end
         if removed and removed[got] then audit.removed = audit.removed + 1; audit.removedIds[got] = true end
         if locked[got] then audit.locked = audit.locked + 1 end
@@ -371,7 +412,41 @@ local function sample(seeds, watch)
         seen[got] = seen[got] + 1
     end
     audit.counts = seen
+    for q = 1, 5 do audit.quality[q] = audit.quality[q] / #seeds end
     return audit.low / #seeds, audit
+end
+
+-- Each quality's share with `copies` held, from the shares `c` without it
+-- (other mods change draws in both arms, so the control stands for the pool):
+-- k_q = (w_q / w_0)^n, a = sum c_q k_q, N the peek limit,
+-- P_q = (c_q k_q / a)(1 - (1 - a)^N) + (1 - a)^(N - 1) c_q (1 - k_q).
+local function expectedShares(c, copies)
+    local pool = U().pool
+    local limit, keep, a = pool.peeksPerCopy * copies, {}, 0
+    for q = 1, 5 do keep[q] = (pool.weights[q] / pool.weights[1]) ^ copies; a = a + c[q] * keep[q] end
+    local out = {}
+    for q = 1, 5 do
+        out[q] = a > 0 and ((c[q] * keep[q] / a) * (1 - (1 - a) ^ limit) + (1 - a) ^ (limit - 1) * c[q] * (1 - keep[q]))
+            or c[q]
+    end
+    return out
+end
+
+-- Whether every quality's share is within its tolerance of the expected one.
+local function sharesMatch(got, want, samples)
+    local ok, parts = true, {}
+    for q = 1, 5 do
+        local tolerance = 0.02 + 4 * math.sqrt(want[q] * (1 - want[q]) / samples)
+        if math.abs(got[q] - want[q]) > tolerance then ok = false end
+        parts[q] = string.format("Q%d %.3f/%.3f", q - 1, got[q], want[q])
+    end
+    return ok, table.concat(parts, " ")
+end
+
+local function fmtShares(c)
+    local parts = {}
+    for q = 1, 5 do parts[q] = string.format("%.3f", c[q]) end
+    return table.concat(parts, "/")
 end
 
 local function itemList(set)
@@ -422,14 +497,23 @@ S.add("UNDERDOG", "pool_weight", { conditions = true }, function(plan, id)
         ctx.evidence = U()._test.evidence()
         local _, total = poolWeights()
         ctx.totalAfterPeeks = total
+        give(player, id, 2)
+        U()._test.resetEvidence()
+        local _, twoAudit = sample(ctx.seeds)
+        ctx.twoAudit, ctx.twoEvidence = twoAudit, U()._test.evidence()
+        give(player, id, 1)
     end)
-    plan.check("quality 0-1 items are 3 times as likely in the treasure pool", function(_, ctx)
-        local k = U().pool.lowWeight
-        local expected = k * ctx.control / (k * ctx.control + 1 - ctx.control)
+    plan.check("the treasure pool weighs quality 0-4 by 5, 4, 3, 2, 1", function(_, ctx)
+        local ok, detail = sharesMatch(ctx.withAudit.quality, expectedShares(ctx.controlAudit.quality, 1), POOL_SAMPLES)
         local e = ctx.evidence
-        return ctx.control > 0 and math.abs(ctx.with - expected) <= 0.05,
-            string.format("quality 0-1 share %.3f without, %.3f with (expected %.3f over %d draws); Underdog answered %d, peeks %d, fallbacks %d, left %d",
-                ctx.control, ctx.with, expected, POOL_SAMPLES, e.draws, e.peeks, e.fallbacks, e.left)
+        return ok, string.format("without %s; with/expected %s over %d draws; Underdog answered %d, peeks %d, fallbacks %d, left %d",
+            fmtShares(ctx.controlAudit.quality), detail, POOL_SAMPLES, e.draws, e.peeks, e.fallbacks, e.left)
+    end)
+    plan.check("two copies weigh it by 25, 16, 9, 4, 1", function(_, ctx)
+        local ok, detail = sharesMatch(ctx.twoAudit.quality, expectedShares(ctx.controlAudit.quality, 2), POOL_SAMPLES)
+        local e = ctx.twoEvidence
+        return ok, string.format("with/expected %s; Underdog answered %d, peeks %d, fallbacks %d, left %d", detail,
+            e.draws, e.peeks, e.fallbacks, e.left)
     end)
     plan.check("draws that take nothing out leave the pool whole", function(_, ctx)
         if not ctx.total then return nil, "no REPENTOGON pool weights to read" end
@@ -536,6 +620,64 @@ S.add("UNDERDOG", "pool_weight", { conditions = true }, function(plan, id)
         return ctx.pearlDraws == 0, string.format("Underdog answered %d of 20 draws", ctx.pearlDraws)
     end)
 end)
+
+-- Every item pool, not only the treasure pool (by name only: about 30 pools).
+-- The same seeds are drawn from each pool without Underdog, with one copy and
+-- with two, without taking anything out; each quality's share must be what the
+-- weights give within the peek limit (expectedShares), taking the shares
+-- without it as the pool's because other mods change draws in every arm.
+local ALL_POOL_SAMPLES = 2000
+
+local function poolName(pool)
+    for name, value in pairs(type(ItemPoolType) == "table" and ItemPoolType or {}) do
+        if value == pool and name ~= "NUM_ITEMPOOLS" then return name end
+    end
+    return "pool " .. pool
+end
+
+S.add("UNDERDOG", "all_pools", { conditions = true }, function(plan, id)
+    plan.require("Underdog's pool hook loaded", function()
+        return (U() and U().pool and type(U().onPreGetCollectible) == "function") or nil, "module or pool hook missing"
+    end)
+    plan.act(function(_, ctx)
+        ctx.seeds = {}
+        for i = 1, ALL_POOL_SAMPLES do ctx.seeds[i] = i * 7919 + 13 end
+        ctx.rows = {}
+    end)
+    local count = type(ItemPoolType) == "table" and tonumber(ItemPoolType.NUM_ITEMPOOLS) or 31
+    for pool = 0, count - 1 do
+        plan.act(function(player, ctx)
+            give(player, id, 0)
+            local _, controlAudit = sample(ctx.seeds, nil, pool)
+            local row = { control = controlAudit.quality, distinct = controlAudit.distinct, arms = {} }
+            for copies = 1, 2 do
+                give(player, id, copies)
+                U()._test.resetEvidence()
+                local _, audit = sample(ctx.seeds, nil, pool)
+                local e = U()._test.evidence()
+                row.arms[copies] = { shares = audit.quality, distinct = audit.distinct, draws = e.draws,
+                    peeks = e.peeks, fallbacks = e.fallbacks, left = e.left }
+            end
+            give(player, id, 0)
+            ctx.rows[pool] = row
+        end)
+        plan.check(poolName(pool) .. ": quality 0-4 weighed by 5-1, and by their squares with two copies", function(_, ctx)
+            local row, ok, parts = ctx.rows[pool], true, {}
+            for copies = 1, 2 do
+                local arm = row.arms[copies]
+                local match, detail = sharesMatch(arm.shares, expectedShares(row.control, copies), ALL_POOL_SAMPLES)
+                ok = ok and match
+                parts[#parts + 1] = string.format("x%d: %s; %d distinct, answered %d, peeks %.2f a draw, fallbacks %d, left %d",
+                    copies, detail, arm.distinct, arm.draws, arm.draws > 0 and arm.peeks / arm.draws or 0,
+                    arm.fallbacks, arm.left)
+            end
+            return ok, string.format("without %s (%d distinct) | %s", fmtShares(row.control), row.distinct,
+                table.concat(parts, " | "))
+        end)
+        plan.wait(1)
+    end
+end)
+S.rows[#S.rows].manual = true
 
 -- Every case only adds and removes items through the engine's own inventory
 -- and reads stat changes, so they share one run: S.resetPlayer takes every

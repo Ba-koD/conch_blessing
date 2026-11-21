@@ -467,29 +467,56 @@ end
 -- The shipped weighted draw over a stand-in pool whose quality 0-1 share is p:
 -- item 1 is quality 0, item 2 quality 3.
 function probe.underdog(samples)
-    header("Underdog (an item pool draw answers quality 0-1)")
+    header("Underdog (an item pool draw weighs quality 0-4 by 5-1, to the power of the copies)")
     local module = ConchBlessing.underdog
     local t, pool = module and module._test, module and module.pool
-    if not t or not t.choose or not pool then out("SKIPPED (module not loaded)") return end
+    if not t or not t.choose or not t.keepChance or not pool then out("SKIPPED (module not loaded)") return end
     local rng = RNG()
     local seed = Random()
     if seed == 0 then seed = 1 end
     rng:SetSeed(seed, 35)
-    local k, n = pool.lowWeight, pool.maxPeeks
-    local function quality(id) return id == 1 and 0 or 3 end
+    -- the vanilla pools' quality shares, as in rng_report.py section 15
+    local profiles = {
+        { "treasure", { 0.147, 0.359, 0.276, 0.186, 0.034 } },
+        { "angel", { 0.0, 0.272, 0.203, 0.423, 0.102 } },
+        { "planetarium", { 0.091, 0.0, 0.455, 0.455, 0.0 } },
+    }
+    local function quality(id) return id end
     local function roll() return rng:RandomFloat() end
-    for _, p in ipairs({ 0.1, 0.2, 0.3, 0.4, 0.5, 0.6 }) do
-        local function draw() return rng:RandomFloat() < p and 1 or 2 end
-        local low = quietly(function()
-            local hits = 0
-            for _ = 1, samples do
-                if t.choose(draw, quality, roll, k, n) == 1 then hits = hits + 1 end
+    local function shares(values)
+        local parts = {}
+        for i = 1, 5 do parts[i] = string.format("%.1f", values[i] * 100) end
+        return table.concat(parts, "/")
+    end
+    for _, profile in ipairs(profiles) do
+        local name, c = profile[1], profile[2]
+        local function draw()
+            local x, total = rng:RandomFloat(), 0
+            for q = 1, 5 do
+                total = total + c[q]
+                if x < total then return q - 1 end
             end
-            return hits
-        end)
-        local a, r = p + (1 - p) / k, (1 - p) * (1 - 1 / k)
-        out(string.format("  quality 0-1 share %3d%%: configured=%7.3f%%  measured=%7.3f%%", math.floor(p * 100 + 0.5),
-            (p / a) * (1 - r ^ n) * 100, low / samples * 100))
+            return 4
+        end
+        for copies = 1, 4 do
+            local limit = pool.peeksPerCopy * copies
+            local keep, a = {}, 0
+            for q = 1, 5 do keep[q] = t.keepChance(q - 1, copies); a = a + c[q] * keep[q] end
+            local expected = {}
+            for q = 1, 5 do
+                expected[q] = (c[q] * keep[q] / a) * (1 - (1 - a) ^ limit) + (1 - a) ^ (limit - 1) * c[q] * (1 - keep[q])
+            end
+            local counts = quietly(function()
+                local found = { 0, 0, 0, 0, 0 }
+                for _ = 1, samples do
+                    local id = t.choose(draw, quality, roll, copies, limit)
+                    found[id + 1] = found[id + 1] + 1
+                end
+                return found
+            end)
+            for q = 1, 5 do counts[q] = counts[q] / samples end
+            out(string.format("  %-11s x%d: configured=%s%%  measured=%s%%", name, copies, shares(expected), shares(counts)))
+        end
     end
 end
 

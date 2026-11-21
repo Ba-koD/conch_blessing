@@ -104,6 +104,16 @@ def cite(key: str, needle: str) -> str:
     sys.exit(f"ERROR: snippet {needle!r} not found in {SRC[key]}")
 
 
+def lua_list(key: str, name: str) -> tuple[list[float], str]:
+    """Return ([numbers], "file:line") for `name = { n, n, ... }` on one line of a Lua source."""
+    pattern = re.compile(r"^\s*(?:local\s+)?" + re.escape(name) + r"\s*=\s*\{([^}]*)\}")
+    hits = [(m, i + 1) for i, ln in enumerate(lines(key)) if (m := pattern.match(ln))]
+    if not hits:
+        sys.exit(f"ERROR: list {name!r} not found in {SRC[key]}")
+    m, line_no = hits[0]
+    return [float(x) for x in m.group(1).split(",") if x.strip()], f"`{SRC[key]}:{line_no}`"
+
+
 def const_table(key: str, name: str) -> list[tuple[str, float, str]]:
     """Return [(entry, value, "file:line")] for `local name = { [X.ENTRY] = n, ... }`."""
     src_lines = lines(key)
@@ -706,41 +716,57 @@ def build(samples: int, seed: int) -> str:
     w("")
 
     # 15 -------------------------------------------------------------------------
-    weight, weight_cite = const("underdog", "lowWeight")
-    peeks, peeks_cite = const("underdog", "maxPeeks")
-    k, n = weight, int(peeks)
+    weights, weights_cite = lua_list("underdog", "weights")
+    per_copy, per_copy_cite = const("underdog", "peeksPerCopy")
     w("## 15. Underdog")
     w("")
     w("While a living player holds it (and nobody holds Conch Pearl), `MC_PRE_GET_COLLECTIBLE` answers every")
     w("item pool draw itself. It peeks the same pool with `decrease = false`, so nothing is taken out, up to")
-    w(f"{n} times ({peeks_cite}). A quality 0-1 peek is kept at once; any other is kept when")
-    w(f"`RandomFloat() x {k:g} < 1` ({weight_cite}). When no peek is kept the last one (quality 2 or more) is the")
-    w("answer, and an empty pool (Breakfast) is left to the engine. Only the kept item is taken out when the")
-    w("draw takes one. With p the weight share of quality 0-1 items in the pool, a peek is kept with")
-    w(f"a = p + (1 - p) / {k:g}, and the answer is quality 0-1 with")
-    w(f"P = (p / a)(1 - r^{n}), r = (1 - p)(1 - 1/{k:g}). Without the peek limit this is {k:g}p / ({k:g}p + 1 - p), the")
-    w(f"same as multiplying every quality 0-1 item's weight by {k:g}; quality 0-1 items keep their shares among")
-    w("themselves, and so do the others.")
+    w(f"{per_copy:g} x n times ({per_copy_cite}), n being the copies the living players hold together. A peek of")
+    w(f"quality q is kept when `RandomFloat() < (w_q / w_0)^n`, with w = {', '.join(f'{x:g}' for x in weights)} for quality")
+    w(f"0-4 ({weights_cite}); quality above 4 counts as 4 and below 0 as 0. When no peek is kept the last one is")
+    w("the answer. Breakfast is an item where the pool lists it and the engine's empty-pool answer elsewhere,")
+    w("which is left to the engine. Only the kept item is taken out when the draw takes one. With c_q the")
+    w("weight share of quality q in the pool, k_q = (w_q / w_0)^n and a = sum c_q k_q, the answer is quality q")
+    w("with P_q = (c_q k_q / a)(1 - (1 - a)^N) + (1 - a)^(N - 1) c_q (1 - k_q), N the peek limit. Without the")
+    w("limit this is c_q w_q^n / sum c w^n: every weight multiplied by its quality's multiplier to the power n.")
+    w("The shares c below are the vanilla pools' (extracted itempools.xml, collectibles only).")
     w("")
+    profiles = [("treasure", (0.147, 0.359, 0.276, 0.186, 0.034)),
+                ("angel", (0.0, 0.272, 0.203, 0.423, 0.102)),
+                ("planetarium", (0.091, 0.0, 0.455, 0.455, 0.0))]
     rows = []
-    for p in (0.1, 0.2, 0.3, 0.4, 0.5, 0.6):
-        a = p + (1 - p) / k
-        r = (1 - p) * (1 - 1 / k)
-        exact = (p / a) * (1 - r ** n)
-        ideal = k * p / (k * p + 1 - p)
-        mean_peeks = (1 - r ** n) / a
-        low = 0
-        for _ in range(samples):
-            for i in range(n):
-                if rng.random() < p:
-                    low += 1
-                    break
-                if rng.random() * k < 1 or i == n - 1:
-                    break
-        rows.append([f"{p:.0%}", f"**{exact:.3%}**", f"{low / samples:.3%}", f"{ideal:.3%}",
-                     f"{r ** n:.2e}", f"{mean_peeks:.2f}"])
-    w("\n".join(table(["Quality 0-1 share p", "Exact P (answer quality 0-1)", "Measured",
-                        f"x{k:g} weights", "P (fallback)", "Peeks per draw"], rows)))
+    for name, shares in profiles:
+        for n in (1, 2, 3, 4):
+            limit = int(per_copy) * n
+            keep = [(x / weights[0]) ** n for x in weights]
+            a = sum(c * k for c, k in zip(shares, keep))
+            exact = [(c * k / a) * (1 - (1 - a) ** limit) + (1 - a) ** (limit - 1) * c * (1 - k)
+                     for c, k in zip(shares, keep)]
+            raw = [c * x ** n for c, x in zip(shares, weights)]
+            ideal = [r / sum(raw) for r in raw]
+            cumulative = []
+            total = 0.0
+            for c in shares:
+                total += c
+                cumulative.append(total)
+            counts = [0] * 5
+            peeks = 0
+            for _ in range(samples):
+                q = 4
+                for _i in range(limit):
+                    x = rng.random()
+                    q = next(idx for idx, edge in enumerate(cumulative) if x < edge or idx == 4)
+                    peeks += 1
+                    if rng.random() < keep[q]:
+                        break
+                counts[q] += 1
+            rows.append([name, str(n), "/".join(f"{e:.1%}" for e in exact),
+                         "/".join(f"{x / samples:.1%}" for x in counts),
+                         "/".join(f"{e:.1%}" for e in ideal),
+                         f"{(1 - a) ** limit:.2e}", f"{peeks / samples:.2f}"])
+    w("\n".join(table(["Pool", "Copies n", "Exact P (quality 0/1/2/3/4)", "Measured",
+                        "Weights x w^n", "P (fallback)", "Peeks per draw"], rows)))
     w("")
 
     return "\n".join(md) + "\n"

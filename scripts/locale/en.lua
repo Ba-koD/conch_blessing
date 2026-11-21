@@ -37,7 +37,7 @@ return {
             description = "The void opens",
             eid = {
                 "#When your attack damages an enemy, has a chance to spawn a void ring at the impact that deals your damage",
-                "#Chance is (30 − {{Tears}}Tears)% guaranteed 5%",
+                "#Chance is (30 - {{Tears}}Tears)% guaranteed 5%",
                 "#chance is increased by (1+0.1×{{Luck}}Luck) (up to 100%)",
                 "#Duration increases by 10 frames per 10 {{Damage}}Damage by 5 steps",
                 "#{{BlackHeart}}No black heart drops",
@@ -696,15 +696,15 @@ return {
         },
         UNDERDOG = {
             name = "Underdog",
-            description = "Every dog has its day",
+            description = "The underdog strikes back!",
             eid = {
-                "Every item you hold gives a stat by its quality",
-                "#{{Quality0}}: {{Damage}} +1 Damage",
-                "#{{Quality1}}: {{Tears}} +0.3 Tears",
-                "#{{Quality2}}: {{Range}} +0.5 Range",
-                "#{{Quality3}}: {{Luck}} -0.5 Luck",
-                "#{{Quality4}}: {{Speed}} -0.1 Speed",
-                "#{{Quality0}}{{Quality1}} items are 3 times as likely to appear",
+                "Stats per item held, by quality:",
+                "#{{Quality0}} odds x5 / {{Damage}} +1.5 Damage",
+                "#{{Quality1}} odds x4 / {{Tears}} +0.4 Tears",
+                "#{{Quality2}} odds x3 / {{Range}} +0.5 Range",
+                "#{{Quality3}} odds x2 / {{Luck}} -0.5 Luck",
+                "#{{Quality4}} odds x1 / {{Speed}} -0.1 Speed",
+                "#Copies multiply odds, add stats",
             },
         },
         JOBS_BLESSING = {

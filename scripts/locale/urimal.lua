@@ -681,15 +681,15 @@ return {
         },
         UNDERDOG = {
             name = "언더독",
-            description = "쥐구멍에도 볕 들 날 있다",
+            description = "언더독의 반란!",
             eid = {
-                "가진 아이템마다 등급에 따라 아래 능력을 얻습니다",
-                "#{{Quality0}}: {{Damage}} 때리는 힘 +1",
-                "#{{Quality1}}: {{Tears}} 쏘는 빠르기 +0.3",
-                "#{{Quality2}}: {{Range}} 닿는 거리 +0.5",
-                "#{{Quality3}}: {{Luck}} 행운 -0.5",
-                "#{{Quality4}}: {{Speed}} 움직이는 빠르기 -0.1",
-                "#{{Quality0}}{{Quality1}} 아이템이 나올 확률이 3배가 됩니다",
+                "아이템마다 등급에 맞는 능력을 얻습니다",
+                "#{{Quality0}} 나올 확률 x5 / {{Damage}} 때리는 힘 +1.5",
+                "#{{Quality1}} 나올 확률 x4 / {{Tears}} 쏘는 빠르기 +0.4",
+                "#{{Quality2}} 나올 확률 x3 / {{Range}} 닿는 거리 +0.5",
+                "#{{Quality3}} 나올 확률 x2 / {{Luck}} 행운 -0.5",
+                "#{{Quality4}} 나올 확률 x1 / {{Speed}} 움직이는 빠르기 -0.1",
+                "#여럿이면 배수는 곱하고 능력은 더합니다",
             },
         },
         JOBS_BLESSING = {

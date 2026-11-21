@@ -233,7 +233,11 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
         return
     end
     if action == "locale" then
-        if case then out("Usage: cb test locale"); return end
+        -- icons: a measurement of how EID draws our icons now (eid_icon_probe.lua)
+        if case == "icons" and TestBench.get("cb test locale icons") then
+            TestBench.start("cb test locale icons", true); return
+        end
+        if case then out("Usage: cb test locale [icons]"); return end
         TestBench.start("cb test locale",true); return
     end
     -- Cards and runes: their own case suites and manual helpers.
@@ -349,7 +353,7 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
             out("cb test " .. string.lower(key) .. (pending and " [unfinished: SKIP]" or ""))
         end
         out("For individual cases: cb test ITEM list (example: cb test kronos list).")
-        out("Short names: cb test appraisal, cb test belt. Shared checks: cb test locale, cb test morph [ITEM | default | cycle | list], cb test evolution, cb test rng [samples] [luck N], cb test perf (what this mod costs per update; a measurement).")
+        out("Short names: cb test appraisal, cb test belt. Shared checks: cb test locale [icons], cb test morph [ITEM | default | cycle | list], cb test evolution, cb test rng [samples] [luck N], cb test perf (what this mod costs per update; a measurement).")
         out("Pocket items: cb test thurisaz [CASE | list | give [N] | spawn | familiars | ledger] (the Kronos rune),")
         out("  cb test conch_ticket [CASE | list | give [N] | spawn | queue | clear] (the Conch Ticket; short name: ticket),")
         out("  cb test uruz [CASE | list | give [N] | spawn | earned] (the Tyrfing rune).")

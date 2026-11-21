@@ -1,10 +1,13 @@
 """언더독 (Underdog) through its shipped Lua: every held collectible gives the
 stat of its quality while Underdog is held (user design 2026-11-15: quality 0
-damage +1, 1 tears +0.3, 2 range +0.5, 3 luck -0.5, 4 and above speed -0.1;
-items held before it count too). Covers what counts, clamping, held copies,
-items leaving, a swap that keeps the total, owner isolation and the EID
-preview. These are Lua regressions with doubles, not proof of engine
-behaviour (`cb test underdog`).
+damage +1.5, 1 tears +0.4 (raised from +1 and +0.3 on 2026-11-21), 2 range +0.5,
+3 luck -0.5, 4 and above speed -0.1;
+items held before it count too; copies of Underdog stack, user decision
+2026-11-21: n copies give n times the stats and raise its pool weights 5, 4, 3,
+2, 1 to the power n). Covers what counts, clamping, held copies, items leaving,
+a swap that keeps the total, owner isolation, the EID preview and the pool
+draw. These are Lua regressions with doubles, not proof of engine behaviour
+(`cb test underdog`).
 """
 from pathlib import Path
 import unittest
@@ -39,6 +42,7 @@ end
 item(UNDERDOG,2)
 item(1,0); item(2,1); item(3,2); item(4,3); item(5,4); item(6,5); item(7,99999); item(8,-1)
 item(9,0,ItemConfig.TAG_QUEST); item(10,1,0,true)
+item(25,1)  -- Breakfast
 frame=0
 Isaac={GetItemIdByName=function(n) return n=="Underdog" and UNDERDOG or -1 end,
     GetItemConfig=function() return {GetCollectible=function(_,id) return items[id] end,
@@ -69,6 +73,9 @@ function pool:GetCollectible(poolType, decrease, seed)
     return poolItems[#poolItems].id
 end
 function pool:RemoveCollectible(id) removed[#removed+1]=id end
+-- REPENTOGON's pool list, only while a test sets listed (else the API is absent)
+listed=nil
+removedMap={}
 function RNG()
     local r={s=1}
     function r:SetSeed(s) self.s=math.floor(s)%4294967296 if self.s==0 then self.s=1 end end
@@ -106,6 +113,10 @@ function player()
 end
 function give(p,id,n) p.inv[id]=(p.inv[id] or 0)+(n or 1) end
 function take(p,id) p.inv[id]=(p.inv[id] or 0)-1 if p.inv[id]<=0 then p.inv[id]=nil end end
+setmetatable(pool,{__index=function(_,k)
+    if k=="GetCollectiblesFromPool" and listed then return function() return listed end end
+    if k=="GetRemovedCollectibles" and listed then return function() return removedMap end end
+end})
 M=ConchBlessingRequire("scripts.items.collectibles.underdog")
 T=M._test
 function evaluate(p)
@@ -138,8 +149,8 @@ class UnderdogTests(unittest.TestCase):
             return o.damage,o.tears,o.range,o.luck,o.speed
         ''')
         damage, tears, range_, luck, speed = result
-        self.assertAlmostEqual(damage, 1)
-        self.assertAlmostEqual(tears, 0.3)
+        self.assertAlmostEqual(damage, 1.5)
+        self.assertAlmostEqual(tears, 0.4)
         self.assertAlmostEqual(range_, 40)       # half a tile each: item 3 and Underdog itself (quality 2)
         self.assertAlmostEqual(luck, -0.5)
         self.assertAlmostEqual(speed, -0.1)
@@ -152,13 +163,13 @@ class UnderdogTests(unittest.TestCase):
             local after=evaluate(p)
             return next(before)==nil, after.damage, after.luck
         ''')
-        self.assertEqual(result, (True, 3, -0.5))
+        self.assertEqual(result, (True, 4.5, -0.5))
 
     def test_qualities_outside_zero_to_four_clamp_and_every_item_counts(self):
         # Only the quality is read (user decision 2026-11-20): quest items,
         # hidden items and Underdog itself count like any other item.
         result = self.run_lua('''
-            local p=player(); give(p,UNDERDOG); give(p,UNDERDOG)
+            local p=player(); give(p,UNDERDOG)
             give(p,6); give(p,7); give(p,8)        -- quality 5, 99999 and -1
             give(p,9); give(p,10)                  -- a quest item (quality 0) and a hidden item (quality 1)
             local o=evaluate(p)
@@ -166,10 +177,36 @@ class UnderdogTests(unittest.TestCase):
         ''')
         speed, damage, tears, range_, b5, bneg, bnil = result
         self.assertAlmostEqual(speed, -0.2)       # quality 5 and 99999
-        self.assertAlmostEqual(damage, 2)         # quality -1 and the quest item's quality 0
-        self.assertAlmostEqual(tears, 0.3)        # the hidden item's quality 1
-        self.assertAlmostEqual(range_, 40)        # both Underdog copies, quality 2
+        self.assertAlmostEqual(damage, 3)         # quality -1 and the quest item's quality 0
+        self.assertAlmostEqual(tears, 0.4)        # the hidden item's quality 1
+        self.assertAlmostEqual(range_, 20)        # Underdog itself, quality 2
         self.assertEqual((b5, bneg, bnil), (5, 1, 1))
+
+    def test_copies_multiply_every_stat(self):
+        # n copies give n times every stat (user decision 2026-11-21); each copy
+        # is also a quality 2 item of its own.
+        result = self.run_lua('''
+            local p=player(); give(p,UNDERDOG); give(p,1); give(p,2); give(p,4); give(p,5)
+            tick(p); local one=evaluate(p)
+            give(p,UNDERDOG); tick(p)
+            local refreshed=p.evaluated
+            local two=evaluate(p)
+            give(p,UNDERDOG); local three=evaluate(p)
+            take(p,UNDERDOG); take(p,UNDERDOG); tick(p)
+            local back=evaluate(p)
+            return one.damage, one.tears, one.range, one.luck, one.speed,
+                two.damage, two.tears, two.range, two.luck, two.speed,
+                three.damage, three.range, back.damage, back.range, refreshed>1
+        ''')
+        d1, t1, r1, l1, s1, d2, t2, r2, l2, s2, d3, r3, db, rb, refreshed = result
+        self.assertEqual((d1, r1), (1.5, 20))
+        self.assertAlmostEqual(t1, 0.4); self.assertAlmostEqual(l1, -0.5); self.assertAlmostEqual(s1, -0.1)
+        self.assertEqual(d2, 3)
+        self.assertAlmostEqual(t2, 0.8); self.assertAlmostEqual(l2, -1.0); self.assertAlmostEqual(s2, -0.2)
+        self.assertEqual(r2, 80)                  # two quality 2 items (the copies) x 2 copies x 20
+        self.assertEqual((d3, r3), (4.5, 180))    # three copies: 3 x 3 x 20
+        self.assertEqual((db, rb), (1.5, 20))     # back to one copy
+        self.assertTrue(refreshed)                # a new copy re-evaluates the stats
 
     def test_an_item_leaving_takes_its_share_and_a_swap_is_caught_by_the_sweep(self):
         result = self.run_lua('''
@@ -185,10 +222,10 @@ class UnderdogTests(unittest.TestCase):
             return before.tears, left.tears, refreshes>0, early.damage, swept.damage, swept.speed
         ''')
         before_tears, left_tears, refreshed, early_damage, swept_damage, swept_speed = result
-        self.assertAlmostEqual(before_tears, 0.3)
+        self.assertAlmostEqual(before_tears, 0.4)
         self.assertIsNone(left_tears)
         self.assertTrue(refreshed)
-        self.assertAlmostEqual(early_damage, 1)
+        self.assertAlmostEqual(early_damage, 1.5)
         self.assertIsNone(swept_damage)
         self.assertAlmostEqual(swept_speed, -0.1)
 
@@ -201,7 +238,7 @@ class UnderdogTests(unittest.TestCase):
             local gone=evaluate(a)
             return oa.damage, oa.luck, next(ob)==nil, next(gone)==nil, T.state()[a.hash]==nil
         ''')
-        self.assertEqual(result, (1, None, True, True, True))
+        self.assertEqual(result, (1.5, None, True, True, True))
 
     def test_a_tally_changed_inside_one_stat_reevaluates_all_on_the_next_update(self):
         result = self.run_lua('''
@@ -217,7 +254,9 @@ class UnderdogTests(unittest.TestCase):
 
     def test_preview_signs(self):
         result = self.run_lua('return T.signed(M.data[1]),T.signed(M.data[2]),T.signed(M.data[3]),T.signed(M.data[4]),T.signed(M.data[5])')
-        self.assertEqual(result, ('+1', '+0.3', '+0.5', '-0.5', '-0.1'))
+        self.assertEqual(result, ('+1.5', '+0.4', '+0.5', '-0.5', '-0.1'))
+        result = self.run_lua('return T.signed(M.data[1],2),T.signed(M.data[2],3),T.signed(M.data[3],2),T.signed(M.data[5],3)')
+        self.assertEqual(result, ('+3', '+1.2', '+1', '-0.3'))
 
     def test_eid_preview_for_the_closest_holder(self):
         result = self.run_lua('''
@@ -231,18 +270,20 @@ class UnderdogTests(unittest.TestCase):
             local a=M.describe(obj(5)).Description
             local b=M.describe(obj(9)).Description
             local c=M.describe(obj(UNDERDOG)).Description
-            take(p,UNDERDOG)
+            give(p,UNDERDOG)
+            local e=M.describe(obj(1)).Description   -- two copies: twice as much
+            take(p,UNDERDOG); take(p,UNDERDOG)
             local d=M.describe(obj(1)).Description
-            return a,b,c,d
+            return a,b,c,d,e
         ''')
         # A quest item and another Underdog show their quality's line too.
-        self.assertEqual(result, ('baseui.underdog.q4|12|-0.1', 'baseui.underdog.q0|12|+1',
-                                  'baseui.underdog.q2|12|+0.5', 'base'))
+        self.assertEqual(result, ('baseui.underdog.q4|12|-0.1', 'baseui.underdog.q0|12|+1.5',
+                                  'baseui.underdog.q2|12|+0.5', 'base', 'baseui.underdog.q0|12|+3'))
 
 
     # ----------------------------------------------------------- item pools
-    # Quality 0-1 items are lowWeight (3) times as likely in item pool draws
-    # while a living player holds Underdog (user decision 2026-11-21).
+    # Item pool draws weigh quality 0-4 by 5, 4, 3, 2, 1, raised to the power of
+    # the copies the living players hold (user decision 2026-11-21).
     POOL = '''
         poolItems={{id=1,weight=1},{id=2,weight=1},{id=3,weight=1},{id=4,weight=1},{id=5,weight=1}}
         poolCalls={}; removed={}; preHook=nil; ConchBlessing.conchpearl=nil
@@ -251,11 +292,19 @@ class UnderdogTests(unittest.TestCase):
     '''
 
     def test_keep_rule(self):
-        result = self.run_lua('''
-            return T.keeps(0,0.99,3), T.keeps(1,0.99,3), T.keeps(-2,0.99,3), T.keeps(nil,0.99,3),
-                T.keeps(2,0.33,3), T.keeps(2,0.34,3), T.keeps(4,0.0,3), T.keeps(99,0.5,3)
+        chances = self.run_lua('''
+            return T.keepChance(0,1), T.keepChance(1,1), T.keepChance(2,1), T.keepChance(3,1), T.keepChance(4,1),
+                T.keepChance(99,1), T.keepChance(-2,1), T.keepChance(nil,1),
+                T.keepChance(1,2), T.keepChance(2,2), T.keepChance(4,2), T.keepChance(3,3)
         ''')
-        self.assertEqual(result, (True, True, True, True, True, False, True, False))
+        expected = (1, 0.8, 0.6, 0.4, 0.2, 0.2, 1, 1, 0.64, 0.36, 0.04, 0.064)
+        for got, want in zip(chances, expected):
+            self.assertAlmostEqual(got, want)
+        result = self.run_lua('''
+            return T.keeps(0,0.999,1), T.keeps(1,0.79,1), T.keeps(1,0.81,1), T.keeps(4,0.19,1), T.keeps(4,0.21,1),
+                T.keeps(1,0.63,2), T.keeps(1,0.65,2)
+        ''')
+        self.assertEqual(result, (True, True, False, True, False, True, False))
 
     def test_choose_peeks_until_kept_and_falls_back_to_the_last_peek(self):
         result = self.run_lua('''
@@ -264,37 +313,75 @@ class UnderdogTests(unittest.TestCase):
                 local function draw() i = i + 1; asked = asked + 1; return ids[i] end
                 local function quality(id) return id // 100 end
                 local function roll() r = r + 1; return rolls[r] or 0.9 end
-                local id, fallback = T.choose(draw, quality, roll, 3, peeks)
+                local id, fallback = T.choose(draw, quality, roll, 1, peeks)
                 return id, fallback, asked
             end
             local a1, b1, c1 = run({ 301, 402, 5 }, { 0.9, 0.9, 0.9 }, 20)
-            local a2, b2, c2 = run({ 301, 202 }, { 0.9, 0.1 }, 20)
+            local a2, b2, c2 = run({ 301, 202 }, { 0.9, 0.5 }, 20)
             local a3, b3, c3 = run({ 301, 302, 303 }, {}, 3)
             local a4, b4, c4 = run({ 301 }, { 0.9 }, 20)
             return a1, b1, c1, a2, b2, c2, a3, b3, c3, a4, c4
         ''')
         self.assertEqual(result[:3], (5, False, 3))      # quality 0 kept at once
-        self.assertEqual(result[3:6], (202, False, 2))   # quality 2 kept on a low roll
+        self.assertEqual(result[3:6], (202, False, 2))   # quality 2 kept on a roll under 0.6
         self.assertEqual(result[6:9], (303, True, 3))    # none kept: the last peek
         self.assertEqual(result[9], None)                # the pool left it to the engine
         self.assertEqual(result[10], 2)
 
-    def test_quality_0_1_draws_are_three_times_as_likely(self):
-        result = self.run_lua(self.POOL + '''
+    SHARES = '''
+        function shares(n)
             local count={}
-            local n=6000
             for s=1,n do
                 local id=M.onPreGetCollectible(nil,0,false,s*7919+13)
                 count[id]=(count[id] or 0)+1
             end
-            return (count[1] or 0)/n, (count[2] or 0)/n, (count[3] or 0)/n, (count[5] or 0)/n
+            return (count[1] or 0)/n, (count[2] or 0)/n, (count[3] or 0)/n, (count[4] or 0)/n, (count[5] or 0)/n
+        end
+    '''
+
+    def check_shares(self, got, weights):
+        total = sum(weights)
+        for share, weight in zip(got, weights):
+            self.assertAlmostEqual(share, weight / total, delta=0.025)
+
+    def test_draws_weigh_qualities_five_to_one(self):
+        result = self.run_lua(self.POOL + self.SHARES + 'return shares(8000)')
+        self.check_shares(result, (5, 4, 3, 2, 1))
+
+    def test_copies_raise_the_weights_to_their_power_across_living_players(self):
+        result = self.run_lua(self.POOL + self.SHARES + '''
+            give(holder,UNDERDOG)
+            local a1,a2,a3,a4,a5=shares(8000)          -- two copies on one player
+            take(holder,UNDERDOG)
+            local other=player(); give(other,UNDERDOG); players={holder,other}
+            local b1,b2,b3,b4,b5=shares(8000)          -- one copy each on two players
+            other.IsDead=function() return true end
+            local c1,c2,c3,c4,c5=shares(8000)          -- a dead player's copy does not count
+            return {a1,a2,a3,a4,a5},{b1,b2,b3,b4,b5},{c1,c2,c3,c4,c5}
         ''')
-        q0, q1, q2, q4 = result
-        # weights 3,3,1,1,1 out of 9
-        self.assertAlmostEqual(q0, 3 / 9, delta=0.03)
-        self.assertAlmostEqual(q1, 3 / 9, delta=0.03)
-        self.assertAlmostEqual(q2, 1 / 9, delta=0.02)
-        self.assertAlmostEqual(q4, 1 / 9, delta=0.02)
+        two, shared, dead = (tuple(t.values()) for t in result)
+        self.check_shares(two, (25, 16, 9, 4, 1))
+        self.check_shares(shared, (25, 16, 9, 4, 1))
+        self.check_shares(dead, (5, 4, 3, 2, 1))
+
+    def test_the_peek_limit_grows_with_the_copies(self):
+        # A pool of quality 4 only: the most peeks any draw makes is the limit.
+        result = self.run_lua(self.POOL + '''
+            poolItems={{id=5,weight=1}}
+            local function most()
+                local top=0
+                for s=1,3000 do
+                    T.resetEvidence()
+                    M.onPreGetCollectible(nil,0,false,s)
+                    top=math.max(top,T.evidence().peeks)
+                end
+                return top
+            end
+            local one=most()
+            give(holder,UNDERDOG); give(holder,UNDERDOG)
+            return one, most()
+        ''')
+        self.assertEqual(result, (20, 60))
 
     def test_peeks_take_nothing_out_and_only_the_kept_item_leaves(self):
         result = self.run_lua(self.POOL + '''
@@ -339,9 +426,40 @@ class UnderdogTests(unittest.TestCase):
             -- an empty pool answers Breakfast
             poolItems={}
             local empty=M.onPreGetCollectible(nil,0,true,77)
-            return a, dead, none, pearl, empty, T.evidence().left
+            -- with REPENTOGON's pool list, an empty pool still lists no Breakfast
+            listed={{itemID=3,weight=1}}
+            local emptyListed=M.onPreGetCollectible(nil,0,true,77)
+            return a, dead, none, pearl, empty, emptyListed, T.evidence().left
         ''')
-        self.assertEqual(result, (True, None, None, None, None, 1))
+        self.assertEqual(result, (True, None, None, None, None, None, 2))
+
+    def test_breakfast_counts_as_an_item_where_the_pool_lists_it(self):
+        # The boss and beggar pools list Breakfast (quality 1); there a Breakfast
+        # answer is a real draw, kept like any quality 1 item (measured
+        # 2026-11-21: about 2% of their draws were left to the engine before).
+        result = self.run_lua(self.POOL + '''
+            poolItems={{id=25,weight=1},{id=5,weight=1}}
+            local function run()
+                T.resetEvidence(); removed={}
+                local count={}
+                for s=1,400 do
+                    local id=M.onPreGetCollectible(nil,0,true,s)
+                    if id then count[id]=(count[id] or 0)+1 end
+                end
+                return count[25] or 0, T.evidence().left, #removed
+            end
+            local plainBreakfast, plainLeft = run()          -- no pool list: left to the engine
+            listed={{itemID=25,weight=1},{itemID=5,weight=1}}
+            local listedBreakfast, listedLeft, listedRemoved = run()
+            removedMap={[25]=true}                           -- taken out already: the empty-pool answer
+            local takenBreakfast, takenLeft = run()
+            return plainBreakfast, plainLeft>0, listedBreakfast, listedLeft, listedRemoved, takenBreakfast, takenLeft>0
+        ''')
+        plain_b, plain_left, listed_b, listed_left, listed_removed, taken_b, taken_left = result
+        self.assertEqual((plain_b, plain_left), (0, True))
+        self.assertAlmostEqual(listed_b / 400, 4 / 5, delta=0.06)   # weights 4 (Breakfast) and 1
+        self.assertEqual((listed_left, listed_removed), (0, 400))
+        self.assertEqual((taken_b, taken_left), (0, True))
 
     def test_a_pool_of_only_good_items_still_answers(self):
         result = self.run_lua(self.POOL + '''

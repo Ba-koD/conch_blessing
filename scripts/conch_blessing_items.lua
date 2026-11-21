@@ -1028,9 +1028,12 @@ ConchBlessing.ItemData = {
         -- 언더독 (user design 2026-11-15): every collectible held gives one
         -- stat by its quality: 0 damage up, 1 tears up, 2 range up, 3 luck
         -- down, 4 speed down. Sacred Orb's neutral answer: the orb throws
-        -- low-quality items away, this one feeds on them.
+        -- low-quality items away, this one feeds on them. Copies stack: n
+        -- copies give n times the stats and raise its pool weights to the
+        -- power n (user decision 2026-11-21).
         type = "passive",
         id = Isaac.GetItemIdByName("Underdog"),
+        stackable = true,
         gfx = "underdog.png",
         tags = "offensive",
         cache = "damage firedelay range luck speed",
