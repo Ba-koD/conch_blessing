@@ -463,6 +463,36 @@ function probe.tiger(samples)
     end
 end
 
+-- --------------------------------------------------------------- underdog
+-- The shipped weighted draw over a stand-in pool whose quality 0-1 share is p:
+-- item 1 is quality 0, item 2 quality 3.
+function probe.underdog(samples)
+    header("Underdog (an item pool draw answers quality 0-1)")
+    local module = ConchBlessing.underdog
+    local t, pool = module and module._test, module and module.pool
+    if not t or not t.choose or not pool then out("SKIPPED (module not loaded)") return end
+    local rng = RNG()
+    local seed = Random()
+    if seed == 0 then seed = 1 end
+    rng:SetSeed(seed, 35)
+    local k, n = pool.lowWeight, pool.maxPeeks
+    local function quality(id) return id == 1 and 0 or 3 end
+    local function roll() return rng:RandomFloat() end
+    for _, p in ipairs({ 0.1, 0.2, 0.3, 0.4, 0.5, 0.6 }) do
+        local function draw() return rng:RandomFloat() < p and 1 or 2 end
+        local low = quietly(function()
+            local hits = 0
+            for _ = 1, samples do
+                if t.choose(draw, quality, roll, k, n) == 1 then hits = hits + 1 end
+            end
+            return hits
+        end)
+        local a, r = p + (1 - p) / k, (1 - p) * (1 - 1 / k)
+        out(string.format("  quality 0-1 share %3d%%: configured=%7.3f%%  measured=%7.3f%%", math.floor(p * 100 + 0.5),
+            (p / a) * (1 - r ^ n) * 100, low / samples * 100))
+    end
+end
+
 -- --------------------------------------------------------------- death spiral
 function probe.injectableDeath()
     header("Injectable Steroids instant death (cumulative over one floor)")
@@ -550,6 +580,7 @@ function probe.run(params)
     probe.dragonAccuracy(samples)
     probe.conchPearl(samples)
     probe.tiger(samples)
+    probe.underdog(samples)
     probe.injectableDeath()
     out("")
     out("cb test rng: done")

@@ -689,6 +689,7 @@ return {
                 "#{{Quality2}}: {{Range}} 닿는 거리 +0.5",
                 "#{{Quality3}}: {{Luck}} 행운 -0.5",
                 "#{{Quality4}}: {{Speed}} 움직이는 빠르기 -0.1",
+                "#{{Quality0}}{{Quality1}} 아이템이 나올 확률이 3배가 됩니다",
             },
         },
         JOBS_BLESSING = {

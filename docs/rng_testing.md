@@ -72,6 +72,7 @@ The measured helpers are module-scope locals, so each item file exposes them thr
 | `dragon.lua` | `rollStrikeKind`, `boltsPerUpdate` |
 | `conch_pearl.lua` | `chanceFor(copies)`, `converts(roll, chance)`, `classify(quality, quest, own)` |
 | `tiger.lua` | `chanceFor(copies)`, `spawns(roll, chance)`, `blastDamage(damage)` |
+| `underdog.lua` | `keeps(quality, roll, weight)`, `choose(draw, quality, roll, weight, maxPeeks)` (+ `pool`) |
 
 `rollStat` was hoisted from a per-call closure to a module function so the probe
 measures the shipped expression instead of a copy. That also removed three duplicated

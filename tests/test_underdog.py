@@ -43,10 +43,52 @@ frame=0
 Isaac={GetItemIdByName=function(n) return n=="Underdog" and UNDERDOG or -1 end,
     GetItemConfig=function() return {GetCollectible=function(_,id) return items[id] end,
         GetCollectibles=function() return {Size=13} end} end}
-function Game() return {GetFrameCount=function() return frame end} end
+players={}
+Isaac.GetPlayer=function(i) return players[i+1] end
+-- An item pool double: a weighted pick decided by the seed alone, every call
+-- recorded, and the engine's PRE_GET_COLLECTIBLE run first like the game does.
+poolItems={}
+poolCalls={}
+removed={}
+preHook=nil
+pool={}
+function pool:GetCollectible(poolType, decrease, seed)
+    poolCalls[#poolCalls+1]={pool=poolType, decrease=decrease, seed=seed}
+    if preHook then
+        local r=preHook(nil, poolType, decrease, seed)
+        if r then return r end
+    end
+    local total=0
+    for _,e in ipairs(poolItems) do total=total+e.weight end
+    if total<=0 then return 25 end
+    local x=((seed*2654435761)%4294967296)/4294967296*total
+    for _,e in ipairs(poolItems) do
+        x=x-e.weight
+        if x<0 then return e.id end
+    end
+    return poolItems[#poolItems].id
+end
+function pool:RemoveCollectible(id) removed[#removed+1]=id end
+function RNG()
+    local r={s=1}
+    function r:SetSeed(s) self.s=math.floor(s)%4294967296 if self.s==0 then self.s=1 end end
+    function r:Next()
+        local x=self.s
+        x=x ~ ((x<<13)&0xffffffff); x=x ~ (x>>17); x=x ~ ((x<<5)&0xffffffff)
+        self.s=x&0xffffffff
+        if self.s==0 then self.s=1 end
+        return self.s
+    end
+    function r:RandomFloat() return self:Next()/4294967296 end
+    return r
+end
+function Game() return {GetFrameCount=function() return frame end,
+    GetNumPlayers=function() return #players end, GetItemPool=function() return pool end} end
 serial=0
 function GetPtrHash(e) return e.hash end
-ConchBlessing={ItemData={},Locale={text=function(path,...) return path.."|"..table.concat({...},"|") end}}
+ConchBlessing={ItemData={},Locale={text=function(path,...) return path.."|"..table.concat({...},"|") end},
+    printDebug=function(fmt,...) if select("#",...)>0 then return string.format(fmt,...) end return fmt end,
+    printError=function(message) error(message) end}
 applied={}
 ConchBlessing.stats={}
 for _,f in ipairs({"damage","tears","range","luck","speed"}) do
@@ -98,7 +140,7 @@ class UnderdogTests(unittest.TestCase):
         damage, tears, range_, luck, speed = result
         self.assertAlmostEqual(damage, 1)
         self.assertAlmostEqual(tears, 0.3)
-        self.assertAlmostEqual(range_, 20)       # half a tile in TearRange units
+        self.assertAlmostEqual(range_, 40)       # half a tile each: item 3 and Underdog itself (quality 2)
         self.assertAlmostEqual(luck, -0.5)
         self.assertAlmostEqual(speed, -0.1)
 
@@ -112,18 +154,21 @@ class UnderdogTests(unittest.TestCase):
         ''')
         self.assertEqual(result, (True, 3, -0.5))
 
-    def test_qualities_outside_zero_to_four_clamp_and_what_never_counts(self):
+    def test_qualities_outside_zero_to_four_clamp_and_every_item_counts(self):
+        # Only the quality is read (user decision 2026-11-20): quest items,
+        # hidden items and Underdog itself count like any other item.
         result = self.run_lua('''
             local p=player(); give(p,UNDERDOG); give(p,UNDERDOG)
             give(p,6); give(p,7); give(p,8)        -- quality 5, 99999 and -1
-            give(p,9); give(p,10)                  -- a quest item and a hidden item
+            give(p,9); give(p,10)                  -- a quest item (quality 0) and a hidden item (quality 1)
             local o=evaluate(p)
-            return o.speed, o.damage, o.range, T.bucket(5), T.bucket(-1), T.bucket(nil)
+            return o.speed, o.damage, o.tears, o.range, T.bucket(5), T.bucket(-1), T.bucket(nil)
         ''')
-        speed, damage, range_, b5, bneg, bnil = result
+        speed, damage, tears, range_, b5, bneg, bnil = result
         self.assertAlmostEqual(speed, -0.2)       # quality 5 and 99999
-        self.assertAlmostEqual(damage, 1)         # quality -1 only; the quest item does not count
-        self.assertIsNone(range_)                 # Underdog itself is quality 2 and never counts
+        self.assertAlmostEqual(damage, 2)         # quality -1 and the quest item's quality 0
+        self.assertAlmostEqual(tears, 0.3)        # the hidden item's quality 1
+        self.assertAlmostEqual(range_, 40)        # both Underdog copies, quality 2
         self.assertEqual((b5, bneg, bnil), (5, 1, 1))
 
     def test_an_item_leaving_takes_its_share_and_a_swap_is_caught_by_the_sweep(self):
@@ -190,7 +235,124 @@ class UnderdogTests(unittest.TestCase):
             local d=M.describe(obj(1)).Description
             return a,b,c,d
         ''')
-        self.assertEqual(result, ('baseui.underdog.q4|12|-0.1', 'base', 'base', 'base'))
+        # A quest item and another Underdog show their quality's line too.
+        self.assertEqual(result, ('baseui.underdog.q4|12|-0.1', 'baseui.underdog.q0|12|+1',
+                                  'baseui.underdog.q2|12|+0.5', 'base'))
+
+
+    # ----------------------------------------------------------- item pools
+    # Quality 0-1 items are lowWeight (3) times as likely in item pool draws
+    # while a living player holds Underdog (user decision 2026-11-21).
+    POOL = '''
+        poolItems={{id=1,weight=1},{id=2,weight=1},{id=3,weight=1},{id=4,weight=1},{id=5,weight=1}}
+        poolCalls={}; removed={}; preHook=nil; ConchBlessing.conchpearl=nil
+        holder=player(); give(holder,UNDERDOG); players={holder}
+        T.resetEvidence()
+    '''
+
+    def test_keep_rule(self):
+        result = self.run_lua('''
+            return T.keeps(0,0.99,3), T.keeps(1,0.99,3), T.keeps(-2,0.99,3), T.keeps(nil,0.99,3),
+                T.keeps(2,0.33,3), T.keeps(2,0.34,3), T.keeps(4,0.0,3), T.keeps(99,0.5,3)
+        ''')
+        self.assertEqual(result, (True, True, True, True, True, False, True, False))
+
+    def test_choose_peeks_until_kept_and_falls_back_to_the_last_peek(self):
+        result = self.run_lua('''
+            local function run(ids, rolls, peeks)
+                local i, r, asked = 0, 0, 0
+                local function draw() i = i + 1; asked = asked + 1; return ids[i] end
+                local function quality(id) return id // 100 end
+                local function roll() r = r + 1; return rolls[r] or 0.9 end
+                local id, fallback = T.choose(draw, quality, roll, 3, peeks)
+                return id, fallback, asked
+            end
+            local a1, b1, c1 = run({ 301, 402, 5 }, { 0.9, 0.9, 0.9 }, 20)
+            local a2, b2, c2 = run({ 301, 202 }, { 0.9, 0.1 }, 20)
+            local a3, b3, c3 = run({ 301, 302, 303 }, {}, 3)
+            local a4, b4, c4 = run({ 301 }, { 0.9 }, 20)
+            return a1, b1, c1, a2, b2, c2, a3, b3, c3, a4, c4
+        ''')
+        self.assertEqual(result[:3], (5, False, 3))      # quality 0 kept at once
+        self.assertEqual(result[3:6], (202, False, 2))   # quality 2 kept on a low roll
+        self.assertEqual(result[6:9], (303, True, 3))    # none kept: the last peek
+        self.assertEqual(result[9], None)                # the pool left it to the engine
+        self.assertEqual(result[10], 2)
+
+    def test_quality_0_1_draws_are_three_times_as_likely(self):
+        result = self.run_lua(self.POOL + '''
+            local count={}
+            local n=6000
+            for s=1,n do
+                local id=M.onPreGetCollectible(nil,0,false,s*7919+13)
+                count[id]=(count[id] or 0)+1
+            end
+            return (count[1] or 0)/n, (count[2] or 0)/n, (count[3] or 0)/n, (count[5] or 0)/n
+        ''')
+        q0, q1, q2, q4 = result
+        # weights 3,3,1,1,1 out of 9
+        self.assertAlmostEqual(q0, 3 / 9, delta=0.03)
+        self.assertAlmostEqual(q1, 3 / 9, delta=0.03)
+        self.assertAlmostEqual(q2, 1 / 9, delta=0.02)
+        self.assertAlmostEqual(q4, 1 / 9, delta=0.02)
+
+    def test_peeks_take_nothing_out_and_only_the_kept_item_leaves(self):
+        result = self.run_lua(self.POOL + '''
+            local idKept=M.onPreGetCollectible(nil,0,true,12345)
+            local decreased=0
+            for _,c in ipairs(poolCalls) do if c.decrease then decreased=decreased+1 end end
+            local removedAfterTrue=#removed
+            local first=removed[1]
+            removed={}
+            M.onPreGetCollectible(nil,0,false,999)
+            return decreased, removedAfterTrue, first==idKept, #removed, #poolCalls>0
+        ''')
+        self.assertEqual(result, (0, 1, True, 0, True))
+
+    def test_nested_draws_leave_our_callback_out(self):
+        result = self.run_lua(self.POOL + '''
+            local nested=0
+            preHook=function(_, poolType, decrease, seed)
+                local r=M.onPreGetCollectible(nil,poolType,decrease,seed)
+                if T.peeking() and r==nil then nested=nested+1 end
+                return r
+            end
+            local id=pool:GetCollectible(0,true,4242)
+            return type(id), nested>0, T.peeking()
+        ''')
+        self.assertEqual(result, ('number', True, False))
+
+    def test_left_to_the_engine(self):
+        result = self.run_lua(self.POOL + '''
+            local a=M.onPreGetCollectible(nil,0,true,77)~=nil
+            -- nobody living holds it
+            holder.IsDead=function() return true end
+            local dead=M.onPreGetCollectible(nil,0,true,77)
+            holder.IsDead=nil
+            players={}
+            local none=M.onPreGetCollectible(nil,0,true,77)
+            players={holder}
+            -- Conch Pearl never lets quality 0-1 appear: Underdog stands aside
+            ConchBlessing.conchpearl={isActive=function() return true end}
+            local pearl=M.onPreGetCollectible(nil,0,true,77)
+            ConchBlessing.conchpearl=nil
+            -- an empty pool answers Breakfast
+            poolItems={}
+            local empty=M.onPreGetCollectible(nil,0,true,77)
+            return a, dead, none, pearl, empty, T.evidence().left
+        ''')
+        self.assertEqual(result, (True, None, None, None, None, 1))
+
+    def test_a_pool_of_only_good_items_still_answers(self):
+        result = self.run_lua(self.POOL + '''
+            poolItems={{id=5,weight=1}}
+            local ids={}
+            for s=1,200 do ids[M.onPreGetCollectible(nil,0,false,s)]=true end
+            local only=true
+            for id in pairs(ids) do if id~=5 then only=false end end
+            return only, T.evidence().draws
+        ''')
+        self.assertEqual(result, (True, 200))
 
 
 if __name__ == '__main__':

@@ -704,6 +704,7 @@ return {
                 "#{{Quality2}}: {{Range}} +0.5 Range",
                 "#{{Quality3}}: {{Luck}} -0.5 Luck",
                 "#{{Quality4}}: {{Speed}} -0.1 Speed",
+                "#{{Quality0}}{{Quality1}} items are 3 times as likely to appear",
             },
         },
         JOBS_BLESSING = {

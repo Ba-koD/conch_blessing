@@ -171,7 +171,7 @@ Saturation points: SOFLAM at Luck 18, Fire Breath at Luck 20, Ice Breath at Luck
 
 ## 6. Time = Money coin replacement
 
-The rolls are a sequential `if/elseif` (`scripts/items/familiars/time_money.lua:242`),
+The rolls are a sequential `if/elseif` (`scripts/items/familiars/time_money.lua:253`),
 so each tier is conditional on the earlier ones failing. The configured
 percentages are therefore inputs, not outcomes.
 
@@ -269,37 +269,37 @@ least one blessing is `1 - (1 - p)^n`:
 ## 9. Kronos projectile block and blue fly / spider spawns
 
 Absorbed barrier familiars add a flat percentage per absorbed copy to one chance
-of ignoring an enemy projectile hit, capped at 100% (`scripts/items/collectibles/kronos.lua:2679`). The roll is
+of ignoring an enemy projectile hit, capped at 100% (`scripts/items/collectibles/kronos.lua:2837`). The roll is
 `RandomFloat() < chance` on the Kronos collectible RNG, uniform on `[0, 1)`, so the
 effective odds equal the configured sum.
 
 | Familiar | Per copy | Source |
 |---|---|---|
-| HALO_OF_FLIES | 1% | `scripts/items/collectibles/kronos.lua:2489` |
-| DISTANT_ADMIRATION | 1% | `scripts/items/collectibles/kronos.lua:2490` |
-| CUBE_OF_MEAT | 1% | `scripts/items/collectibles/kronos.lua:2491` |
-| FOREVER_ALONE | 1% | `scripts/items/collectibles/kronos.lua:2492` |
-| SACRIFICIAL_DAGGER | 2% | `scripts/items/collectibles/kronos.lua:2493` |
-| GUPPYS_HAIRBALL | 1% | `scripts/items/collectibles/kronos.lua:2494` |
-| GUILLOTINE | 1% | `scripts/items/collectibles/kronos.lua:2495` |
-| BALL_OF_BANDAGES | 1% | `scripts/items/collectibles/kronos.lua:2496` |
-| SMART_FLY | 1% | `scripts/items/collectibles/kronos.lua:2497` |
-| BEST_BUD | 1% | `scripts/items/collectibles/kronos.lua:2498` |
-| BIG_FAN | 2% | `scripts/items/collectibles/kronos.lua:2499` |
-| PUNCHING_BAG | 2% | `scripts/items/collectibles/kronos.lua:2500` |
-| SWORN_PROTECTOR | 5% | `scripts/items/collectibles/kronos.lua:2501` |
-| FRIEND_ZONE | 1% | `scripts/items/collectibles/kronos.lua:2502` |
-| LOST_FLY | 1% | `scripts/items/collectibles/kronos.lua:2503` |
-| HUSHY | 1% | `scripts/items/collectibles/kronos.lua:2504` |
-| BIG_CHUBBY | 1% | `scripts/items/collectibles/kronos.lua:2505` |
-| MOMS_RAZOR | 1% | `scripts/items/collectibles/kronos.lua:2506` |
-| ANGRY_FLY | 1% | `scripts/items/collectibles/kronos.lua:2507` |
-| LEPROSY | 1% | `scripts/items/collectibles/kronos.lua:2508` |
-| SLIPPED_RIB | 1% | `scripts/items/collectibles/kronos.lua:2509` |
-| POINTY_RIB | 1% | `scripts/items/collectibles/kronos.lua:2510` |
-| PSY_FLY | 5% | `scripts/items/collectibles/kronos.lua:2511` |
-| TINYTOMA | 1% | `scripts/items/collectibles/kronos.lua:2512` |
-| OBSESSED_FAN | 1% | `scripts/items/collectibles/kronos.lua:2513` |
+| HALO_OF_FLIES | 1% | `scripts/items/collectibles/kronos.lua:2645` |
+| DISTANT_ADMIRATION | 1% | `scripts/items/collectibles/kronos.lua:2646` |
+| CUBE_OF_MEAT | 1% | `scripts/items/collectibles/kronos.lua:2647` |
+| FOREVER_ALONE | 1% | `scripts/items/collectibles/kronos.lua:2648` |
+| SACRIFICIAL_DAGGER | 2% | `scripts/items/collectibles/kronos.lua:2649` |
+| GUPPYS_HAIRBALL | 1% | `scripts/items/collectibles/kronos.lua:2650` |
+| GUILLOTINE | 1% | `scripts/items/collectibles/kronos.lua:2651` |
+| BALL_OF_BANDAGES | 1% | `scripts/items/collectibles/kronos.lua:2652` |
+| SMART_FLY | 1% | `scripts/items/collectibles/kronos.lua:2653` |
+| BEST_BUD | 1% | `scripts/items/collectibles/kronos.lua:2654` |
+| BIG_FAN | 2% | `scripts/items/collectibles/kronos.lua:2655` |
+| PUNCHING_BAG | 2% | `scripts/items/collectibles/kronos.lua:2656` |
+| SWORN_PROTECTOR | 5% | `scripts/items/collectibles/kronos.lua:2657` |
+| FRIEND_ZONE | 1% | `scripts/items/collectibles/kronos.lua:2658` |
+| LOST_FLY | 1% | `scripts/items/collectibles/kronos.lua:2659` |
+| HUSHY | 1% | `scripts/items/collectibles/kronos.lua:2660` |
+| BIG_CHUBBY | 1% | `scripts/items/collectibles/kronos.lua:2661` |
+| MOMS_RAZOR | 1% | `scripts/items/collectibles/kronos.lua:2662` |
+| ANGRY_FLY | 1% | `scripts/items/collectibles/kronos.lua:2663` |
+| LEPROSY | 1% | `scripts/items/collectibles/kronos.lua:2664` |
+| SLIPPED_RIB | 1% | `scripts/items/collectibles/kronos.lua:2665` |
+| POINTY_RIB | 1% | `scripts/items/collectibles/kronos.lua:2666` |
+| PSY_FLY | 5% | `scripts/items/collectibles/kronos.lua:2667` |
+| TINYTOMA | 1% | `scripts/items/collectibles/kronos.lua:2668` |
+| OBSESSED_FAN | 1% | `scripts/items/collectibles/kronos.lua:2669` |
 
 One copy of every listed familiar adds up to **36%**.
 
@@ -310,7 +310,7 @@ One copy of every listed familiar adds up to **36%**.
 | every listed familiar once | **36.0%** | 35.946% |
 
 Blue fly (Rotten Baby, 7 Seals) and blue spider (Juicy Sack, Sissy Longlegs) spawns
-add 50% per absorbed copy (`scripts/items/collectibles/kronos.lua:2520`), capped at 100%. Each
+add 50% per absorbed copy (`scripts/items/collectibles/kronos.lua:2676`), capped at 100%. Each
 physical attack claims one roll before the RNG, so a piercing tear or a beam rolls
 once across all of its targets, and a familiar body (the spawned flies and spiders
 themselves) cannot claim one.
@@ -323,47 +323,47 @@ themselves) cannot claim one.
 
 ## 10. Kronos chance effects, room-clear drops, GB Bug and floor picks
 
-Each chance effect adds its percentage per absorbed copy, capped at 100% (`scripts/items/collectibles/kronos.lua:2629`), rolled as
+Each chance effect adds its percentage per absorbed copy, capped at 100% (`scripts/items/collectibles/kronos.lua:2787`), rolled as
 `RandomFloat() < chance` on the familiar's own collectible RNG. Attack procs claim one
 roll per physical attack before the RNG; room-clear drops roll once per cleared room;
 Dry Baby rolls once per hit taken.
 
 | Familiar | Per copy | 1 copy | Measured | 2 copies | 3 copies | Source |
 |---|---|---|---|---|---|---|
-| DADDY_LONGLEGS | 10% | **10%** | 9.951% | 20% | 30% | `scripts/items/collectibles/kronos.lua:2545` |
-| MOMS_RAZOR | 10% | **10%** | 10.031% | 20% | 30% | `scripts/items/collectibles/kronos.lua:2546` |
-| CUBE_BABY | 10% | **10%** | 10.028% | 20% | 30% | `scripts/items/collectibles/kronos.lua:2547` |
-| LIL_SPEWER | 25% | **25%** | 25.083% | 50% | 75% | `scripts/items/collectibles/kronos.lua:2548` |
-| DRY_BABY | 25% | **25%** | 24.854% | 50% | 75% | `scripts/items/collectibles/kronos.lua:2549` |
-| BUM_FRIEND | 10% | **10%** | 10.082% | 20% | 30% | `scripts/items/collectibles/kronos.lua:2550` |
-| LIL_CHEST | 10% | **10%** | 10.008% | 20% | 30% | `scripts/items/collectibles/kronos.lua:2551` |
+| DADDY_LONGLEGS | 10% | **10%** | 9.951% | 20% | 30% | `scripts/items/collectibles/kronos.lua:2701` |
+| MOMS_RAZOR | 10% | **10%** | 10.031% | 20% | 30% | `scripts/items/collectibles/kronos.lua:2702` |
+| CUBE_BABY | 10% | **10%** | 10.028% | 20% | 30% | `scripts/items/collectibles/kronos.lua:2703` |
+| LIL_SPEWER | 25% | **25%** | 25.083% | 50% | 75% | `scripts/items/collectibles/kronos.lua:2704` |
+| DRY_BABY | 25% | **25%** | 24.854% | 50% | 75% | `scripts/items/collectibles/kronos.lua:2705` |
+| BUM_FRIEND | 10% | **10%** | 10.082% | 20% | 30% | `scripts/items/collectibles/kronos.lua:2706` |
+| LIL_CHEST | 10% | **10%** | 10.008% | 20% | 30% | `scripts/items/collectibles/kronos.lua:2707` |
 
 Counter drops are not random: each cleared room advances a saved counter, and every
 absorbed copy adds one drop when it reaches the interval.
 
 | Familiar | Rooms per drop | Drops per room per copy | Source |
 |---|---|---|---|
-| RELIC | 6 | 0.167 | `scripts/items/collectibles/kronos.lua:2555` |
-| MYSTERY_SACK | 6 | 0.167 | `scripts/items/collectibles/kronos.lua:2556` |
-| RUNE_BAG | 7 | 0.143 | `scripts/items/collectibles/kronos.lua:2557` |
+| RELIC | 6 | 0.167 | `scripts/items/collectibles/kronos.lua:2711` |
+| MYSTERY_SACK | 6 | 0.167 | `scripts/items/collectibles/kronos.lua:2712` |
+| RUNE_BAG | 7 | 0.143 | `scripts/items/collectibles/kronos.lua:2713` |
 
 Paschal Candle adds 0.03 tears per copy for every room clear, uncapped (`scripts/items/collectibles/kronos.lua:19`); it is stored as whole hundredths, so it never drifts.
 
 GB Bug hands back `floor(N / 2)` of the `N` other absorbed copies, chosen without
-replacement by a partial Fisher-Yates shuffle (`scripts/items/collectibles/kronos.lua:2651`),
+replacement by a partial Fisher-Yates shuffle (`scripts/items/collectibles/kronos.lua:2809`),
 so each copy returns with probability `floor(N/2) / N`. With N = 6 every copy
 should return 50% of the time; over 50000 trials the per-copy rate
 ranges 49.836% to 50.204% (spread 0.368%).
 
 Buddy in a Box / Lil Delirium draw one familiar per copy and floor, with replacement,
 uniformly from 55 candidates: the 30 effect familiars in
-`FLOOR_PICK_EFFECTS` (`scripts/items/collectibles/kronos.lua:2591`) plus the 25 projectile-block familiars,
+`FLOOR_PICK_EFFECTS` (`scripts/items/collectibles/kronos.lua:2749`) plus the 25 projectile-block familiars,
 each at **1.818%** per pick.
 
 Temporary familiars reuse the same draws. A Pretty Fly pill fly absorbed under
-REPENTOGON adds **5%** to the projectile block above (`scripts/items/collectibles/kronos.lua:2516`). When The Twins
+REPENTOGON adds **5%** to the projectile block above (`scripts/items/collectibles/kronos.lua:2672`). When The Twins
 duplicates, it picks one absorbed effect familiar uniformly with its trinket RNG. Sacrificial
-Altar takes up to 2 copies (`scripts/items/collectibles/kronos.lua:3386`), owned familiars first and the rest from the
+Altar takes up to 2 copies (`scripts/items/collectibles/kronos.lua:3554`), owned familiars first and the rest from the
 absorbed pool through the same partial Fisher-Yates draw as GB Bug.
 
 ## 11. Live Eye miss forgiveness
@@ -473,4 +473,26 @@ enemy its explosion reaches once for 3x the holder's damage (`scripts/items/coll
 | 2 | **66.67%** | 66.529% |
 | 3 | **100.00%** | 100.000% |
 | 4 | **100.00%** | 100.000% |
+
+## 15. Underdog
+
+While a living player holds it (and nobody holds Conch Pearl), `MC_PRE_GET_COLLECTIBLE` answers every
+item pool draw itself. It peeks the same pool with `decrease = false`, so nothing is taken out, up to
+20 times (`scripts/items/collectibles/underdog.lua:35`). A quality 0-1 peek is kept at once; any other is kept when
+`RandomFloat() x 3 < 1` (`scripts/items/collectibles/underdog.lua:34`). When no peek is kept the last one (quality 2 or more) is the
+answer, and an empty pool (Breakfast) is left to the engine. Only the kept item is taken out when the
+draw takes one. With p the weight share of quality 0-1 items in the pool, a peek is kept with
+a = p + (1 - p) / 3, and the answer is quality 0-1 with
+P = (p / a)(1 - r^20), r = (1 - p)(1 - 1/3). Without the peek limit this is 3p / (3p + 1 - p), the
+same as multiplying every quality 0-1 item's weight by 3; quality 0-1 items keep their shares among
+themselves, and so do the others.
+
+| Quality 0-1 share p | Exact P (answer quality 0-1) | Measured | x3 weights | P (fallback) | Peeks per draw |
+|---|---|---|---|---|---|
+| 10% | **24.999%** | 25.003% | 25.000% | 3.66e-05 | 2.50 |
+| 20% | **42.857%** | 42.916% | 42.857% | 3.47e-06 | 2.14 |
+| 30% | **56.250%** | 56.239% | 56.250% | 2.40e-07 | 1.87 |
+| 40% | **66.667%** | 66.589% | 66.667% | 1.10e-08 | 1.67 |
+| 50% | **75.000%** | 75.074% | 75.000% | 2.87e-10 | 1.50 |
+| 60% | **81.818%** | 81.860% | 81.818% | 3.31e-12 | 1.36 |
 

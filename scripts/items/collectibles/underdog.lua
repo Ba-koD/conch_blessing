@@ -9,9 +9,12 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- It counts what the player holds right now (user decision 2026-11-15: items
 -- held before picking it up count too), so an item that leaves (a D4 reroll,
 -- an active swapped out, an absorption) takes its share with it and nothing is
--- saved. Quest items, hidden items and Underdog itself never count; each held
--- copy counts. The tally is redone when the player's collectible total
+-- saved. Only an item's quality is read: quest items, hidden items and
+-- Underdog itself count like any other (user decision 2026-11-20, "예외없이"),
+-- and each held copy counts. The tally is redone when the player's collectible total
 -- changes and, to catch a swap that keeps the total, every `M.sweep` updates.
+-- While a living player holds it, quality 0-1 items are also `M.pool.lowWeight`
+-- times as likely in item pool draws (see "item pools" below).
 -- Base API only.
 local M = {}
 ConchBlessing.underdog = M
@@ -27,12 +30,16 @@ M.data = {
     { field = "speed", flag = CacheFlag.CACHE_SPEED, step = -0.1 },
 }
 M.sweep = 30
+M.pool = {
+    lowWeight = 3,  -- quality 0-1 weight multiplier in item pool draws (user decision 2026-11-21)
+    maxPeeks = 20,  -- pool answers asked for one draw before the last one is kept
+}
 
 local state = {}  -- [GetPtrHash(player)] = { total, counts, at }: this process only
 local eligible    -- { { id, rule } } for every collectible that counts, built once
 local evidence
 local function resetEvidence()
-    evidence = { tallies = 0, refreshes = 0 }
+    evidence = { tallies = 0, refreshes = 0, draws = 0, peeks = 0, fallbacks = 0, left = 0 }
 end
 resetEvidence()
 
@@ -63,10 +70,9 @@ local function sameCounts(a, b)
 end
 
 -- ------------------------------------------------------------------ counting
--- Whether collectible `id` counts at all.
+-- Every collectible with a config counts; only its quality matters.
 local function counts(config)
-    if not config or config.Hidden then return false end
-    return not (ItemConfig and ItemConfig.TAG_QUEST and config:HasTags(ItemConfig.TAG_QUEST))
+    return config ~= nil
 end
 
 local function scan()
@@ -76,7 +82,7 @@ local function scan()
     local size = itemConfig:GetCollectibles().Size
     for id = 1, size - 1 do
         local config = itemConfig:GetCollectible(id)
-        if id ~= ID and counts(config) then eligible[#eligible + 1] = { id = id, rule = bucket(config.Quality) } end
+        if counts(config) then eligible[#eligible + 1] = { id = id, rule = bucket(config.Quality) } end
     end
     return eligible
 end
@@ -149,6 +155,120 @@ end
 function M.onGameStarted() state = {} end
 function M.onGameExit() state = {} end
 
+-- ------------------------------------------------------------------ item pools
+-- While a living player holds Underdog, quality 0-1 items are `lowWeight` times
+-- as likely in every item pool draw (user decision 2026-11-21). No API writes a
+-- pool's weights (base or REPENTOGON, which only reads them), so the draw is
+-- made here in MC_PRE_GET_COLLECTIBLE: the pool is asked without taking anything
+-- out (decrease false) and an answer of quality 2 or more is kept only one time
+-- in lowWeight, which gives exactly the pool's own odds with every quality 0-1
+-- weight multiplied by lowWeight. Nothing turned down leaves the pool; the kept
+-- answer is taken out only when the caller asked for that. It runs at LATE
+-- priority, so a callback that answers a draw itself answers first and the draw
+-- it makes (Angel's Crown asking the angel pool) is weighted here. While anyone
+-- holds Conch Pearl, which never lets a quality 0-1 draw appear, draws are left
+-- alone. A pool that answers Breakfast (empty) is left to the engine.
+local BREAKFAST = CollectibleType and CollectibleType.COLLECTIBLE_BREAKFAST or 25
+local POOL_RNG_SHIFT = 35
+local peeking = false
+local poolWarned = false
+
+-- Whether a pool answer of `quality` is kept, for a roll in [0, 1): quality 0-1
+-- (and below) always, anything else one time in `weight`.
+local function keeps(quality, roll, weight)
+    if bucket(quality) <= 2 then return true end
+    return roll * weight < 1
+end
+
+-- One weighted draw, with nothing taken out of the pool: draw() peeks the pool
+-- (an item ID, or nil to leave the draw to the engine), quality(id) reads its
+-- quality and roll() gives a float in [0, 1). Up to maxPeeks peeks; the first
+-- one kept is the answer, and when none is, the last peek (always quality 2 or
+-- more, since quality 0-1 is always kept). Equal to multiplying every quality
+-- 0-1 weight by `weight`, apart from that fallback. Returns the ID and whether
+-- it was the fallback, or nil.
+local function choose(draw, quality, roll, weight, maxPeeks)
+    local last
+    for _ = 1, maxPeeks do
+        local id = draw()
+        if not id then return nil end
+        last = id
+        if keeps(quality(id), roll(), weight) then return id, false end
+    end
+    return last, last ~= nil
+end
+
+-- The draw's seed mixed before seeding our RNG, so a small or sequential seed
+-- still gives an even first roll (see Conch Pearl).
+local function mixSeed(seed)
+    local h = math.floor(tonumber(seed) or 0) & 0xffffffff
+    h = ((h ~ (h >> 16)) * 0x85ebca6b) & 0xffffffff
+    h = ((h ~ (h >> 13)) * 0xc2b2ae35) & 0xffffffff
+    h = h ~ (h >> 16)
+    if h == 0 then h = 1 end
+    return h
+end
+
+local function livingHolder()
+    if ID <= 0 then return false end
+    for index = 0, Game():GetNumPlayers() - 1 do
+        local player = Isaac.GetPlayer(index)
+        if player and player:GetCollectibleNum(ID) > 0
+            and not (type(player.IsDead) == "function" and player:IsDead())
+            and not (type(player.IsCoopGhost) == "function" and player:IsCoopGhost()) then
+            return true
+        end
+    end
+    return false
+end
+
+local function conchPearlHeld()
+    local pearl = ConchBlessing.conchpearl
+    return type(pearl) == "table" and type(pearl.isActive) == "function" and pearl.isActive() == true
+end
+
+-- MC_PRE_GET_COLLECTIBLE(poolType, decrease, seed): the item that appears, or nil
+-- to leave the draw to the engine.
+function M.onPreGetCollectible(_, poolType, decrease, seed)
+    if peeking or not livingHolder() or conchPearlHeld() then return nil end
+    local itemPool, itemConfig = Game():GetItemPool(), Isaac.GetItemConfig()
+    local rng = RNG()
+    rng:SetSeed(mixSeed(seed), POOL_RNG_SHIFT)
+    local function draw()
+        local peekSeed = rng:Next()
+        if peekSeed == 0 then peekSeed = 1 end
+        local id = itemPool:GetCollectible(poolType, false, peekSeed)
+        evidence.peeks = evidence.peeks + 1
+        if type(id) ~= "number" or id <= 0 or id == BREAKFAST then return nil end
+        return id
+    end
+    local function quality(id)
+        local config = itemConfig:GetCollectible(id)
+        return config and config.Quality
+    end
+    local function roll() return rng:RandomFloat() end
+    peeking = true
+    local ok, chosen, fallback = pcall(choose, draw, quality, roll, M.pool.lowWeight, M.pool.maxPeeks)
+    peeking = false
+    if not ok then
+        if not poolWarned then
+            poolWarned = true
+            ConchBlessing.printError("[Underdog] pool draw failed: " .. tostring(chosen))
+        end
+        return nil
+    end
+    if not chosen then
+        evidence.left = evidence.left + 1
+        return nil
+    end
+    if fallback then evidence.fallbacks = evidence.fallbacks + 1 end
+    if decrease then pcall(function() itemPool:RemoveCollectible(chosen) end) end
+    evidence.draws = evidence.draws + 1
+    ConchBlessing.printDebug("[Underdog] pool %s draw: %d (decrease %s)", tostring(poolType), chosen,
+        tostring(decrease))
+    return chosen
+end
+
 --- The player's current change of each stat (for EID and tests).
 function M.totals(player)
     local held = current(player)
@@ -164,7 +284,7 @@ function M.describe(descObj)
     if not pickup or type(EID.ClosestPlayerTo) ~= "function" then return descObj end
     local player = EID:ClosestPlayerTo(pickup)
     player = player and player:ToPlayer()
-    if not holds(player) or descObj.ObjSubType == ID then return descObj end
+    if not holds(player) then return descObj end
     local config = Isaac.GetItemConfig():GetCollectible(descObj.ObjSubType)
     if not counts(config) then return descObj end
     local index = bucket(config.Quality)
@@ -189,6 +309,23 @@ M._test = {
     evidence = function() return evidence end,
     resetEvidence = resetEvidence,
     resetScan = function() eligible = nil end,
+    keeps = keeps,
+    choose = choose,
+    mixSeed = mixSeed,
+    peeking = function() return peeking end,
 }
+
+-- LATE, so a callback that answers a draw itself answers first (see "item pools").
+do
+    local priority = rawget(_G, "CallbackPriority")
+    local LATE = type(priority) == "table" and tonumber(priority.LATE) or 100
+    if ModCallbacks and ModCallbacks.MC_PRE_GET_COLLECTIBLE then
+        if type(ConchBlessing.AddPriorityCallback) == "function" then
+            ConchBlessing:AddPriorityCallback(ModCallbacks.MC_PRE_GET_COLLECTIBLE, LATE, M.onPreGetCollectible)
+        else
+            ConchBlessing:AddCallback(ModCallbacks.MC_PRE_GET_COLLECTIBLE, M.onPreGetCollectible)
+        end
+    end
+end
 
 return M

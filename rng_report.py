@@ -45,6 +45,7 @@ SRC = {
     "dragon": "scripts/items/collectibles/dragon.lua",
     "pearl": "scripts/items/collectibles/conch_pearl.lua",
     "tiger": "scripts/items/collectibles/tiger.lua",
+    "underdog": "scripts/items/collectibles/underdog.lua",
 }
 
 _cache: dict[str, list[str]] = {}
@@ -702,6 +703,44 @@ def build(samples: int, seed: int) -> str:
         hits = sum(1 for _ in range(samples) if rng.random() < p)
         rows.append([str(copies), f"**{p:.2%}**", f"{hits / samples:.3%}"])
     w("\n".join(table(["Copies held", "Exact P (a kill raises a 창귀)", "Measured"], rows)))
+    w("")
+
+    # 15 -------------------------------------------------------------------------
+    weight, weight_cite = const("underdog", "lowWeight")
+    peeks, peeks_cite = const("underdog", "maxPeeks")
+    k, n = weight, int(peeks)
+    w("## 15. Underdog")
+    w("")
+    w("While a living player holds it (and nobody holds Conch Pearl), `MC_PRE_GET_COLLECTIBLE` answers every")
+    w("item pool draw itself. It peeks the same pool with `decrease = false`, so nothing is taken out, up to")
+    w(f"{n} times ({peeks_cite}). A quality 0-1 peek is kept at once; any other is kept when")
+    w(f"`RandomFloat() x {k:g} < 1` ({weight_cite}). When no peek is kept the last one (quality 2 or more) is the")
+    w("answer, and an empty pool (Breakfast) is left to the engine. Only the kept item is taken out when the")
+    w("draw takes one. With p the weight share of quality 0-1 items in the pool, a peek is kept with")
+    w(f"a = p + (1 - p) / {k:g}, and the answer is quality 0-1 with")
+    w(f"P = (p / a)(1 - r^{n}), r = (1 - p)(1 - 1/{k:g}). Without the peek limit this is {k:g}p / ({k:g}p + 1 - p), the")
+    w(f"same as multiplying every quality 0-1 item's weight by {k:g}; quality 0-1 items keep their shares among")
+    w("themselves, and so do the others.")
+    w("")
+    rows = []
+    for p in (0.1, 0.2, 0.3, 0.4, 0.5, 0.6):
+        a = p + (1 - p) / k
+        r = (1 - p) * (1 - 1 / k)
+        exact = (p / a) * (1 - r ** n)
+        ideal = k * p / (k * p + 1 - p)
+        mean_peeks = (1 - r ** n) / a
+        low = 0
+        for _ in range(samples):
+            for i in range(n):
+                if rng.random() < p:
+                    low += 1
+                    break
+                if rng.random() * k < 1 or i == n - 1:
+                    break
+        rows.append([f"{p:.0%}", f"**{exact:.3%}**", f"{low / samples:.3%}", f"{ideal:.3%}",
+                     f"{r ** n:.2e}", f"{mean_peeks:.2f}"])
+    w("\n".join(table(["Quality 0-1 share p", "Exact P (answer quality 0-1)", "Measured",
+                        f"x{k:g} weights", "P (fallback)", "Peeks per draw"], rows)))
     w("")
 
     return "\n".join(md) + "\n"
