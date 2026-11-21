@@ -56,10 +56,24 @@ function ConchBlessing_MCM.Setup(mod)
     local GENERAL = text("tab_general")
     local SOUND = text("tab_sound")
     local SPAWN = text("tab_spawn")
-    local category = "Conch's Blessing v" .. tostring(mod.Config.Version or "")
+    local category = "Conch's Blessing"
 
-    -- Recreate category to reflect any text changes
+    -- Recreate category to reflect any text changes; a reload also drops the
+    -- category of a build that still carried its version in the name.
     ModConfigMenu.RemoveCategory(category)
+    if type(ModConfigMenu.MenuData) == "table" then
+        local stale = {}
+        for _, entry in pairs(ModConfigMenu.MenuData) do
+            if type(entry) == "table" and type(entry.Name) == "string"
+                and entry.Name:find("Conch's Blessing v", 1, true) == 1 then
+                stale[#stale + 1] = entry.Name
+            end
+        end
+        for _, name in ipairs(stale) do ModConfigMenu.RemoveCategory(name) end
+    end
+    -- The version (metadata.xml's, through scripts/version.lua) as a plain
+    -- line at the top of General, not a setting.
+    ModConfigMenu.AddText(category, GENERAL, text("version", tostring(ConchBlessing_Config.Version or "?")))
     ModConfigMenu.AddSpace(category, GENERAL)
     ModConfigMenu.AddText(category, GENERAL, text("options_title"))
 

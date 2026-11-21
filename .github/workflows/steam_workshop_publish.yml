@@ -233,15 +233,15 @@ jobs:
 
       - name: Commit resolved release version
         run: |
-          if git diff --quiet -- metadata.xml; then
+          if git diff --quiet -- metadata.xml scripts/version.lua; then
             echo "metadata.xml version unchanged."
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add metadata.xml
+          git add metadata.xml scripts/version.lua
           git commit \
             -m "Chore: Sync Workshop Version" \
-            -m "- 창작마당 업로드 후 확정된 버전을 metadata.xml에 반영"
+            -m "- 창작마당 업로드 후 확정된 버전을 metadata.xml과 scripts/version.lua에 반영"
           git push origin "HEAD:${GITHUB_REF_NAME}"

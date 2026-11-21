@@ -999,6 +999,7 @@ return {
             proc_detail = " (Base: %s, {{Luck}}x%s)",
         },
         mcm = {
+            version = "Version : %s",
             tab_general = "General",
             tab_spawn = "Spawn",
             tab_sound = "Sound",

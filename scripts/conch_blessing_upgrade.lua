@@ -1357,9 +1357,11 @@ local function queueResult(result, explicitPickups)
     local deleteableItems = {}
     local failedItems = {}
     -- Whether the room holds any evolvable item (one this answer evolves, one
-    -- it fails, or one still in an earlier answer's upgrade): then Delete Mode
-    -- leaves the items that cannot evolve alone (see below).
+    -- it fails, or one still in an earlier answer's upgrade), and whether one is
+    -- evolving (this answer's or an earlier one's): Delete Mode's rule for the
+    -- items that cannot evolve depends on both (see below).
     local evolvablePresent = false
+    local evolving = false
     local viewer = ConchBlessing.morphViewer
     local function ownedByViewer(entity)
         return viewer ~= nil and type(viewer.ownsPickup) == "function" and viewer.ownsPickup(entity) == true
@@ -1374,7 +1376,7 @@ local function queueResult(result, explicitPickups)
             -- including before queueing and after its pending lock is released.
             and (explicitPickups or not ownedByViewer(entity))
         if itemPickup and _isPickupPending(entity:ToPickup()) then
-            evolvablePresent = true
+            evolvablePresent, evolving = true, true
         elseif itemPickup then
             local pickup = entity:ToPickup()
             local cycleHandled = false
@@ -1454,11 +1456,10 @@ local function queueResult(result, explicitPickups)
                         end
                     end
                 else
-                    -- This item has NO evolution possibilities in ConchBlessing
-                    -- If Delete Mode is on and result is "negative", delete the item
-                    -- (the debris failed evolutions leave behind is never deleted).
-                    if deleteModeActive and resultType == "negative" and not isConchDebris(entity) then
-                        ConchBlessing.printDebug("Delete Mode: Item has no evolution and result is negative. Marking for deletion.")
+                    -- This item has NO evolution possibilities in ConchBlessing:
+                    -- a candidate for Delete Mode, decided once the room is
+                    -- known (the debris failed evolutions leave is never deleted).
+                    if deleteModeActive and not isConchDebris(entity) then
                         table.insert(deleteableItems, entity)
                     end
                 end
@@ -1524,14 +1525,23 @@ local function queueResult(result, explicitPickups)
         ConchBlessing.printDebug("Total " .. upgradeCount .. " items queued for upgrade!")
     end
     
-    -- Delete Mode deletes the items that cannot evolve on a negative answer
-    -- only in a room without an evolvable item (user rule 2026-11-21). With one,
-    -- only the evolvable items this answer fails are deleted (each leaving a
-    -- debris) and every item that cannot evolve stays, whatever the answer and
-    -- whether or not anything evolves.
-    if #deleteableItems > 0 and evolvablePresent then
-        ConchBlessing.printDebug("Delete Mode: %d items that cannot evolve stay: the room has an evolvable item",
-            #deleteableItems)
+    -- Delete Mode and the items that cannot evolve (user rules 2026-11-21): in a
+    -- room without an evolvable item they are deleted on a negative answer, as
+    -- Delete Mode always did. In a room with one, the evolvable items this
+    -- answer fails are deleted (each leaving a debris), and the items that
+    -- cannot evolve stay while anything evolves (this answer or an earlier one
+    -- still playing) and are deleted with them when every evolution failed,
+    -- whatever the answer.
+    if upgradeCount > 0 then evolving = true end
+    local deletePlain
+    if evolvablePresent then
+        deletePlain = #failedItems > 0 and not evolving
+    else
+        deletePlain = resultType == "negative"
+    end
+    if #deleteableItems > 0 and not deletePlain then
+        ConchBlessing.printDebug("Delete Mode: %d items that cannot evolve stay (evolvable %s, evolving %s, failed %d)",
+            #deleteableItems, tostring(evolvablePresent), tostring(evolving), #failedItems)
         deleteableItems = {}
     end
 

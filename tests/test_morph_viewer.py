@@ -856,6 +856,22 @@ class MorphVisualTests(unittest.TestCase):
             assert(explicit.petSource=='random' and #explicit.pets==3)
         ''')
 
+    def test_kronos_rings_only_the_familiars_kronos_absorbs(self):
+        # user report 2026-11-22: a blue fly rode the ring
+        self.lua.execute('''
+            local live=Sprite(); live:Load('brother-bobby.anm2'); live:SetFrame('FloatDown',1)
+            local bobby={Player=owner,InitSeed=22,GetSprite=function() return live end}
+            local fly={Player=owner,InitSeed=11,blue=true,GetSprite=function() error('a blue fly was read') end}
+            ConchBlessing.kronos={devourable=function(f) return not f.blue end}
+            entities={{ToFamiliar=function() return bobby end},{ToFamiliar=function() return fly end}}
+            local s=V.create('KRONOS',Vector(320,180))
+            assert(s.petSource=='owned' and #s.pets==1 and s.pets[1].path=='brother-bobby.anm2')
+            entities={{ToFamiliar=function() return fly end}}
+            local onlyFlies=V.create('KRONOS',Vector(320,180))
+            assert(onlyFlies.petSource=='random' and #onlyFlies.pets==3, 'no absorbable pet: stand-ins')
+            ConchBlessing.kronos=nil
+        ''')
+
     def test_kronos_copy_fallback_and_unreadable_owned_roster_never_fills_random(self):
         self.lua.execute('''
             local live=Sprite(); live:Load('original-familiar.anm2'); live:SetFrame('FloatDown',5)

@@ -340,12 +340,12 @@ class DeleteModeDebrisTests(unittest.TestCase):
             assert(#drops==0 and #errors==0, 'nothing that never tried to evolve leaves debris')
         ''')
 
-    def test_a_room_with_an_evolvable_item_keeps_the_items_that_cannot_evolve(self):
-        # User rule 2026-11-21: with any evolvable item in the room, Delete Mode
-        # deletes only the evolvable items the answer fails (each leaving a
-        # debris) and keeps every item that cannot evolve, whatever the answer.
-        # One plain item, one that evolves on a positive answer and one that
-        # evolves on a negative answer.
+    def test_items_that_cannot_evolve_stay_while_anything_evolves(self):
+        # User rules 2026-11-21: with any evolvable item in the room, Delete Mode
+        # deletes the evolvable items the answer fails (each leaving a debris);
+        # the items that cannot evolve stay while anything evolves and go with
+        # them when every evolution failed, whatever the answer. One plain item,
+        # one that evolves on a positive answer and one on a negative answer.
         self.lua.execute('''
             assert(ConchBlessing._itemMapsReady or #errors==0)
             local positiveOrigin, negativeOrigin = origin, nil
@@ -374,8 +374,15 @@ class DeleteModeDebrisTests(unittest.TestCase):
             assert(not neg:Exists() and #drops==1 and drops[1].x==160, 'positive: the negative item is deleted with a debris')
             plain,pos,neg=room()
             actualConchResult({type='neutral'})
-            assert(plain:Exists(), 'neutral: the plain item stays')
-            assert(not pos:Exists() and not neg:Exists() and #drops==2, 'neutral: both evolvable items are deleted')
+            assert(not plain:Exists(), 'neutral: every evolution failed, so the plain item goes too')
+            assert(not pos:Exists() and not neg:Exists() and #drops==2, 'neutral: both evolvable items leave a debris')
+            assert(poofs==3, 'three deletions')
+            -- every evolution failing on a positive answer deletes the plain item as well
+            fresh(); ConchBlessing._upgradeJobs={}
+            local plain2=Isaac.Spawn(5,100,999,Vector(10,10),Vector(0,0),nil)
+            local neg2=Isaac.Spawn(5,100,negativeOrigin,Vector(160,90),Vector(0,0),nil)
+            actualConchResult({type='positive'})
+            assert(not plain2:Exists() and not neg2:Exists() and #drops==1, 'positive, all failed: both go')
             plain,pos,neg=room()
             actualConchResult({type='negative'})
             assert(plain:Exists(), 'negative: the plain item stays')
@@ -391,8 +398,10 @@ class DeleteModeDebrisTests(unittest.TestCase):
             local p=Isaac.Spawn(5,100,origin,Vector(80,90),Vector(0,0),nil)
             actualConchResult({type='positive'})          -- p is now in its upgrade
             assert(#ConchBlessing._upgradeJobs==1)
-            actualConchResult({type='negative'})
-            assert(plain:Exists() and p:Exists() and #drops==0 and #errors==0)
+            local failing=Isaac.Spawn(5,100,origin,Vector(160,90),Vector(0,0),nil)
+            actualConchResult({type='negative'})          -- the new one fails, p is still evolving
+            assert(plain:Exists() and p:Exists(), 'an evolution still playing keeps the plain item')
+            assert(not failing:Exists() and #drops==1 and #errors==0)
         ''')
 
     def test_a_matching_answer_evolves_and_drops_nothing(self):

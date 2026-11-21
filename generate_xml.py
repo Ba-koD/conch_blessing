@@ -1279,9 +1279,34 @@ def generate_death_items_png(
         print(f"{os.path.basename(output_path)} created: {output_path} with size {final_width}x{final_height}")
     print(f"Total items placed: {item_count}")
 
+VERSION_MODULE_HEADER = (
+    "-- The mod's version, mirrored from metadata.xml's <version> (generated: do\n"
+    "-- not edit). generate_xml.py rewrites it on every run, and the Steam Workshop\n"
+    "-- packager writes the release version here before staging the upload.\n"
+)
+
+
+def sync_version_module(metadata_path="metadata.xml", module_path="scripts/version.lua"):
+    """Mirror metadata.xml's <version> into scripts/version.lua (shown in Mod Config Menu)."""
+    version = (ET.parse(metadata_path).getroot().findtext("version") or "").strip()
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        raise SystemExit(f"ERROR: metadata.xml has no MAJOR.MINOR.PATCH version: {version!r}")
+    text = f'{VERSION_MODULE_HEADER}return "{version}"\n'
+    current = None
+    if os.path.exists(module_path):
+        with open(module_path, encoding="utf-8", newline="") as handle:
+            current = handle.read()
+    if current != text:
+        with open(module_path, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(text)
+        print(f"{module_path} updated: {version}")
+    return version
+
+
 def main():
     """main function"""
     args = parse_args()
+    sync_version_module()
     lua_file = "scripts/conch_blessing_items.lua"
     items_xml_path = "content/items.xml"
     itempools_xml_path = "content/itempools.xml"

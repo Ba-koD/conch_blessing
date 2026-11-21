@@ -4925,6 +4925,24 @@ function Rune.familiarItemOf(fam)
     return nil, id
 end
 
+--- Whether Kronos's upgrade presentation may show `fam` among the pets it
+--- devours: a familiar of an item Kronos absorbs (a vanilla familiar collectible
+--- or one of this mod's `kronosAbsorb` rows, not blacklisted), never a blue fly,
+--- spider, locust, wisp or one of Kronos's own anchors (user report 2026-11-22:
+--- a blue fly rode the ring). Without REPENTOGON's familiar-to-item lookup only
+--- the anchors are left out.
+function ConchBlessing.kronos.devourable(fam)
+    if not fam or Rune.isKronosAnchor(fam) then return false end
+    if type(fam.GetItemConfig) ~= "function" then return true end
+    local itemId = Rune.familiarItemOf(fam)
+    if not itemId or (ConchBlessing.kronos.data.blacklist or {})[itemId] then return false end
+    if not Rune.absorbable then
+        Rune.absorbable = {}
+        for _, id in ipairs(getFamiliarCollectibleIds()) do Rune.absorbable[id] = true end
+    end
+    return Rune.absorbable[itemId] == true
+end
+
 --- What Thurisaz can devour for `player`: each of their familiars in the room,
 --- temporary ones included. Without REPENTOGON's familiar-to-item lookup only
 --- their owned familiar collectibles count, one entry per copy.

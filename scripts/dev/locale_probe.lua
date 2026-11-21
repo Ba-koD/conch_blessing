@@ -12,6 +12,7 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 
 local TestBench = require("scripts.dev.test_bench")
 local Config = require("scripts.conch_blessing_config")
+local VERSION = require("scripts.version")
 
 local Locale = ConchBlessing.Locale
 local LANGUAGES = { "en", "kr", "urimal" }
@@ -326,16 +327,38 @@ local function build(plan)
     end)
 
     plan.section("Mod Config Menu", nil)
+    local function mcmCategory()
+        for _, entry in pairs(ModConfigMenu.MenuData) do
+            if type(entry) == "table" and entry.Name == "Conch's Blessing" then return entry end
+        end
+    end
+    plan.check("the menu is named Conch's Blessing and General opens with its version as plain text", function()
+        if not (ModConfigMenu and type(ModConfigMenu.MenuData) == "table") then
+            return nil, "Mod Config Menu is not installed"
+        end
+        local category = mcmCategory()
+        if not category then return false, "no category named Conch's Blessing" end
+        local version = VERSION
+        local expected = Locale.textIn("en", "ui.mcm.version", version)
+        local general = Locale.textIn("en", "ui.mcm.tab_general")
+        for _, sub in ipairs(category.Subcategories or {}) do
+            if sub.Name == general then
+                local first = (sub.Options or {})[1]
+                local shown = first and (type(first.Display) == "function" and first.Display() or first.Display)
+                local textType = ModConfigMenu.OptionType and ModConfigMenu.OptionType.TEXT
+                return first ~= nil and shown == expected and (textType == nil or first.Type == textType)
+                    and ConchBlessing.Config.Version == version,
+                    string.format("first=%s type=%s expected=%s config=%s", tostring(shown), tostring(first and first.Type),
+                        expected, tostring(ConchBlessing.Config.Version))
+            end
+        end
+        return false, "no " .. general .. " tab"
+    end)
     plan.check("the menu reads its text from en.lua", function()
         if not (ModConfigMenu and type(ModConfigMenu.MenuData) == "table") then
             return nil, "Mod Config Menu is not installed"
         end
-        local category
-        for _, entry in pairs(ModConfigMenu.MenuData) do
-            if type(entry) == "table" and type(entry.Name) == "string" and entry.Name:find("Conch's Blessing v", 1, true) == 1 then
-                category = entry
-            end
-        end
+        local category = mcmCategory()
         if not category then return false, "Conch's Blessing category not found" end
         local state = Locale.textIn("en", ConchBlessing.Config.debugMode and "ui.mcm.on" or "ui.mcm.off")
         local expected = Locale.textIn("en", "ui.mcm.debug_mode", state)

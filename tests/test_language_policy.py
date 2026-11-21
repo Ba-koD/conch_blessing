@@ -1,4 +1,5 @@
 """Calendar language policy, persisted choice and MCM selection (not engine render)."""
+import re
 from pathlib import Path
 import unittest
 
@@ -161,6 +162,25 @@ class LanguagePolicyTests(unittest.TestCase):
             ConchBlessing.Config.language='auto';mcm.loadConfigFromSaveManager(ConchBlessing)
             assert(Config.GetCurrentLanguage()=='kr' and language.CurrentSetting()==5)
         ''')
+
+    def test_mcm_is_named_conchs_blessing_and_opens_with_the_version(self):
+        version = re.search(r'<version>([^<]+)</version>', (ROOT / 'metadata.xml').read_text(encoding='utf-8')).group(1)
+        result = self.lua.execute('''
+            texts={};categories={};first=nil
+            ModConfigMenu={OptionType={BOOLEAN=1,NUMBER=2},RemoveCategory=function(c) categories[#categories+1]=c end,
+                AddSpace=function(c,sub) if not first then first={kind='space'} end end,
+                AddText=function(c,sub,text)
+                    texts[#texts+1]={category=c,sub=sub,text=text}
+                    if not first then first={kind='text',category=c,sub=sub,text=text} end
+                end,
+                AddSetting=function(c,sub,setting) if not first then first={kind='setting'} end end}
+            ConchBlessing.SaveManager={IsLoaded=function() return true end,
+                GetSettingsSave=function() return {} end,Save=function() end}
+            ConchBlessing.EID={refreshLanguage=function() end}
+            require('scripts.conch_blessing_mcm').Setup(ConchBlessing)
+            return first.kind, first.category, first.sub, first.text, categories[1], Config.Version
+        ''')
+        self.assertEqual(result, ('text', "Conch's Blessing", 'General', 'Version : ' + version, "Conch's Blessing", version))
 
     def test_locale_is_independent_and_exposes_every_korean_item(self):
         self.run_lua('''

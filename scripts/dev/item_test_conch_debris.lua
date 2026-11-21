@@ -254,8 +254,7 @@ end
 -- Delete Mode, a neutral answer: every evolvable item without a neutral result
 -- is deleted and leaves one free, normal debris on its spot (a shop item, a
 -- choice and a golden trinket alike); an item with a neutral result evolves,
--- and an item that cannot evolve stays (Delete Mode deletes those only on a
--- negative answer).
+-- and an item that cannot evolve stays because something evolves.
 case("drop", function(plan)
     requireModule(plan)
     conchSetup(plan, true)
@@ -381,6 +380,36 @@ case("negative_plain", function(plan)
     end)
     plan.check("the debris on the floor stays", function(player, ctx)
         return ctx.old:Exists() and debrisAt(ctx.oldPos) ~= nil, describe(player)
+    end)
+end)
+
+-- Delete Mode, a neutral answer that every evolvable item in the room fails
+-- (user rule 2026-11-21): the failed item leaves a debris and the item that
+-- cannot evolve is deleted with it, leaving nothing.
+case("all_fail", function(plan)
+    requireModule(plan)
+    conchSetup(plan, true)
+    plan.require("a vanilla collectible with no neutral result", function(_, ctx)
+        ctx.fail = origins("C", "neutral", false)
+        return ctx.fail ~= nil, "none found"
+    end)
+    park(plan)
+    plan.act(function(_, ctx)
+        ctx.plain = spawn(PickupVariant.PICKUP_COLLECTIBLE, CollectibleType.COLLECTIBLE_BREAKFAST, 140, 80)
+        ctx.failed = spawn(PickupVariant.PICKUP_COLLECTIBLE, ctx.fail, 40, -80)
+    end)
+    plan.wait(5)
+    plan.act(function(_, ctx)
+        T().resetEvidence()
+        ctx.failPos = Vector(ctx.failed.Position.X, ctx.failed.Position.Y)
+        ctx.plainPos = Vector(ctx.plain.Position.X, ctx.plain.Position.Y)
+    end)
+    answer(plan, "neutral")
+    plan.check("the failed evolution leaves one debris", function(player, ctx)
+        return not ctx.failed:Exists() and debrisAt(ctx.failPos) ~= nil and evidence().dropped == 1, describe(player)
+    end)
+    plan.check("the item that cannot evolve goes with it, leaving nothing", function(player, ctx)
+        return not ctx.plain:Exists() and debrisAt(ctx.plainPos) == nil and #floorDebris() == 1, describe(player)
     end)
 end)
 

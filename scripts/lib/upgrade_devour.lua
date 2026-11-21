@@ -1,5 +1,7 @@
 -- Kronos's presentation: snapshots of the upgrading player's own familiars
--- ride the turned Saturn ring. Never retain or animate a live familiar.
+-- that Kronos absorbs ride the turned Saturn ring (ConchBlessing.kronos.devourable:
+-- never a blue fly, spider, locust, wisp or Kronos anchor). Never retain or
+-- animate a live familiar.
 local Devour = {}
 local fallback = {
     { "gfx/003.001_brother bobby.anm2", "FloatDown" },
@@ -39,9 +41,13 @@ function Devour.snapshot(owner)
     if not owner and Game():GetNumPlayers() == 1 then owner = Isaac.GetPlayer(0) end
     local pets, owned = {}, {}
     if not owner then return pets, "unknown" end
+    local kronos = ConchBlessing and ConchBlessing.kronos
+    local devourable = kronos and type(kronos.devourable) == "function" and kronos.devourable
     for _, entity in ipairs(Isaac.GetRoomEntities()) do
         local familiar = entity:ToFamiliar()
-        if familiar and samePlayer(familiar.Player, owner) then owned[#owned + 1] = familiar end
+        if familiar and samePlayer(familiar.Player, owner) and (not devourable or devourable(familiar)) then
+            owned[#owned + 1] = familiar
+        end
     end
     table.sort(owned, function(a, b) return a.InitSeed < b.InitSeed end)
     serial = serial + 1

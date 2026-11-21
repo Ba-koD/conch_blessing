@@ -1,7 +1,10 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 local ConchBlessing_Config = {}
 
-local Version = "1.0.0"
+-- metadata.xml's version, mirrored into scripts/version.lua by generate_xml.py
+-- and the Workshop packager (shown at the top of Mod Config Menu's General tab).
+local versionLoaded, Version = pcall(require, "scripts.version")
+if not versionLoaded or type(Version) ~= "string" then Version = "?" end
 ConchBlessing_Config.Version = Version
 
 local DefaultConfig = {

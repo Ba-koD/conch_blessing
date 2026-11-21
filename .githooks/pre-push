@@ -46,6 +46,7 @@ content/entities2.xml
 content/costumes2.xml
 content/gfx/death_items.anm2
 content/gfx/death_items.png
+scripts/version.lua
 "
 
 before_head=$(git rev-parse HEAD)

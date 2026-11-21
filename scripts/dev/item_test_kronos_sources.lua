@@ -1,6 +1,7 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 local S = require("scripts.dev.item_scenarios")
 local H = require("scripts.dev.item_test_support")
+local Devour = require("scripts.lib.upgrade_devour")
 local cases = require("scripts.dev.kronos_synergy_cases")
 
 local function manualGrants(player,ctx)
@@ -256,5 +257,56 @@ for _,order in ipairs({"before","after"}) do
         end)
     end,order=="before" and {"monster_manual"} or nil)
 end
+
+-- Kronos's upgrade presentation shows only familiars Kronos absorbs (user report
+-- 2026-11-22: a blue fly rode the ring): a real Brother Bobby counts, blue flies
+-- never do, and with only blue flies the ring falls back to stand-in pets.
+S.add("KRONOS", "devour_roster", {}, function(plan)
+    plan.require("Kronos's devourable check", function()
+        local present = type(ConchBlessing.kronos.devourable) == "function"
+        return present, present and "present" or "missing"
+    end)
+    plan.act(function(player, ctx)
+        ctx.cleanupFns = ctx.cleanupFns or {}
+        table.insert(ctx.cleanupFns, function()
+            for _, entity in ipairs(Isaac.FindByType(EntityType.ENTITY_FAMILIAR, FamiliarVariant.BLUE_FLY)) do entity:Remove() end
+        end)
+        player:AddCollectible(CollectibleType.COLLECTIBLE_BROTHER_BOBBY, 0, false)
+        player:AddBlueFlies(3, player.Position, nil)
+    end)
+    plan.wait(10)
+    local function owned(player, variant)
+        local list = {}
+        for _, entity in ipairs(Isaac.FindByType(EntityType.ENTITY_FAMILIAR, variant)) do
+            local fam = entity:ToFamiliar()
+            if fam and fam.Player and GetPtrHash(fam.Player) == GetPtrHash(player) then list[#list + 1] = fam end
+        end
+        return list
+    end
+    plan.require("REPENTOGON's familiar-to-item lookup on a live familiar", function(player)
+        local bobby = owned(player, FamiliarVariant.BROTHER_BOBBY)[1]
+        if not bobby then return false, "no Brother Bobby" end
+        local present = type(bobby.GetItemConfig) == "function"
+        return present or nil, present and "present" or "GetItemConfig missing"
+    end)
+    plan.check("Brother Bobby is devourable and blue flies are not", function(player)
+        local bobby, flies = owned(player, FamiliarVariant.BROTHER_BOBBY), owned(player, FamiliarVariant.BLUE_FLY)
+        local fliesOut = #flies > 0
+        for _, fly in ipairs(flies) do if ConchBlessing.kronos.devourable(fly) then fliesOut = false end end
+        return #bobby == 1 and ConchBlessing.kronos.devourable(bobby[1]) and fliesOut,
+            string.format("bobby=%d devourable=%s flies=%d", #bobby, tostring(bobby[1] and ConchBlessing.kronos.devourable(bobby[1])), #flies)
+    end)
+    plan.check("the ring carries Brother Bobby alone", function(player)
+        local pets, source = Devour.snapshot(player)
+        return source == "owned" and #pets == 1, string.format("source=%s pets=%d", tostring(source), #pets)
+    end)
+    plan.act(function(player) player:RemoveCollectible(CollectibleType.COLLECTIBLE_BROTHER_BOBBY) end)
+    plan.wait(10)
+    plan.check("with only blue flies the ring shows stand-in pets", function(player)
+        local pets, source = Devour.snapshot(player)
+        return #owned(player, FamiliarVariant.BLUE_FLY) > 0 and source == "random" and #pets == 3,
+            string.format("flies=%d source=%s pets=%d", #owned(player, FamiliarVariant.BLUE_FLY), tostring(source), #pets)
+    end)
+end)
 
 return S

@@ -177,6 +177,28 @@ def write_metadata_version(repo_root, current_version, release_version):
     metadata_path.write_text(original.replace(old, new, 1), encoding="utf-8")
 
 
+VERSION_MODULE = Path("scripts") / "version.lua"
+VERSION_MODULE_HEADER = (
+    "-- The mod's version, mirrored from metadata.xml's <version> (generated: do\n"
+    "-- not edit). generate_xml.py rewrites it on every run, and the Steam Workshop\n"
+    "-- packager writes the release version here before staging the upload.\n"
+)
+
+
+def version_module_text(version):
+    return f'{VERSION_MODULE_HEADER}return "{version}"\n'
+
+
+def write_version_module(repo_root, version):
+    """Mirror `version` into scripts/version.lua, which the mod shows in Mod Config Menu."""
+    path = repo_root / VERSION_MODULE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = version_module_text(version)
+    if not path.exists() or path.read_text(encoding="utf-8") != text:
+        path.write_text(text, encoding="utf-8", newline="\n")
+    return path
+
+
 def apply_release_version(repo_root, metadata, requested_version, steam_version):
     requested_version = requested_version.strip()
     steam_version = steam_version.strip()
@@ -265,6 +287,7 @@ def main():
     languages = parse_languages(args.languages)
 
     metadata = apply_release_version(repo_root, read_metadata(repo_root), args.version, args.steam_version)
+    write_version_module(repo_root, metadata["version"])
     content_dir = prepare_content(repo_root, output_dir, metadata["directory"])
     preview_file = content_dir / "Thumbnail.png"
     if not preview_file.exists():
