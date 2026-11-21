@@ -335,9 +335,64 @@ class DeleteModeDebrisTests(unittest.TestCase):
             local plain=Isaac.Spawn(5,100,999,Vector(10,10),Vector(0,0),nil)
             local old=Isaac.Spawn(5,350,4242,Vector(20,20),Vector(0,0),nil)
             actualConchResult({type='negative'})
-            assert(not plain:Exists(), 'Delete Mode still deletes it on a negative answer')
+            assert(not plain:Exists(), 'with no evolvable item Delete Mode still deletes it on a negative answer')
             assert(old:Exists(), 'the debris itself is never deleted')
             assert(#drops==0 and #errors==0, 'nothing that never tried to evolve leaves debris')
+        ''')
+
+    def test_a_room_with_an_evolvable_item_keeps_the_items_that_cannot_evolve(self):
+        # User rule 2026-11-21: with any evolvable item in the room, Delete Mode
+        # deletes only the evolvable items the answer fails (each leaving a
+        # debris) and keeps every item that cannot evolve, whatever the answer.
+        # One plain item, one that evolves on a positive answer and one that
+        # evolves on a negative answer.
+        self.lua.execute('''
+            assert(ConchBlessing._itemMapsReady or #errors==0)
+            local positiveOrigin, negativeOrigin = origin, nil
+            for key,row in pairs(ConchBlessing.ItemData) do
+                if row.origin.type=='collectible' and row.origin.id~=origin and not negativeOrigin then
+                    negativeOrigin=row.origin.id
+                end
+            end
+            -- make negativeOrigin evolve on a negative answer only
+            local source=ConchBlessing.ItemMaps['C:'..negativeOrigin].positive
+            local copy={}
+            for k,v in pairs(source) do copy[k]=v end
+            copy.flag='negative'
+            ConchBlessing.ItemMaps['C:'..negativeOrigin]={negative=copy}
+            function room()
+                fresh(); ConchBlessing._upgradeJobs={}
+                local plain=Isaac.Spawn(5,100,999,Vector(10,10),Vector(0,0),nil)
+                local pos=Isaac.Spawn(5,100,positiveOrigin,Vector(80,90),Vector(0,0),nil)
+                local neg=Isaac.Spawn(5,100,negativeOrigin,Vector(160,90),Vector(0,0),nil)
+                return plain,pos,neg
+            end
+            local plain,pos,neg=room()
+            actualConchResult({type='positive'})
+            assert(plain:Exists(), 'positive: the plain item stays')
+            assert(pos:Exists() and #ConchBlessing._upgradeJobs==1, 'positive: the positive item evolves')
+            assert(not neg:Exists() and #drops==1 and drops[1].x==160, 'positive: the negative item is deleted with a debris')
+            plain,pos,neg=room()
+            actualConchResult({type='neutral'})
+            assert(plain:Exists(), 'neutral: the plain item stays')
+            assert(not pos:Exists() and not neg:Exists() and #drops==2, 'neutral: both evolvable items are deleted')
+            plain,pos,neg=room()
+            actualConchResult({type='negative'})
+            assert(plain:Exists(), 'negative: the plain item stays')
+            assert(not pos:Exists() and #drops==1 and drops[1].x==80, 'negative: the positive item is deleted with a debris')
+            assert(neg:Exists() and #ConchBlessing._upgradeJobs==1, 'negative: the negative item evolves')
+            assert(#errors==0)
+        ''')
+
+    def test_an_item_still_in_an_upgrade_also_keeps_the_items_that_cannot_evolve(self):
+        self.lua.execute('''
+            fresh()
+            local plain=Isaac.Spawn(5,100,999,Vector(10,10),Vector(0,0),nil)
+            local p=Isaac.Spawn(5,100,origin,Vector(80,90),Vector(0,0),nil)
+            actualConchResult({type='positive'})          -- p is now in its upgrade
+            assert(#ConchBlessing._upgradeJobs==1)
+            actualConchResult({type='negative'})
+            assert(plain:Exists() and p:Exists() and #drops==0 and #errors==0)
         ''')
 
     def test_a_matching_answer_evolves_and_drops_nothing(self):

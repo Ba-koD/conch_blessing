@@ -1356,6 +1356,10 @@ local function queueResult(result, explicitPickups)
     local upgradeableItems = {}
     local deleteableItems = {}
     local failedItems = {}
+    -- Whether the room holds any evolvable item (one this answer evolves, one
+    -- it fails, or one still in an earlier answer's upgrade): then Delete Mode
+    -- leaves the items that cannot evolve alone (see below).
+    local evolvablePresent = false
     local viewer = ConchBlessing.morphViewer
     local function ownedByViewer(entity)
         return viewer ~= nil and type(viewer.ownsPickup) == "function" and viewer.ownsPickup(entity) == true
@@ -1363,13 +1367,15 @@ local function queueResult(result, explicitPickups)
     
     for _, entity in ipairs(entities) do
         -- check if it's a pickup (collectible or trinket)
-        if entity.Type == EntityType.ENTITY_PICKUP
+        local itemPickup = entity.Type == EntityType.ENTITY_PICKUP
             and (entity.Variant == PickupVariant.PICKUP_COLLECTIBLE or entity.Variant == PickupVariant.PICKUP_TRINKET)
             -- The room-wide result owns gameplay pickups only. A preview may
             -- enter this same pipeline only through its explicit target list,
             -- including before queueing and after its pending lock is released.
             and (explicitPickups or not ownedByViewer(entity))
-            and not _isPickupPending(entity:ToPickup()) then
+        if itemPickup and _isPickupPending(entity:ToPickup()) then
+            evolvablePresent = true
+        elseif itemPickup then
             local pickup = entity:ToPickup()
             local cycleHandled = false
             if pickup and entity.Variant == PickupVariant.PICKUP_COLLECTIBLE then
@@ -1380,6 +1386,7 @@ local function queueResult(result, explicitPickups)
                     )
                     cycleHandled = true
                 elseif cyclePlan and cyclePlan.matched then
+                    evolvablePresent = true
                     table.insert(upgradeableItems, {
                         entity = entity,
                         upgradeData = cyclePlan.primaryUpgradeData,
@@ -1414,6 +1421,7 @@ local function queueResult(result, explicitPickups)
 
                 if originMappings then
                     -- This item HAS evolution possibilities
+                    evolvablePresent = true
                     ConchBlessing.printDebug("Convertible item found: originKey=" .. originKey)
 
                     local availableFlags = {}
@@ -1516,6 +1524,17 @@ local function queueResult(result, explicitPickups)
         ConchBlessing.printDebug("Total " .. upgradeCount .. " items queued for upgrade!")
     end
     
+    -- Delete Mode deletes the items that cannot evolve on a negative answer
+    -- only in a room without an evolvable item (user rule 2026-11-21). With one,
+    -- only the evolvable items this answer fails are deleted (each leaving a
+    -- debris) and every item that cannot evolve stays, whatever the answer and
+    -- whether or not anything evolves.
+    if #deleteableItems > 0 and evolvablePresent then
+        ConchBlessing.printDebug("Delete Mode: %d items that cannot evolve stay: the room has an evolvable item",
+            #deleteableItems)
+        deleteableItems = {}
+    end
+
     -- Process deleteable items (Delete Mode)
     if #deleteableItems > 0 then
         ConchBlessing.printDebug("Delete Mode: Processing " .. #deleteableItems .. " items for deletion...")

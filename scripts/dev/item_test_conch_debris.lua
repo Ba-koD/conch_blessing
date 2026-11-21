@@ -312,21 +312,24 @@ case("drop", function(plan)
     plan.section("CONCH_DEBRIS / drop", "the two failed items vanished with a poof and a broken-shell trinket lay on each spot")
 end)
 
--- Delete Mode, a negative answer: an item that cannot evolve is deleted with no
--- debris, a debris already on the floor stays, and an evolvable item without a
--- negative result leaves a debris.
+-- Delete Mode, a negative answer in a room with evolvable items (user rule
+-- 2026-11-21, the bug where the plain items vanished too): an item that cannot
+-- evolve stays, a debris already on the floor stays, an evolvable item without a
+-- negative result leaves a debris and one with a negative result evolves.
 case("negative", function(plan)
     requireModule(plan)
     conchSetup(plan, true)
-    plan.require("a vanilla collectible with no negative result", function(_, ctx)
+    plan.require("vanilla collectibles without and with a negative result", function(_, ctx)
         ctx.fail = origins("C", "negative", false)
-        return ctx.fail ~= nil, "none found"
+        ctx.pass = origins("C", "negative", true)
+        return ctx.fail ~= nil and ctx.pass ~= nil, string.format("fail=%s pass=%s", tostring(ctx.fail), tostring(ctx.pass))
     end)
     park(plan)
     plan.act(function(player, ctx)
         ctx.old = spawnDebris(40, 80)
         ctx.plain = spawn(PickupVariant.PICKUP_COLLECTIBLE, CollectibleType.COLLECTIBLE_BREAKFAST, 140, 80)
         ctx.failed = spawn(PickupVariant.PICKUP_COLLECTIBLE, ctx.fail, 40, -80)
+        ctx.passed = spawn(PickupVariant.PICKUP_COLLECTIBLE, ctx.pass, 140, -80)
     end)
     plan.wait(5)
     plan.act(function(_, ctx)
@@ -336,8 +339,8 @@ case("negative", function(plan)
         ctx.plainPos = Vector(ctx.plain.Position.X, ctx.plain.Position.Y)
     end)
     answer(plan, "negative")
-    plan.check("the item that cannot evolve is deleted, leaving nothing", function(player, ctx)
-        return not ctx.plain:Exists() and debrisAt(ctx.plainPos) == nil, describe(player)
+    plan.check("the item that cannot evolve stays: the room has evolvable items", function(player, ctx)
+        return ctx.plain:Exists() and ctx.plain.SubType == CollectibleType.COLLECTIBLE_BREAKFAST, describe(player)
     end)
     plan.check("the debris already on the floor stays", function(player, ctx)
         return ctx.old:Exists() and debrisAt(ctx.oldPos) ~= nil, describe(player)
@@ -345,6 +348,39 @@ case("negative", function(plan)
     plan.check("the failed evolution leaves one debris", function(player, ctx)
         return not ctx.failed:Exists() and debrisAt(ctx.failPos) ~= nil and evidence().dropped == 1
             and #floorDebris() == 2, describe(player)
+    end)
+    plan.check("the item with a negative result evolves", function(player, ctx)
+        return ctx.passed:Exists() and ConchBlessing.upgrade.isAnimatingPickup(ctx.passed), describe(player)
+    end)
+    -- let the evolution finish so the shared run's reset finds a still room
+    plan.waitUntil(function(_, ctx)
+        return not (ctx.passed:Exists() and ConchBlessing.upgrade.isAnimatingPickup(ctx.passed)), "still evolving"
+    end, 900, "the evolution finishes")
+end)
+
+-- Delete Mode, a negative answer in a room with no evolvable item: the item
+-- that cannot evolve is deleted with no debris, as Delete Mode always did, and
+-- a debris on the floor stays.
+case("negative_plain", function(plan)
+    requireModule(plan)
+    conchSetup(plan, true)
+    park(plan)
+    plan.act(function(_, ctx)
+        ctx.old = spawnDebris(40, 80)
+        ctx.plain = spawn(PickupVariant.PICKUP_COLLECTIBLE, CollectibleType.COLLECTIBLE_BREAKFAST, 140, 80)
+    end)
+    plan.wait(5)
+    plan.act(function(_, ctx)
+        T().resetEvidence()
+        ctx.oldPos = Vector(ctx.old.Position.X, ctx.old.Position.Y)
+        ctx.plainPos = Vector(ctx.plain.Position.X, ctx.plain.Position.Y)
+    end)
+    answer(plan, "negative")
+    plan.check("the item that cannot evolve is deleted, leaving nothing", function(player, ctx)
+        return not ctx.plain:Exists() and debrisAt(ctx.plainPos) == nil and evidence().dropped == 0, describe(player)
+    end)
+    plan.check("the debris on the floor stays", function(player, ctx)
+        return ctx.old:Exists() and debrisAt(ctx.oldPos) ~= nil, describe(player)
     end)
 end)
 
@@ -369,8 +405,9 @@ end)
 -- The cases only spawn pickups, touch them, smelt copies and ask the real
 -- Magic Conch with settings each case puts back, so they share one run:
 -- S.resetPlayer takes the hand, the smelted copies and every floor pickup
--- away and proves the player is where the run started. drop goes last: the
--- item it evolves is still playing its upgrade when the case ends.
+-- away and proves the player is where the run started. negative and drop go
+-- last: the item each evolves is still playing its upgrade when the case ends.
+S.last(shared, "negative")
 S.last(shared, "drop")
 S.sequenceBundle("CONCH_DEBRIS", "shared", {}, shared, function(plan)
     S.resetPlayer(plan, nil, function(player)
