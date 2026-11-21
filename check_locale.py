@@ -18,7 +18,7 @@ Prints every problem and exits 1 if there is one. It checks that
     (checked when the mod sits in the game's mods folder), {own:KEY} is an ItemData key
     and {pocket:KEY} a card or rune in scripts/items/cards/definitions.lua
   * %TOKEN% values in item text are registered in ConchBlessing.EIDDynamicTokens
-  * ui strings mirror English (ui.mcm is English-only), use only %s and %% as
+  * ui strings mirror English (ui.mcm.language* is English-only), use only %s and %% as
     format directives, and take as many %s arguments as English does
   * every character Kronos's absorption captions can show has a glyph in
     scripts/items/collectibles/kronos_caption_glyphs.lua (generate_caption_glyphs.py)
@@ -37,7 +37,9 @@ ITEMS_PATH = os.path.join(ROOT, "scripts", "conch_blessing_items.lua")
 SCRIPTS_DIR = os.path.join(ROOT, "scripts")
 ENUMS_PATH = os.path.normpath(os.path.join(ROOT, "..", "..", "resources", "scripts", "enums.lua"))
 FALLBACK = "en"
-ENGLISH_ONLY = ("ui.mcm",)
+# The language setting and its help stay English in Mod Config Menu, so they
+# can be read to switch back whatever font a game has.
+ENGLISH_ONLY = ("ui.mcm.language",)
 ITEM_FIELDS = ("name", "description", "eid", "synergies", "specials")
 POCKETS_PATH = os.path.join(ROOT, "scripts", "items", "cards", "definitions.lua")
 # synergies: a rune's own lines that replace a shared item's (scripts/lib/pocket_synergies.lua)
@@ -253,7 +255,8 @@ def format_arguments(path, text):
 
 
 def english_only(path):
-    return any(path == p or path.startswith(p + ".") for p in ENGLISH_ONLY)
+    # a prefix: ui.mcm.language, ui.mcm.language_auto, ui.mcm.language_info.1, ...
+    return any(path.startswith(p) for p in ENGLISH_ONLY)
 
 
 # ---- checks ----
@@ -339,7 +342,7 @@ def main():
         ui = dict(strings(table.get("ui", {}), "ui"))
         for path, text in ui.items():
             if english_only(path):
-                error("%s.lua: %s is English-only (Mod Config Menu reads it in English); remove it" % (lang, path))
+                error("%s.lua: %s is English-only (Mod Config Menu shows it in English); remove it" % (lang, path))
             elif path not in en_ui:
                 error("%s.lua: %s is not in en.lua" % (lang, path))
             elif format_arguments("%s.lua: %s" % (lang, path), text) != en_arguments[path]:

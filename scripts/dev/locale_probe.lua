@@ -13,6 +13,7 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 local TestBench = require("scripts.dev.test_bench")
 local Config = require("scripts.conch_blessing_config")
 local VERSION = require("scripts.version")
+local MCM = require("scripts.conch_blessing_mcm")
 
 local Locale = ConchBlessing.Locale
 local LANGUAGES = { "en", "kr", "urimal" }
@@ -106,6 +107,7 @@ local function restoreLanguage(ctx)
     if not ctx.languageSaved then return end
     assert(Config.SetLanguage(ctx.languageSelection), "could not restore the original language preference")
     refreshLanguage()
+    if type(MCM.refreshTabs) == "function" then MCM.refreshTabs() end
 end
 
 local function eidLanguageUnchanged(ctx)
@@ -332,47 +334,71 @@ local function build(plan)
             if type(entry) == "table" and entry.Name == "Conch's Blessing" then return entry end
         end
     end
+    local function mcmTab(category, name)
+        for _, sub in ipairs(category.Subcategories or {}) do
+            if sub.Name == name then return sub end
+        end
+    end
+    local function shown(value)
+        if type(value) == "function" then return value() end
+        return value
+    end
     plan.check("the menu is named Conch's Blessing and General opens with its version as plain text", function()
         if not (ModConfigMenu and type(ModConfigMenu.MenuData) == "table") then
             return nil, "Mod Config Menu is not installed"
         end
         local category = mcmCategory()
         if not category then return false, "no category named Conch's Blessing" end
-        local version = VERSION
-        local expected = Locale.textIn("en", "ui.mcm.version", version)
-        local general = Locale.textIn("en", "ui.mcm.tab_general")
-        for _, sub in ipairs(category.Subcategories or {}) do
-            if sub.Name == general then
-                local first = (sub.Options or {})[1]
-                local shown = first and (type(first.Display) == "function" and first.Display() or first.Display)
-                local textType = ModConfigMenu.OptionType and ModConfigMenu.OptionType.TEXT
-                return first ~= nil and shown == expected and (textType == nil or first.Type == textType)
-                    and ConchBlessing.Config.Version == version,
-                    string.format("first=%s type=%s expected=%s config=%s", tostring(shown), tostring(first and first.Type),
-                        expected, tostring(ConchBlessing.Config.Version))
-            end
-        end
-        return false, "no " .. general .. " tab"
+        if type(MCM.refreshTabs) == "function" then MCM.refreshTabs() end
+        local lang = Config.GetCurrentLanguage()
+        local expected = Locale.textIn(lang, "ui.mcm.version", VERSION)
+        local general = mcmTab(category, Locale.textIn(lang, "ui.mcm.tab_general"))
+        if not general then return false, "no " .. Locale.textIn(lang, "ui.mcm.tab_general") .. " tab" end
+        local first = (general.Options or {})[1]
+        local text = first and shown(first.Display)
+        local textType = ModConfigMenu.OptionType and ModConfigMenu.OptionType.TEXT
+        return first ~= nil and text == expected and (textType == nil or first.Type == textType)
+            and ConchBlessing.Config.Version == VERSION,
+            string.format("first=%s type=%s expected=%s config=%s", tostring(text), tostring(first and first.Type),
+                expected, tostring(ConchBlessing.Config.Version))
     end)
-    plan.check("the menu reads its text from en.lua", function()
+    -- User request 2026-11-22: the menu speaks the mod language like Item
+    -- Synergy Plus, tabs included; the language setting itself stays English.
+    plan.check("the menu follows the mod language, tabs included, and keeps the language setting English", function(_, ctx)
         if not (ModConfigMenu and type(ModConfigMenu.MenuData) == "table") then
             return nil, "Mod Config Menu is not installed"
         end
         local category = mcmCategory()
         if not category then return false, "Conch's Blessing category not found" end
-        local state = Locale.textIn("en", ConchBlessing.Config.debugMode and "ui.mcm.on" or "ui.mcm.off")
-        local expected = Locale.textIn("en", "ui.mcm.debug_mode", state)
-        local general = Locale.textIn("en", "ui.mcm.tab_general")
-        for _, sub in ipairs(category.Subcategories or {}) do
-            if sub.Name == general then
-                for _, option in ipairs(sub.Options or {}) do
-                    if type(option.Display) == "function" and option.Display() == expected then
-                        return true, general .. " / " .. expected
-                    end
+        local ok, seen = true, {}
+        for _, lang in ipairs({ "en", "kr", "urimal" }) do
+            assert(Config.SetLanguage(lang), "could not select " .. lang)
+            MCM.refreshTabs()
+            local effective = Config.GetCurrentLanguage()
+            local function t(key, ...) return Locale.textIn(effective, "ui.mcm." .. key, ...) end
+            local general = mcmTab(category, t("tab_general"))
+            local sound, spawn = mcmTab(category, t("tab_sound")), mcmTab(category, t("tab_spawn"))
+            local options = general and general.Options or {}
+            local debugText = t("debug_mode", t(ConchBlessing.Config.debugMode and "on" or "off"))
+            local debugInfo = Locale.linesIn(effective, "ui.mcm.debug_mode_info")[1]
+            local languageLine, debugShown, infoShown
+            for _, option in ipairs(options) do
+                local text = shown(option.Display)
+                if type(text) == "string" and text:find("Language: ", 1, true) == 1 then languageLine = text end
+                if text == debugText then
+                    debugShown = true
+                    infoShown = (shown(option.Info) or {})[1]
                 end
             end
+            local good = general ~= nil and sound ~= nil and spawn ~= nil and shown(options[1] and options[1].Display) == t("version", VERSION)
+                and languageLine ~= nil and debugShown == true and infoShown == debugInfo
+            ok = ok and good
+            seen[#seen + 1] = string.format("%s: tabs %s/%s/%s, language line %s, debug %s, info %s", lang,
+                general and general.Name or "?", sound and sound.Name or "?", spawn and spawn.Name or "?",
+                tostring(languageLine), tostring(debugShown), tostring(infoShown))
         end
-        return false, "no option shows " .. expected
+        restoreLanguage(ctx)
+        return ok, table.concat(seen, "; ")
     end)
 
     plan.section("pickup banner", "the item banner uses the restored mod language, including October 9's Korean-to-Urimal rule")

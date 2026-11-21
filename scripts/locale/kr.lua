@@ -910,6 +910,64 @@ return {
         },
     },
     ui = {
+        -- Mod Config Menu, in this language; the language setting and its
+        -- help stay English (ui.mcm.language* in en.lua) so they can always be read.
+        mcm = {
+            version = "버전 : %s",
+            tab_general = "일반",
+            tab_spawn = "등장",
+            tab_sound = "소리",
+            sound_title = "--- 소리 설정 ---",
+            sound_volume = "효과음: %s%%",
+            sound_volume_info = {
+                "모드의 모든 소리 크기입니다.",
+                "기본값: 100%%",
+            },
+            rain_volume = "빗소리: %s%%",
+            rain_volume_info = {
+                "진의 빗소리 크기입니다.",
+                "기본값: 100%%",
+            },
+            options_title = "--- 소라고둥의 축복 설정 ---",
+            april_fools = "만우절 3D: %s",
+            april_fools_auto = "자동 (4월 1일)",
+            april_fools_on = "항상 켜기",
+            april_fools_off = "끄기",
+            april_fools_info = {
+                "아이템과 몬스터를 3D로 보여줍니다.",
+                "자동: 4월 1일에만 켜짐",
+                "효과는 그대로, REPENTOGON 필요",
+            },
+            spawn_title = "--- 등장 설정 ---",
+            on = "켜짐",
+            off = "꺼짐",
+            debug_mode = "디버그 모드: %s",
+            debug_mode_info = {
+                "디버그 출력을 로그에 남깁니다.",
+                "켜짐: 진단 표시",
+                "꺼짐: 진단 숨김 (기본값)",
+            },
+            preview_range = "진화 미리보기 거리: %s (%s칸)",
+            preview_range_info = {
+                "소라고둥 결과가 보이는 거리입니다.",
+                "기본값: 128 (3.2칸)",
+            },
+            reset = "기본값으로 초기화",
+            reset_info = {
+                "모든 설정을 기본값으로 돌립니다.",
+                "바로 적용됩니다.",
+            },
+            spawn_collectibles = "아이템: %s",
+            spawn_collectibles_info = {
+                "모드 아이템이 자연 등장합니다.",
+                "기본값: 꺼짐",
+            },
+            spawn_trinkets = "장신구: %s",
+            spawn_trinkets_info = {
+                "모드 장신구가 자연 등장합니다.",
+                "기본값: 꺼짐",
+            },
+        },
         -- The mod's name EID shows beside our items.
         eid = {
             mod_name = "소라고둥의 축복",

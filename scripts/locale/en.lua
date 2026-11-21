@@ -1020,10 +1020,9 @@ return {
             april_fools_on = "Always ON",
             april_fools_off = "OFF",
             april_fools_info = {
-                "3D item turntables and model-rendered creatures.",
-                "Auto uses your computer's local date: April 1 only.",
-                "Always ON / OFF overrides the date. Requires REPENTOGON sprite layers.",
-                "Only appearance changes; item effects stay the same.",
+                "3D items and monsters; effects stay the same.",
+                "Auto: on April 1 by your computer's date.",
+                "Requires REPENTOGON.",
             },
             spawn_title = "--- Spawn Settings ---",
             on = "ON",
@@ -1039,9 +1038,8 @@ return {
             language_zh = "Chinese",
             language_info = {
                 "Choose the language for Conch's Blessing.",
-                "Korean uses Urimal on October 9, then returns automatically.",
-                "Korean (Standard) keeps Korean even on October 9.",
-                "Choosing Urimal directly keeps it active on every date.",
+                "Korean turns into Urimal on October 9 only.",
+                "Korean (Standard) never switches.",
             },
             debug_mode = "Debug Mode: %s",
             debug_mode_info = {

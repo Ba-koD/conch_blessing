@@ -166,21 +166,44 @@ class LanguagePolicyTests(unittest.TestCase):
     def test_mcm_is_named_conchs_blessing_and_opens_with_the_version(self):
         version = re.search(r'<version>([^<]+)</version>', (ROOT / 'metadata.xml').read_text(encoding='utf-8')).group(1)
         result = self.lua.execute('''
-            texts={};categories={};first=nil
+            local first, categories, renamed, settings = nil, {}, {}, {}
+            local function shown(v) if type(v)=='function' then return v() end return v end
             ModConfigMenu={OptionType={BOOLEAN=1,NUMBER=2},RemoveCategory=function(c) categories[#categories+1]=c end,
-                AddSpace=function(c,sub) if not first then first={kind='space'} end end,
-                AddText=function(c,sub,text)
-                    texts[#texts+1]={category=c,sub=sub,text=text}
-                    if not first then first={kind='text',category=c,sub=sub,text=text} end
-                end,
-                AddSetting=function(c,sub,setting) if not first then first={kind='setting'} end end}
+                AddSpace=function() if not first then first={kind='space'} end end,
+                AddText=function(c,sub,text) if not first then first={kind='text',category=c,sub=sub,text=text} end end,
+                AddSetting=function(c,sub,setting) settings[#settings+1]=setting; if not first then first={kind='setting'} end end,
+                UpdateSubcategory=function(c,old,data) renamed[#renamed+1]=old..'>'..data.Name end}
             ConchBlessing.SaveManager={IsLoaded=function() return true end,
                 GetSettingsSave=function() return {} end,Save=function() end}
             ConchBlessing.EID={refreshLanguage=function() end}
-            require('scripts.conch_blessing_mcm').Setup(ConchBlessing)
-            return first.kind, first.category, first.sub, first.text, categories[1], Config.Version
+            calendar.day=10
+            Config.SetLanguage('en')
+            local mcm=require('scripts.conch_blessing_mcm'); mcm.Setup(ConchBlessing)
+            local englishVersion, englishSub = shown(first.text), first.sub
+            local language, debug = settings[1], settings[3]
+            local englishDebug, englishLanguage = debug.Display(), language.Display()
+            local englishInfo = shown(debug.Info)[1]
+            language.OnChange(3)                                -- Korean
+            local koreanVersion = shown(first.text)
+            return first.kind, first.category, englishSub, englishVersion, categories[1], Config.Version,
+                englishDebug, englishLanguage, englishInfo, koreanVersion, debug.Display(), language.Display(),
+                shown(debug.Info)[1], table.concat(renamed, ',')
         ''')
-        self.assertEqual(result, ('text', "Conch's Blessing", 'General', 'Version : ' + version, "Conch's Blessing", version))
+        (kind, category, sub, english_version, removed, config_version, english_debug, english_language,
+         english_info, korean_version, korean_debug, korean_language, korean_info, renamed) = result
+        self.assertEqual((kind, category, sub, removed, config_version), ('text', "Conch's Blessing", 'General',
+                                                                          "Conch's Blessing", version))
+        self.assertEqual(english_version, 'Version : ' + version)
+        self.assertEqual(english_debug, 'Debug Mode: OFF')
+        self.assertEqual(english_info, 'Enable debug output in the log and console.')
+        # Korean: the menu follows the language, the tabs are renamed in place,
+        # and the language setting stays English so it can always be read
+        self.assertEqual(korean_version, '버전 : ' + version)
+        self.assertEqual(korean_debug, '디버그 모드: 꺼짐')
+        self.assertEqual(korean_info, '디버그 출력을 로그에 남깁니다.')
+        self.assertEqual(english_language, 'Language: English')
+        self.assertEqual(korean_language, 'Language: Korean')
+        self.assertEqual(set(renamed.split(',')), {'General>일반', 'Sound>소리', 'Spawn>등장'})
 
     def test_locale_is_independent_and_exposes_every_korean_item(self):
         self.run_lua('''

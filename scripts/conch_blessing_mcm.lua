@@ -36,27 +36,55 @@ function ConchBlessing_MCM.Setup(mod)
     end
 
     local ConchBlessing_Config = require("scripts.conch_blessing_config")
-    -- Menu text is ui.mcm in scripts/locale/en.lua. It is read in English on
-    -- purpose: Mod Config Menu's fonts are not known to cover every language.
+    -- Menu text is ui.mcm in scripts/locale/<lang>.lua, read in the mod's
+    -- current language every time it is drawn (user request 2026-11-22, like
+    -- Item Synergy Plus; the game's MCM font has every Hangul syllable). The
+    -- language setting and its help stay English (ui.mcm.language*, only in
+    -- en.lua) so a player can always read how to switch back.
     -- Core calls Setup unprotected, so a broken text module only costs the menu.
     local loaded, Locale = pcall(require, "scripts.locale.init")
     if not loaded then
         printError(mod, "menu text failed to load: " .. tostring(Locale))
         return
     end
+    local function language()
+        return ConchBlessing_Config.GetCurrentLanguage()
+    end
     local function text(key, ...)
+        return Locale.textIn(language(), "ui.mcm." .. key, ...)
+    end
+    local function english(key, ...)
         return Locale.textIn("en", "ui.mcm." .. key, ...)
     end
     local function lines(key)
-        return Locale.linesIn("en", "ui.mcm." .. key)
+        return function() return Locale.linesIn(language(), "ui.mcm." .. key) end
+    end
+    local function dynamic(key, ...)
+        local args = table.pack(...)
+        return function() return text(key, table.unpack(args, 1, args.n)) end
     end
     local function onOff(enabled)
         return text(enabled and "on" or "off")
     end
-    local GENERAL = text("tab_general")
-    local SOUND = text("tab_sound")
-    local SPAWN = text("tab_spawn")
     local category = "Conch's Blessing"
+    -- Tab names cannot be functions: they are renamed in place when the
+    -- language changes (a setting, the calendar, EID or the game language).
+    local tabs = { general = text("tab_general"), sound = text("tab_sound"), spawn = text("tab_spawn") }
+    local GENERAL, SOUND, SPAWN = tabs.general, tabs.sound, tabs.spawn
+    local tabLanguage = language()
+    local function refreshTabs()
+        local now = language()
+        if now == tabLanguage or type(ModConfigMenu.UpdateSubcategory) ~= "function" then return end
+        tabLanguage = now
+        for key, old in pairs(tabs) do
+            local new = text("tab_" .. key)
+            if new ~= old then
+                local ok, err = pcall(ModConfigMenu.UpdateSubcategory, category, old, { Name = new })
+                if ok then tabs[key] = new else printError(mod, "tab rename failed: " .. tostring(err)) end
+            end
+        end
+    end
+    ConchBlessing_MCM.refreshTabs = refreshTabs
 
     -- Recreate category to reflect any text changes; a reload also drops the
     -- category of a build that still carried its version in the name.
@@ -73,9 +101,13 @@ function ConchBlessing_MCM.Setup(mod)
     end
     -- The version (metadata.xml's, through scripts/version.lua) as a plain
     -- line at the top of General, not a setting.
-    ModConfigMenu.AddText(category, GENERAL, text("version", tostring(ConchBlessing_Config.Version or "?")))
+    local version = tostring(ConchBlessing_Config.Version or "?")
+    ModConfigMenu.AddText(category, GENERAL, function()
+        refreshTabs()
+        return text("version", version)
+    end)
     ModConfigMenu.AddSpace(category, GENERAL)
-    ModConfigMenu.AddText(category, GENERAL, text("options_title"))
+    ModConfigMenu.AddText(category, GENERAL, dynamic("options_title"))
 
     local languageChoices = ConchBlessing_Config.LANGUAGE_CHOICES
     ModConfigMenu.AddSetting(category, GENERAL, {
@@ -89,19 +121,20 @@ function ConchBlessing_MCM.Setup(mod)
         end,
         Display = function()
             local selected = ConchBlessing_Config.GetSelectedLanguage(mod)
-            local label = text("language_" .. selected)
+            local label = english("language_" .. selected)
             if selected ~= "urimal" and ConchBlessing_Config.GetCurrentLanguage() == "urimal" then
-                return text("language_holiday", label)
+                return english("language_holiday", label)
             end
-            return text("language", label)
+            return english("language", label)
         end,
         OnChange = function(index)
             local code = languageChoices[index]
             if not code or not ConchBlessing_Config.SetLanguage(code, mod) then return end
             ConchBlessing_MCM.saveConfigToSaveManager(mod)
             if mod.EID and type(mod.EID.refreshLanguage) == "function" then mod.EID.refreshLanguage() end
+            refreshTabs()
         end,
-        Info = lines("language_info")
+        Info = Locale.linesIn("en", "ui.mcm.language_info")
     })
 
     local aprilChoices = ConchBlessing_Config.APRIL_FOOLS_CHOICES
@@ -180,6 +213,7 @@ function ConchBlessing_MCM.Setup(mod)
                 if mod.EID and type(mod.EID.registerAllItems) == "function" then
                     mod.EID.registerAllItems()
                 end
+                refreshTabs()
             end
         end,
         Info = lines("reset_info")
@@ -192,7 +226,7 @@ function ConchBlessing_MCM.Setup(mod)
         if not value then return Sound.STEPS end
         return math.max(0, math.min(Sound.STEPS, math.floor(value + 0.5)))
     end
-    ModConfigMenu.AddText(category, SOUND, text("sound_title"))
+    ModConfigMenu.AddText(category, SOUND, dynamic("sound_title"))
     for _, setting in ipairs({ { key = Sound.ALL, name = "sound_volume" }, { key = Sound.RAIN, name = "rain_volume" } }) do
         ModConfigMenu.AddSetting(category, SOUND, {
             Type = ModConfigMenu.OptionType.NUMBER,
@@ -214,7 +248,7 @@ function ConchBlessing_MCM.Setup(mod)
     end
 
     -- Spawn - Collectibles
-    ModConfigMenu.AddText(category, SPAWN, text("spawn_title"))
+    ModConfigMenu.AddText(category, SPAWN, dynamic("spawn_title"))
     ModConfigMenu.AddSetting(category, SPAWN, {
         Type = ModConfigMenu.OptionType.BOOLEAN,
         CurrentSetting = function()

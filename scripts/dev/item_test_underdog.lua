@@ -679,6 +679,196 @@ S.add("UNDERDOG", "all_pools", { conditions = true }, function(plan, id)
 end)
 S.rows[#S.rows].manual = true
 
+-- Binge Eater with and without Underdog (a measurement, by name only): the
+-- same seeded pedestals are made while holding Binge Eater, first without
+-- Underdog and then with it, and the food choice Binge Eater adds to each is
+-- compared seed by seed. It also counts the item pool draws the engine makes
+-- through MC_PRE_GET_COLLECTIBLE outside Underdog's own peeks, which shows
+-- whether Binge Eater's food is drawn from a pool at all.
+local BINGE_PEDESTALS = 24
+local bingeWatch = nil -- { calls, decreasing, pools } while one arm's pedestals are made
+if ModCallbacks and ModCallbacks.MC_PRE_GET_COLLECTIBLE then
+    local priority = rawget(_G, "CallbackPriority")
+    local first = type(priority) == "table" and tonumber(priority.IMPORTANT) or -200
+    ConchBlessing:AddPriorityCallback(ModCallbacks.MC_PRE_GET_COLLECTIBLE, first, function(_, pool, decrease)
+        if not bingeWatch or (U() and U()._test and U()._test.peeking()) then return end
+        bingeWatch.calls = bingeWatch.calls + 1
+        if decrease then bingeWatch.decreasing = bingeWatch.decreasing + 1 end
+        bingeWatch.pools[pool] = (bingeWatch.pools[pool] or 0) + 1
+    end)
+end
+
+local function describeItem(item)
+    local config = Isaac.GetItemConfig():GetCollectible(item)
+    local food = config and ItemConfig.TAG_FOOD and config:HasTags(ItemConfig.TAG_FOOD)
+    return string.format("%d(Q%s%s)", item, config and tostring(config.Quality) or "?", food and ",food" or "")
+end
+
+local function listItems(list)
+    local out = {}
+    for _, item in ipairs(list) do out[#out + 1] = describeItem(item) end
+    return #out > 0 and table.concat(out, " ") or "-"
+end
+
+local function poolCounts(pools)
+    local out = {}
+    for pool, n in pairs(pools) do out[#out + 1] = string.format("pool %d x%d", pool, n) end
+    table.sort(out)
+    return #out > 0 and table.concat(out, ", ") or "none"
+end
+
+S.add("UNDERDOG", "binge_eater", { conditions = true }, function(plan, id)
+    local BINGE = CollectibleType.COLLECTIBLE_BINGE_EATER
+    plan.require("Underdog's pool hook and REPENTOGON's pedestal cycle", function()
+        local probe = Isaac.Spawn(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_COLLECTIBLE,
+            CollectibleType.COLLECTIBLE_SAD_ONION, Vector(-1000, -1000), Vector.Zero, nil):ToPickup()
+        local cycle = type(probe.GetCollectibleCycle) == "function"
+        probe:Remove()
+        return (U() and U()._test and type(U()._test.peeking) == "function" and cycle) or nil,
+            "module or GetCollectibleCycle missing"
+    end)
+    local function arm(label, copies)
+        plan.act(function(player, ctx)
+            ctx.cleanupFns = ctx.cleanupFns or {}
+            if not ctx.bingeCleanup then
+                ctx.bingeCleanup = true
+                table.insert(ctx.cleanupFns, function()
+                    bingeWatch = nil
+                    for _, key in ipairs({ "without", "with" }) do
+                        for _, pedestal in ipairs(ctx[key] and ctx[key].pedestals or {}) do
+                            if pedestal:Exists() then pedestal:Remove() end
+                        end
+                    end
+                end)
+            end
+            give(player, id, copies)
+            if player:GetCollectibleNum(BINGE) == 0 then player:AddCollectible(BINGE, 0, false) end
+            local room = Game():GetRoom()
+            local data = { pedestals = {}, removedBefore = removedSet() or {} }
+            ctx[label] = data
+            U()._test.resetEvidence()
+            bingeWatch = { calls = 0, decreasing = 0, pools = {} }
+            for i = 1, BINGE_PEDESTALS do
+                local spot = room:GetCenterPos() + Vector(((i - 1) % 6 - 2.5) * 60, (math.floor((i - 1) / 6) - 1.5) * 60 + 30)
+                local seed = 100003 * i + 7
+                local entity = Game():Spawn(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_COLLECTIBLE, spot, Vector.Zero,
+                    nil, 0, seed)
+                local pedestal = entity:ToPickup()
+                data.pedestals[i] = pedestal
+                local queued = {}
+                for _, item in ipairs(pedestal:GetCollectibleCycle() or {}) do queued[#queued + 1] = item end
+                data.atSpawn = data.atSpawn or {}
+                data.atSpawn[i] = { main = pedestal.SubType, cycle = queued }
+            end
+            data.spawnCalls = bingeWatch.calls
+        end)
+        plan.wait(15)
+        plan.act(function(_, ctx)
+            local data = ctx[label]
+            data.calls, data.decreasing, data.pools = bingeWatch.calls, bingeWatch.decreasing, bingeWatch.pools
+            bingeWatch = nil
+            local e = U()._test.evidence()
+            data.evidence = { draws = e.draws, peeks = e.peeks }
+            data.rows = {}
+            for i, pedestal in ipairs(data.pedestals) do
+                local cycle = {}
+                if pedestal:Exists() then
+                    for _, item in ipairs(pedestal:GetCollectibleCycle() or {}) do cycle[#cycle + 1] = item end
+                end
+                data.rows[i] = { main = pedestal:Exists() and pedestal.SubType or 0, cycle = cycle }
+            end
+            local itemPool = Game():GetItemPool()
+            data.taken = {}
+            for item in pairs(removedSet() or {}) do
+                if not data.removedBefore[item] then data.taken[#data.taken + 1] = item end
+            end
+            for _, pedestal in ipairs(data.pedestals) do if pedestal:Exists() then pedestal:Remove() end end
+            for _, item in ipairs(data.taken) do pcall(itemPool.ResetCollectible, itemPool, item) end
+        end)
+        plan.wait(2)
+    end
+    arm("without", 0)
+    arm("with", 1)
+    -- Which items Binge Eater leaves without food, without Underdog: each item a
+    -- pedestal of the "with" arm showed, put on a fixed pedestal (subtype set,
+    -- no pool draw) at that pedestal's own seed and at another seed.
+    plan.act(function(player, ctx)
+        give(player, id, 0)
+        local room = Game():GetRoom()
+        ctx.fixed = {}
+        -- Mystery Egg got no food on one Underdog run (2026-11-22): checked on its own.
+        local items = {}
+        for i = 1, #ctx.with.rows do items[i] = ctx.with.atSpawn[i].main end
+        items[#items + 1] = CollectibleType.COLLECTIBLE_MYSTERY_EGG
+        for i, item in ipairs(items) do
+            local seeds = { 100003 * i + 7, 7777 * i + 3 }
+            if i == #items then seeds = { 600025, 100003 * i + 7, 7777 * i + 3 } end -- 600025: that run's pedestal 6
+            for k, seed in ipairs(seeds) do
+                local spot = room:GetCenterPos() + Vector(((i - 1) % 6 - 2.5) * 60, (k - 1.5) * 90 + 40)
+                local pedestal = Game():Spawn(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_COLLECTIBLE, spot, Vector.Zero,
+                    nil, item, seed):ToPickup()
+                local queued = {}
+                for _, choice in ipairs(pedestal:GetCollectibleCycle() or {}) do queued[#queued + 1] = choice end
+                ctx.fixed[#ctx.fixed + 1] = { item = item, seed = seed, food = #queued > 0 and table.concat(queued, ",") or "none" }
+                pedestal:Remove()
+            end
+        end
+    end)
+    plan.note("Binge Eater's food on fixed pedestals without Underdog", function(_, ctx)
+        local out = {}
+        for _, row in ipairs(ctx.fixed) do out[#out + 1] = string.format("%s@%d->%s", describeItem(row.item), row.seed, row.food) end
+        return table.concat(out, " ")
+    end)
+    plan.note("item pool draws outside Underdog's peeks", function(_, ctx)
+        local a, b = ctx.without, ctx.with
+        return string.format("without Underdog %d (%d while spawning, %d decreasing; %s); with Underdog %d (%d while spawning, %d decreasing; %s), Underdog answered %d with %d peeks; %d pedestals each",
+            a.calls, a.spawnCalls, a.decreasing, poolCounts(a.pools), b.calls, b.spawnCalls, b.decreasing, poolCounts(b.pools),
+            b.evidence.draws, b.evidence.peeks, BINGE_PEDESTALS)
+    end)
+    plan.note("items taken out of the pools", function(_, ctx)
+        return "without: " .. listItems(ctx.without.taken) .. " | with: " .. listItems(ctx.with.taken)
+    end)
+    for i = 1, BINGE_PEDESTALS do
+        plan.note(string.format("pedestal %d", i), function(_, ctx)
+            local a, b = ctx.without.rows[i], ctx.with.rows[i]
+            return string.format("without: %s + choices %s | with: %s + choices %s", describeItem(a.main), listItems(a.cycle),
+                describeItem(b.main), listItems(b.cycle))
+        end)
+    end
+    -- Binge Eater's choice is the one not drawn from the pool (a pool draw takes
+    -- its item out; the food is never taken out, see the DIAG above).
+    local function foodOf(data, row)
+        local taken = {}
+        for _, item in ipairs(data.taken) do taken[item] = true end
+        local foods = {}
+        for _, item in ipairs({ row.main, table.unpack(row.cycle) }) do
+            if not taken[item] then foods[#foods + 1] = item end
+        end
+        return table.concat(foods, ",")
+    end
+    plan.note("first choice shown right after spawning", function(_, ctx)
+        local out = {}
+        for i = 1, BINGE_PEDESTALS do
+            local a, b = ctx.without.atSpawn[i], ctx.with.atSpawn[i]
+            out[#out + 1] = string.format("%d: %d+[%s] / %d+[%s]", i, a.main, table.concat(a.cycle, ","), b.main,
+                table.concat(b.cycle, ","))
+        end
+        return "without / with: " .. table.concat(out, "; ")
+    end)
+    plan.check("Binge Eater adds the same food to each seeded pedestal with and without Underdog", function(_, ctx)
+        local same, differ, missing = 0, {}, 0
+        for i = 1, BINGE_PEDESTALS do
+            local a, b = foodOf(ctx.without, ctx.without.rows[i]), foodOf(ctx.with, ctx.with.rows[i])
+            if a == "" or b == "" then missing = missing + 1
+            elseif a == b then same = same + 1
+            else differ[#differ + 1] = string.format("%d:%s/%s", i, a, b) end
+        end
+        return missing == 0 and #differ == 0, string.format("%d same, %d differ [%s], %d without a food choice", same,
+            #differ, table.concat(differ, " "), missing)
+    end)
+end)
+S.rows[#S.rows].manual = true
+
 -- Every case only adds and removes items through the engine's own inventory
 -- and reads stat changes, so they share one run: S.resetPlayer takes every
 -- item away again and proves the stats are back where the run started.
