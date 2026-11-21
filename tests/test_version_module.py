@@ -71,6 +71,11 @@ class VersionModuleTests(unittest.TestCase):
             before = module.stat().st_mtime_ns
             Generator.sync_version_module(str(repo / 'metadata.xml'), str(module))
             self.assertEqual(module.stat().st_mtime_ns, before, 'an unchanged version is not rewritten')
+            # a CRLF checkout of the same text is not rewritten either
+            module.write_bytes(module.read_bytes().replace(b'\n', b'\r\n'))
+            before = module.stat().st_mtime_ns
+            Generator.sync_version_module(str(repo / 'metadata.xml'), str(module))
+            self.assertEqual(module.stat().st_mtime_ns, before, 'line endings alone are no change')
 
     def test_the_workflow_and_hook_carry_the_module(self):
         workflow = (ROOT / '.github/workflows/steam_workshop_publish.yml').read_text(encoding='utf-8')

@@ -1295,7 +1295,7 @@ def sync_version_module(metadata_path="metadata.xml", module_path="scripts/versi
     current = None
     if os.path.exists(module_path):
         with open(module_path, encoding="utf-8", newline="") as handle:
-            current = handle.read()
+            current = handle.read().replace("\r\n", "\n")  # a CRLF checkout is the same file
     if current != text:
         with open(module_path, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(text)

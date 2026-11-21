@@ -194,7 +194,8 @@ def write_version_module(repo_root, version):
     path = repo_root / VERSION_MODULE
     path.parent.mkdir(parents=True, exist_ok=True)
     text = version_module_text(version)
-    if not path.exists() or path.read_text(encoding="utf-8") != text:
+    current = path.read_bytes().decode("utf-8").replace("\r\n", "\n") if path.exists() else None
+    if current != text:
         path.write_text(text, encoding="utf-8", newline="\n")
     return path
 
