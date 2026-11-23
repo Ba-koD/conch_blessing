@@ -720,6 +720,17 @@ return {
                 "#{{Warning}} Requires REPENTOGON!",
             },
         },
+        AGING_CURVE = {
+            name = "Aging Curve",
+            description = "Your prime won't last",
+            eid = {
+                "The lower the floor, the bigger every stat but luck",
+                "#Floor 1: {{Damage}} +7.5 Damage, {{Tears}} +2.5 Tears, {{Speed}} +0.5 Speed, {{Range}} +5 Range, {{Shotspeed}} +0.5 Shot speed",
+                "#Each floor takes 1.5 Damage, 0.5 Tears, 0.1 Speed, 1 Range and 0.1 Shot speed: 0 at floor 6, then keeps falling",
+                "#{{Luck}} From floor 4, Luck rises by +1 every floor",
+                "#Copies add up",
+            },
+        },
 
         -- Familiars
         TIME_MONEY = {

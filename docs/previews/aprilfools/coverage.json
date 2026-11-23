@@ -140,6 +140,11 @@
     "detail": "gfx/grid/door_02_treasureroomdoor_angel_af3d.png"
   },
   {
+    "source": "gfx/items/collectibles/aging_curve.png",
+    "status": "pending",
+    "detail": "3D model not built yet (Aging Curve, added 2026-11-24)"
+  },
+  {
     "source": "gfx/items/collectibles/appraisal_certificate.png",
     "status": "modelled",
     "detail": "gfx/items/collectibles/appraisal_certificate_af3d.png"

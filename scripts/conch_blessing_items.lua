@@ -1085,6 +1085,33 @@ ConchBlessing.ItemData = {
             preGameExit = "jobsblessing.onGameExit",
         },
     },
+    AGING_CURVE = {
+        -- 에이징 커브 (user decision 2026-11-24): Growth Hormones' neutral
+        -- answer. Every stat but luck falls by the same step every stage,
+        -- nothing at stage 6 and below it after (the engine's own floors stop
+        -- it); luck rises by 1 a stage from stage 4. Copies add up.
+        type = "passive",
+        id = Isaac.GetItemIdByName("Aging Curve"),
+        stackable = true,
+        gfx = "aging_curve.png",
+        tags = "offensive",
+        cache = "damage firedelay speed range shotspeed luck",
+        pool = {
+            RoomType.ROOM_TREASURE,
+            RoomType.ROOM_BOSS
+        },
+        quality = 3,
+        hidden = false,
+        shopprice = 15,
+        devilprice = 2,
+        origin = { id = CollectibleType.COLLECTIBLE_GROWTH_HORMONES, type = "collectible" },
+        flag = "neutral",
+        script = "scripts/items/collectibles/aging_curve",
+        callbacks = {
+            evaluateCache = "agingCurve.onEvaluateCache",
+            postNewLevel = "agingCurve.onNewLevel",
+        },
+    },
 
     -- The twelve zodiac items (십이지) close the collectible group in their own
     -- order, 자 … 해, followed by the familiars and trinkets.

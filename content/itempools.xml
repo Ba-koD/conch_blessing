@@ -49,6 +49,7 @@
         <Item Name="Jeon Woo-chi" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Landmine" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Underdog" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Aging Curve" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Rat" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Ox" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Tiger" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
@@ -85,5 +86,8 @@
         <Item Name="Tiger" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Rabbit" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Dragon" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+    </Pool>
+    <Pool Name="boss">
+        <Item Name="Aging Curve" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>
 </ItemPools>

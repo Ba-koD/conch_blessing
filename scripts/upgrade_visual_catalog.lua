@@ -52,4 +52,5 @@ return {
     { key = "LANDMINE" },
     { key = "UNDERDOG" },
     { key = "JOBS_BLESSING" },
+    { key = "AGING_CURVE" },
 }
