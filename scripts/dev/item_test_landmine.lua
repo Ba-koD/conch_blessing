@@ -6,10 +6,10 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- with where the player stood, and every mine is the module's own effect in
 -- the room (its fall read from its own PositionOffset): a case compares the
 -- two, one mine for each attack, at the same spot. Every blast is read from
--- the enemy's actual HP and the player's actual health. Mines drop only in a
--- room with enemies, so a case keeps one harmless enemy pinned in the corner
--- behind the walks, where the tears (fired to the right) never reach it and
--- it never comes near a mine.
+-- the enemy's actual HP and the player's actual health. A case keeps one
+-- harmless enemy pinned in the corner behind the walks (the room stays
+-- uncleared and its doors shut), where the tears (fired to the right) never
+-- reach it and it never comes near a mine; no_enemies shoots with none.
 local S = require("scripts.dev.item_scenarios")
 local H = require("scripts.dev.item_test_support")
 local C = {}
@@ -105,7 +105,8 @@ local function matchesAttacks(ctx, spots)
 end
 
 -- Cases that share one run per group (S.sequenceBundle below); each stays
--- callable alone.
+-- callable alone. Mines drop with or without enemies; the cases keep one so
+-- the room stays uncleared and its doors shut.
 local sharedConditions, sharedDamage = {}, {}
 local conditionsCase = S.caseIn(sharedConditions, "LANDMINE", { conditions = true })
 local damageCase = S.caseIn(sharedDamage, "LANDMINE", { damage = true })
@@ -378,8 +379,8 @@ conditionsCase("not_shooting", function(plan, id)
     end)
 end)
 
--- No enemy in the room, no mine; once an enemy is there, every attack drops
--- one again.
+-- With no enemy in the room every attack still drops its mine (user decision
+-- 2026-11-24), and an enemy coming in later sets one off.
 conditionsCase("no_enemies", function(plan, id)
     setup(plan, id)
     plan.require("no enemy in the room", function()
@@ -387,20 +388,10 @@ conditionsCase("no_enemies", function(plan, id)
         return alive == 0, "alive enemies " .. alive
     end)
     walk(plan, "walk and shoot with no enemy about", leftSide, WALK, 0, true)
-    plan.check("no enemy, no mine", function(_, ctx)
-        return #roomMines() == 0 and evidence().laid == 0 and #ctx.attacks >= 1,
-            string.format("attacks=%d %s", #ctx.attacks, describeMines())
-    end)
-    withEnemy(plan)
-    plan.act(function(_, ctx) ctx.attacks = {} end)
-    stand(plan, function(_, ctx)
-        ctx.spot2 = leftSide(Game():GetRoom()) + Vector(WALK, 0)
-        return ctx.spot2
-    end, 6, true)
-    plan.check("with an enemy in the room, a mine at the feet for the attack", function(_, ctx)
+    settle(plan)
+    plan.check("no enemy, still a mine for every attack where the player stood", function(_, ctx)
         local ok, detail = matchesAttacks(ctx)
-        local list = roomMines()
-        return ok and #list >= 1 and list[1].Position:Distance(ctx.spot2) <= 1, detail
+        return ok and #ctx.attacks >= 4, detail
     end)
 end)
 

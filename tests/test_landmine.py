@@ -3,9 +3,9 @@ a mine at their feet, mines pile up where they stand, who drops none, the
 missing cap, how mines fall, land and arm, the blast (twice the holder's
 damage, enemies only), a pile going off together and the chain to nearby
 mines. The user's design: an enemy stepping on a mine sets it off and it never
-hurts the player (2026-11-15); every attack in a room with enemies drops a
-mine at the feet, with no spacing and no cap, so mines may overlap
-(2026-11-23). These are Lua regressions with doubles, not proof of engine
+hurts the player (2026-11-15); every attack drops a mine at the feet, with no
+spacing and no cap, so mines may overlap (2026-11-23), enemies about or not
+(2026-11-24). These are Lua regressions with doubles, not proof of engine
 behaviour (`cb test landmine`).
 """
 from pathlib import Path
@@ -230,16 +230,15 @@ class LandmineTests(unittest.TestCase):
         # An enemy under a falling mine sets nothing off.
         self.assertEqual(result, (-20, 'Fall', '-18.5,-15.5,-11.0,-5.0,0,0', 'Land', True, None, False, True, 1, 1))
 
-    def test_no_mine_in_a_room_without_enemies(self):
+    def test_mines_drop_with_no_enemy_in_the_room(self):
+        # At first mines dropped only with enemies about; the user wanted them
+        # in an empty room too (2026-11-24).
         result = self.run_lua('''
             local p=player(); roomEnemies=0
             for i=1,5 do attackAt(p,50+i*20,150) end
-            local before=#M.mines()
-            roomEnemies=1
-            attackAt(p,300,150)
-            return before, xs()
+            return xs()
         ''')
-        self.assertEqual(result, (0, '300'))
+        self.assertEqual(result, '70,90,110,130,150')
 
     def test_a_mine_holds_the_holders_damage_when_it_was_laid(self):
         result = self.run_lua('''

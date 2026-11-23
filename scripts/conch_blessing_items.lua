@@ -998,10 +998,10 @@ ConchBlessing.ItemData = {
         },
     },
     LANDMINE = {
-        -- 지뢰 (user design 2026-11-15): every attack the holder makes in a
-        -- room with enemies drops a mine at their feet, piling up where they
-        -- stand (2026-11-23); an enemy stepping on one sets it off. It never
-        -- hurts a player.
+        -- 지뢰 (user design 2026-11-15): every attack the holder makes drops a
+        -- mine at their feet, piling up where they stand (2026-11-23, enemies
+        -- about or not since 11-24); an enemy stepping on one sets it off. It
+        -- never hurts a player.
         type = "passive",
         id = Isaac.GetItemIdByName("Landmine"),
         gfx = "landmine.png",

@@ -1,8 +1,10 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- 지뢰 (Landmine), the Magic Conch's neutral answer to Ipecac (user design
 -- 2026-11-15). Ipecac turns every tear into a bomb; this keeps the tears as
--- they are and drops a mine at the holder's feet on every attack they make in
--- a room with enemies (user decision 2026-11-23). Mines may lie on top of one
+-- they are and drops a mine at the holder's feet on every attack they make,
+-- enemies about or not (user decisions 2026-11-23 and 11-24: at first only in
+-- a room with enemies, which left an empty room's shooting with nothing to
+-- show). Mines may lie on top of one
 -- another: shooting in place piles them up, and an enemy stepping on the pile
 -- sets off every mine in it. Earlier that day a mine dropped every two tiles
 -- walked while shooting, never within a tile of another; before that each
@@ -373,13 +375,12 @@ local function stepOn()
 end
 
 -- ------------------------------------------------------------------ callbacks
--- An attack by `player`: a holder in a room with enemies drops a mine at their
--- feet over free floor, on top of any mine already there.
+-- An attack by `player`: a holder drops a mine at their feet over free floor,
+-- on top of any mine already there.
 local function attack(player)
     if not M.available or ID <= 0 or not player or player:GetCollectibleNum(ID) <= 0 then return end
     if not isActingPlayer(player) then return end
     local room = Game():GetRoom()
-    if room:GetAliveEnemiesCount() <= 0 then return end
     local position = player.Position
     if not isFloor(room, position) then
         evidence.blocked = evidence.blocked + 1
