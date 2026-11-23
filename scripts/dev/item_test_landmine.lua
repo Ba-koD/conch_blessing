@@ -395,6 +395,64 @@ conditionsCase("no_enemies", function(plan, id)
     end)
 end)
 
+-- At tears 120 (MaxFireDelay -0.75: four tears an update) a holder still
+-- drops one mine every 3 updates, 0.1 s (user decision 2026-11-24); every
+-- mine lies where the player stood.
+local fastPlayer = nil -- GetPtrHash of the player whose fire rate the case raises
+if ModCallbacks.MC_EVALUATE_CACHE and ConchBlessing.AddPriorityCallback then
+    local late = (CallbackPriority and CallbackPriority.LATE) or 100
+    ConchBlessing:AddPriorityCallback(ModCallbacks.MC_EVALUATE_CACHE, late, function(_, player, flag)
+        if fastPlayer and flag == CacheFlag.CACHE_FIREDELAY and GetPtrHash(player) == fastPlayer then
+            player.MaxFireDelay = 30 / 120 - 1
+        end
+    end)
+end
+local function setFast(player, on)
+    fastPlayer = on and GetPtrHash(player) or nil
+    player:AddCacheFlags(CacheFlag.CACHE_FIREDELAY)
+    player:EvaluateItems()
+end
+
+conditionsCase("interval", function(plan, id)
+    local UPDATES = 60
+    setup(plan, id)
+    withEnemy(plan)
+    plan.act(function(player, ctx)
+        setFast(player, true)
+        table.insert(ctx.cleanupFns, 1, function() setFast(player, false) end)
+    end)
+    plan.wait(2)
+    plan.require("tears 120", function(player)
+        local tears = 30 / (player.MaxFireDelay + 1)
+        return math.abs(tears - 120) < 0.5, string.format("tears %.1f", tears)
+    end)
+    stand(plan, function(room, ctx)
+        ctx.from = leftSide(room)
+        return ctx.from
+    end, UPDATES, true)
+    plan.act(function(player) setFast(player, false) end)
+    settle(plan)
+    plan.check("one mine every 3 updates however fast the attacks come", function(_, ctx)
+        local frames = {}
+        for _, record in ipairs(M().mines()) do frames[#frames + 1] = record.frame end
+        table.sort(frames)
+        local closest = math.huge
+        for k = 2, #frames do closest = math.min(closest, frames[k] - frames[k - 1]) end
+        local expected = UPDATES / M().data.interval
+        return #ctx.attacks >= 2 * #frames and #frames >= expected - 2 and #frames <= expected + 1
+            and closest >= M().data.interval,
+            string.format("attacks=%d mines=%d expected about %d closest %s updates apart waited=%d", #ctx.attacks,
+                #frames, expected, tostring(closest), evidence().waited)
+    end)
+    plan.check("every mine lies at the feet", function(_, ctx)
+        local list = roomMines()
+        for _, mine in ipairs(list) do
+            if mine.Position:Distance(ctx.from) > 1 then return false, describeMines() end
+        end
+        return #list >= 1, describeMines()
+    end)
+end)
+
 -- Three walks leave every mine laid, far more than the old ten.
 conditionsCase("no_cap", function(plan, id)
     setup(plan, id)

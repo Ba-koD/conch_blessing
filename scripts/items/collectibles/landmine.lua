@@ -4,9 +4,12 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- they are and drops a mine at the holder's feet on every attack they make,
 -- enemies about or not (user decisions 2026-11-23 and 11-24: at first only in
 -- a room with enemies, which left an empty room's shooting with nothing to
--- show). Mines may lie on top of one
--- another: shooting in place piles them up, and an enemy stepping on the pile
--- sets off every mine in it. Earlier that day a mine dropped every two tiles
+-- show). A holder drops at most one mine every `interval` updates (0.1 s,
+-- user decision 2026-11-24), whatever the weapon: Brimstone's weapon trigger
+-- fires every update its beam is out, so a beam once left about 18 mines, and
+-- at tears 120 the engine fires four tears an update. Mines may lie on top of
+-- one another: shooting in place piles them up, and an enemy stepping on the
+-- pile sets off every mine in it. Earlier that day a mine dropped every two tiles
 -- walked while shooting, never within a tile of another; before that each
 -- tear dropped mines along its flight (2026-11-19, after Auri's Blue Eye),
 -- which did not feel like mines: strong tears killed the enemies before any
@@ -47,6 +50,7 @@ M.data = {
     triggerRadius = 8,    -- an enemy this close (plus its size) has stepped on it
     armFrames = 8,        -- a mine arms this many updates after landing, as its Land animation ends
     dropHeight = 20,      -- a mine falls from this high at the holder's feet
+    interval = 3,         -- a holder drops at most one mine every this many updates (0.1 s)
     gravity = 1.5,        -- a dropped mine falls this much faster each update
     floorMargin = 6,      -- a mine stays this far inside the room's floor
     chainDelay = 3,       -- updates before a mine caught in a blast goes off
@@ -91,13 +95,15 @@ M.available = mineVariant > 0
 local mines, cells, fresh, fused = {}, {}, {}, {}
 local dirty = false     -- some record died since `mines` was last compacted
 local soundFrame = -1   -- one blast sound per update however many mines go off
+-- The update each holder (GetPtrHash) last dropped a mine; never saved.
+local lastDrop = {}
 -- The explosions drawn this update ({ x, y }), so a pile draws one.
 local pictures, pictureFrame = {}, -1
 -- Runtime evidence for cb test landmine; never saved.
 local evidence
 local function resetEvidence()
-    evidence = { laid = 0, landed = 0, blocked = 0, exploded = 0, struck = 0, chained = 0, pictures = 0,
-        last = nil }
+    evidence = { laid = 0, landed = 0, blocked = 0, waited = 0, exploded = 0, struck = 0, chained = 0,
+        pictures = 0, last = nil }
 end
 resetEvidence()
 
@@ -193,7 +199,7 @@ local function compact(checkLive)
 end
 
 local function reset()
-    mines, cells, fresh, fused, pictures = {}, {}, {}, {}, {}
+    mines, cells, fresh, fused, pictures, lastDrop = {}, {}, {}, {}, {}, {}
     dirty, soundFrame, pictureFrame = false, -1, -1
 end
 
@@ -221,7 +227,7 @@ local function lay(player, position, damage, snapshot, lift)
     DamageProvenance.markTriggeredAttack(mine, PROC_KEY, snapshot, PROC_KEY)
     local x, y = position.X, position.Y
     local record = { ref = EntityPtr(mine), owner = EntityPtr(player), damage = damage, x = x, y = y,
-        key = keyOf(tileOf(x), tileOf(y)) }
+        key = keyOf(tileOf(x), tileOf(y)), frame = Game():GetFrameCount() }
     lift = math.min(0, tonumber(lift) or 0)
     if lift < -1 then
         record.lift, record.fall = lift, 0
@@ -376,16 +382,24 @@ end
 
 -- ------------------------------------------------------------------ callbacks
 -- An attack by `player`: a holder drops a mine at their feet over free floor,
--- on top of any mine already there.
+-- on top of any mine already there, unless they dropped one within the last
+-- `interval` updates.
 local function attack(player)
     if not M.available or ID <= 0 or not player or player:GetCollectibleNum(ID) <= 0 then return end
     if not isActingPlayer(player) then return end
+    local frame, key = Game():GetFrameCount(), GetPtrHash(player)
+    local last = lastDrop[key]
+    if last and frame - last < M.data.interval then
+        evidence.waited = evidence.waited + 1
+        return
+    end
     local room = Game():GetRoom()
     local position = player.Position
     if not isFloor(room, position) then
         evidence.blocked = evidence.blocked + 1
         return
     end
+    lastDrop[key] = frame
     lay(player, position, player.Damage, nil, -M.data.dropHeight)
 end
 

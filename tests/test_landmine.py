@@ -122,16 +122,17 @@ function player(copies)
     players[#players+1]=p
     return p
 end
--- One attack by `owner` (REPENTOGON's weapon trigger), the player standing at (x,y).
-function attackAt(owner,x,y)
-    frame=frame+1
+-- One attack by `owner` (REPENTOGON's weapon trigger), the player standing at
+-- (x,y), a mine's interval after the last unless `gap` updates are given.
+function attackAt(owner,x,y,gap)
+    frame=frame+(gap or M.data.interval)
     local p=owner and owner:ToPlayer()
     if p and x then p.Position=Vector(x,y) end
     M.onWeaponFired(nil,Vector(1,0),1,owner)
 end
 -- One tear fired by `spawner`, the player standing at (x,y) (the base fallback).
-function tearAt(spawner,x,y)
-    frame=frame+1
+function tearAt(spawner,x,y,gap)
+    frame=frame+(gap or M.data.interval)
     local p=spawner and spawner:ToPlayer()
     if p and x then p.Position=Vector(x,y) end
     M.onFireTear(nil,entity({Type=EntityType.ENTITY_TEAR,Variant=0,Position=Vector(x or 0,y or 0),SpawnerEntity=spawner}))
@@ -203,6 +204,31 @@ class LandmineTests(unittest.TestCase):
         ''')
         # Ten units apart: no spacing, no gap.
         self.assertEqual(result, ('50,60,70,80,90', 7790, 150, 4.5, True, 'Fall', -1000, -20, 5))
+
+    def test_one_mine_every_tenth_of_a_second_whatever_the_weapon(self):
+        # Brimstone's trigger fires every update its beam is out and tears 120
+        # fire four an update; a holder still drops one mine every 3 updates
+        # (user decision 2026-11-24).
+        result = self.run_lua('''
+            local p=player()
+            local frames={}
+            for i=1,12 do attackAt(p,100,150,1); frames[#frames+1]=#M.mines() end
+            for _=1,4 do attackAt(p,100,150,0) end
+            local other=player(); attackAt(other,200,150,0)
+            return M.data.interval, table.concat(frames,","), #M.mines(), T.evidence().waited
+        ''')
+        # Updates 1..12 drop at 1, 4, 7, 10; four attacks in update 12 add none;
+        # another holder in the same update drops its own.
+        self.assertEqual(result, (3, '1,1,1,2,2,2,3,3,3,4,4,4', 5, 12))
+
+    def test_a_blocked_attack_does_not_spend_the_interval(self):
+        result = self.run_lua('''
+            local p=player()
+            attackAt(p,200,250,3)   -- over the pit
+            attackAt(p,230,250,1)   -- the next update, on the floor
+            return xs()
+        ''')
+        self.assertEqual(result, '230')
 
     def test_attacks_in_place_pile_mines_up(self):
         result = self.run_lua('''

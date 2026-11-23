@@ -688,7 +688,7 @@ return {
             name = "Landmine",
             description = "Don't. Move.",
             eid = {
-                "Every attack drops a mine at your feet",
+                "Every attack drops a mine at your feet (0.1s cooldown)",
                 "#An enemy stepping on a mine sets it off, dealing 2x your damage to enemies around it",
                 "#Mines can pile up in one spot",
                 "#Other mines caught in the blast go off too",
