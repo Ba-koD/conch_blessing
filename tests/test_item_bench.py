@@ -438,7 +438,7 @@ class BenchTests(unittest.TestCase):
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'kronos detail')
             assert(started=='cb test kronos detail')
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'all')
-            assert(label=='cb test' and #selected==391,'update the documented suite count when it changes (got '..#selected..')')
+            assert(label=='cb test' and #selected==394,'update the documented suite count when it changes (got '..#selected..')')
             dispatch(ModCallbacks.MC_EXECUTE_CMD,'cb','test '..'rat characters')
             assert(label=='cb test rat characters' and #selected==34,'every selectable character once')
             for _,name in ipairs(selected) do assert(name:match('^cb test rat same_')) end
@@ -527,7 +527,7 @@ class BenchTests(unittest.TestCase):
             UseFlag={USE_NOANIM=1,USE_NOANNOUNCER=2}
             local Rune=require('scripts.dev.thurisaz_probe')
             local names={'basic','more','flies','temporary','kronos','stand_ins','exclusions','conversion',
-                'gb_bug','clear_rune','card','drop','pool'}
+                'gb_bug','clear_rune','card','drop','pool','repick_1','repick_2','repick_3','repick_4','repick_5'}
             assert(#Rune.commands()==#names)
             for i,name in ipairs(names) do
                 local command='cb test thurisaz '..name

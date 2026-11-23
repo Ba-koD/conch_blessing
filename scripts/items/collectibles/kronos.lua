@@ -41,7 +41,12 @@ ConchBlessing.kronos.data = ConchBlessing.kronos.data or {
     anchorDepthOffset = -10,
     angelicPrismOffset = 0,
     angelicPrismCount = 1,
-    angelicPrismSizeScale = 4,
+    angelicPrismSizeScale = 6,
+    -- A thrown knife splits only coming into a prism from outside, and the held
+    -- knife stands inside the centred prism, so a knife holder gets a second,
+    -- small hidden prism this far ahead along the knife (Size player x scale).
+    angelicPrismKnifeOffset = 70,
+    angelicPrismKnifeScale = 2,
     -- DEBUG ONLY: leaves the prisms fully rendered (sprite + shadow). Set back to
     -- false before shipping; nothing else reads this.
     angelicPrismDebugVisible = false,
@@ -1580,7 +1585,13 @@ end
 -- outside-to-inside transition. So a single centred prism does split, provided its
 -- radius clears the ring the projectiles spawn on: sizeScale 4 (radius ~24) splits,
 -- 3 (~18) does not. Do not trim sizeScale to the measured floor -- player.Size and the
--- spawn offset both vary per character and weapon.
+-- spawn offset both vary per character and weapon. With 4, lasers fired to the left
+-- missed the split now and then while walking (user report 2026-11-23). Measured
+-- that day with Technology (`cb test kronos prism_walk_probe`, Isaac's Size 10):
+-- at 4 (radius 40) left shots near the right wall and at the start of a walk did
+-- not split; at 6 (60) and 8 (80) every attack split except one fired straight
+-- into a wall 20 units away or less, whose laser stops at once. So it is 6, and
+-- `cb test kronos prism_lasers` keeps every direction, standing and walking.
 -- The ring layout (count > 1 with a non-zero offset) still works and stays supported;
 -- the `or` defaults below spell out its proven values so a missing config lands there.
 local function isAngelicPrismDebugVisible()
@@ -1606,8 +1617,42 @@ local function getAngelicPrismBaseDir(player)
     return Vector(1, 0)
 end
 
+-- The player's own knife (Mom's Knife), else nil.
+function Rune.heldKnife(player)
+    if type(player.GetActiveWeaponEntity) == "function" then
+        local ok, weapon = pcall(player.GetActiveWeaponEntity, player)
+        local knife = ok and weapon and weapon.ToKnife and weapon:ToKnife()
+        if knife then return knife end
+    end
+    return nil
+end
+
+function Rune.holdsKnifeWeapon(player)
+    if type(player.HasWeaponType) ~= "function" or not WeaponType or not WeaponType.WEAPON_KNIFE then return false end
+    local ok, has = pcall(player.HasWeaponType, player, WeaponType.WEAPON_KNIFE)
+    return ok and has == true
+end
+
+-- The knife prism: ahead of the player along the knife, so the knife comes
+-- into it from outside as it is thrown.
+function Rune.applyKnifePrismAnchor(fam, player, baseDir)
+    local dir = baseDir
+    local knife = Rune.heldKnife(player)
+    if knife then
+        local along = knife.Position - player.Position
+        if along:Length() > 1 then dir = along:Normalized() end
+    end
+    fam.Position = player.Position + dir * (tonumber(ConchBlessing.kronos.data.angelicPrismKnifeOffset) or 70)
+    fam.Velocity = Vector.Zero
+    fam.DepthOffset = tonumber(ConchBlessing.kronos.data.anchorDepthOffset) or 0
+    fam.Visible = isAngelicPrismDebugVisible()
+    fam.Size = player.Size * (tonumber(ConchBlessing.kronos.data.angelicPrismKnifeScale) or 2)
+    if isAngelicPrismDebugVisible() then fam.SpriteScale = Vector.One * (fam.Size / 10) end
+end
+
 local function applyAngelicPrismAnchor(fam, player, baseDir)
     local fd = fam:GetData()
+    if fd and fd.__kronosKnifePrism then return Rune.applyKnifePrismAnchor(fam, player, baseDir) end
     local slot = (fd and fd.__kronosPrismDirection) or 0
     local angle = slot * (2 * math.pi) / getAngelicPrismCount()
     local slotDir = Vector(
@@ -1679,8 +1724,10 @@ function ConchBlessing.kronos._ensureAngelicPrismStack(player)
     pdata.__kronosAngelicPrisms = pdata.__kronosAngelicPrisms or {}
     
     -- Remove this player's original Angelic Prism familiars (not managed by
-    -- Kronos); another player's prisms are theirs to keep.
-    if absorbed > 0 then
+    -- Kronos), unless the player holds the item again (Thurisaz fed them the
+    -- first; the real prism then stays, user report 2026-11-24); another
+    -- player's prisms are theirs to keep.
+    if absorbed > 0 and Rune.heldCopies(player, CollectibleType.COLLECTIBLE_ANGELIC_PRISM) == 0 then
         local owner = GetPtrHash(player)
         for _, entity in ipairs(Isaac.GetRoomEntities()) do
             local fam = entity:ToFamiliar()
@@ -1695,12 +1742,14 @@ function ConchBlessing.kronos._ensureAngelicPrismStack(player)
         end
     end
 
-    -- Keep existing prisms
-    local kept = {}
+    -- Keep existing prisms; the knife prism is kept apart from the ring.
+    local kept, knifePrism = {}, nil
     for _, f in ipairs(pdata.__kronosAngelicPrisms) do
         if f and f:Exists() and f:ToFamiliar() then
             local fd = f:GetData()
-            if fd and fd.__kronosAngelicPrism then 
+            if fd and fd.__kronosKnifePrism then
+                if knifePrism then f:Remove() else knifePrism = f end
+            elseif fd and fd.__kronosAngelicPrism then
                 table.insert(kept, f)
             end
         end
@@ -1739,6 +1788,17 @@ function ConchBlessing.kronos._ensureAngelicPrismStack(player)
         usedSlots[nextSlot] = true
         table.insert(pdata.__kronosAngelicPrisms, fam)
     end
+
+    -- One knife prism while the player throws a knife.
+    local wantKnife = absorbed > 0 and Rune.holdsKnifeWeapon(player)
+    if wantKnife and not knifePrism then
+        knifePrism = spawnInvisibleAngelicPrism(player)
+        if knifePrism then knifePrism:GetData().__kronosKnifePrism = true end
+    elseif not wantKnife and knifePrism then
+        knifePrism:Remove()
+        knifePrism = nil
+    end
+    if knifePrism then table.insert(pdata.__kronosAngelicPrisms, knifePrism) end
 end
 
 function ConchBlessing.kronos._updateAngelicPrismAnchors(player)
@@ -2056,9 +2116,96 @@ function Rune.syncDamage(player, frame)
     Rune.synced[key] = { copies = copies, until_ = frame + 30 }
 end
 
+-- Kronos's hidden stand-ins share their familiar's variant and owner, so the
+-- engine counts them as that player's real familiars: a player who holds the
+-- item again (Thurisaz fed them its familiar, user report 2026-11-24) got no
+-- real familiar back, the stand-in passing for it. When fewer real ones are out
+-- than the copies held, drop the stand-ins and let the engine add the real ones
+-- (CheckFamiliar); the next update rebuilds the stand-ins, newer than the real
+-- familiars. A try waits 30 updates before the next for the same kind.
+Rune.STAND_INS = {
+    { item = CollectibleType.COLLECTIBLE_INCUBUS, variant = FamiliarVariant.INCUBUS, list = "__kronosIncubi" },
+    { item = CollectibleType.COLLECTIBLE_SUCCUBUS, variant = FamiliarVariant.SUCCUBUS, list = "__kronosSuccubi" },
+    { item = CollectibleType.COLLECTIBLE_CENSER, variant = FamiliarVariant.CENSER, list = "__kronosCensers" },
+    { item = CollectibleType.COLLECTIBLE_STAR_OF_BETHLEHEM, variant = FamiliarVariant.STAR_OF_BETHLEHEM,
+        list = "__kronosStarsOfBethlehem" },
+    { item = CollectibleType.COLLECTIBLE_ANGELIC_PRISM, variant = FamiliarVariant.ANGELIC_PRISM,
+        list = "__kronosAngelicPrisms" },
+    { item = CollectibleType.COLLECTIBLE_BLOODSHOT_EYE, variant = FamiliarVariant.BLOODSHOT_EYE,
+        list = "__kronosBloodshotEyes" },
+    -- Twisted Pair's two babies are subtypes 0 and 1, one of each per copy.
+    { item = CollectibleType.COLLECTIBLE_TWISTED_PAIR, variant = FamiliarVariant.TWISTED_BABY,
+        list = "__kronosTwistedPairs", subtypes = { 0, 1 } },
+}
+
+-- Familiar items that keep a TemporaryEffect of themselves, one per copy held:
+-- of the 125 familiar items only Paschal Candle (its flame), measured
+-- 2026-11-24. That effect is the item's own, not a temporary copy such as Box
+-- of Friends gives; Thurisaz once took it instead of the candle, kept the
+-- candle and counted it anyway.
+Rune.SELF_EFFECT = { [CollectibleType.COLLECTIBLE_PASCHAL_CANDLE] = true }
+
+-- How many of `kind` the player really holds, collectibles and their effects.
+function Rune.heldCopies(player, item)
+    local held = player:GetCollectibleNum(item)
+    local effects = player:GetEffects()
+    if effects then
+        local extra = effects:GetCollectibleEffectNum(item)
+        if Rune.SELF_EFFECT[item] then extra = math.max(0, extra - player:GetCollectibleNum(item, true)) end
+        held = held + extra
+    end
+    return held
+end
+
+function Rune.restoreNatives(player, pdata)
+    local frame = Game():GetFrameCount()
+    pdata.__kronosRestoreTry = pdata.__kronosRestoreTry or {}
+    for _, kind in ipairs(Rune.STAND_INS) do
+        local list = pdata[kind.list]
+        if list and #list > 0 and (pdata.__kronosRestoreTry[kind.item] or -1000) + 30 <= frame then
+            local want = Rune.heldCopies(player, kind.item)
+            if want > 0 then
+                local owner, short = GetPtrHash(player), false
+                local natives = {}
+                for _, entity in ipairs(Isaac.FindByType(EntityType.ENTITY_FAMILIAR, kind.variant)) do
+                    local fam = entity:ToFamiliar()
+                    if fam and fam:Exists() and fam.Player and GetPtrHash(fam.Player) == owner
+                        and not Rune.isKronosAnchor(fam) then
+                        natives[fam.SubType] = (natives[fam.SubType] or 0) + 1
+                        natives.all = (natives.all or 0) + 1
+                    end
+                end
+                for _, subtype in ipairs(kind.subtypes or {}) do
+                    short = short or (natives[subtype] or 0) < want
+                end
+                if not kind.subtypes then short = (natives.all or 0) < want end
+                if short then
+                    pdata.__kronosRestoreTry[kind.item] = frame
+                    for _, fam in ipairs(list) do
+                        if fam and fam:Exists() then fam:Remove() end
+                    end
+                    pdata[kind.list] = {}
+                    local config = Isaac.GetItemConfig():GetCollectible(kind.item)
+                    local rng = player:GetCollectibleRNG(kind.item)
+                    if kind.subtypes then
+                        for _, subtype in ipairs(kind.subtypes) do
+                            player:CheckFamiliar(kind.variant, want, rng, config, subtype)
+                        end
+                    else
+                        player:CheckFamiliar(kind.variant, want, rng, config)
+                    end
+                    dbg(string.format("Restored the real familiars of item %d (%d held, %d were out)", kind.item,
+                        want, natives.all or 0))
+                end
+            end
+        end
+    end
+end
+
 function Rune.runAbsorbActions(player)
     local absorbActions = ConchBlessing.kronos.data.absorbActions
     if not absorbActions then return end
+    Rune.restoreNatives(player, player:GetData())
     for familiarId, action in pairs(absorbActions) do
         local count = ConchBlessing.kronos._getEffectCount(player, familiarId)
         if count > 0 and type(action) == "function" then
@@ -5008,11 +5155,17 @@ function Rune.devourOne(player, ledger, pick)
     if fam and not fam:Exists() then return false end
     if itemId then
         local effects = player:GetEffects()
-        if effects:GetCollectibleEffectNum(itemId) > 0 then
+        local owned = player:GetCollectibleNum(itemId, true)
+        -- An item's own effect is part of the item, not a temporary copy.
+        local own = Rune.SELF_EFFECT[itemId] and owned or 0
+        if effects:GetCollectibleEffectNum(itemId) > own then
             effects:RemoveCollectibleEffect(itemId, 1)
             if fam then fam:Remove() end
-        elseif player:GetCollectibleNum(itemId, true) > 0 then
+        elseif owned > 0 then
             Rune.removeKeepingForms(player, itemId)
+            if own > 0 and effects:GetCollectibleEffectNum(itemId) > own - 1 then
+                effects:RemoveCollectibleEffect(itemId, 1)
+            end
             if fam then fam:Remove() end
         elseif fam then
             fam:Remove()

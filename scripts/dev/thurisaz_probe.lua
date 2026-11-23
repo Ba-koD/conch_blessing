@@ -487,6 +487,145 @@ case("pool", "it turns up among the game's random runes", function(plan)
     end)
 end)
 
+-- Every vanilla familiar item, one after another in one run, without Kronos:
+-- taken, devoured by the rune, then taken again (user report 2026-11-24: a
+-- familiar picked up again after the rune devoured it misbehaved, the prism
+-- seemed to circle unseen). The second copy is an ordinary familiar: it must
+-- come back as many and as visible as the first did, stay put (no familiar of
+-- its kind respawning over and over), and leave the rune's ledger alone.
+-- Kronos's blacklisted items are left out; an item whose familiar does not
+-- stay out on its own (none appears in 10 updates) is reported and skipped.
+local REPICK_WINDOW = 30
+
+local function repickItems()
+    if type(Isaac.GetItemConfig) ~= "function" then return {} end
+    local list, config, blacklist = {}, Isaac.GetItemConfig(), K().data.blacklist or {}
+    for id = 1, CollectibleType.NUM_COLLECTIBLES - 1 do
+        local item = config:GetCollectible(id)
+        if item and item.Type == ItemType.ITEM_FAMILIAR and not item.Hidden and not blacklist[id] then
+            list[#list + 1] = id
+        end
+    end
+    return list
+end
+
+-- The player's own familiars of item `id` (stand-ins left out), by the item
+-- the engine says each belongs to (REPENTOGON): Lil Delirium changes form.
+local function itemFamiliars(player, id)
+    local list = {}
+    for _, pick in ipairs(K().runeCandidates(player)) do
+        if pick.familiar and pick.itemId == id then list[#list + 1] = pick.familiar end
+    end
+    return list
+end
+
+local function itemName(id)
+    local item = Isaac.GetItemConfig():GetCollectible(id)
+    return string.format("%d %s", id, item and item.Name or "?")
+end
+
+-- Five parts, each from a clean run: abilities absorbed earlier in a long run
+-- change later items (from the 90th on, the rune stopped taking the item back
+-- in one run, 2026-11-24).
+local REPICK_PARTS = 5
+local function repickCase(part)
+  case("repick_" .. part, "familiar items, part " .. part .. " of " .. REPICK_PARTS
+        .. ": taken, devoured by the rune, taken again", function(plan)
+    local all, items = repickItems(), {}
+    local size = math.ceil(#all / REPICK_PARTS)
+    for k = (part - 1) * size + 1, math.min(#all, part * size) do items[#items + 1] = all[k] end
+    plan.act(function(_, ctx) ctx.repick = { failures = {}, skipped = {}, passed = 0 } end)
+    for _, id in ipairs(items) do
+        plan.act(function(player, ctx)
+            -- Start bare: whatever earlier absorbed abilities left (blue flies,
+            -- spiders) would be candidates for the rune too.
+            for _, fam in ipairs(ownFamiliars(player)) do fam:Remove() end
+            ctx.item = { id = id }
+            player:AddCollectible(id, 0, false)
+        end)
+        plan.wait(10)
+        plan.act(function(player, ctx)
+            local mine = {}
+            for _, fam in ipairs(itemFamiliars(player, id)) do mine[GetPtrHash(fam)] = true end
+            ctx.item.total = #itemFamiliars(player, id)
+            -- Only this item's familiars stay for the rune to pick from.
+            for _, fam in ipairs(ownFamiliars(player)) do
+                if not mine[GetPtrHash(fam)] then fam:Remove() end
+            end
+            ctx.item.runeBefore = runeCount(player, id)
+            if ctx.item.total > 0 then player:UseCard(cardId(), UseFlag.USE_NOANIM | UseFlag.USE_NOANNOUNCER) end
+        end)
+        plan.wait(12)
+        plan.act(function(player, ctx)
+            local entry = ctx.item
+            if entry.total == 0 then return end
+            entry.devoured = runeCount(player, id) > entry.runeBefore and owned(player, id) == 0
+            for _, fam in ipairs(ownFamiliars(player)) do fam:Remove() end
+            player:AddCollectible(id, 0, false)
+            entry.seen, entry.most, entry.hidden = {}, 0, 0
+        end)
+        plan.wait(15)
+        plan.waitUntil(function(player, ctx)
+            local entry = ctx.item
+            entry.ticks = (entry.ticks or 0) + 1
+            if entry.total == 0 then return true end
+            -- Halfway, the engine recounts the familiars (as on a pickup): the
+            -- real ones must stay, not be swapped for respawned copies.
+            if entry.ticks == math.floor(REPICK_WINDOW / 2) then
+                player:AddCacheFlags(CacheFlag.CACHE_FAMILIARS)
+                player:EvaluateItems()
+            end
+            local present, hidden = 0, 0
+            for _, fam in ipairs(itemFamiliars(player, id)) do
+                present = present + 1
+                if not fam.Visible then hidden = hidden + 1 end
+                entry.seen[GetPtrHash(fam) .. ":" .. fam.InitSeed] = true
+            end
+            entry.most = math.max(entry.most, present)
+            entry.least = math.min(entry.least or present, present)
+            entry.hidden = math.max(entry.hidden, hidden)
+            return entry.ticks >= REPICK_WINDOW
+        end, REPICK_WINDOW + 10, "watch the second copy: " .. itemName(id))
+        plan.act(function(player, ctx)
+            local entry, results = ctx.item, ctx.repick
+            if entry.total == 0 then
+                results.skipped[#results.skipped + 1] = itemName(id)
+            else
+                local distinct = 0
+                for _ in pairs(entry.seen) do distinct = distinct + 1 end
+                local problems = {}
+                if not entry.devoured then problems[#problems + 1] = "the rune did not devour it" end
+                if entry.least < entry.total then
+                    problems[#problems + 1] = string.format("%d of %d back", entry.least, entry.total)
+                end
+                if distinct > entry.most then problems[#problems + 1] = string.format("respawned (%d seen)", distinct) end
+                if runeCount(player, id) ~= entry.runeBefore + (entry.devoured and 1 or 0) then
+                    problems[#problems + 1] = "the rune's ledger changed again"
+                end
+                if #problems == 0 then
+                    results.passed = results.passed + 1
+                else
+                    results.failures[#results.failures + 1] = itemName(id) .. ": " .. table.concat(problems, ", ")
+                end
+            end
+            player:RemoveCollectible(id)
+            for _, fam in ipairs(ownFamiliars(player)) do fam:Remove() end
+            ctx.item = nil
+        end)
+        plan.wait(3)
+    end
+    plan.note("skipped (no familiar stays out on its own)", function(_, ctx)
+        return #ctx.repick.skipped .. ": " .. table.concat(ctx.repick.skipped, "; ")
+    end)
+    plan.check("every familiar picked up again after the rune comes back whole", function(_, ctx)
+        local results = ctx.repick
+        return #results.failures == 0, string.format("%d fine; problems: [%s]", results.passed,
+            table.concat(results.failures, " | "))
+    end)
+  end)
+end
+for part = 1, REPICK_PARTS do repickCase(part) end
+
 -- ---------------------------------------------------------------- manual helpers
 local HELPERS = {
     give = function(words, player)

@@ -123,6 +123,30 @@ class ThurisazTests(unittest.TestCase):
             assert(ledger().absorbed['fam_'..bobby]==1)
         """)
 
+    def test_paschal_candles_own_effect_is_part_of_the_candle(self):
+        # Paschal Candle keeps one effect of itself per copy held (measured
+        # 2026-11-24); the rune once took that effect, kept the candle and still
+        # counted it, so every use gave +2 damage for nothing.
+        self.lua.execute("""
+            dropKronos()
+            local candle,fam=owned('PASCHAL_CANDLE')
+            effects[candle]=1
+            assert(K.devourWithRune(player,1,first)==1)
+            assert(player:GetCollectibleNum(candle)==0,'the candle itself is taken')
+            assert(effects[candle]==0,'its own effect goes with it')
+            assert(not fam:Exists() and ledger().absorbed['fam_'..candle]==1)
+        """)
+
+    def test_a_temporary_paschal_copy_still_goes_before_the_owned_candle(self):
+        self.lua.execute("""
+            dropKronos()
+            local candle=owned('PASCHAL_CANDLE')
+            effects[candle]=2; familiar(candle)
+            assert(K.devourWithRune(player,1,function(n) return n-1 end)==1)
+            assert(effects[candle]==1,'one temporary copy over the candle own effect went')
+            assert(player:GetCollectibleNum(candle)==1,'the owned candle stays')
+        """)
+
     def test_kronos_loss_never_returns_rune_familiars(self):
         self.lua.execute("""
             local bobby=absorb('BROTHER_BOBBY',1)        -- Kronos's own absorption
