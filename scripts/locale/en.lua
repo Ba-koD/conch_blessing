@@ -688,10 +688,12 @@ return {
             name = "Landmine",
             description = "Don't. Move.",
             eid = {
-                "Tears leave a trail of mines along their flight",
-                "#An enemy stepping on a mine sets it off, dealing twice that tear's damage to enemies around it",
+                "Every attack in a room with enemies drops a mine at your feet",
+                "#An enemy stepping on a mine sets it off, dealing 2x your damage to enemies around it",
+                "#Mines can pile up in one spot",
                 "#Other mines caught in the blast go off too",
                 "#Mines never hurt you",
+                "#{{Warning}} REPENTOGON recommended",
             },
         },
         UNDERDOG = {

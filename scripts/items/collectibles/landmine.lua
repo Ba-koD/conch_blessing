@@ -1,34 +1,35 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- 지뢰 (Landmine), the Magic Conch's neutral answer to Ipecac (user design
 -- 2026-11-15). Ipecac turns every tear into a bomb; this keeps the tears as
--- they are and has them sow mines. Every tear the holder fires drops a mine
--- each time it has flown `spacing` units since its last one, so it leaves a
--- trail of mines along its flight whether it hits or not (user request
--- 2026-11-19, after Auri's Blue Eye, whose tears drop flames along their path;
--- the first design laid one mine where a missed tear fell, ten per player at
--- most). The mine falls from the tear's height to the floor beneath it, lands
--- in a splash of ooze and arms (same day: the mine should look dropped from
--- the tear). The spacing is by distance, so shot speed does not change it, and
--- a tear of the default range drops two (same day: the first trail, a mine
--- every 50 units, was too dense). There is no cap (same request). No mine is
--- dropped over a wall, rock or pit (the tear drops it at the first free floor
--- after it), and a drop point with a mine within a tile already counts as
--- dropped, so shots along one line never add mines to it. An enemy coming
--- onto an armed mine sets it off: every enemy within reach takes twice the
--- damage the tear had, and other mines the blast reaches go off a moment
--- later.
+-- they are and drops a mine at the holder's feet on every attack they make in
+-- a room with enemies (user decision 2026-11-23). Mines may lie on top of one
+-- another: shooting in place piles them up, and an enemy stepping on the pile
+-- sets off every mine in it. Earlier that day a mine dropped every two tiles
+-- walked while shooting, never within a tile of another; before that each
+-- tear dropped mines along its flight (2026-11-19, after Auri's Blue Eye),
+-- which did not feel like mines: strong tears killed the enemies before any
+-- reached a mine, and the mines lay where the tears flew rather than where
+-- enemies walk. An attack is REPENTOGON's weapon trigger, once per attack
+-- whatever the weapon; a familiar's weapon is its own, so its shots lay
+-- nothing. Without REPENTOGON each tear the holder fires stands for an
+-- attack, so a multishot attack drops several mines and other weapons none.
+-- There is no cap (user decision, same day). The mine falls from the
+-- holder's hands, lands in a splash of ooze and arms; none is dropped over a
+-- wall, rock or pit. An enemy coming onto an armed mine sets it off: every
+-- enemy within reach takes twice the damage the holder had when it was laid,
+-- and other mines the blast reaches go off a moment later.
 --
 -- Mines never hurt a player (user decision 2026-11-15). The blast is dealt
 -- here, to enemies only, never through the engine's explosion, which would
 -- also hit players and break rocks; the vanilla bomb explosion is spawned only
 -- as a picture.
 --
--- A tear is the holder's when the holder spawned it (familiars' tears lay
--- nothing). Base API only. Mines are effects that last as long as their room;
--- nothing is saved. Without a cap a room may hold a hundred mines or more, so
--- they are also filed by floor tile, and arming, stepping and chaining look
--- only at the tiles around a spot.
+-- Mines are effects that last as long as their room; nothing is saved.
+-- Without a cap a room may hold a hundred mines or more, so they are also
+-- filed by floor tile, and arming, stepping and chaining look only at the
+-- tiles around a spot; a pile going off draws one explosion.
 local DamageProvenance = require("scripts.lib.damage_provenance")
+local WeaponAttackTracker = require("scripts.lib.weapon_attack_tracker")
 local Sound = require("scripts.lib.sound_volume")
 local definitions = require("scripts.entities.definitions")
 
@@ -37,20 +38,27 @@ ConchBlessing.landmine = M
 
 local ID = Isaac.GetItemIdByName("Landmine")
 local PROC_KEY = "landmine"
-local TRAIL_KEY = "__ConchBlessingLandmineTrail"
 
 M.data = {
-    damageMultiplier = 2, -- of the tear's own damage
+    damageMultiplier = 2, -- of the holder's damage when the mine was laid
     blastRadius = 60,     -- a tile and a half, plus each enemy's own size
     triggerRadius = 8,    -- an enemy this close (plus its size) has stepped on it
     armFrames = 8,        -- a mine arms this many updates after landing, as its Land animation ends
-    spacing = 100,        -- a tear drops a mine each time it has flown this far (a default tear flies about 240: two mines)
-    gap = 40,             -- a drop point with a mine this close counts as dropped
+    dropHeight = 20,      -- a mine falls from this high at the holder's feet
     gravity = 1.5,        -- a dropped mine falls this much faster each update
     floorMargin = 6,      -- a mine stays this far inside the room's floor
     chainDelay = 3,       -- updates before a mine caught in a blast goes off
     blastScale = 0.6,     -- the vanilla bomb explosion is drawn this size
+    pictureGap = 20,      -- mines this close going off in one update draw one explosion
 }
+
+-- REPENTOGON reports each attack (CallbackManager's `weaponFiredOptional`
+-- registers it under the same condition); without it the tears stand in.
+local WEAPON_EVENT = (function()
+    local repentogon = rawget(_G, "REPENTOGON")
+    return type(repentogon) == "table" and repentogon.Real == true
+        and type(ModCallbacks.MC_POST_TRIGGER_WEAPON_FIRED) == "number"
+end)()
 
 local BLAST_COLOR = Color(0.75, 1, 0.6, 1, 0, 0.06, 0) -- Ipecac's green
 local BLAST_SOUND = SoundEffect.SOUND_EXPLOSION_WEAK or SoundEffect.SOUND_BOOM
@@ -81,11 +89,12 @@ M.available = mineVariant > 0
 local mines, cells, fresh, fused = {}, {}, {}, {}
 local dirty = false     -- some record died since `mines` was last compacted
 local soundFrame = -1   -- one blast sound per update however many mines go off
-local holderFrame, holding = -1, false
+-- The explosions drawn this update ({ x, y }), so a pile draws one.
+local pictures, pictureFrame = {}, -1
 -- Runtime evidence for cb test landmine; never saved.
 local evidence
 local function resetEvidence()
-    evidence = { trails = 0, laid = 0, landed = 0, blocked = 0, crowded = 0, exploded = 0, struck = 0, chained = 0,
+    evidence = { laid = 0, landed = 0, blocked = 0, exploded = 0, struck = 0, chained = 0, pictures = 0,
         last = nil }
 end
 resetEvidence()
@@ -98,9 +107,9 @@ local function isActingPlayer(player)
 end
 
 -- ------------------------------------------------------------------ pure rules
--- The blast a mine laid by a tear of `tearDamage` deals to each enemy.
-local function mineDamage(tearDamage)
-    return M.data.damageMultiplier * math.max(0, tonumber(tearDamage) or 0)
+-- The blast a mine laid by a holder of `damage` deals to each enemy.
+local function mineDamage(damage)
+    return M.data.damageMultiplier * math.max(0, tonumber(damage) or 0)
 end
 
 -- Whether something `distance` away whose own size is `size` is within `radius`.
@@ -182,25 +191,14 @@ local function compact(checkLive)
 end
 
 local function reset()
-    mines, cells, fresh, fused = {}, {}, {}, {}
-    dirty, soundFrame, holderFrame, holding = false, -1, -1, false
+    mines, cells, fresh, fused, pictures = {}, {}, {}, {}, {}
+    dirty, soundFrame, pictureFrame = false, -1, -1
 end
 
 -- ------------------------------------------------------------------ placement
 local function isFloor(room, position)
     if not room:IsPositionInRoom(position, M.data.floorMargin) then return false end
     return room:GetGridCollisionAtPos(position) == GridCollisionClass.COLLISION_NONE
-end
-
--- Whether another mine lies within `gap` of (x, y).
-local function crowded(x, y)
-    local gap = M.data.gap
-    for k = 1, gather(x, y, gap) do
-        local record = nearby[k]
-        local dx, dy = record.x - x, record.y - y
-        if dx * dx + dy * dy < gap * gap then return true end
-    end
-    return false
 end
 
 local function land(record, mine)
@@ -210,8 +208,8 @@ local function land(record, mine)
     evidence.landed = evidence.landed + 1
 end
 
--- A mine for `position` on the floor, dropped from `lift` above it (the
--- tear's height, negative) or landing at once.
+-- A mine for `position` on the floor, dropped from `lift` above it
+-- (negative, as PositionOffset) or landing at once.
 local function lay(player, position, damage, snapshot, lift)
     local mine = Isaac.Spawn(EntityType.ENTITY_EFFECT, mineVariant, 0, position, Vector.Zero, player)
     mine = mine and mine:ToEffect()
@@ -239,6 +237,19 @@ local function lay(player, position, damage, snapshot, lift)
 end
 
 -- ------------------------------------------------------------------ blasts
+-- Whether a blast at (x, y) needs its own picture this update: mines piled
+-- on one spot going off together draw one explosion.
+local function newPicture(x, y, frame)
+    if frame ~= pictureFrame then pictures, pictureFrame = {}, frame end
+    local gap = M.data.pictureGap
+    for _, other in ipairs(pictures) do
+        local dx, dy = other.x - x, other.y - y
+        if dx * dx + dy * dy < gap * gap then return false end
+    end
+    pictures[#pictures + 1] = { x = x, y = y }
+    return true
+end
+
 local function explode(record)
     local effect = liveMine(record)
     if not effect then
@@ -246,12 +257,15 @@ local function explode(record)
         return
     end
     local position = effect.Position
-    local blast = Isaac.Spawn(EntityType.ENTITY_EFFECT, EffectVariant.BOMB_EXPLOSION, 0, position, Vector.Zero, nil)
-    if blast then
-        blast.SpriteScale = Vector(M.data.blastScale, M.data.blastScale)
-        blast.Color = BLAST_COLOR
-    end
     local frame = Game():GetFrameCount()
+    if newPicture(position.X, position.Y, frame) then
+        local blast = Isaac.Spawn(EntityType.ENTITY_EFFECT, EffectVariant.BOMB_EXPLOSION, 0, position, Vector.Zero, nil)
+        if blast then
+            blast.SpriteScale = Vector(M.data.blastScale, M.data.blastScale)
+            blast.Color = BLAST_COLOR
+        end
+        evidence.pictures = evidence.pictures + 1
+    end
     if BLAST_SOUND and frame ~= soundFrame then
         soundFrame = frame
         SFXManager():Play(BLAST_SOUND, Sound.volume(0.8), 0, false, 1.1)
@@ -359,67 +373,32 @@ local function stepOn()
 end
 
 -- ------------------------------------------------------------------ callbacks
--- Whether any player holds the item, asked once per update: the tear
--- callback runs for every tear in the room.
-local function anyHolder()
-    local game = Game()
-    local frame = game:GetFrameCount()
-    if frame ~= holderFrame then
-        holderFrame, holding = frame, false
-        if ID > 0 then
-            for i = 0, game:GetNumPlayers() - 1 do
-                local player = Isaac.GetPlayer(i)
-                if player and player:GetCollectibleNum(ID) > 0 then
-                    holding = true
-                    break
-                end
-            end
-        end
-    end
-    return holding
-end
-
--- A holder's tear drops a mine each time it has flown `spacing` units since
--- its last one: over free floor, unless a mine already lies within a tile.
-function M.onTearUpdate(_, tear)
-    if not M.available or not anyHolder() then return end
-    local data = tear:GetData()
-    local trail = data[TRAIL_KEY]
-    if trail == false then return end
-    local position = tear.Position
-    local x, y = position.X, position.Y
-    if not trail then
-        local player = DamageProvenance.getDirectPlayerOwner(tear)
-        local snapshot = player and player:GetCollectibleNum(ID) > 0 and DamageProvenance.getSnapshot(tear)
-        -- A tear a mine's own blast led to never lays more.
-        if not player or player:GetCollectibleNum(ID) <= 0
-            or snapshot and snapshot.procChain and snapshot.procChain[PROC_KEY] then
-            data[TRAIL_KEY] = false
-            return
-        end
-        data[TRAIL_KEY] = { owner = EntityPtr(player), snapshot = snapshot, x = x, y = y, flown = 0 }
-        evidence.trails = evidence.trails + 1
-        return
-    end
-    local dx, dy = x - trail.x, y - trail.y
-    trail.x, trail.y = x, y
-    trail.flown = trail.flown + math.sqrt(dx * dx + dy * dy)
-    if trail.flown < M.data.spacing then return end
-    if not isFloor(Game():GetRoom(), position) then
+-- An attack by `player`: a holder in a room with enemies drops a mine at their
+-- feet over free floor, on top of any mine already there.
+local function attack(player)
+    if not M.available or ID <= 0 or not player or player:GetCollectibleNum(ID) <= 0 then return end
+    if not isActingPlayer(player) then return end
+    local room = Game():GetRoom()
+    if room:GetAliveEnemiesCount() <= 0 then return end
+    local position = player.Position
+    if not isFloor(room, position) then
         evidence.blocked = evidence.blocked + 1
         return
     end
-    if crowded(x, y) then
-        -- The mine already there stands for this drop.
-        trail.flown = 0
-        evidence.crowded = evidence.crowded + 1
-        return
-    end
-    local owner = trail.owner.Ref
-    local player = owner and owner:ToPlayer()
-    if not player or not player:Exists() or player:GetCollectibleNum(ID) <= 0 or not isActingPlayer(player) then return end
-    trail.flown = 0
-    lay(player, position, tear.CollisionDamage, trail.snapshot, tear.Height)
+    lay(player, position, player.Damage, nil, -M.data.dropHeight)
+end
+
+-- REPENTOGON: one weapon trigger is one attack, whatever the weapon; only a
+-- player's own weapon counts, never a familiar's.
+function M.onWeaponFired(_, _, _, owner)
+    attack(WeaponAttackTracker.getDirectPlayerOwner(owner))
+end
+
+-- Without REPENTOGON each tear the holder fires stands for an attack.
+function M.onFireTear(_, tear)
+    if WEAPON_EVENT or not tear then return end
+    local spawner = tear.SpawnerEntity
+    attack(spawner and spawner:ToPlayer())
 end
 
 function M.onUpdate()
@@ -450,15 +429,15 @@ M._test = {
     mineDamage = mineDamage,
     within = within,
     isFloor = isFloor,
-    crowded = crowded,
+    attack = attack,
     lay = lay,
     land = land,
     explode = explode,
     tiles = function() return cells end,
     evidence = function() return evidence end,
     resetEvidence = resetEvidence,
+    weaponEvent = function() return WEAPON_EVENT end,
     procKey = PROC_KEY,
-    trailKey = TRAIL_KEY,
 }
 
 if not M.available then

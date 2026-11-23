@@ -1,14 +1,14 @@
-"""지뢰 (Landmine) through its shipped Lua: where a flying tear drops its mines,
-how they fall and land, which tears drop none, the one-tile rule and the
-missing cap, arming, the blast (twice the tear's damage, enemies only) and the
-chain to nearby mines. The user's design: an enemy stepping on a mine sets it
-off and it never hurts the player (2026-11-15); every tear drops a trail of
-mines as it flies, like Auri's Blue Eye, two at the default range, falling from
-the tear, with no cap (2026-11-19). These are Lua regressions with doubles, not
-proof of engine behaviour (`cb test landmine`).
+"""지뢰 (Landmine) through its shipped Lua: every attack the holder makes drops
+a mine at their feet, mines pile up where they stand, who drops none, the
+missing cap, how mines fall, land and arm, the blast (twice the holder's
+damage, enemies only), a pile going off together and the chain to nearby
+mines. The user's design: an enemy stepping on a mine sets it off and it never
+hurts the player (2026-11-15); every attack in a room with enemies drops a
+mine at the feet, with no spacing and no cap, so mines may overlap
+(2026-11-23). These are Lua regressions with doubles, not proof of engine
+behaviour (`cb test landmine`).
 """
 from pathlib import Path
-import re
 import unittest
 
 from lupa.lua53 import LuaRuntime
@@ -27,6 +27,11 @@ function ConchBlessingRequire(name)
     if not cache[name] then cache[name]=load(loadsource(name),name)() end
     return cache[name]
 end
+function reloadLandmine()
+    cache["scripts.items.collectibles.landmine"]=nil
+    M=ConchBlessingRequire("scripts.items.collectibles.landmine")
+    T=M._test
+end
 local V={}; V.__index=V
 V.__add=function(a,b) return Vector(a.X+b.X,a.Y+b.Y) end
 V.__sub=function(a,b) return Vector(a.X-b.X,a.Y-b.Y) end
@@ -37,7 +42,7 @@ function V:Normalized() local l=self:Length() return Vector(self.X/l,self.Y/l) e
 Vector=setmetatable({},{__call=function(_,x,y) return setmetatable({X=x,Y=y},V) end})
 Vector.Zero=Vector(0,0)
 function Color(...) return {...} end
-ModCallbacks={MC_POST_TEAR_DEATH=1033,MC_POST_TEAR_COLLISION=1233}
+ModCallbacks={}
 EntityType={ENTITY_PLAYER=1,ENTITY_TEAR=2,ENTITY_FAMILIAR=3,ENTITY_EFFECT=1000}
 EffectVariant={BOMB_EXPLOSION=1,POOF01=15}
 EntityPartition={ENEMY=8}
@@ -66,6 +71,7 @@ function E:IsActiveEnemy() return self.enemy==true and not self.dead end
 function E:IsVulnerableEnemy() return self.enemy==true and not self.invulnerable end
 function E:HasEntityFlags(f) return ((self.flags or 0) & f)~=0 end
 function E:IsDead() return self.dead==true end
+function E:IsCoopGhost() return self.ghost==true end
 function E:GetCollectibleNum(id) return id==LANDMINE and (self.copies or 0) or 0 end
 function E:TakeDamage(amount,flags,source) self.hits=self.hits or {}; self.hits[#self.hits+1]={amount=amount,flags=flags,source=source} end
 function E:GetSprite()
@@ -98,10 +104,11 @@ Isaac={
     end,
 }
 -- A room 0..400 x 0..300 with one rock cell around (200,100) and a pit cell
--- around (200,250).
-room={}
+-- around (200,250); `roomEnemies` is how many enemies are alive in it.
+room={}; roomEnemies=1
 function room:IsPositionInRoom(p,m) return p.X>=m and p.X<=400-m and p.Y>=m and p.Y<=300-m end
 function room:GetCenterPos() return Vector(200,150) end
+function room:GetAliveEnemiesCount() return roomEnemies end
 function room:GetGridCollisionAtPos(p)
     if math.abs(p.X-200)<=20 and math.abs(p.Y-100)<=20 then return GridCollisionClass.COLLISION_SOLID end
     if math.abs(p.X-200)<=20 and math.abs(p.Y-250)<=20 then return GridCollisionClass.COLLISION_PIT end
@@ -109,25 +116,25 @@ function room:GetGridCollisionAtPos(p)
 end
 function Game() return {GetRoom=function() return room end,GetFrameCount=function() return frame end,
     GetNumPlayers=function() return #players end} end
-M=ConchBlessingRequire("scripts.items.collectibles.landmine")
-T=M._test
-DP=ConchBlessingRequire("scripts.lib.damage_provenance")
+reloadLandmine()
 function player(copies)
-    local p=entity({Type=EntityType.ENTITY_PLAYER,Variant=0,Position=Vector(50,150),copies=copies or 1})
+    local p=entity({Type=EntityType.ENTITY_PLAYER,Variant=0,Position=Vector(50,150),copies=copies or 1,Damage=3.5})
     players[#players+1]=p
     return p
 end
-function tear(owner,x,y,damage)
-    return entity({Type=EntityType.ENTITY_TEAR,Variant=0,Position=Vector(x,y),SpawnerEntity=owner,CollisionDamage=damage or 3.5})
+-- One attack by `owner` (REPENTOGON's weapon trigger), the player standing at (x,y).
+function attackAt(owner,x,y)
+    frame=frame+1
+    local p=owner and owner:ToPlayer()
+    if p and x then p.Position=Vector(x,y) end
+    M.onWeaponFired(nil,Vector(1,0),1,owner)
 end
--- Moves the tear by (dx,dy) `steps` times, one update each, the way the engine
--- calls MC_POST_TEAR_UPDATE after every move.
-function fly(t,dx,dy,steps)
-    for _=1,steps do
-        frame=frame+1
-        t.Position=t.Position+Vector(dx,dy)
-        M.onTearUpdate(nil,t)
-    end
+-- One tear fired by `spawner`, the player standing at (x,y) (the base fallback).
+function tearAt(spawner,x,y)
+    frame=frame+1
+    local p=spawner and spawner:ToPlayer()
+    if p and x then p.Position=Vector(x,y) end
+    M.onFireTear(nil,entity({Type=EntityType.ENTITY_TEAR,Variant=0,Position=Vector(x or 0,y or 0),SpawnerEntity=spawner}))
 end
 function enemy(x,y,size) return entity({Type=10,Variant=0,Position=Vector(x,y),Size=size or 10,enemy=true}) end
 function xs() local list={} for i,r in ipairs(M.mines()) do list[i]=r.x end return table.concat(list,",") end
@@ -135,6 +142,13 @@ function liveMines() local n=0 for _,r in ipairs(M.mines()) do if r.ref.Ref:Exis
 function age(frames) for _,r in ipairs(M.mines()) do r.ref.Ref.FrameCount=r.ref.Ref.FrameCount+frames end end
 function update(n) for _=1,(n or 1) do frame=frame+1; M.onUpdate() end end
 function tileCount() local n=0 for _,list in pairs(T.tiles()) do n=n+#list end return n end
+function explosions()
+    local n=0
+    for _,e in ipairs(entities) do
+        if e.Type==EntityType.ENTITY_EFFECT and e.Variant==EffectVariant.BOMB_EXPLOSION then n=n+1 end
+    end
+    return n
+end
 '''
 
 
@@ -149,38 +163,62 @@ class LandmineTests(unittest.TestCase):
     def run_lua(self, code):
         return self.lua.execute(code)
 
-    def test_uses_the_base_tear_update_through_item_data(self):
-        # Base API only: no REPENTOGON tear callbacks and no direct registration.
+    def test_registers_the_attack_event_with_a_tear_fallback_through_item_data(self):
         self.assertTrue(self.g.M.available)
         self.assertEqual(len(list(self.g.callbacks.keys())), 0)
         self.assertEqual(len(list(self.g.errors.values())), 0)
         registry = (ROOT / 'scripts/conch_blessing_items.lua').read_text(encoding='utf-8')
         row = registry[registry.index('    LANDMINE = {'):registry.index('    UNDERDOG = {')]
-        self.assertIn('postTearUpdate = "landmine.onTearUpdate"', row)
-        for lang in ('en', 'kr', 'urimal'):
+        self.assertIn('weaponFiredOptional = "landmine.onWeaponFired"', row)
+        self.assertIn('fireTear = "landmine.onFireTear"', row)
+        self.assertNotIn('postPEffectUpdate', row)
+        manager = (ROOT / 'scripts/callback_manager.lua').read_text(encoding='utf-8')
+        mapping = manager[manager.index('    weaponFiredOptional = {'):]
+        mapping = mapping[:mapping.index('},')]
+        self.assertIn('MC_POST_TRIGGER_WEAPON_FIRED', mapping)
+        self.assertIn('optional = true', mapping)
+        warnings = {
+            'en': '#{{Warning}} REPENTOGON recommended',
+            'kr': '#{{Warning}} REPENTOGON 권장',
+            'urimal': '#{{Warning}} 덧붙임 도우미(REPENTOGON)를 쓰면 좋습니다',
+        }
+        for lang, warning in warnings.items():
             text = (ROOT / f'scripts/locale/{lang}.lua').read_text(encoding='utf-8')
             entry = text[text.index('LANDMINE = {'):text.index('UNDERDOG = {')]
-            self.assertNotIn('REPENTOGON', entry, lang)
-            self.assertNotRegex(entry, r'10', lang)
+            self.assertIn(warning, entry, lang)
+            self.assertNotIn('2칸', entry, lang)
+            self.assertNotIn('tiles walked', entry, lang)
+        # No spacing and no gap: every attack drops one.
+        self.assertIsNone(self.g.M.data.spacing)
+        self.assertIsNone(self.g.M.data.gap)
+        self.assertFalse(self.g.T.weaponEvent())
 
-    def test_flying_tear_drops_a_mine_each_spacing_beneath_it(self):
+    def test_every_attack_drops_a_mine_where_the_holder_stands(self):
         result = self.run_lua('''
-            local p=player(); local t=tear(p,60,150,4.5); fly(t,10,0,25)
+            local p=player(); p.Damage=4.5
+            for i=0,4 do attackAt(p,50+i*10,150) end
             local r=M.mines()[1]; local m=r.ref.Ref
             return xs(), m.Variant, m.Position.Y, r.damage, m.SpawnerEntity==p, m.sprite.anim, m.DepthOffset,
-                T.evidence().trails
+                m.PositionOffset.Y, T.evidence().laid
         ''')
-        # Its first update (x=70) starts the count; a mine every 100 units after,
-        # two over a default tear's flight. A tear with no height lands it at once.
-        self.assertEqual(result, ('170,270', 7790, 150, 4.5, True, 'Land', -1000, 1))
+        # Ten units apart: no spacing, no gap.
+        self.assertEqual(result, ('50,60,70,80,90', 7790, 150, 4.5, True, 'Fall', -1000, -20, 5))
 
-    def test_dropped_mine_falls_from_the_tear_and_arms_after_landing(self):
+    def test_attacks_in_place_pile_mines_up(self):
         result = self.run_lua('''
-            local p=player(); local t=tear(p,60,150,3); t.Height=-24; fly(t,10,0,11)
+            local p=player()
+            for _=1,6 do attackAt(p,120,150) end
+            return xs(), tileCount(), T.evidence().laid
+        ''')
+        self.assertEqual(result, ('120,120,120,120,120,120', 6, 6))
+
+    def test_mine_falls_from_the_hands_and_arms_after_landing(self):
+        result = self.run_lua('''
+            local p=player(); attackAt(p,100,150)
             local r=M.mines()[1]; local m=r.ref.Ref
             local start, anim = m.PositionOffset.Y, m.sprite.anim
             local lifts={}
-            local stepper=enemy(170,150,10)
+            local stepper=enemy(100,150,10)
             for i=1,6 do update(1); lifts[i]=m.PositionOffset.Y end
             local landedAnim, landed, armedOnLanding = m.sprite.anim, r.landed, r.armed
             m.FrameCount=m.FrameCount+M.data.armFrames-1; update(1)
@@ -189,103 +227,112 @@ class LandmineTests(unittest.TestCase):
             return start, anim, table.concat(lifts,","), landedAnim, landed, armedOnLanding, early, m.removed==true,
                 stepper.hits and #stepper.hits or 0, T.evidence().landed
         ''')
-        self.assertEqual(result, (-24, 'Fall', '-22.5,-19.5,-15.0,-9.0,-1.5,0', 'Land', True, None, False, True, 1, 1))
+        # An enemy under a falling mine sets nothing off.
+        self.assertEqual(result, (-20, 'Fall', '-18.5,-15.5,-11.0,-5.0,0,0', 'Land', True, None, False, True, 1, 1))
 
-    def test_tear_that_hits_keeps_the_mines_it_laid(self):
+    def test_no_mine_in_a_room_without_enemies(self):
         result = self.run_lua('''
-            local p=player(); local t=tear(p,60,150); fly(t,10,0,15)
-            t:Remove()   -- it hit something at x=210
-            update(1)
-            return xs()
+            local p=player(); roomEnemies=0
+            for i=1,5 do attackAt(p,50+i*20,150) end
+            local before=#M.mines()
+            roomEnemies=1
+            attackAt(p,300,150)
+            return before, xs()
         ''')
-        self.assertEqual(result, '170')
+        self.assertEqual(result, (0, '300'))
 
-    def test_familiar_tear_non_holder_and_own_lineage_lay_nothing(self):
+    def test_a_mine_holds_the_holders_damage_when_it_was_laid(self):
         result = self.run_lua('''
-            local p=player()
-            local familiar=entity({Type=EntityType.ENTITY_FAMILIAR,Variant=1,Position=Vector(0,0)})
-            familiar.SpawnerEntity=p
-            fly(tear(familiar,60,40),10,0,20)
-            local other=player(0); fly(tear(other,60,200),10,0,20)
-            local looped=tear(p,60,280); DP.markTriggeredAttack(looped,"landmine",nil,"landmine"); fly(looped,10,0,20)
+            local p=player(); p.Damage=3.5
+            attackAt(p,50,150); attackAt(p,50,150)
+            p.Damage=10
+            attackAt(p,50,150)
+            local list={}
+            for i,r in ipairs(M.mines()) do list[i]=tostring(r.damage) end
+            return table.concat(list,",")
+        ''')
+        self.assertEqual(result, '3.5,3.5,10')
+
+    def test_only_a_living_holders_own_attacks_drop_mines(self):
+        result = self.run_lua('''
+            local other=player(0); attackAt(other,50,40)
+            local dead=player(); dead.dead=true; attackAt(dead,50,150)
+            local ghost=player(); ghost.ghost=true; attackAt(ghost,50,280)
+            local holder=player()
+            local familiar=entity({Type=EntityType.ENTITY_FAMILIAR,Variant=1,Position=Vector(80,80),Player=holder})
+            attackAt(familiar)
+            attackAt(nil)
+            return #M.mines(), #errors
+        ''')
+        # A familiar's weapon is its own, even when its player holds Landmine.
+        self.assertEqual(result, (0, 0))
+
+    def test_losing_the_item_stops_the_mines_and_regaining_it_resumes(self):
+        result = self.run_lua('''
+            local p=player(); attackAt(p,50,150); attackAt(p,60,150)
+            local before=xs()
+            p.copies=0; attackAt(p,70,150); attackAt(p,80,150)
+            local lost=xs()
+            p.copies=1; attackAt(p,90,150)
+            return before, lost, xs()
+        ''')
+        self.assertEqual(result, ('50,60', '50,60', '50,60,90'))
+
+    def test_copies_do_not_multiply_the_mines(self):
+        result = self.run_lua('''
+            local p=player(3); attackAt(p,50,150)
             return #M.mines()
         ''')
-        self.assertEqual(result, 0)
+        self.assertEqual(result, 1)
 
-    def test_nobody_holding_skips_every_tear_cheaply(self):
-        result = self.run_lua('''
-            local p=player(0); local t=tear(p,60,150); fly(t,10,0,20)
-            return #M.mines(), t.data==nil
-        ''')
-        # The holder check comes before the tear's own data is touched.
-        self.assertEqual(result, (0, True))
-
-    def test_no_mine_over_a_rock_or_pit_the_next_free_floor_gets_it(self):
+    def test_no_mine_over_a_rock_or_pit_or_off_the_floor(self):
         result = self.run_lua('''
             local p=player()
-            fly(tear(p,110,100),10,0,25)    -- due over the rock at x 180..220
-            local rock=xs()
-            M.onNewRoom()
-            fly(tear(p,110,250),10,0,25)    -- due over the pit
-            return rock, xs(), T.evidence().blocked
+            attackAt(p,200,100)   -- the rock
+            attackAt(p,200,250)   -- the pit
+            attackAt(p,398,150)   -- past the floor margin
+            attackAt(p,230,250)   -- floor beside the pit
+            return xs(), T.evidence().blocked
         ''')
-        rock, pit, blocked = result
-        self.assertEqual(rock, '230,330')
-        self.assertEqual(pit, '230,330')
-        self.assertEqual(blocked, 2)
-
-    def test_no_mine_outside_the_floor_margin(self):
-        result = self.run_lua('''
-            local p=player(); fly(tear(p,250,150),10,0,20)   -- on past the right wall at 400
-            return xs()
-        ''')
-        self.assertEqual(result, '360')
-
-    def test_a_drop_point_with_a_mine_within_a_tile_counts_as_dropped(self):
-        result = self.run_lua('''
-            local p=player()
-            fly(tear(p,60,150),10,0,22)
-            local first=#M.mines()
-            fly(tear(p,60,150),10,0,22)          -- the same line
-            local same=#M.mines()
-            fly(tear(p,75,150),10,0,22)          -- the same line, due 15 further on
-            local shifted=#M.mines()
-            fly(tear(p,60,180),10,0,22)          -- 30 away
-            local close=#M.mines()
-            fly(tear(p,60,195),10,0,22)          -- 45 away
-            return first, same, shifted, close, #M.mines(), T.evidence().crowded
-        ''')
-        # A tear never fills in between the mines already on its line.
-        self.assertEqual(result, (2, 2, 2, 2, 4, 6))
+        self.assertEqual(result, ('230', 3))
 
     def test_no_cap_on_mines(self):
         result = self.run_lua('''
             local p=player(); local first
-            for row=0,4 do
-                fly(tear(p,60,30+row*50),10,0,33)
+            for i=1,200 do
+                attackAt(p,20+(i%10)*10,20+math.floor(i/10)*10)   -- clear of the rock and the pit
                 first=first or M.mines()[1].ref.Ref
             end
             return #M.mines(), liveMines(), T.evidence().laid, first.removed==true
         ''')
-        # Five rows 50 apart, three mines each.
-        self.assertEqual(result, (15, 15, 15, False))
+        self.assertEqual(result, (200, 200, 200, False))
 
-    def test_owner_losing_the_item_stops_the_trail(self):
+    def test_without_repentogon_each_tear_the_holder_fires_drops_a_mine(self):
         result = self.run_lua('''
-            local p=player(); local t=tear(p,60,150); fly(t,10,0,11)
-            p.copies=0; players[2]=entity({Type=EntityType.ENTITY_PLAYER,Variant=0,Position=Vector(0,0),copies=1})
-            fly(t,10,0,20)
-            return xs()
+            local p=player()
+            tearAt(p,60,150); tearAt(p,60,150); tearAt(p,90,150)
+            local holder=player()
+            local familiar=entity({Type=EntityType.ENTITY_FAMILIAR,Variant=1,Position=Vector(80,80),Player=holder})
+            tearAt(familiar,80,80)
+            tearAt(nil,80,80)
+            M.onFireTear(nil,nil)
+            return T.weaponEvent(), xs()
         ''')
-        self.assertEqual(result, '170')
+        self.assertEqual(result, (False, '60,60,90'))
 
-    def test_dead_owner_lays_nothing(self):
+    def test_with_repentogon_the_tears_lay_nothing(self):
         result = self.run_lua('''
-            local p=player(); local t=tear(p,60,150); fly(t,10,0,1)
-            p.dead=true; fly(t,10,0,20)
-            return #M.mines()
+            REPENTOGON={Real=true}
+            ModCallbacks.MC_POST_TRIGGER_WEAPON_FIRED=1100
+            reloadLandmine()
+            local p=player()
+            tearAt(p,60,150); tearAt(p,90,150)
+            local tears=#M.mines()
+            attackAt(p,120,150)
+            return T.weaponEvent(), tears, xs()
         ''')
-        self.assertEqual(result, 0)
+        # Only the attack counts, so a multishot attack drops one mine.
+        self.assertEqual(result, (True, 0, '120'))
 
     def test_unarmed_mine_waits_and_armed_mine_blasts_enemies_only(self):
         result = self.run_lua('''
@@ -305,6 +352,21 @@ class LandmineTests(unittest.TestCase):
         ''')
         self.assertEqual(result, (False, True, 1, 1, 0, 0, 6, 4, True, 0, 1, 0, 0))
 
+    def test_a_pile_goes_off_together_with_one_explosion(self):
+        result = self.run_lua('''
+            local p=player()
+            for _=1,4 do attackAt(p,100,150) end
+            update(6); age(M.data.armFrames)
+            local stepper=enemy(100,150,10)
+            local near=enemy(140,150,10)
+            update(1)
+            local function total(e) local n=0 for _,h in ipairs(e.hits or {}) do n=n+h.amount end return n end
+            return T.evidence().exploded, #stepper.hits, total(stepper), total(near), explosions(),
+                T.evidence().pictures, #played, #M.mines(), T.evidence().chained
+        ''')
+        # Four mines of 2 x 3.5 each: 28 to every enemy within reach.
+        self.assertEqual(result, (4, 4, 28, 28, 1, 1, 1, 0, 0))
+
     def test_blast_sets_off_nearby_mines_a_moment_later(self):
         result = self.run_lua('''
             local p=player()
@@ -321,16 +383,16 @@ class LandmineTests(unittest.TestCase):
         ''')
         self.assertEqual(result, (2, 2, 1, 1, 2))
 
-    def test_one_blast_sound_per_update_however_many_go_off(self):
+    def test_one_blast_sound_per_update_and_a_picture_per_spot(self):
         result = self.run_lua('''
             local p=player()
             for i=0,4 do T.lay(p,Vector(60+i*45,150),3) end
             age(M.data.armFrames)
             enemy(60,150,10); enemy(150,150,10); enemy(240,150,10)
             update(1)
-            return T.evidence().exploded, #played
+            return T.evidence().exploded, #played, explosions()
         ''')
-        self.assertEqual(result, (3, 1))
+        self.assertEqual(result, (3, 1, 3))
 
     def test_stepping_looks_only_near_each_enemy(self):
         result = self.run_lua('''
@@ -363,19 +425,21 @@ class LandmineTests(unittest.TestCase):
         result = self.run_lua('''
             local p=player(); local m=T.lay(p,Vector(100,150),3); T.lay(p,Vector(200,150),3)
             m:Remove()
-            return #M.mines(), tileCount(), T.crowded(100,150)
+            return #M.mines(), tileCount()
         ''')
-        self.assertEqual(result, (1, 1, False))
+        self.assertEqual(result, (1, 1))
 
     def test_new_room_forgets_mines_and_unload_removes_them(self):
         result = self.run_lua('''
             local p=player(); local m=T.lay(p,Vector(100,150),3)
             M.onModUnload()
             local removed=m.removed==true
-            T.lay(p,Vector(120,150),3); M.onNewRoom()
-            return removed, #M.mines(), tileCount()
+            attackAt(p,120,150)
+            local laid=#M.mines()
+            M.onNewRoom()
+            return removed, laid, #M.mines(), tileCount()
         ''')
-        self.assertEqual(result, (True, 0, 0))
+        self.assertEqual(result, (True, 1, 0, 0))
 
     def test_pure_rules(self):
         result = self.run_lua('return T.mineDamage(3.5), T.mineDamage(-1), T.within(60,60,0), T.within(71,60,10)')

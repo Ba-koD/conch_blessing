@@ -53,7 +53,7 @@ class EntityDefinitionsTests(unittest.TestCase):
             self.assertEqual((thief.get('name'), thief.get('variant'), thief.get('shadowSize')),
                              (definitions['JEON_WOOCHI']['name'], '7789', '0'))
             self.assertTrue((Path('resources/gfx') / thief.get('anm2path')).is_file())
-            # 지뢰's mine where a missed tear fell (2026-11-15).
+            # 지뢰's mine on the floor (2026-11-15).
             mine = rows[9]
             self.assertEqual((mine.get('name'), mine.get('variant'), mine.get('shadowSize')),
                              (definitions['LANDMINE']['name'], '7790', '0'))

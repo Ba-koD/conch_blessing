@@ -126,6 +126,12 @@ ConchBlessing.CallbackManager.callbackMapping = {
         needsId = false,
         requires = "REPENTOGON"
     },
+    -- The same event for an item with a base fallback: skipped quietly
+    -- without REPENTOGON.
+    weaponFiredOptional = {
+        callback = getRepentogonCallback("MC_POST_TRIGGER_WEAPON_FIRED"),
+        needsId = false, requires = "REPENTOGON", optional = true
+    },
     tearCollision = { callback = ModCallbacks.MC_PRE_TEAR_COLLISION, needsId = false },
     tearRemoved = { callback = ModCallbacks.MC_POST_ENTITY_REMOVE, needsId = false },
     gameStarted = { callback = ModCallbacks.MC_POST_GAME_STARTED, needsId = false },
