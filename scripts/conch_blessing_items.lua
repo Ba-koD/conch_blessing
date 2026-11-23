@@ -930,7 +930,7 @@ ConchBlessing.ItemData = {
         },
         quality = 3,
         hidden = false,
-        shopprice = 20, -- user decision 2026-11-24
+        shopprice = 15,
         devilprice = 2,
         origin = { id = CollectibleType.COLLECTIBLE_GUARDIAN_ANGEL, type = "collectible" },
         flag = "positive",
