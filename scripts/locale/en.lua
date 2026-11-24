@@ -738,7 +738,7 @@ return {
             eid = {
                 "Using it while holding up an item drops that item's number as number cereal",
                 "#Combining number cereal needs one {c:BREAKFAST} Breakfast each time",
-                "#Items turn into {c:BREAKFAST} Breakfast with a 100% chance, halved for each one held",
+                "#Items turn into {c:BREAKFAST} Breakfast with a 100% chance, reduced by half for each one held",
                 "#{{Warning}} Requires REPENTOGON!",
             },
             synergies = {
@@ -975,6 +975,7 @@ return {
             no_milk = "No milk",
             cancel_none = "No item %s: cancelled",
             cancel_nocraft = "Item %s can't be made: cancelled",
+            chance = "#{{ColorYellow}}Current chance of Breakfast: %s{{CR}}",
         },
         morph = {
             applied = "APPLIED",

@@ -1076,6 +1076,37 @@ function M.milkChance(milk)
     return M.data.milkChance ^ math.max(0, math.floor(milk or 0))
 end
 
+-- EID: below Cereal's description, above the REPENTOGON line, the chance a
+-- draw becomes Breakfast now (user request 2026-11-24). Milk is shared by the
+-- whole run, so the line holds for every player reading it.
+function M.chanceText(milk)
+    local shown = string.format("%.2f", M.milkChance(milk) * 100):gsub("0+$", ""):gsub("%.$", "")
+    local Locale = ConchBlessing.Locale
+    local percent = type(Locale) == "table" and type(Locale.formatPercent) == "function"
+        and Locale.formatPercent(shown) or (shown .. "%")
+    return View.text("ui.cereal.chance", percent)
+end
+
+function M.describe(descObj)
+    local ok, line = pcall(M.chanceText, M.milk())
+    if not ok or type(line) ~= "string" then return descObj end
+    local desc = descObj.Description or ""
+    local at = desc:find("#{{Warning}}", 1, true)
+    if at then
+        descObj.Description = desc:sub(1, at - 1) .. line .. desc:sub(at)
+    else
+        descObj.Description = desc .. line
+    end
+    return descObj
+end
+
+if type(EID) == "table" and type(EID.addDescriptionModifier) == "function" and ID and ID > 0 then
+    EID:addDescriptionModifier("ConchBlessing_CerealBreakfastChance", function(descObj)
+        return descObj.ObjType == EntityType.ENTITY_PICKUP and descObj.ObjVariant == PickupVariant.PICKUP_COLLECTIBLE
+            and descObj.ObjSubType == ID
+    end, M.describe)
+end
+
 -- Draw seeds often follow each other closely, and the first number an RNG
 -- gives after such seeds leans one way (measured 2026-11-24: with seeds a fixed
 -- step apart, one milk turned every draw into Breakfast). The seed is hashed

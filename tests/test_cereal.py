@@ -395,6 +395,28 @@ class CerealTests(unittest.TestCase):
         self.assertEqual(result, (False, ''))
 
     # -------------------------------------------------------------- pickups
+    # -------------------------------------------------------------- EID
+    def test_the_eid_shows_the_breakfast_chance_now(self):
+        # User request (2026-11-24): the chance a draw becomes Breakfast now,
+        # halved per milk, as a percent without needless decimals.
+        result = self.run_lua('''
+            local out={}
+            for _,milk in ipairs({0,1,2,3,4,20}) do out[#out+1]=M.chanceText(milk) end
+            return table.concat(out,' ')
+        ''')
+        self.assertEqual(result, 'ui.cereal.chance:100% ui.cereal.chance:50% ui.cereal.chance:25% '
+                                 'ui.cereal.chance:12.5% ui.cereal.chance:6.25% ui.cereal.chance:0%')
+
+    def test_the_chance_line_sits_above_the_repentogon_line(self):
+        result = self.run_lua('''
+            M.addMilk(2)
+            local a=M.describe({Description='first#second#{{Warning}} need'}).Description
+            local b=M.describe({Description='only'}).Description
+            return a, b
+        ''')
+        self.assertEqual(result, ('first#secondui.cereal.chance:25%#{{Warning}} need',
+                                  'onlyui.cereal.chance:25%'))
+
     def test_touching_a_cereal_takes_it_once(self):
         result = self.run_lua('''
             local p=player()

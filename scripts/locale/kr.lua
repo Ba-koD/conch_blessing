@@ -724,7 +724,7 @@ return {
             eid = {
                 "아이템을 들고 있을 때 사용하면 아이템 번호대로 숫자 시리얼이 떨어집니다",
                 "#숫자 시리얼 조합에는 {c:BREAKFAST} 아침밥이 1개씩 필요합니다",
-                "#아이템이 100% 확률로 {c:BREAKFAST} 아침밥으로 변경되며 소지 개수만큼 확률이 절반이 됩니다",
+                "#아이템이 100% 확률로 {c:BREAKFAST} 아침밥으로 변경되며 소지 개수만큼 확률이 절반으로 감소됩니다",
                 "#{{Warning}} REPENTOGON이 필요합니다!",
             },
             synergies = {
@@ -1018,6 +1018,7 @@ return {
             no_milk = "우유가 없어요",
             cancel_none = "%s번은 없는 번호라 취소됐어요",
             cancel_nocraft = "%s번은 만들 수 없는 아이템이라 취소됐어요",
+            chance = "#{{ColorYellow}}현재 아침밥으로 변할 확률 : %s{{CR}}",
         },
         morph = {
             applied = "인게임 적용",
