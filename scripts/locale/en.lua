@@ -737,6 +737,7 @@ return {
             description = "Milk first or cereal first?",
             eid = {
                 "Using it while holding up an item drops that item's number as number cereal",
+                "#Combining number cereal needs one {c:BREAKFAST} Breakfast each time",
                 "#Items turn into {c:BREAKFAST} Breakfast with a 100% chance, halved for each one held",
                 "#{{Warning}} Requires REPENTOGON!",
             },
