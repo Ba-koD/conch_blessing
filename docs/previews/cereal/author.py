@@ -12,8 +12,9 @@
   request 2026-11-24: real cereal texture), one colour per digit, built like
   the vanilla key's;
 - resources/gfx/ui/conch_cereal_ui.png and .anm2: the bowl Isaac holds (its far
-  and near halves, drawn either side of the cereal in it), the digits for the
-  picker and the HUD marks.
+  half with the empty inside, the milk drawn only while milk is held, and its
+  near half drawn over the cereal in it), the digits for the picker and the
+  HUD marks.
 
 The palettes and bowl drive the preview page's script (template.html) too, the
 layout the user approved on 2026-11-24. The box icon and the textured cereal
@@ -159,43 +160,110 @@ def cereal(d):
     return img
 
 
-def bowl(w=56, h=21, cx=28.0, rc=6.5, rx=27.5, ry=6.0, split=7, band=(11, 12), front=None):
-    """The milk bowl; `front` True/False gives the near or far half only."""
+# The bowl Isaac holds, drawn the Isaac way at the user's request (2026-11-24):
+# a cream ceramic bowl with a muted blue band and a foot, a near-black outline
+# round it, lit from the top left, grimy shade on the right and underneath.
+# It comes in three parts drawn over one another: its far half with the empty
+# inside, the milk (drawn only while milk is held, so with none the bowl is
+# plainly empty), and its near half drawn over the cereal in it.
+BOWL_W, BOWL_H = 56, 28
+B_CX, B_RC = 28.0, 8.0                 # centre column, rim centre row
+B_RX, B_RY = 26.0, 7.0                 # outer rim
+B_IRX, B_IRY, B_IOFF = 23.0, 5.0, 0.3  # the opening
+B_MRX, B_MRY, B_MOFF = 21.5, 4.2, 0.9  # the milk surface, just under the rim
+B_DEPTH = 15.5                         # how far the body reaches below the rim centre
+B_FOOT = (22.5, 25.5, 9.5)             # foot rows (from, to) and half width
+BOWL_C = {
+    "rim_hi": (246, 240, 226), "rim": (226, 216, 198), "rim_sh": (196, 184, 166),
+    "wall": (204, 192, 174), "wall_sh": (176, 162, 146), "floor": (156, 142, 128), "deep": (122, 108, 98),
+    "body_hi": (240, 232, 216), "body": (214, 202, 184), "body_sh": (172, 158, 142), "body_dk": (138, 124, 112),
+    "band": (98, 126, 166), "band_sh": (68, 90, 128),
+    "foot": (178, 164, 148), "foot_sh": (140, 126, 114),
+    "milk": (246, 244, 236), "milk_hi": (255, 255, 252), "milk_sh": (216, 216, 222), "milk_edge": (230, 228, 228),
+}
+
+
+def _in(fx, fy, cx, cy, rx, ry):
+    return ((fx - cx) / rx) ** 2 + ((fy - cy) / ry) ** 2 <= 1
+
+
+def _bowl_cells():
     cat = {}
-    for y in range(h):
-        for x in range(w):
+    for y in range(BOWL_H):
+        for x in range(BOWL_W):
             fx, fy = x + 0.5, y + 0.5
-            rim = ((fx - cx) / rx) ** 2 + ((fy - rc) / ry) ** 2 <= 1
-            milk = ((fx - cx) / (rx - 3)) ** 2 + ((fy - rc - 0.4) / (ry - 1.8)) ** 2 <= 1
-            body = fy >= rc and ((fx - cx) / rx) ** 2 + ((fy - rc) / 11) ** 2 <= 1
-            foot = rc + 9.5 < fy <= rc + 12.8 and abs(fx - cx) <= 8
-            cat[x, y] = "milk" if milk else "rim" if rim else "body" if body else "foot" if foot else None
-    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    px = img.load()
-    for y in range(h):
-        if front is not None and (y >= split) != front:
-            continue
-        for x in range(w):
-            c, t = cat[x, y], (x + 0.5 - cx) / rx
-            col = None
-            if c == "milk":
-                col = (222, 228, 238) if cat.get((x, y - 1)) != "milk" else (252, 252, 246)
-            elif c == "rim":
-                col = (212, 214, 226) if y < split else (248, 248, 252)
-            elif c == "body":
-                if cat.get((x, y - 1)) == "rim":
-                    col = (196, 198, 212)
-                elif y in band:
-                    col = (74, 106, 168) if t > 0.45 else (104, 146, 210)
+            if _in(fx, fy, B_CX, B_RC + B_IOFF, B_IRX, B_IRY):
+                cat[x, y] = "in"
+            elif _in(fx, fy, B_CX, B_RC, B_RX, B_RY):
+                cat[x, y] = "rimB" if fy < B_RC + B_IOFF else "rimF"
+            elif fy >= B_RC and _in(fx, fy, B_CX, B_RC, B_RX, B_DEPTH):
+                cat[x, y] = "body"
+            elif B_FOOT[0] <= fy <= B_FOOT[1] and abs(fx - B_CX) <= B_FOOT[2]:
+                cat[x, y] = "foot"
+    return cat
+
+
+def bowl_parts():
+    """(far half with the empty inside, milk, near half), each BOWL_W x BOWL_H."""
+    C = BOWL_C
+    cat = _bowl_cells()
+    back, milk, front = (Image.new("RGBA", (BOWL_W, BOWL_H), (0, 0, 0, 0)) for _ in range(3))
+    pb, pm, pf = back.load(), milk.load(), front.load()
+    for y in range(BOWL_H):
+        for x in range(BOWL_W):
+            c = cat.get((x, y))
+            t = (x + 0.5 - B_CX) / B_RX
+            fx, fy = x + 0.5, y + 0.5
+            if c == "in":
+                # the far wall lit, the bottom in shade, darkest under the near rim
+                if cat.get((x, y - 1)) == "rimB":
+                    col = C["wall_sh"]
+                elif fy < B_RC + B_IOFF - 0.5:
+                    col = C["wall"] if t < 0.45 else C["wall_sh"]
+                elif cat.get((x, y + 1)) == "rimF" or cat.get((x, y + 2)) == "rimF":
+                    col = C["deep"]
                 else:
-                    col = (246, 246, 250) if t < -0.45 else (170, 174, 192) if t > 0.45 else (222, 224, 232)
+                    col = C["floor"] if t < 0.4 else C["deep"]
+                pb[x, y] = col + (255,)
+                if _in(fx, fy, B_CX, B_RC + B_MOFF, B_MRX, B_MRY):
+                    if not _in(fx, fy - 1, B_CX, B_RC + B_MOFF, B_MRX, B_MRY):
+                        mc = C["milk_sh"]          # in the far rim's shadow
+                    elif _in(fx, fy, B_CX - 8, B_RC - 0.2, 6.5, 1.1):
+                        mc = C["milk_hi"]          # the sheen, top left
+                    elif t > 0.55 or not _in(fx, fy + 1, B_CX, B_RC + B_MOFF, B_MRX, B_MRY):
+                        mc = C["milk_edge"]
+                    else:
+                        mc = C["milk"]
+                    pm[x, y] = mc + (255,)
+            elif c == "rimB":
+                pb[x, y] = (C["rim"] if t < 0.5 else C["rim_sh"]) + (255,)
+            elif c == "rimF":
+                if cat.get((x, y - 1)) == "in":
+                    col = C["rim_sh"]                # where the near rim meets the inside
+                else:
+                    col = C["rim_hi"] if t < -0.2 else C["rim"] if t < 0.55 else C["rim_sh"]
+                pf[x, y] = col + (255,)
+            elif c == "body":
+                band = B_RC + 5.0 <= fy <= B_RC + 6.9
+                low = not _in(fx, fy + 1.5, B_CX, B_RC, B_RX, B_DEPTH)
+                if band:
+                    col = C["band"] if t < 0.35 else C["band_sh"]
+                elif t < -0.62:
+                    col = C["body_hi"]
+                elif t > 0.5 or low:
+                    col = C["body_dk"] if (t > 0.5 and low) else C["body_sh"]
+                else:
+                    col = C["body"]
+                pf[x, y] = col + (255,)
             elif c == "foot":
-                col = (186, 188, 204)
+                pf[x, y] = (C["foot"] if t < 0.15 else C["foot_sh"]) + (255,)
             elif any(cat.get((x + dx, y + dy)) for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]):
-                col = INK
-            if col:
-                px[x, y] = col + (255,)
-    return img
+                (pb if fy < B_RC else pf)[x, y] = INK + (255,)
+    # a glint of glaze on the lit side
+    for gx, gy in ((int(B_CX - 20), int(B_RC + 2)), (int(B_CX - 19), int(B_RC + 2)), (int(B_CX - 20), int(B_RC + 3))):
+        if cat.get((gx, gy)) == "body":
+            pf[gx, gy] = (255, 252, 244, 255)
+    return back, milk, front
 
 
 CARTON = ['..OOOO..', '.OWWWWO.', 'OWWWWWGO', 'OOOOOOOO', 'OWWWWWGO', 'OWBBBBGO', 'OWBBBBGO', 'OWWWWWGO',
@@ -378,17 +446,18 @@ def pickup_anm2(d):
 # ------------------------------------------------------------------ UI
 # Sheet layout (x, y, w, h) for the UI parts; each frame's pivot is its top left.
 UI_PARTS = {
-    "BowlBack": (0, 0, 56, 21),
-    "BowlFront": (56, 0, 56, 21),
+    "BowlBack": (0, 0, 56, 28),
+    "BowlFront": (56, 0, 56, 28),
+    "Milk": (100, 28, 56, 28),  # drawn between the halves only while milk is held
     "Ring": (112, 0, 9, 9),
     "Carton": (122, 0, 8, 10),
     "Unknown": (132, 0, 20, 20),
-    "ArrowLR": (0, 37, 13, 9),
-    "ArrowUp": (14, 37, 9, 9),
-    "ArrowDown": (24, 37, 9, 9),
-    "Empty": (159, 47, 1, 1),   # a clear pixel: what Isaac lifts while the mod draws the bowl
+    "ArrowLR": (0, 44, 13, 9),
+    "ArrowUp": (14, 44, 9, 9),
+    "ArrowDown": (24, 44, 9, 9),
+    "Empty": (159, 59, 1, 1),   # a clear pixel: what Isaac lifts while the mod draws the bowl
 }
-DIGIT_Y = 24       # the ten digits, 10x12 each, in a row under the bowl
+DIGIT_Y = 30       # the ten digits, 10x12 each, in a row under the bowl
 DIGIT_W, DIGIT_H = 10, 12
 
 # The picker's keys drawn as arrows, since "<>", "^" and "v" in the hint did
@@ -416,12 +485,14 @@ def arrow(rows):
 
 
 def ui_sheet():
-    img = Image.new("RGBA", (160, 48), (0, 0, 0, 0))
+    img = Image.new("RGBA", (160, 60), (0, 0, 0, 0))
     img.alpha_composite(arrow(ARROW_LR), UI_PARTS["ArrowLR"][:2])
     img.alpha_composite(arrow(ARROW_UP), UI_PARTS["ArrowUp"][:2])
     img.alpha_composite(arrow(ARROW_DOWN), UI_PARTS["ArrowDown"][:2])
-    img.alpha_composite(bowl(front=False), (0, 0))
-    img.alpha_composite(bowl(front=True), (56, 0))
+    back, milk, front = bowl_parts()
+    img.alpha_composite(back, UI_PARTS["BowlBack"][:2])
+    img.alpha_composite(front, UI_PARTS["BowlFront"][:2])
+    img.alpha_composite(milk, UI_PARTS["Milk"][:2])
     img.alpha_composite(puffy(RING, GOLD), (112, 0))
     paint(img, CARTON, (122, 0), CARTON_PAL)
     paint(img, UNKNOWN, (132, 0), {"O": INK, "G": (92, 84, 104)})

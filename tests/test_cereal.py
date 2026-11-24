@@ -26,6 +26,7 @@ local cache={
     ['scripts.lib.conch_answer_view']={text=function(k,...) local a={...} return k..(#a>0 and ':'..table.concat(a,'|') or '') end,
         width=function() return 10 end,drawAt=function() end,lineHeight=function() return 8 end},
     ['scripts.lib.sound_volume']={volume=function(v) return v end},
+    ['scripts.lib.isaacscript-common']={setCollectibleEmpty=function(_,p) p.SubType=0 end},
 }
 function ConchBlessingRequire(name)
     if not cache[name] then cache[name]=load(loadsource(name),name)() end
@@ -42,7 +43,9 @@ InputHook={IS_ACTION_PRESSED=0,IS_ACTION_TRIGGERED=1,GET_ACTION_VALUE=2}
 UseFlag={USE_CARBATTERY=1<<5,USE_NOANIM=1<<0,USE_OWNED=1<<1}
 SoundEffect={SOUND_PLOP=237,SOUND_MENU_FLIP_LIGHT=569,SOUND_MENU_FLIP_DARK=570,SOUND_BOSS2INTRO_ERRORBUZZ=187,
     SOUND_BONE_SNAP=40,SOUND_VAMP_GULP=50}
-EntityType={ENTITY_PICKUP=5}
+EntityType={ENTITY_PICKUP=5,ENTITY_EFFECT=1000}
+EffectVariant={POOF01=15}
+PickupPrice={PRICE_FREE=-1000}
 PickupVariant={PICKUP_COLLECTIBLE=100}
 EntityCollisionClass={ENTCOLL_NONE=0}
 GridCollisionClass={COLLISION_NONE=0}
@@ -100,6 +103,7 @@ local function entity(t,v,sub,pos,vel,spawner,seed)
 end
 hudShown={}
 function Game() return {GetRoom=function() return room end,IsPaused=function() return paused end,
+    GetLevel=function() return {GetCurrentRoomDesc=function() return {Data=roomData} end} end,
     GetFrameCount=function() return frame end,
     GetNumPlayers=function() return #(players or {}) end,
     Spawn=function(_,t,v,pos,vel,spawner,sub,seed) return entity(t,v,sub,pos,vel,spawner,seed) end,
@@ -113,7 +117,26 @@ ConchBlessing={printDebug=function() end,printError=function(m) lastError=m end,
         TryGetRunSave=function(e) return runSave end},
     AddCallback=function(_,cb,fn,filter) regs[#regs+1]={cb=cb,fn=fn,filter=filter} end,
     AddPriorityCallback=function(_,cb,pri,fn,filter) regs[#regs+1]={cb=cb,fn=fn,filter=filter,pri=pri} end}
+pedestals={}
+roomData={StageID=1,Subtype=0}
+function pedestal(id,x,y,extra)
+    local e={Type=5,Variant=100,SubType=id,Position=Vector(x,y),PositionOffset=Vector(0,0),Price=0,
+        OptionsPickupIndex=0,hash=1000+#pedestals,removed=false}
+    for k,v in pairs(extra or {}) do e[k]=v end
+    function e:Exists() return not self.removed end
+    function e:ToPickup() return self end
+    function e:Remove() self.removed=true end
+    function e:TryRemoveCollectible() self.SubType=0; return true end
+    function e:RemoveCollectibleCycle() self.cycle=nil end
+    pedestals[#pedestals+1]=e
+    return e
+end
 Isaac={GetItemIdByName=function(name) return name=='Cereal' and CEREAL or -1 end,
+    FindByType=function(t,v)
+        local out={}
+        for _,e in ipairs(pedestals) do if not e.removed and e.Type==t and (v==nil or e.Variant==v) then out[#out+1]=e end end
+        return out
+    end,
     GetEntityVariantByName=function(name) return name=='Conch Blessing Cereal 0' and 7792 or -1 end,
     GetItemConfig=function() return {GetCollectibles=function() return {Size=733} end,
         GetCollectible=function(_,id) return items[id] end} end,
@@ -227,19 +250,21 @@ class CerealTests(unittest.TestCase):
 
     # -------------------------------------------------------------- milk
     def test_the_milk_chance_halves_with_every_milk(self):
+        # User decision 2026-11-24: 50% with no milk (it was 100%), halved per milk.
         result = self.run_lua('return M.milkChance(0), M.milkChance(1), M.milkChance(2), M.milkChance(5)')
-        self.assertEqual(result, (1.0, 0.5, 0.25, 0.03125))
+        self.assertEqual(result, (0.5, 0.25, 0.125, 0.015625))
 
-    def test_with_no_milk_every_draw_is_breakfast_and_without_a_holder_none(self):
+    def test_with_no_milk_half_the_draws_are_breakfast_and_without_a_holder_none(self):
         result = self.run_lua('''
-            local none=M.onPreGetCollectible(nil,0,true,11)
+            local none=0
+            for seed=1,200 do if M.onPreGetCollectible(nil,0,true,seed*7919) then none=none+1 end end
             player()
-            local out={}
-            for seed=1,20 do out[#out+1]=M.onPreGetCollectible(nil,0,true,seed) end
-            return tostring(none), list(out)
+            local n=0
+            for seed=1,4000 do if M.onPreGetCollectible(nil,0,true,seed*7919)==25 then n=n+1 end end
+            return none, n
         ''')
-        self.assertEqual(result[0], 'nil')
-        self.assertEqual(result[1], ','.join(['25'] * 20))
+        self.assertEqual(result[0], 0)
+        self.assertAlmostEqual(result[1] / 4000, 0.5, delta=0.03)
 
     def test_draws_turn_to_breakfast_about_as_often_as_the_rule_says(self):
         result = self.run_lua('''
@@ -248,11 +273,11 @@ class CerealTests(unittest.TestCase):
             for seed=1,4000 do if M.onPreGetCollectible(nil,0,true,seed*7919)==25 then n=n+1 end end
             return n
         ''')
-        self.assertAlmostEqual(result / 4000, 0.25, delta=0.03)
+        self.assertAlmostEqual(result / 4000, 0.125, delta=0.03)
 
     def test_underdog_peeks_and_conch_pearl_redraws_are_left_alone(self):
         result = self.run_lua('''
-            player()
+            player(); M.data.milkBase=1 -- every other draw would become Breakfast
             ConchBlessing.underdog={isPeeking=function() return true end}
             local a=M.onPreGetCollectible(nil,0,false,3)
             ConchBlessing.underdog=nil
@@ -395,17 +420,90 @@ class CerealTests(unittest.TestCase):
         self.assertEqual(result, (False, ''))
 
     # -------------------------------------------------------------- pickups
+    # -------------------------------------------------------------- grinding
+    def test_a_use_near_a_pedestal_grinds_it_where_it_stands(self):
+        # User decision 2026-11-24 (B): actives too, the pedestal stays empty,
+        # the number lies in a row beside it and no bowl opens.
+        result = self.run_lua('''
+            local p=player(); local d6=pedestal(105,100,160)
+            M.onUpdate()
+            local marked=T.target(p)==d6
+            local r=M.onUseItem(nil,CEREAL,nil,p,0,0)
+            local out={}
+            for _,e in ipairs(spawned) do if e.Variant==7792 then out[#out+1]=string.format('%d@%d,%d',e.SubType,e.Position.X,e.Position.Y) end end
+            return marked, d6.SubType, table.concat(out,' '), M.picking(p), r.Discharge
+        ''')
+        self.assertEqual(result, (True, 0, '1@80,200 0@100,200 5@120,200', False, False))
+
+    def test_only_a_pedestal_that_may_be_ground_is_marked(self):
+        # Like Quick Pick: out of reach, for sale, a deal, a quest item, Cereal
+        # itself, an empty pedestal and the Death Certificate area are not.
+        result = self.run_lua('''
+            local p=player()
+            local out={}
+            local function try(id,x,y,extra)
+                for _,e in ipairs(pedestals) do e.removed=true end
+                pedestal(id,x,y,extra); M.onUpdate()
+                out[#out+1]=tostring(T.target(p)~=nil)
+            end
+            try(118,100,170)            -- in reach (70)
+            try(118,100,190)            -- out of reach (90)
+            try(118,100,150,{Price=15}) -- for sale
+            try(118,100,150,{Price=-1}) -- a deal
+            try(118,100,150,{Price=-1000}) -- free
+            try(300,100,150)            -- a quest item
+            try(CEREAL,100,150)         -- Cereal itself
+            try(0,100,150)              -- empty
+            roomData={StageID=35,Subtype=33}
+            try(118,100,150)            -- the Death Certificate area
+            return table.concat(out,',')
+        ''')
+        self.assertEqual(result, 'true,false,false,false,true,false,false,false,false')
+
+    def test_the_nearest_pedestal_is_ground(self):
+        result = self.run_lua('''
+            local p=player(); local far=pedestal(118,100,170); local near=pedestal(182,130,110)
+            M.onUseItem(nil,CEREAL,nil,p,0,0)
+            return far.SubType, near.SubType
+        ''')
+        self.assertEqual(result, (118, 0))
+
+    def test_grinding_a_choice_takes_its_other_choices_away(self):
+        result = self.run_lua('''
+            local p=player(); local a=pedestal(118,100,150,{OptionsPickupIndex=3})
+            local b=pedestal(182,200,150,{OptionsPickupIndex=3}); local c=pedestal(4,300,150)
+            M.onUseItem(nil,CEREAL,nil,p,0,0)
+            return a.SubType, b.removed, c.removed
+        ''')
+        self.assertEqual(result, (0, True, False))
+
+    def test_a_use_with_nothing_in_reach_opens_the_bowl(self):
+        result = self.run_lua('''
+            local p=player(); local far=pedestal(118,400,400)
+            M.onUseItem(nil,CEREAL,nil,p,0,0)
+            return M.picking(p), far.SubType
+        ''')
+        self.assertEqual(result, (True, 118))
+
+    def test_without_the_engine_call_the_pedestal_is_emptied_another_way(self):
+        result = self.run_lua('''
+            local p=player(); local d=pedestal(118,100,150); d.TryRemoveCollectible=nil
+            M.onUseItem(nil,CEREAL,nil,p,0,0)
+            return d.SubType, subtypes()
+        ''')
+        self.assertEqual(result, (0, '1,1,8'))
+
     # -------------------------------------------------------------- EID
     def test_the_eid_shows_the_breakfast_chance_now(self):
         # User request (2026-11-24): the chance a draw becomes Breakfast now,
-        # halved per milk, as a percent without needless decimals.
+        # 50% with no milk, halved per milk, as a percent without needless decimals.
         result = self.run_lua('''
             local out={}
             for _,milk in ipairs({0,1,2,3,4,20}) do out[#out+1]=M.chanceText(milk) end
             return table.concat(out,' ')
         ''')
-        self.assertEqual(result, 'ui.cereal.chance:100% ui.cereal.chance:50% ui.cereal.chance:25% '
-                                 'ui.cereal.chance:12.5% ui.cereal.chance:6.25% ui.cereal.chance:0%')
+        self.assertEqual(result, 'ui.cereal.chance:50% ui.cereal.chance:25% ui.cereal.chance:12.5% '
+                                 'ui.cereal.chance:6.25% ui.cereal.chance:3.12% ui.cereal.chance:0%')
 
     def test_the_chance_line_sits_above_the_repentogon_line(self):
         result = self.run_lua('''
@@ -414,8 +512,8 @@ class CerealTests(unittest.TestCase):
             local b=M.describe({Description='only'}).Description
             return a, b
         ''')
-        self.assertEqual(result, ('first#secondui.cereal.chance:25%#{{Warning}} need',
-                                  'onlyui.cereal.chance:25%'))
+        self.assertEqual(result, ('first#secondui.cereal.chance:12.5%#{{Warning}} need',
+                                  'onlyui.cereal.chance:12.5%'))
 
     def test_touching_a_cereal_takes_it_once(self):
         result = self.run_lua('''

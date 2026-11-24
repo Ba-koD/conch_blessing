@@ -736,13 +736,13 @@ return {
             name = "Cereal",
             description = "Milk first or cereal first?",
             eid = {
-                "Using it while holding up an item drops that item's number as number cereal",
+                "Using it near an item to grind drops that item's number as number cereal",
                 "#Combining number cereal needs one {c:BREAKFAST} Breakfast each time",
-                "#Items turn into {c:BREAKFAST} Breakfast with a 100% chance, reduced by half for each one held",
+                "#Items turn into {c:BREAKFAST} Breakfast with a 50% chance, reduced by half for each one held",
                 "#{{Warning}} Requires REPENTOGON!",
             },
             synergies = {
-                breakfast = "Drops 3 random number cereal",
+                breakfast = "When used, drops 3 random number cereal",
             },
         },
 

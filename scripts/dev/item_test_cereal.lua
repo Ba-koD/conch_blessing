@@ -465,7 +465,94 @@ S.add("CEREAL", "room", { conditions = true }, function(plan, id)
     end)
 end)
 
--- Every draw becomes Breakfast with chance 1/2 ^ milk while Cereal is held;
+-- A pedestal set down `dy` below the player (`price` for a shop item, `group`
+-- for a choice); the room's update then marks or leaves it.
+local function placePedestal(plan, name, id, dy, extra)
+    plan.act(function(player, ctx)
+        local room = Game():GetRoom()
+        local pos = room:FindFreePickupSpawnPosition(player.Position + Vector(0, dy), 0, true)
+        local pickup = Isaac.Spawn(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_COLLECTIBLE, id(), pos, Vector.Zero, nil):ToPickup()
+        pickup.Wait = 60 -- nobody walks into it during the case
+        for key, value in pairs(extra or {}) do pickup[key] = value end
+        ctx[name] = EntityPtr(pickup)
+    end)
+    plan.wait(3)
+end
+
+local function ref(ctx, name)
+    local ptr = ctx[name]
+    return ptr and ptr.Ref and ptr.Ref:ToPickup()
+end
+
+-- User decision 2026-11-24 (B): a use near a pedestal Cereal may grind grinds
+-- it where it stands, actives included; the pedestal is marked first, stays
+-- empty, the number lies beside it, no bowl opens and it is one use.
+S.add("CEREAL", "grind", { conditions = true }, function(plan, id)
+    requireModule(plan)
+    cleanup(plan)
+    holdCereal(plan, id)
+    observeUses(plan, id)
+    placePedestal(plan, "d6", function() return CollectibleType.COLLECTIBLE_D6 end, 60)
+    plan.check("the pedestal in reach is marked", function(player, ctx)
+        local target = M()._test.target(player)
+        return target ~= nil and GetPtrHash(target) == GetPtrHash(ref(ctx, "d6")), "target " .. tostring(target and target.SubType)
+    end)
+    use(plan, id)
+    plan.wait(20)
+    plan.check("The D6 is ground into 1, 0, 5 beside its pedestal and not taken", function(player, ctx)
+        local pedestal = ref(ctx, "d6")
+        local ok = pedestal and pedestal.SubType == 0 and subtypes() == "0,1,5"
+            and player:GetCollectibleNum(CollectibleType.COLLECTIBLE_D6, true) == 0
+            and player:GetActiveItem(ActiveSlot.SLOT_PRIMARY) == id and not M().picking(player)
+        return ok, string.format("pedestal=%s cereal=%s d6 held=%d slot=%d bowl=%s", tostring(pedestal and pedestal.SubType),
+            subtypes(), player:GetCollectibleNum(CollectibleType.COLLECTIBLE_D6, true),
+            player:GetActiveItem(ActiveSlot.SLOT_PRIMARY), tostring(M().picking(player)))
+    end)
+    expectUses(plan, "grinding counts as one use", 1)
+end)
+
+-- Like Quick Pick, only what may be ground is marked: an item for sale has to
+-- be paid for and one out of reach is not; then a use opens the bowl.
+S.add("CEREAL", "grind_not", { conditions = true }, function(plan, id)
+    requireModule(plan)
+    cleanup(plan)
+    holdCereal(plan, id)
+    placePedestal(plan, "shop", brimstone, 60, { Price = 15, AutoUpdatePrice = false })
+    placePedestal(plan, "far", function() return CollectibleType.COLLECTIBLE_SAD_ONION end, 200)
+    plan.check("neither the shop item nor the far one is marked", function(player)
+        local target = M()._test.target(player)
+        return target == nil, "target " .. tostring(target and target.SubType)
+    end)
+    plan.act(function() M().addMilk(1) end)
+    use(plan, id)
+    plan.check("a use opens the bowl and both items stay", function(player, ctx)
+        local shop, far = ref(ctx, "shop"), ref(ctx, "far")
+        return M().picking(player) == true and shop and shop.SubType == brimstone() and far
+            and far.SubType == CollectibleType.COLLECTIBLE_SAD_ONION and #cereals() == 0,
+            string.format("bowl=%s shop=%s far=%s", tostring(M().picking(player)), tostring(shop and shop.SubType),
+                tostring(far and far.SubType))
+    end)
+    plan.act(function(player) M()._test.close(player) end)
+end)
+
+-- Grinding one item of a choice takes its other choices away, as taking it does.
+S.add("CEREAL", "grind_choice", { conditions = true }, function(plan, id)
+    requireModule(plan)
+    cleanup(plan)
+    holdCereal(plan, id)
+    placePedestal(plan, "near", brimstone, 50, { OptionsPickupIndex = 77 })
+    placePedestal(plan, "other", function() return CollectibleType.COLLECTIBLE_SAD_ONION end, 160, { OptionsPickupIndex = 77 })
+    use(plan, id)
+    plan.wait(10)
+    plan.check("the near choice is ground and the other is gone", function(_, ctx)
+        local near, other = ref(ctx, "near"), ref(ctx, "other")
+        return near and near.SubType == 0 and (other == nil or not other:Exists()) and subtypes() == "1,1,8",
+            string.format("near=%s other=%s cereal=%s", tostring(near and near.SubType), tostring(other and other:Exists()), subtypes())
+    end)
+end)
+
+-- Every draw becomes Breakfast with chance 1/2 x 1/2 ^ milk while Cereal is
+-- held (user decision 2026-11-24: 50% with no milk);
 -- the treasure pool's own answers (nothing taken out) are counted.
 S.add("CEREAL", "milk_chance", { conditions = true }, function(plan, id)
     requireModule(plan)
@@ -482,7 +569,7 @@ S.add("CEREAL", "milk_chance", { conditions = true }, function(plan, id)
         return ctx.without < 0.02, string.format("%.3f", ctx.without)
     end)
     holdCereal(plan, id)
-    for _, case in ipairs({ { 0, 1.0, 0 }, { 1, 0.5, 0.08 }, { 2, 0.25, 0.07 }, { 3, 0.125, 0.05 } }) do
+    for _, case in ipairs({ { 0, 0.5, 0.08 }, { 1, 0.25, 0.07 }, { 2, 0.125, 0.05 }, { 3, 0.0625, 0.04 } }) do
         local milk, want, slack = case[1], case[2], case[3]
         plan.act(function() clearStock(); if milk > 0 then M().addMilk(milk) end end)
         plan.check(string.format("with %d milk about %s%% of draws are Breakfast", milk, tostring(want * 100)), function()

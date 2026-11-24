@@ -6,6 +6,9 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 --     not kept: the queue is emptied and the item's number falls to the floor
 --     as number cereal, real pickups, digit for digit as the number is written
 --     (item 4 is one cereal, 4). A Breakfast breaks into three random digits.
+--   * used near a pedestal it can grind (marked with an arrow while in reach,
+--     checked the way Quick Pick checks what it may pick up), the item on it
+--     is ground the same way without being taken, actives included.
 --   * used otherwise, it opens a bowl Isaac holds over his head: the shooting
 --     keys choose cereal to put in, the key that used it confirms and the drop
 --     key or Esc closes. The digits put in (never starting with 0) make the
@@ -13,14 +16,15 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 --     taken, an active stands on a pedestal nearby. A number no item has, or
 --     one no item pool lists, is cancelled with nothing spent.
 --   * while anyone living holds it, every item pool draw turns into Breakfast
---     (one milk) with chance 1/2 ^ (milk held), answered before the draw so the
---     pool loses nothing.
+--     (one milk) with chance 1/2 x 1/2 ^ (milk held), answered before the draw
+--     so the pool loses nothing.
 -- Cereal and milk are shared like coins (the global run save `cereal`).
 local M = {}
 ConchBlessing.cereal = M
 local View = require("scripts.lib.conch_answer_view")
 local Sound = require("scripts.lib.sound_volume")
 local RunSaveCache = require("scripts.lib.run_save_cache")
+local isc = require("scripts.lib.isaacscript-common")
 
 local ID = Isaac.GetItemIdByName("Cereal")
 local BREAKFAST = CollectibleType and CollectibleType.COLLECTIBLE_BREAKFAST or 25
@@ -31,11 +35,23 @@ if type(VARIANT) ~= "number" or VARIANT < 0 then
 end
 
 M.data = {
-    milkChance = 0.5,    -- a draw becomes Breakfast with chance milkChance ^ milk held
+    -- A draw becomes Breakfast with chance milkBase x milkChance ^ milk held:
+    -- 50% with no milk (user decision 2026-11-24, was 100%), halved per milk.
+    milkBase = 0.5,
+    milkChance = 0.5,
+    grindRange = 80,     -- reach to grind a pedestal (Quick Pick's default pick-up reach)
+    markerLift = 52,     -- screen pixels from a pedestal up to its grind marker
     rowGap = 20,         -- world units between the cereal of a broken number, left to right
     rowDistance = 40,    -- how far from the player that row lies
     takeAfter = 8,       -- updates before a dropped cereal can be picked up
     bowlLift = 28,       -- screen pixels from the feet up to the bottom of the bowl
+    -- The bowl (56x28, drawn the Isaac way, user request 2026-11-24): the
+    -- cereal float on the milk just under its rim, or with no milk lie on its
+    -- bottom, half hidden by the near rim; a splash shows only on milk.
+    bowlHeight = 28,
+    floatY = 1,          -- cereal top below the bowl's top, on the milk
+    bottomY = 6,         -- the same, in an empty bowl
+    milkY = 9,           -- the milk's surface below the bowl's top
     toastFrames = 45,    -- how long a short message stays over the head
     dropDistance = 60,   -- how far from the player a crafted active is set down
     -- Text sizes (LanaPixel scale), raised at the user's request (2026-11-24).
@@ -74,6 +90,7 @@ local owners = {}       -- player hash -> { ptr, controller }
 local lastSel = {}      -- player hash -> the digit last framed
 local toasts = {}       -- player hash -> { text, frames }
 local bits = {}         -- cosmetic collect animations of taken cereal
+local targets = {}      -- player hash -> EntityPtr of the pedestal a use would grind now
 local testKeys = {}     -- bench-held keys (a mod's own reads ignore MC_INPUT_ACTION)
 local reading = false
 local counting = false   -- inside the one real use a made or broken item counts as
@@ -436,11 +453,11 @@ end
 -- request 2026-11-24: not scattered): in front of the player, else above,
 -- right or left of them, wherever the whole row is on open floor.
 local ROW_SIDES = { Vector(0, 1), Vector(0, -1), Vector(1, 0), Vector(-1, 0) }
-local function rowSpots(player, n)
+local function rowSpots(origin, n)
     local room = Game():GetRoom()
     local gap, away = M.data.rowGap, M.data.rowDistance
     for _, side in ipairs(ROW_SIDES) do
-        local centre = player.Position + side * away
+        local centre = origin + side * away
         local spots = {}
         for i = 1, n do
             local pos = centre + Vector((i - (n + 1) / 2) * gap, 0)
@@ -454,7 +471,7 @@ local function rowSpots(player, n)
         if spots then return spots end
     end
     local spots = {}
-    for i = 1, n do spots[i] = player.Position + Vector((i - (n + 1) / 2) * gap, 0) end
+    for i = 1, n do spots[i] = origin + Vector((i - (n + 1) / 2) * gap, 0) end
     return spots
 end
 
@@ -483,12 +500,158 @@ function M.breakHeld(player)
     else
         digits = M.digitsOf(id)
     end
-    local spots = rowSpots(player, #digits)
+    local spots = rowSpots(player.Position, #digits)
     for i, d in ipairs(digits) do spawnCereal(d, spots[i], player) end
     sfx(SoundEffect.SOUND_BONE_SNAP, 0.8)
     ConchBlessing.printDebug("[Cereal] player %d broke item %d into %s", player.ControllerIndex, id,
         table.concat(digits, ""))
     return true, id, digits
+end
+
+-- ------------------------------------------------------------------ grinding
+-- A pedestal in reach is ground without being taken (user decision
+-- 2026-11-24, so actives can be ground too: touching an active pedestal swaps
+-- Cereal out of its slot before the use key could break it). Like Quick Pick,
+-- each pedestal is checked for whether it may be ground now, and only one that
+-- may is marked and ground: an item for sale (a shop item or a deal) has to be
+-- paid for first, a quest item stays (the story needs it), an item the Magic
+-- Conch is upgrading waits, and the Death Certificate area, where every item
+-- of the game stands, grinds nothing.
+local HOME_STAGE_ID, DEATH_CERTIFICATE_SUBTYPES, DEATH_CERTIFICATE_DIMENSION = 35, { [33] = true, [34] = true }, 2
+local PRICE_FREE = PickupPrice and PickupPrice.PRICE_FREE or -1000
+
+local function inDeathCertificateArea()
+    local level = Game():GetLevel()
+    local ok, data = pcall(function() return level:GetCurrentRoomDesc().Data end)
+    local stage = ok and data and tonumber(data.StageID)
+    if stage then
+        return stage == HOME_STAGE_ID and DEATH_CERTIFICATE_SUBTYPES[tonumber(data.Subtype)] == true
+    end
+    if type(level.GetDimension) == "function" then
+        local dimOk, dimension = pcall(level.GetDimension, level)
+        return dimOk and dimension == DEATH_CERTIFICATE_DIMENSION
+    end
+    return false
+end
+
+local function grindable(pickup)
+    if not pickup or not pickup:Exists() or pickup.Variant ~= PickupVariant.PICKUP_COLLECTIBLE then return false end
+    local id = pickup.SubType
+    if id <= 0 or id == ID then return false end
+    local config = Isaac.GetItemConfig():GetCollectible(id)
+    if not config or config:HasTags(ItemConfig.TAG_QUEST) then return false end
+    local price = pickup.Price or 0
+    if price ~= 0 and price ~= PRICE_FREE then return false end
+    local upgrade = ConchBlessing.upgrade
+    if type(upgrade) == "table" then
+        if type(upgrade.isAnimatingPickup) == "function" and upgrade.isAnimatingPickup(pickup) then return false end
+        if type(upgrade.isCycleFrozen) == "function" and upgrade.isCycleFrozen(pickup) then return false end
+    end
+    return true
+end
+
+--- The nearest pedestal `player` may grind now, within reach, or nil.
+function M.grindTarget(player)
+    if not player or inDeathCertificateArea() then return nil end
+    local best, bestDistance = nil, M.data.grindRange
+    for _, entity in ipairs(Isaac.FindByType(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_COLLECTIBLE)) do
+        local pickup = entity:ToPickup()
+        local distance = pickup and pickup.Position:Distance(player.Position)
+        if distance and distance <= bestDistance and grindable(pickup) then best, bestDistance = pickup, distance end
+    end
+    return best
+end
+
+-- The engine's own way where there is one, else IsaacScript Common's: an
+-- empty pedestal is subtype 0 with nothing drawn on it.
+local function emptyPedestal(pickup)
+    if type(pickup.TryRemoveCollectible) == "function" then
+        local ok = pcall(pickup.TryRemoveCollectible, pickup)
+        if ok and pickup.SubType == 0 then return true end
+    end
+    local ok = pcall(isc.setCollectibleEmpty, nil, pickup)
+    return ok and pickup.SubType == 0
+end
+
+--- Grind the item on `pickup` into its number's cereal, beside the pedestal.
+--- Its other choices go as when it is taken. Returns true, the item and the
+--- digits, or false.
+function M.grindPedestal(player, pickup)
+    if not player or not grindable(pickup) then return false end
+    local id = pickup.SubType
+    local pos = pickup.Position
+    local group = pickup.OptionsPickupIndex or 0
+    local rng = player:GetCollectibleRNG(ID)
+    local digits
+    if id == BREAKFAST then
+        digits = { rng:RandomInt(10), rng:RandomInt(10), rng:RandomInt(10) }
+    else
+        digits = M.digitsOf(id)
+    end
+    -- A rotating pedestal's other choices go with the one on show, as when
+    -- it is taken.
+    if type(pickup.RemoveCollectibleCycle) == "function" then pcall(pickup.RemoveCollectibleCycle, pickup) end
+    if not emptyPedestal(pickup) then
+        ConchBlessing.printError("[Cereal] could not empty the pedestal of item " .. tostring(id) .. " to grind it")
+        return false
+    end
+    if group ~= 0 then
+        for _, entity in ipairs(Isaac.FindByType(EntityType.ENTITY_PICKUP)) do
+            local other = entity:ToPickup()
+            if other and GetPtrHash(other) ~= GetPtrHash(pickup) and other.OptionsPickupIndex == group then
+                Isaac.Spawn(EntityType.ENTITY_EFFECT, EffectVariant.POOF01, 0, other.Position, Vector.Zero, nil)
+                other:Remove()
+            end
+        end
+    end
+    local spots = rowSpots(pos, #digits)
+    for i, d in ipairs(digits) do spawnCereal(d, spots[i], player) end
+    Isaac.Spawn(EntityType.ENTITY_EFFECT, EffectVariant.POOF01, 0, pos, Vector.Zero, nil)
+    sfx(SoundEffect.SOUND_BONE_SNAP, 0.8)
+    if type(player.AnimateCollectible) == "function" then pcall(player.AnimateCollectible, player, ID, "UseItem") end
+    ConchBlessing.printDebug("[Cereal] player %d ground item %d into %s", player.ControllerIndex, id,
+        table.concat(digits, ""))
+    return true, id, digits
+end
+
+-- Which pedestal each player holding Cereal in reach of the use key would
+-- grind now; worked out once an update and drawn every render frame.
+local function updateTargets()
+    local seen = {}
+    eachPlayer(function(player)
+        local key = GetPtrHash(player)
+        if not living(player) or pickers[key] or queuedCollectible(player) or not cerealSlot(player) then return end
+        local pickup = M.grindTarget(player)
+        if pickup then
+            targets[key] = EntityPtr(pickup)
+            seen[key] = true
+        end
+    end)
+    for key in pairs(targets) do
+        if not seen[key] then targets[key] = nil end
+    end
+end
+
+local function liveTarget(key)
+    local ptr = targets[key]
+    local pickup = ptr and ptr.Ref and ptr.Ref:ToPickup()
+    if pickup and grindable(pickup) then return pickup end
+    return nil
+end
+
+-- A gold arrow bobbing over the item that would be ground.
+local function drawTargets()
+    local drawn = {}
+    for key in pairs(targets) do
+        local pickup = liveTarget(key)
+        local hash = pickup and GetPtrHash(pickup)
+        if pickup and not drawn[hash] then
+            drawn[hash] = true
+            local at = Isaac.WorldToScreen(pickup.Position + pickup.PositionOffset)
+            local bob = math.floor(math.sin(Isaac.GetFrameCount() / 9) * 2 + 0.5)
+            part("ArrowDown", 0, at.X - 4, at.Y - M.data.markerLift + bob, Color(1, 0.85, 0.35, 1))
+        end
+    end
 end
 
 -- ------------------------------------------------------------------ the bowl
@@ -778,6 +941,13 @@ local function act(player, slot)
         lock(key, player, confirmAction(slot))
         return M.breakHeld(player) == true
     end
+    if not pickers[key] then
+        local pickup = M.grindTarget(player)
+        if pickup then
+            targets[key] = nil
+            return M.grindPedestal(player, pickup) == true
+        end
+    end
     if not pickers[key] and not M.open(player, slot) then sfx(SoundEffect.SOUND_BOSS2INTRO_ERRORBUZZ, 0.6) end
     return false
 end
@@ -875,7 +1045,7 @@ end
 --- all goes under the feet instead, in the same order downwards.
 function M.layout(footY, bowlTop, active, nameH, noteH, countH)
     local L = { bowlTop = bowlTop }
-    L.countsY = bowlTop - 4 - countH          -- the cereal in the bowl reach 3 above its top
+    L.countsY = bowlTop - 4 - countH          -- clear of the bowl's rim and the cereal in it
     L.digitsTop = L.countsY - 13
     L.iconY = L.digitsTop - 18                -- icon centre: its bottom 2 above the framed digit
     L.nameY = L.iconY - 14 - nameH
@@ -898,7 +1068,7 @@ local function draw(player, picker)
     local foot = Isaac.WorldToScreen(player.Position)
     local shake = picker.shake > 0 and math.floor(math.sin(picker.shake * 2.2) * 2 + 0.5) or 0
     local cx = math.floor(foot.X) + shake
-    local bowlTop = math.floor(foot.Y - M.data.bowlLift - 21)
+    local bowlTop = math.floor(foot.Y - M.data.bowlLift - M.data.bowlHeight)
     local nameScale, noteScale = M.data.nameScale, M.data.noteScale
     local state, n, config = M.lookup(picker.entered)
     local active = state == "ok" and config ~= nil and config.Type == ItemType.ITEM_ACTIVE
@@ -921,7 +1091,9 @@ local function draw(player, picker)
     end
     -- the bowl, the cereal in it, then its near rim over the cereal
     local left = cx - 28
+    local milky = M.milk() > 0
     part("BowlBack", 0, left, bowlTop)
+    if milky then part("Milk", 0, left, bowlTop) end
     local bob = math.floor(Game():GetFrameCount() / 12)
     local frame, fx = Isaac.GetFrameCount(), M.data.fx
     -- The cereal in the bowl stay centred (user request 2026-11-24): each eases
@@ -949,7 +1121,7 @@ local function draw(player, picker)
     for _, f in ipairs(picker.fx) do
         if f.kind == "in" and frame - f.start < fx.fall then falling[f.slot] = f end
     end
-    local restY = bowlTop - 3
+    local restY = bowlTop + (milky and M.data.floatY or M.data.bottomY)
     for i = 1, count do
         local x = slotX(i)
         local d = picker.entered[i]
@@ -971,14 +1143,16 @@ local function draw(player, picker)
         if f.kind == "in" and age >= fx.fall then
             if not f.splashed then
                 f.splashed = true
-                sfx(SoundEffect.SOUND_PLOP, 0.6)
+                sfx(SoundEffect.SOUND_PLOP, milky and 0.6 or 0.3)
             end
-            local k = (age - fx.fall) / fx.splash
-            local sx, sy = slotX(f.slot) + 5, bowlTop + 5
-            local drop = Color(0.98, 0.98, 0.96, 1 - k)
-            for j, dx in ipairs({ -5, -2, 2, 5 }) do
-                local h = j % 2 == 0 and 7 or 5
-                rect(math.floor(sx + dx * (0.6 + k * 0.7)), math.floor(sy - math.sin(math.pi * k) * h), 1, 1, drop)
+            if milky then
+                local k = (age - fx.fall) / fx.splash
+                local sx, sy = slotX(f.slot) + 5, bowlTop + M.data.milkY
+                local drop = Color(0.98, 0.98, 0.96, 1 - k)
+                for j, dx in ipairs({ -5, -2, 2, 5 }) do
+                    local h = j % 2 == 0 and 7 or 5
+                    rect(math.floor(sx + dx * (0.6 + k * 0.7)), math.floor(sy - math.sin(math.pi * k) * h), 1, 1, drop)
+                end
             end
         elseif f.kind == "out" then
             local k = age / fx.out
@@ -1073,7 +1247,7 @@ end
 
 --- The chance that a draw becomes Breakfast with `milk` held.
 function M.milkChance(milk)
-    return M.data.milkChance ^ math.max(0, math.floor(milk or 0))
+    return M.data.milkBase * M.data.milkChance ^ math.max(0, math.floor(milk or 0))
 end
 
 -- EID: below Cereal's description, above the REPENTOGON line, the chance a
@@ -1164,6 +1338,7 @@ end
 function M.onUpdate()
     if #pendingCounts > 0 then issueCounts() end
     watchQueues()
+    updateTargets()
     if next(owners) ~= nil then each(step) end
     for key, entry in pairs(toasts) do
         entry.frames = entry.frames - 1
@@ -1181,6 +1356,7 @@ end
 
 function M.onRender()
     for _, bit in ipairs(bits) do bit.sprite:Render(Isaac.WorldToScreen(bit.pos)) end
+    if next(targets) ~= nil then drawTargets() end
     if next(owners) ~= nil then
         each(function(key, player)
             step(key, player)
@@ -1204,11 +1380,11 @@ function M.onNewRoom()
         watches[key] = nil
         forget(key)
     end)
-    bits = {}
+    bits, targets = {}, {}
 end
 
 function M.reset()
-    pickers, watches, locks, owners, toasts, bits, testKeys = {}, {}, {}, {}, {}, {}, {}
+    pickers, watches, locks, owners, toasts, bits, testKeys, targets = {}, {}, {}, {}, {}, {}, {}, {}
     pendingCounts, counting = {}, false
     pooledCache = nil
 end
@@ -1250,6 +1426,7 @@ M._test = {
     clearKeys = function() testKeys = {} end,
     withheld = function(player, action) return withheld(GetPtrHash(player), player.ControllerIndex, action) end,
     variant = function() return VARIANT end,
+    target = function(player) local ptr = player and targets[GetPtrHash(player)]; return ptr and ptr.Ref end,
     bits = function() return #bits end,
     reset = M.reset,
 }

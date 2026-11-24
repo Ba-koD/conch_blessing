@@ -1114,10 +1114,11 @@ ConchBlessing.ItemData = {
     },
     CEREAL = {
         -- 시리얼 (user design 2026-11-24): Breakfast's positive answer. A use
-        -- while an item is held up breaks it into the number cereal of its
-        -- ID; a use otherwise opens a bowl in which the cereal put in make
-        -- the item of that number for one milk. Every draw becomes Breakfast
-        -- (milk) by a chance that halves with each milk held.
+        -- near a pedestal it may grind (or while an item is held up) breaks
+        -- that item into the number cereal of its ID; a use otherwise opens a
+        -- bowl in which the cereal put in make the item of that number for
+        -- one milk. Every draw becomes Breakfast (milk), 50% with no milk and
+        -- halved with each milk held.
         type = "active",
         id = Isaac.GetItemIdByName("Cereal"),
         gfx = "cereal.png",

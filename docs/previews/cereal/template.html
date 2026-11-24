@@ -33,7 +33,7 @@ ul{padding-left:18px;margin:4px 0}
     <div><span class="k">Space</span> 들고 있을 때: 시리얼로 부수기 · 평소: 그릇 열기 (우유 1개)</div>
     <div>그릇 (공격 키): <span class="k">←</span><span class="k">→</span> 숫자 고르기 · <span class="k">↓</span> 넣기 · <span class="k">↑</span> 빼기(마지막에 넣은 것부터) · <span class="k">Space</span> 확정 · <span class="k">Ctrl</span>/<span class="k">Esc</span> 닫기</div>
     <h2>지금 상태</h2>
-    <div>다음 아이템이 우유일 확률 <span class="big" id="chance">100%</span></div>
+    <div>다음 아이템이 우유일 확률 <span class="big" id="chance">50%</span></div>
     <div class="muted" id="state"></div>
     <div style="margin-top:6px">
       <button id="bPick">아이템 집기 (Q)</button>
@@ -50,7 +50,7 @@ ul{padding-left:18px;margin:4px 0}
       <li>없는 번호(000 포함)나 만들 수 없는 아이템이면 확정할 때 통째로 취소되고, 우유와 시리얼은 돌려받아요. 닫아도 마찬가지.</li>
       <li>패시브·패밀리어는 바로 얻고, 액티브는 근처 받침대로 나와요.</li>
       <li>칸 수는 가장 큰 아이템 번호의 자릿수예요(번호가 1000을 넘으면 4칸). 숫자 하나로도 만들 수 있고, 0은 첫 칸에 못 넣어요.</li>
-      <li>아이템이 우유로 바뀔 확률은 100%에서 가진 우유 1개마다 절반.</li>
+      <li>아이템이 우유로 바뀔 확률은 50%에서 가진 우유 1개마다 절반.</li>
       <li>HUD에는 시리얼 아이콘 오른쪽 위에 우유 개수만 x5처럼 보여요. 시리얼은 그릇을 열면 숫자별로 보이고, 그릇은 우유가 없어도 열리며 빈 채로 Space를 누르면 닫혀요.</li>
     </ul>
     <div class="muted">떨어진 시리얼은 동전·열쇠처럼 바닥에 튀어 떨어지고, 밟으면 반짝이며 주워져요. 숫자마다 색이 달라요: 0 흰색, 1 빨강, 2 주황, 3 노랑, 4 초록, 5 청록, 6 파랑, 7 보라, 8 분홍, 9 초콜릿. 우리 모드 아이템은 다른 모드가 없다고 보고 733번부터 붙였어요. 글씨는 미리보기용 글꼴이고, 게임에서는 LanaPixel로 그려요.</div>
@@ -143,7 +143,7 @@ function cutUi() {
   const P = D.uiParts;
   for (let d = 0; d < 10; d++) CEREAL[d] = cut(d * D.digit.w, D.digit.y, D.digit.w, D.digit.h);
   RING = cut(...P.Ring); CARTON = cut(...P.Carton); QMARK = cut(...P.Unknown);
-  BOWL = { back: cut(...P.BowlBack), front: cut(...P.BowlFront), w: P.BowlBack[2], h: P.BowlBack[3] };
+  BOWL = { back: cut(...P.BowlBack), front: cut(...P.BowlFront), milk: cut(...P.Milk), w: P.BowlBack[2], h: P.BowlBack[3] };
   ARROW = { LR: cut(...P.ArrowLR), UP: cut(...P.ArrowUp), DOWN: cut(...P.ArrowDown) };
 }
 
@@ -207,7 +207,7 @@ function lookup(entered) {
 
 function pickItem() {
   if (state.mode !== 'idle') return;
-  const chance = 0.5 ** milk;
+  const chance = 0.5 * 0.5 ** milk;
   const id = Math.random() < chance ? BREAKFAST : CRAFTABLE[Math.floor(Math.random() * CRAFTABLE.length)].id;
   state = { mode: 'hold', id, item: ITEMS.get(id), t: 0, from: 'pick' };
 }
@@ -381,7 +381,7 @@ function sparkle(x, y, t) {
 }
 function drawBowlUI() {
   const s = state, ox = shake ? Math.round(Math.sin(shake * 2.2) * 2) : 0;
-  const cx = P.x + ox, top = P.y - 28 - 21;
+  const cx = P.x + ox, top = P.y - 28 - BOWL.h;
   const res = lookup(s.entered), num = s.entered.join('');
   const active = res.state === 'ok' && res.item.active;
   const countH = 6, nameH = 9, noteH = 7;
@@ -400,8 +400,11 @@ function drawBowlUI() {
     mini(a, x + 3 - (String(a).length - 1) * 2, countsY, a > 0 ? '#fff' : '#777');
   }
   // bowl, the cereal in it, then the near rim over the cereal
-  const bxl = cx - 28;
+  // the milk only while milk is held; the cereal float on it just under the
+  // rim, or lie on the bottom of an empty bowl (as the game draws them)
+  const bxl = cx - 28, milky = milk > 0, rest = top + (milky ? 1 : 6);
   bx.drawImage(BOWL.back, bxl, top);
+  if (milky) bx.drawImage(BOWL.milk, bxl, top);
   const FALL = 7, SPLASH = 7, OUT = 6;      // update frames, as the game's 14/14/12 render frames
   s.fx = s.fx.filter(f => frame - f.start <= (f.kind === 'in' ? FALL + SPLASH : OUT));
   // the cereal stay centred and slide aside as the count changes, as in the game
@@ -419,20 +422,20 @@ function drawBowlUI() {
     const f = s.fx.find(f => f.kind === 'in' && f.slot === i && frame - f.start < FALL);
     if (f) {
       const e = ((frame - f.start) / FALL) ** 2;
-      bx.drawImage(CEREAL[d], Math.floor(rowX(d) + (x - rowX(d)) * e), Math.floor(digitsTop + (top - 3 - digitsTop) * e));
-    } else bx.drawImage(CEREAL[d], x, top - 3 + (Math.floor(frame / 12 + i) % 2));
+      bx.drawImage(CEREAL[d], Math.floor(rowX(d) + (x - rowX(d)) * e), Math.floor(digitsTop + (rest - digitsTop) * e));
+    } else bx.drawImage(CEREAL[d], x, rest + (Math.floor(frame / 12 + i) % 2));
   }
   bx.drawImage(BOWL.front, bxl, top);
   for (const f of s.fx) {
     const age = frame - f.start;
-    if (f.kind === 'in' && age >= FALL) {
-      const k = (age - FALL) / SPLASH, sx = slotX(f.slot) + 5, sy = top + 5;
+    if (f.kind === 'in' && age >= FALL && milky) {
+      const k = (age - FALL) / SPLASH, sx = slotX(f.slot) + 5, sy = top + 9;
       bx.save(); bx.globalAlpha = 1 - k; bx.fillStyle = '#fbfbf5';
       [-5, -2, 2, 5].forEach((dx, j) => bx.fillRect(Math.floor(sx + dx * (0.6 + k * 0.7)), Math.floor(sy - Math.sin(Math.PI * k) * (j % 2 ? 7 : 5)), 1, 1));
       bx.restore();
     } else if (f.kind === 'out') {
       const k = age / OUT;
-      bx.save(); bx.globalAlpha = 1 - k; bx.drawImage(CEREAL[f.d], Math.floor(cx + f.off + 0.5), Math.floor(top - 3 - 18 * (1 - (1 - k) ** 2))); bx.restore();
+      bx.save(); bx.globalAlpha = 1 - k; bx.drawImage(CEREAL[f.d], Math.floor(cx + f.off + 0.5), Math.floor(rest - 18 * (1 - (1 - k) ** 2))); bx.restore();
     }
   }
   // what the number makes
@@ -514,7 +517,7 @@ function draw() {
     vx.fillStyle = t.color; vx.fillText(t.t, t.x * S, t.y * S);
     vx.restore();
   }
-  document.getElementById('chance').textContent = `${+(100 * 0.5 ** milk).toFixed(2)}%`;
+  document.getElementById('chance').textContent = `${+(100 * 0.5 * 0.5 ** milk).toFixed(2)}%`;
   const per = counts.map((n, d) => n ? `${d}×${n}` : '').filter(Boolean).join('  ') || '없음';
   document.getElementById('state').textContent = `우유 ${milk}개 · 시리얼 ${per} · 최대 번호 ${maxId()} (${maxLen()}자리)`;
 }
