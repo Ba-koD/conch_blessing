@@ -732,6 +732,19 @@ return {
             },
         },
 
+        CEREAL = {
+            name = "Cereal",
+            description = "Milk first or cereal first?",
+            eid = {
+                "Using it while holding up an item drops that item's number as number cereal",
+                "#Items turn into {c:BREAKFAST} Breakfast with a 100% chance, halved for each one held",
+                "#{{Warning}} Requires REPENTOGON!",
+            },
+            synergies = {
+                breakfast = "Drops 3 random number cereal",
+            },
+        },
+
         -- Familiars
         TIME_MONEY = {
             name = "Time = Money",
@@ -949,6 +962,18 @@ return {
         conch_ticket = {
             hint = "< > choose   %s confirm", confirm_card = "Q", confirm_glasses = "Space",
             waiting = "x%s", reserved = "Reserved: %s", separator = ", ",
+        },
+        cereal = {
+            hint_choose = " choose", hint_add = " add", hint_remove = " remove",
+            hint_confirm = "%s confirm", hint_close = "%s close",
+            key_item = "Space", key_card = "Q", key_drop = "Ctrl/Esc",
+            result = "%s  %s",
+            nocraft = "%s  %s (can't be made)",
+            none = "%s  no such item",
+            active = "Spawns near the player",
+            no_milk = "No milk",
+            cancel_none = "No item %s: cancelled",
+            cancel_nocraft = "Item %s can't be made: cancelled",
         },
         morph = {
             applied = "APPLIED",

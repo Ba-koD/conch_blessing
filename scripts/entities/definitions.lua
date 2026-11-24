@@ -76,4 +76,18 @@ return {
         collisionDamage = 0, collisionMass = 0, collisionRadius = 0,
         friction = 1, numGridCollisionPoints = 0, shadowSize = 0,
     },
+    -- 시리얼's number cereal, a floor pickup (subtype = its digit, each with its
+    -- own animation). One named variant holds the ten subtypes, as the
+    -- installed mods' custom pickups name theirs; no installed mod used 7792
+    -- for a pickup on 2026-11-24.
+    CEREAL_0 = { name = "Conch Blessing Cereal 0", id = 5, variant = 7792, subtype = 0, anm2path = "005.7792_conch_cereal_0.anm2", collisionDamage = 0, collisionMass = 3, collisionRadius = 7, friction = 1, numGridCollisionPoints = 12, shadowSize = 8 },
+    CEREAL_1 = { name = "Conch Blessing Cereal 1", id = 5, variant = 7792, subtype = 1, anm2path = "005.7792_conch_cereal_1.anm2", collisionDamage = 0, collisionMass = 3, collisionRadius = 7, friction = 1, numGridCollisionPoints = 12, shadowSize = 8 },
+    CEREAL_2 = { name = "Conch Blessing Cereal 2", id = 5, variant = 7792, subtype = 2, anm2path = "005.7792_conch_cereal_2.anm2", collisionDamage = 0, collisionMass = 3, collisionRadius = 7, friction = 1, numGridCollisionPoints = 12, shadowSize = 8 },
+    CEREAL_3 = { name = "Conch Blessing Cereal 3", id = 5, variant = 7792, subtype = 3, anm2path = "005.7792_conch_cereal_3.anm2", collisionDamage = 0, collisionMass = 3, collisionRadius = 7, friction = 1, numGridCollisionPoints = 12, shadowSize = 8 },
+    CEREAL_4 = { name = "Conch Blessing Cereal 4", id = 5, variant = 7792, subtype = 4, anm2path = "005.7792_conch_cereal_4.anm2", collisionDamage = 0, collisionMass = 3, collisionRadius = 7, friction = 1, numGridCollisionPoints = 12, shadowSize = 8 },
+    CEREAL_5 = { name = "Conch Blessing Cereal 5", id = 5, variant = 7792, subtype = 5, anm2path = "005.7792_conch_cereal_5.anm2", collisionDamage = 0, collisionMass = 3, collisionRadius = 7, friction = 1, numGridCollisionPoints = 12, shadowSize = 8 },
+    CEREAL_6 = { name = "Conch Blessing Cereal 6", id = 5, variant = 7792, subtype = 6, anm2path = "005.7792_conch_cereal_6.anm2", collisionDamage = 0, collisionMass = 3, collisionRadius = 7, friction = 1, numGridCollisionPoints = 12, shadowSize = 8 },
+    CEREAL_7 = { name = "Conch Blessing Cereal 7", id = 5, variant = 7792, subtype = 7, anm2path = "005.7792_conch_cereal_7.anm2", collisionDamage = 0, collisionMass = 3, collisionRadius = 7, friction = 1, numGridCollisionPoints = 12, shadowSize = 8 },
+    CEREAL_8 = { name = "Conch Blessing Cereal 8", id = 5, variant = 7792, subtype = 8, anm2path = "005.7792_conch_cereal_8.anm2", collisionDamage = 0, collisionMass = 3, collisionRadius = 7, friction = 1, numGridCollisionPoints = 12, shadowSize = 8 },
+    CEREAL_9 = { name = "Conch Blessing Cereal 9", id = 5, variant = 7792, subtype = 9, anm2path = "005.7792_conch_cereal_9.anm2", collisionDamage = 0, collisionMass = 3, collisionRadius = 7, friction = 1, numGridCollisionPoints = 12, shadowSize = 8 },
 }

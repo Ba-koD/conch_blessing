@@ -22,7 +22,12 @@ class EntityDefinitionsTests(unittest.TestCase):
             generate_xml.create_entities2_xml(items, str(path), definitions, {})
             self.assertEqual(first, path.read_bytes())
             rows = ET.parse(path).getroot().findall('entity')
-            self.assertEqual(len(rows), 11)
+            self.assertEqual(len(rows), 21)
+            # 시리얼's number cereal: real pickups, one row a digit (2026-11-24).
+            for d, row in enumerate(rows[11:21]):
+                self.assertEqual((row.get('name'), row.get('id'), row.get('variant'), row.get('subtype')),
+                                 (definitions['CEREAL_%d' % d]['name'], '5', '7792', str(d)))
+                self.assertTrue((Path('resources/gfx') / row.get('anm2path')).is_file())
             self.assertEqual((rows[0].get('id'), rows[0].get('variant')), ('3', '777'))
             marker = rows[1]
             ox = rows[2]

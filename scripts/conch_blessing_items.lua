@@ -1112,6 +1112,38 @@ ConchBlessing.ItemData = {
             postNewLevel = "agingCurve.onNewLevel",
         },
     },
+    CEREAL = {
+        -- 시리얼 (user design 2026-11-24): Breakfast's positive answer. A use
+        -- while an item is held up breaks it into the number cereal of its
+        -- ID; a use otherwise opens a bowl in which the cereal put in make
+        -- the item of that number for one milk. Every draw becomes Breakfast
+        -- (milk) by a chance that halves with each milk held.
+        type = "active",
+        id = Isaac.GetItemIdByName("Cereal"),
+        gfx = "cereal.png",
+        pool = { RoomType.ROOM_TREASURE, RoomType.ROOM_SHOP }, -- user decision 2026-11-24
+        quality = 4,
+        hidden = false,
+        shopprice = 20,
+        devilprice = 2,
+        maxcharges = 0,
+        origin = { id = CollectibleType.COLLECTIBLE_BREAKFAST, type = "collectible" },
+        flag = "positive",
+        script = "scripts/items/collectibles/cereal",
+        callbacks = {
+            use = "cereal.onUseItem",
+            postUpdate = "cereal.onUpdate",
+            postRender = "cereal.onRender",
+            inputAction = "cereal.onInputAction",
+            postNewRoom = "cereal.onNewRoom",
+            postGameStarted = "cereal.reset",
+            preGameExit = "cereal.reset",
+        },
+        synergies = {
+            -- a Breakfast broken while held up drops three random digits
+            [{ id = CollectibleType.COLLECTIBLE_BREAKFAST, type = "collectible" }] = "breakfast",
+        },
+    },
 
     -- The twelve zodiac items (십이지) close the collectible group in their own
     -- order, 자 … 해, followed by the familiars and trinkets.

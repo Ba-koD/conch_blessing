@@ -25,6 +25,9 @@ PENDING={
  'gfx/items/collectibles/underdog.png':'3D model not built yet (Underdog, added 2026-11-15)',
  'gfx/items/collectibles/jobs_blessing.png':"3D model not built yet (Job's Blessing, added 2026-11-18)",
  'gfx/items/collectibles/aging_curve.png':'3D model not built yet (Aging Curve, added 2026-11-24)',
+ 'gfx/items/collectibles/cereal.png':'3D model not built yet (Cereal, added 2026-11-24)',
+ 'gfx/items/pick ups/pickup_conch_cereal.png':'3D model not built yet (Cereal number cereal, added 2026-11-24)',
+ 'gfx/ui/conch_cereal_ui.png':'3D model not built yet (Cereal bowl and HUD marks, added 2026-11-24)',
  'gfx/effects/conch_jangseung_rope.png':'3D model not built yet (Jangseung 금줄, added 2026-11-15)',
 }
 

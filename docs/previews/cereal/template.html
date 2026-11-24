@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cereal Bowl Preview</title>
+<style>
+:root{--bg:#16131a;--panel:#221d27;--text:#eee6dc;--muted:#a99f94;--accent:#f0b84a;--line:#3a3240}
+body{margin:0;background:var(--bg);color:var(--text);font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif}
+.wrap{display:flex;gap:18px;padding:16px;flex-wrap:wrap;align-items:flex-start}
+canvas{image-rendering:pixelated;border:1px solid var(--line);background:#000;max-width:100%;height:auto}
+.panel{flex:1;min-width:260px;max-width:440px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 16px;font-size:14px;line-height:1.6}
+button{background:#3a3142;color:var(--text);border:1px solid #574a60;border-radius:6px;padding:5px 10px;margin:3px 4px 3px 0;cursor:pointer;font:inherit;font-size:13px}
+button:hover{background:#4a3f55}
+label{font-size:13px;cursor:pointer}
+.k{display:inline-block;min-width:16px;padding:0 5px;border:1px solid #574a60;border-radius:4px;background:#2c2533;font-size:12px;text-align:center;line-height:18px}
+.big{font-size:18px;color:var(--accent);font-weight:bold}
+h1{font-size:17px;margin:0 0 6px}
+h2{font-size:14px;margin:14px 0 4px;color:var(--accent)}
+ul{padding-left:18px;margin:4px 0}
+.muted{color:var(--muted);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <canvas id="view"></canvas>
+  <div class="panel">
+    <h1>시리얼 그릇 미리보기</h1>
+    <div class="muted">캔버스를 한 번 누른 뒤 키보드로 조작해요. 화면은 게임 화소 4배예요.</div>
+    <h2>조작</h2>
+    <div><span class="k">W</span><span class="k">A</span><span class="k">S</span><span class="k">D</span> 걷기 (떨어진 시리얼을 밟아서 줍기)</div>
+    <div><span class="k">Q</span> 아이템 집기 (받침대에서 집은 셈)</div>
+    <div><span class="k">Space</span> 들고 있을 때: 시리얼로 부수기 · 평소: 그릇 열기 (우유 1개)</div>
+    <div>그릇 (공격 키): <span class="k">←</span><span class="k">→</span> 숫자 고르기 · <span class="k">↓</span> 넣기 · <span class="k">↑</span> 빼기(마지막에 넣은 것부터) · <span class="k">Space</span> 확정 · <span class="k">Ctrl</span>/<span class="k">Esc</span> 닫기</div>
+    <h2>지금 상태</h2>
+    <div>다음 아이템이 우유일 확률 <span class="big" id="chance">100%</span></div>
+    <div class="muted" id="state"></div>
+    <div style="margin-top:6px">
+      <button id="bPick">아이템 집기 (Q)</button>
+      <button id="bMilk">우유 +1</button>
+      <button id="bCereal">바닥에 시리얼 6개</button>
+      <button id="bReset">처음부터</button>
+    </div>
+    <div style="margin-top:4px"><label><input type="checkbox" id="wide"> 모드가 많아 아이템 번호가 1000을 넘을 때 (4자리 칸)</label></div>
+    <h2>규칙 (지금 미리보기에 들어간 것)</h2>
+    <ul>
+      <li>0칸 액티브라 몇 번이든 써요.</li>
+      <li>집어서 들고 있는 동안 쓰면 그 아이템은 얻지 않고, 번호가 쓰인 그대로 시리얼로 떨어져요 (4번은 4 하나, 118번은 1·1·8). 아침밥은 무작위 숫자 3개.</li>
+      <li>그냥 쓰면 그릇을 들어요(우유가 없어도). 숫자를 넣고 Space로 확정하면 우유 1개로 만들어요.</li>
+      <li>없는 번호(000 포함)나 만들 수 없는 아이템이면 확정할 때 통째로 취소되고, 우유와 시리얼은 돌려받아요. 닫아도 마찬가지.</li>
+      <li>패시브·패밀리어는 바로 얻고, 액티브는 근처 받침대로 나와요.</li>
+      <li>칸 수는 가장 큰 아이템 번호의 자릿수예요(번호가 1000을 넘으면 4칸). 숫자 하나로도 만들 수 있고, 0은 첫 칸에 못 넣어요.</li>
+      <li>아이템이 우유로 바뀔 확률은 100%에서 가진 우유 1개마다 절반.</li>
+      <li>HUD에는 시리얼 아이콘 오른쪽 위에 우유 개수만 x5처럼 보여요. 시리얼은 그릇을 열면 숫자별로 보이고, 그릇은 우유가 없어도 열리며 빈 채로 Space를 누르면 닫혀요.</li>
+    </ul>
+    <div class="muted">떨어진 시리얼은 동전·열쇠처럼 바닥에 튀어 떨어지고, 밟으면 반짝이며 주워져요. 숫자마다 색이 달라요: 0 흰색, 1 빨강, 2 주황, 3 노랑, 4 초록, 5 청록, 6 파랑, 7 보라, 8 분홍, 9 초콜릿. 우리 모드 아이템은 다른 모드가 없다고 보고 733번부터 붙였어요. 글씨는 미리보기용 글꼴이고, 게임에서는 LanaPixel로 그려요.</div>
+  </div>
+</div>
+<script>
+const D = /*DATA*/null;
+const S = 4, W = 240, H = 180;
+const view = document.getElementById('view');
+view.width = W * S; view.height = H * S;
+const vx = view.getContext('2d'); vx.imageSmoothingEnabled = false;
+const buf = document.createElement('canvas'); buf.width = W; buf.height = H;
+const bx = buf.getContext('2d'); bx.imageSmoothingEnabled = false;
+
+function img(src) { const i = new Image(); i.src = src; return i; }
+const IM = { atlas: img(D.atlas), isaac: img(D.isaac), hud: img(D.hud), hearts: img(D.hearts), altar: img(D.altar), ui: img(D.ui) };
+
+const ITEMS = new Map();
+let lastOwn = D.vanillaLast;
+for (const r of D.items) {
+  const [id, en, kr, q, act, craft, slot, own] = r;
+  ITEMS.set(id, { id, en, kr, q, active: !!act, craft: !!craft, slot, own: !!own });
+  if (id > lastOwn) lastOwn = id;
+}
+const CRAFTABLE = [...ITEMS.values()].filter(i => i.craft);
+const BREAKFAST = 25;
+
+// ---------- pixel art ----------
+function sprite(w, h, paint) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const x = c.getContext('2d'); const id = x.createImageData(w, h);
+  paint((px, py, col) => {
+    if (px < 0 || py < 0 || px >= w || py >= h) return;
+    const o = (py * w + px) * 4;
+    id.data[o] = col[0]; id.data[o + 1] = col[1]; id.data[o + 2] = col[2]; id.data[o + 3] = col.length > 3 ? col[3] : 255;
+  });
+  x.putImageData(id, 0, 0); return c;
+}
+const N8 = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]];
+// Puffy cereal: a 2px stroke, lit from the top left, outlined in a dark tone of its own colour.
+const GOLD = { out: [70, 34, 10], base: [228, 164, 64], light: [255, 222, 132], shade: [180, 108, 38] };
+function puffy(rows, pal = GOLD) {
+  const gw = rows[0].length, gh = rows.length;
+  const f = (x, y) => y >= 0 && y < gh && x >= 0 && x < gw && rows[y][x] === '#';
+  return sprite(gw + 2, gh + 2, set => {
+    for (let y = -1; y <= gh; y++) for (let x = -1; x <= gw; x++) {
+      if (f(x, y)) {
+        const lit = !f(x, y - 1) || !f(x - 1, y), dark = !f(x, y + 1) || !f(x + 1, y);
+        set(x + 1, y + 1, lit && !dark ? pal.light : dark && !lit ? pal.shade : pal.base);
+      } else if (N8.some(([dx, dy]) => f(x + dx, y + dy))) set(x + 1, y + 1, pal.out);
+    }
+  });
+}
+const GLYPHS = {
+  0: ['.####.','##..##','##..##','##..##','##..##','##..##','##..##','.####.'],
+  1: ['..##..','.###..','####..','..##..','..##..','..##..','..##..','######'],
+  2: ['.####.','##..##','....##','...##.','..##..','.##...','##....','######'],
+  3: ['.####.','##..##','....##','..###.','....##','....##','##..##','.####.'],
+  4: ['...##.','..###.','.####.','##.##.','######','...##.','...##.','...##.'],
+  5: ['######','##....','##....','#####.','....##','....##','##..##','.####.'],
+  6: ['.####.','##....','##....','#####.','##..##','##..##','##..##','.####.'],
+  7: ['######','....##','...##.','...##.','..##..','..##..','.##...','.##...'],
+  8: ['.####.','##..##','##..##','.####.','##..##','##..##','##..##','.####.'],
+  9: ['.####.','##..##','##..##','##..##','.#####','....##','...##.','.###..'],
+};
+// One colour per digit: 0 plain (milk white), 1 red, 2 orange, 3 yellow, 4 green,
+// 5 teal, 6 blue, 7 purple, 8 pink, 9 chocolate.
+const PAL = [
+  { out: [92, 70, 48], shade: [208, 188, 150], base: [242, 230, 200], light: [255, 252, 238] },
+  { out: [84, 14, 14], shade: [176, 36, 36], base: [226, 66, 58], light: [255, 138, 116] },
+  { out: [92, 40, 8], shade: [204, 98, 24], base: [244, 142, 42], light: [255, 198, 112] },
+  { out: [90, 68, 8], shade: [204, 164, 28], base: [246, 210, 60], light: [255, 242, 152] },
+  { out: [18, 62, 18], shade: [50, 138, 46], base: [96, 190, 72], light: [172, 234, 132] },
+  { out: [10, 58, 66], shade: [28, 138, 150], base: [60, 192, 196], light: [152, 238, 234] },
+  { out: [16, 30, 92], shade: [46, 84, 190], base: [84, 130, 234], light: [162, 198, 255] },
+  { out: [52, 20, 82], shade: [118, 62, 176], base: [164, 104, 222], light: [212, 172, 252] },
+  { out: [92, 24, 62], shade: [198, 78, 138], base: [240, 124, 180], light: [255, 192, 222] },
+  { out: [38, 18, 8], shade: [96, 56, 28], base: [138, 84, 46], light: [196, 140, 92] },
+];
+// The cereal, the bowl and the HUD marks are cut from the runtime UI sheet
+// (resources/gfx/ui/conch_cereal_ui.png, drawn by author.py), so the page shows
+// exactly what the game draws: 10x12 textured cereal, a 56px bowl in halves.
+let CEREAL = [], RING = null, CARTON = null, QMARK = null, BOWL = null, ARROW = null;
+function cut(x, y, w, h) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  c.getContext('2d').drawImage(IM.ui, x, y, w, h, 0, 0, w, h);
+  return c;
+}
+function cutUi() {
+  const P = D.uiParts;
+  for (let d = 0; d < 10; d++) CEREAL[d] = cut(d * D.digit.w, D.digit.y, D.digit.w, D.digit.h);
+  RING = cut(...P.Ring); CARTON = cut(...P.Carton); QMARK = cut(...P.Unknown);
+  BOWL = { back: cut(...P.BowlBack), front: cut(...P.BowlFront), w: P.BowlBack[2], h: P.BowlBack[3] };
+  ARROW = { LR: cut(...P.ArrowLR), UP: cut(...P.ArrowUp), DOWN: cut(...P.ArrowDown) };
+}
+
+const MINI = {
+  0: ['###','#.#','#.#','#.#','###'], 1: ['.#.','##.','.#.','.#.','###'], 2: ['###','..#','###','#..','###'],
+  3: ['###','..#','###','..#','###'], 4: ['#.#','#.#','###','..#','..#'], 5: ['###','#..','###','..#','###'],
+  6: ['###','#..','###','#.#','###'], 7: ['###','..#','..#','.#.','.#.'], 8: ['###','#.#','###','#.#','###'],
+  9: ['###','#.#','###','..#','###'], x: ['...','#.#','.#.','#.#','...'],
+};
+function mini(str, x, y, col = '#fff', alpha = 1) {
+  bx.save(); bx.globalAlpha = alpha;
+  for (const pass of [0, 1]) {
+    bx.fillStyle = pass ? col : '#000';
+    let cx = x;
+    for (const ch of String(str)) {
+      const g = MINI[ch];
+      if (g) g.forEach((r, yy) => [...r].forEach((p, xx) => { if (p === '#') bx.fillRect(cx + xx + (pass ? 0 : 1), y + yy + (pass ? 0 : 1), 1, 1); }));
+      cx += 4;
+    }
+  }
+  bx.restore();
+}
+
+const FLOOR = sprite(W, H, set => {
+  let s = 7;
+  const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const seam = (x % 26 === 0 || y % 26 === 0);
+    const n = rnd();
+    const b = seam ? 30 : 46 + Math.floor(n * 6);
+    set(x, y, [b + 6, b - 2, b - 8]);
+  }
+});
+
+// ---------- state ----------
+const P = { x: 120, y: 140 };
+let counts, milk, floorC, peds, toast, pulse, shake, state, lastSel = 0, wide = false, frame = 0;
+const keys = new Set(); let face = 'Down', walkTick = 0, moving = false;
+function reset() {
+  counts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]; milk = 0; floorC = []; peds = []; P.x = 120; P.y = 140; face = 'Down';
+  toast = null; pulse = 0; shake = 0; state = { mode: 'idle' };
+}
+reset();
+const maxId = () => wide ? 1200 : lastOwn;
+const maxLen = () => String(maxId()).length;
+const used = d => state.mode === 'bowl' ? state.entered.filter(v => v === d).length : 0;
+const avail = d => counts[d] - used(d);
+const name = it => it.fake ? `다른 모드 아이템 #${it.id}` : it.kr;
+function say(text, frames = 75) { toast = { text, t: frames }; }
+
+function lookup(entered) {
+  if (entered.length === 0) return { state: 'short' };
+  if (entered[0] === 0) return { state: 'none', n: parseInt(entered.join(''), 10) };
+  const n = parseInt(entered.join(''), 10);
+  if (n === 0) return { state: 'none', n };
+  const it = ITEMS.get(n);
+  if (it) return { state: it.craft ? 'ok' : 'nocraft', item: it, n };
+  if (wide && n > lastOwn && n <= maxId()) return { state: 'ok', item: { id: n, fake: true, active: false, craft: true }, n };
+  return { state: 'none', n };
+}
+
+function pickItem() {
+  if (state.mode !== 'idle') return;
+  const chance = 0.5 ** milk;
+  const id = Math.random() < chance ? BREAKFAST : CRAFTABLE[Math.floor(Math.random() * CRAFTABLE.length)].id;
+  state = { mode: 'hold', id, item: ITEMS.get(id), t: 0, from: 'pick' };
+}
+// A dropped cereal is a pickup: it pops out, bounces, settles, and is taken
+// when Isaac walks onto it (in game: an EntityPickup of our own variant).
+function drop(d, x, y, z, vx, vy, vz) { floorC.push({ d, x, y, z, vx, vy, vz, st: 'air', t: 0, squash: 0 }); }
+function breakHeld() {
+  const id = state.id;
+  const digits = id === BREAKFAST ? [0, 0, 0].map(() => Math.floor(Math.random() * 10))
+    : String(id).split('').map(Number);
+  // In a row in the number's order in front of Isaac, as the game lays them
+  // (20 world units apart, 40 in front: 13 and 26 screen pixels).
+  const n = digits.length;
+  digits.forEach((d, i) => drop(d, P.x + (i - (n - 1) / 2) * 13, P.y + 26, 0, 0, 0, 0));
+  say(id === BREAKFAST ? '아침밥 → 무작위 시리얼 3개' : `${name(state.item)} → ${digits.join(' · ')}`);
+  state = { mode: 'idle' };
+}
+// The bowl opens with or without milk (it is also how the cereal held are
+// looked at); the use key on an empty bowl closes it, and milk is spent only
+// when an item is made.
+function openBowl() {
+  state = { mode: 'bowl', entered: [], sel: lastSel, fx: [] };
+}
+function closeBowl(msg) { lastSel = state.sel; state = { mode: 'idle' }; if (msg) say(msg); }
+function confirmBowl() {
+  if (state.entered.length === 0) { closeBowl(); return; }
+  const res = lookup(state.entered);
+  if (res.state === 'ok' && milk < 1) { shake = 8; say('우유가 없어요'); return; }
+  if (res.state !== 'ok') {
+    closeBowl(res.state === 'nocraft' ? `${res.n}번은 만들 수 없는 아이템이라 취소됐어요` : `${res.n}번은 없는 번호라 취소됐어요`);
+    return;
+  }
+  state.entered.forEach(d => counts[d]--);
+  milk--;
+  lastSel = state.sel;
+  if (res.item.active) {
+    peds.push({ item: res.item, t: 0 });
+    if (peds.length > 3) peds.shift();
+    peds.forEach((p, i) => { p.x = P.x + 44 + i * 34; p.y = P.y + 6; });
+    say(`${name(res.item)} (액티브) → 근처에 소환`);
+    state = { mode: 'idle' };
+  } else {
+    state = { mode: 'hold', id: res.item.id, item: res.item, t: 0, from: 'craft' };
+  }
+}
+function bowlKey(k) {
+  const s = state;
+  if (k === 'ArrowLeft') s.sel = (s.sel + 9) % 10;
+  else if (k === 'ArrowRight') s.sel = (s.sel + 1) % 10;
+  else if (k === 'ArrowDown') {
+    // down drops the framed cereal into the milk, up takes the last one back out
+    const zeroFirst = s.entered.length === 0 && s.sel === 0;   // a number never starts with 0
+    if (avail(s.sel) <= 0 || s.entered.length >= maxLen() || zeroFirst) { shake = 6; return; }
+    s.entered.push(s.sel);
+    s.fx.push({ kind: 'in', d: s.sel, slot: s.entered.length - 1, start: frame });
+  } else if (k === 'ArrowUp' && s.entered.length) {
+    const slot = s.entered.length - 1, d = s.entered.pop();
+    const off = (s.xs && s.xs[slot] !== undefined) ? s.xs[slot] : 0;
+    s.fx = s.fx.filter(f => !(f.kind === 'in' && f.slot === slot));
+    s.fx.push({ kind: 'out', d, slot, start: frame, off });
+  }
+  else if (k === 'Space') confirmBowl();
+  else if (k === 'Escape' || k === 'ControlLeft' || k === 'ControlRight') closeBowl('닫았어요 (우유와 시리얼은 그대로)');
+}
+function onKey(k) {
+  if (k === 'KeyQ') return pickItem();
+  if (state.mode === 'hold') { if (k === 'Space' && state.from === 'pick') breakHeld(); return; }
+  if (state.mode === 'bowl') return bowlKey(k);
+  if (k === 'Space') openBowl();
+}
+const MOVE = ['KeyW', 'KeyA', 'KeyS', 'KeyD'];
+document.addEventListener('keyup', e => keys.delete(e.code));
+window.addEventListener('blur', () => keys.clear());
+document.addEventListener('keydown', e => {
+  if (['Space', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault();
+  if (MOVE.includes(e.code)) { keys.add(e.code); return; }
+  if (e.repeat && e.code === 'Space') return;
+  onKey(e.code);
+});
+document.getElementById('bPick').onclick = () => pickItem();
+document.getElementById('bMilk').onclick = () => { milk++; pulse = 10; };
+document.getElementById('bCereal').onclick = () => { for (let i = 0; i < 6; i++) drop(Math.floor(Math.random() * 10), 30 + Math.random() * 180, 80 + Math.random() * 80, 30, (Math.random() - 0.5) * 1.2, (Math.random() - 0.5) * 0.8, 1.5); };
+document.getElementById('bReset').onclick = () => reset();
+document.getElementById('wide').onchange = e => { wide = e.target.checked; if (state.mode === 'bowl') state.entered.length = Math.min(state.entered.length, maxLen()); };
+
+// ---------- update ----------
+const HOLD = 40, HUD_CEREAL = { x: 8, y: 54 };
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+function update() {
+  frame++;
+  if (toast && --toast.t <= 0) toast = null;
+  if (pulse > 0) pulse--;
+  if (shake > 0) shake--;
+  if (state.mode === 'hold' && ++state.t >= HOLD) {
+    const it = state.item;
+    if (state.from === 'pick' && it.id === BREAKFAST) { milk++; pulse = 10; say('브렉퍼스트 → 우유 +1'); }
+    else say(state.from === 'craft' ? `만들었어요: ${name(it)}` : `획득: ${name(it)}`);
+    state = { mode: 'idle' };
+  }
+  const mx = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0), my = (keys.has('KeyS') ? 1 : 0) - (keys.has('KeyW') ? 1 : 0);
+  moving = !!(mx || my);
+  if (moving) {
+    const l = Math.hypot(mx, my);
+    P.x = clamp(P.x + mx / l * 1.8, 14, W - 14); P.y = clamp(P.y + my / l * 1.8, 100, H - 14);
+    face = Math.abs(mx) >= Math.abs(my) ? (mx > 0 ? 'Right' : 'Left') : (my > 0 ? 'Down' : 'Up');
+    walkTick++;
+  } else walkTick = 0;
+  for (const c of floorC) {
+    c.t++;
+    if (c.st === 'collect') continue;
+    c.x += c.vx; c.y += c.vy; c.z += c.vz; c.vz -= 0.4;
+    if (c.z <= 0) {
+      c.z = 0;
+      if (c.vz < -1.4) { c.vz = -c.vz * 0.45; c.squash = 3; }
+      else { if (c.st === 'air') { c.st = 'idle'; c.squash = 4; } c.vz = 0; c.vx *= 0.7; c.vy *= 0.7; }
+    }
+    if (c.squash > 0) c.squash--;
+    c.vx *= 0.97; c.vy *= 0.97;
+    c.x = clamp(c.x, 12, W - 12); c.y = clamp(c.y, 70, H - 8);
+    if (c.t > 8 && c.z < 3 && Math.hypot(c.x - P.x, c.y - (P.y + 4)) < 11) { c.st = 'collect'; c.t = 0; counts[c.d]++; pulse = 10; }
+  }
+  floorC = floorC.filter(c => !(c.st === 'collect' && c.t > 12));
+  peds.forEach(p => p.t++);
+}
+
+// ---------- draw ----------
+const texts = [];
+function text(t, x, y, size = 5, color = '#fff', align = 'center') { texts.push({ t, x, y, size, color, align }); }
+function sheet(cx, cy, w, h, px, py, x, y, flip) {
+  bx.save();
+  if (flip) { bx.translate(x, 0); bx.scale(-1, 1); bx.drawImage(IM.isaac, cx, cy, w, h, -px, y - py, w, h); }
+  else bx.drawImage(IM.isaac, cx, cy, w, h, x - px, y - py, w, h);
+  bx.restore();
+}
+function shadow(x, y, rx, ry, a = 0.35) { bx.save(); bx.globalAlpha = a; bx.fillStyle = '#000'; bx.beginPath(); bx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); bx.fill(); bx.restore(); }
+function icon(it, cx, cy, size, alpha = 1) {
+  bx.save(); bx.globalAlpha = alpha;
+  if (it.fake) bx.drawImage(QMARK, Math.round(cx - 10), Math.round(cy - 10));
+  else {
+    const c = D.atlasCols, sx = (it.slot % c) * 32, sy = Math.floor(it.slot / c) * 32;
+    bx.drawImage(IM.atlas, sx, sy, 32, 32, Math.round(cx - size / 2), Math.round(cy - size / 2), size, size);
+  }
+  bx.restore();
+}
+// Isaac from the vanilla player anm2: walk cycles while moving, the
+// arms-up carry pose while holding an item or the bowl.
+function frameOf(list, tick) {
+  const total = list.reduce((a, f) => a + f[8], 0);
+  let t = tick % total;
+  for (const f of list) { if (t < f[8]) return f; t -= f[8]; }
+  return list[0];
+}
+function drawFrame(f, x, y) { const [cx, cy, w, h, px, py, ox, oy, , flip] = f; sheet(cx, cy, w, h, px, py, x + ox, y + oy, !!flip); }
+function drawIsaac(holding) {
+  shadow(P.x, P.y + 8, 8, 2.6);
+  const tick = moving ? walkTick : 0;
+  if (holding) {
+    const a = D.anims['PickupWalk' + face];
+    drawFrame(a.head[0], P.x, P.y); drawFrame(frameOf(a.body, tick), P.x, P.y);
+  } else {
+    drawFrame(frameOf(D.anims['Walk' + face].body, tick), P.x, P.y);
+    drawFrame(D.anims['Head' + face].head[0], P.x, P.y);
+  }
+}
+function sparkle(x, y, t) {
+  const r = 2 + t * 0.7, a = Math.max(0, 1 - t / 12);
+  bx.save(); bx.globalAlpha = a; bx.fillStyle = '#fff';
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) bx.fillRect(Math.round(x + dx * r), Math.round(y + dy * r), 1, 1);
+  bx.fillRect(Math.round(x), Math.round(y), 1, 1);
+  bx.restore();
+}
+function drawBowlUI() {
+  const s = state, ox = shake ? Math.round(Math.sin(shake * 2.2) * 2) : 0;
+  const cx = P.x + ox, top = P.y - 28 - 21;
+  const res = lookup(s.entered), num = s.entered.join('');
+  const active = res.state === 'ok' && res.item.active;
+  const countH = 6, nameH = 9, noteH = 7;
+  const countsY = top - 4 - countH, digitsTop = countsY - 13, iy = digitsTop - 18;
+  const nameY = iy - 14 - nameH, noteY = nameY - noteH;
+  // digit row with counts
+  for (let d = 0; d < 10; d++) {
+    const x = cx - 60 + d * 12 + 1, a = avail(d);
+    const lift = d === s.sel ? 2 : 0, y = digitsTop - lift;
+    if (d === s.sel) {
+      bx.fillStyle = '#000'; bx.fillRect(x - 2, y - 2, 14, 16);
+      bx.fillStyle = '#fff'; bx.fillRect(x - 1, y - 1, 12, 14);
+      bx.fillStyle = '#000'; bx.fillRect(x, y, 10, 12);
+    }
+    bx.save(); bx.globalAlpha = a > 0 ? 1 : 0.3; bx.drawImage(CEREAL[d], x, y); bx.restore();
+    mini(a, x + 3 - (String(a).length - 1) * 2, countsY, a > 0 ? '#fff' : '#777');
+  }
+  // bowl, the cereal in it, then the near rim over the cereal
+  const bxl = cx - 28;
+  bx.drawImage(BOWL.back, bxl, top);
+  const FALL = 7, SPLASH = 7, OUT = 6;      // update frames, as the game's 14/14/12 render frames
+  s.fx = s.fx.filter(f => frame - f.start <= (f.kind === 'in' ? FALL + SPLASH : OUT));
+  // the cereal stay centred and slide aside as the count changes, as in the game
+  const n = s.entered.length, centred = i => -(n - 1) * 5.5 + i * 11 - 5;
+  s.xs = s.xs || [];
+  for (let i = 0; i < n; i++) {
+    const t = centred(i), cur = s.xs[i] === undefined ? t : s.xs[i] + (t - s.xs[i]) * 0.25;
+    s.xs[i] = Math.abs(t - cur) < 0.25 ? t : cur;
+  }
+  s.xs.length = n;
+  const slotX = i => Math.floor(cx + (s.xs[i] ?? centred(i)) + 0.5), rowX = d => cx - 60 + d * 12 + 1;
+  for (let i = 0; i < n; i++) {
+    const x = slotX(i);
+    const d = s.entered[i];
+    const f = s.fx.find(f => f.kind === 'in' && f.slot === i && frame - f.start < FALL);
+    if (f) {
+      const e = ((frame - f.start) / FALL) ** 2;
+      bx.drawImage(CEREAL[d], Math.floor(rowX(d) + (x - rowX(d)) * e), Math.floor(digitsTop + (top - 3 - digitsTop) * e));
+    } else bx.drawImage(CEREAL[d], x, top - 3 + (Math.floor(frame / 12 + i) % 2));
+  }
+  bx.drawImage(BOWL.front, bxl, top);
+  for (const f of s.fx) {
+    const age = frame - f.start;
+    if (f.kind === 'in' && age >= FALL) {
+      const k = (age - FALL) / SPLASH, sx = slotX(f.slot) + 5, sy = top + 5;
+      bx.save(); bx.globalAlpha = 1 - k; bx.fillStyle = '#fbfbf5';
+      [-5, -2, 2, 5].forEach((dx, j) => bx.fillRect(Math.floor(sx + dx * (0.6 + k * 0.7)), Math.floor(sy - Math.sin(Math.PI * k) * (j % 2 ? 7 : 5)), 1, 1));
+      bx.restore();
+    } else if (f.kind === 'out') {
+      const k = age / OUT;
+      bx.save(); bx.globalAlpha = 1 - k; bx.drawImage(CEREAL[f.d], Math.floor(cx + f.off + 0.5), Math.floor(top - 3 - 18 * (1 - (1 - k) ** 2))); bx.restore();
+    }
+  }
+  // what the number makes
+  const ty = nameY + nameH / 2, ny = noteY + noteH / 2;
+  if (res.state === 'ok') {
+    icon(res.item, cx, iy, 24);
+    text(`${num}  ${name(res.item)}`, cx, ty, 7);
+    if (active) text('플레이어 근처에 소환', cx, ny, 5.2, '#f0c060');
+  } else if (res.state === 'nocraft') {
+    icon(res.item, cx, iy, 24, 0.3);
+    text(`${num}  ${name(res.item)} (만들 수 없음)`, cx, ty, 7, '#ff8a7a');
+  } else if (res.state === 'none') {
+    bx.drawImage(QMARK, cx - 10, iy - 10);
+    text(`${num}  없는 번호`, cx, ty, 7, '#ff8a7a');
+  }
+  drawHint(P.x, P.y + 15);
+}
+// The keys under the feet, the shooting keys as arrow pictures, as the game draws them.
+function drawHint(cx, y) {
+  const size = 5.4;
+  vx.font = `bold ${Math.round(size * S)}px "Malgun Gothic","Apple SD Gothic Neo",sans-serif`;
+  const w = t => vx.measureText(t).width / S;
+  const parts = [[ARROW.LR], [' 고르기'], [7], [ARROW.DOWN], [' 넣기'], [7], [ARROW.UP], [' 빼기'], [7], ['Space 확정'], [7], ['Ctrl/Esc 닫기']];
+  const width = p => typeof p[0] === 'number' ? p[0] : typeof p[0] === 'string' ? w(p[0]) : p[0].width + 2;
+  let x = cx - parts.reduce((a, p) => a + width(p), 0) / 2;
+  for (const p of parts) {
+    if (typeof p[0] === 'string') text(p[0], x, y, size, '#e8dfd2', 'left');
+    else if (typeof p[0] !== 'number') bx.drawImage(p[0], Math.round(x), Math.round(y - 4.5));
+    x += width(p);
+  }
+}
+function drawHud() {
+  const cereal = [...ITEMS.values()].find(it => it.en === 'Cereal');
+  if (cereal) icon(cereal, 18, 18, 32);
+  for (let i = 0; i < 3; i++) bx.drawImage(IM.hearts, 38 + i * 12, 4);
+  const rows = [[0, 0, '05'], [0, 16, '01'], [16, 0, '01']];
+  rows.forEach(([sx, sy, n], i) => { bx.drawImage(IM.hud, sx, sy, 16, 16, 2, 36 + i * 11, 16, 16); mini(n, 17, 41 + i * 11); });
+  // ours: only the milk, as x5 on the icon's upper right
+  const mtext = 'x' + milk;
+  mini(mtext, 2 + 31 - mtext.length * 4, 2, pulse ? '#ffe9a0' : '#fff');
+}
+function draw() {
+  texts.length = 0;
+  bx.drawImage(FLOOR, 0, 0);
+  for (const p of peds) {
+    shadow(p.x, p.y, 10, 3);
+    bx.drawImage(IM.altar, p.x - 16, p.y - 26);
+    icon(p.item, p.x, p.y - 30 + Math.round(Math.sin(p.t / 10) * 1.5), 32);
+  }
+  for (const c of [...floorC].sort((a, b) => a.y - b.y)) {
+    if (c.st === 'collect') {
+      const k = c.t / 12;
+      bx.save(); bx.globalAlpha = 1 - k; bx.drawImage(CEREAL[c.d], Math.round(c.x - 5), Math.round(c.y - 11 - k * 9)); bx.restore();
+      sparkle(c.x, c.y - 8 - k * 6, c.t);
+      continue;
+    }
+    shadow(c.x, c.y, 4, 1.5, 0.3);
+    const q = c.squash > 0 ? 1 : 0;
+    bx.drawImage(CEREAL[c.d], Math.round(c.x - 5 - q), Math.round(c.y - 11 - c.z + q * 2), 10 + q * 2, 12 - q * 2);
+    if (c.st === 'idle' && (c.t + c.d * 13) % 90 < 6) { bx.fillStyle = '#fff'; bx.fillRect(Math.round(c.x - 2), Math.round(c.y - 8), 1, 1); }
+  }
+  drawIsaac(state.mode !== 'idle');
+  if (state.mode === 'hold') {
+    icon(state.item, P.x, P.y - 45, 32);
+    if (state.from === 'pick') text('Space: 시리얼로 부수기', P.x, P.y + 17, 4.6, '#f0c060');
+  } else if (state.mode === 'bowl') drawBowlUI();
+  drawHud();
+  vx.drawImage(buf, 0, 0, W * S, H * S);
+  if (toast) {
+    const a = Math.min(1, toast.t / 12);
+    vx.save(); vx.globalAlpha = a * 0.55; vx.fillStyle = '#000'; vx.fillRect(0, (H - 15) * S, W * S, 11 * S); vx.restore();
+    texts.push({ t: toast.text, x: W / 2, y: H - 9.5, size: 5.2, color: '#fff', align: 'center', alpha: a });
+  }
+  for (const t of texts) {
+    vx.save(); vx.globalAlpha = t.alpha ?? 1;
+    vx.font = `bold ${Math.round(t.size * S)}px "Malgun Gothic","Apple SD Gothic Neo",sans-serif`;
+    vx.textAlign = t.align; vx.textBaseline = 'middle'; vx.lineJoin = 'round';
+    vx.strokeStyle = '#000'; vx.lineWidth = S * 1.1; vx.strokeText(t.t, t.x * S, t.y * S);
+    vx.fillStyle = t.color; vx.fillText(t.t, t.x * S, t.y * S);
+    vx.restore();
+  }
+  document.getElementById('chance').textContent = `${+(100 * 0.5 ** milk).toFixed(2)}%`;
+  const per = counts.map((n, d) => n ? `${d}×${n}` : '').filter(Boolean).join('  ') || '없음';
+  document.getElementById('state').textContent = `우유 ${milk}개 · 시리얼 ${per} · 최대 번호 ${maxId()} (${maxLen()}자리)`;
+}
+let acc = 0, last = performance.now();
+function loop(now) {
+  acc += Math.min(200, now - last); last = now;
+  while (acc >= 1000 / 30) { update(); acc -= 1000 / 30; }
+  draw();
+  requestAnimationFrame(loop);
+}
+view.tabIndex = 0; view.addEventListener('click', () => view.focus());
+IM.ui.onload = () => { cutUi(); requestAnimationFrame(loop); };
+if (IM.ui.complete && IM.ui.naturalWidth) { cutUi(); requestAnimationFrame(loop); }
+</script>
+</body>
+</html>

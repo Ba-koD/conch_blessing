@@ -165,6 +165,11 @@
     "detail": "gfx/items/collectibles/ceil_af3d.png"
   },
   {
+    "source": "gfx/items/collectibles/cereal.png",
+    "status": "pending",
+    "detail": "3D model not built yet (Cereal, added 2026-11-24)"
+  },
+  {
     "source": "gfx/items/collectibles/chicken.png",
     "status": "modelled",
     "detail": "gfx/items/collectibles/chicken_af3d.png"
@@ -395,6 +400,11 @@
     "detail": "gfx/items/collectibles/void_dagger_af3d.png"
   },
   {
+    "source": "gfx/items/pick ups/pickup_conch_cereal.png",
+    "status": "pending",
+    "detail": "3D model not built yet (Cereal number cereal, added 2026-11-24)"
+  },
+  {
     "source": "gfx/items/pick ups/pickup_conch_ticket.png",
     "status": "modelled",
     "detail": "gfx/items/pick ups/pickup_conch_ticket_af3d.png"
@@ -473,6 +483,11 @@
     "source": "gfx/items/trinkets/wrong_answer_note.png",
     "status": "modelled",
     "detail": "gfx/items/trinkets/wrong_answer_note_af3d.png"
+  },
+  {
+    "source": "gfx/ui/conch_cereal_ui.png",
+    "status": "pending",
+    "detail": "3D model not built yet (Cereal bowl and HUD marks, added 2026-11-24)"
   },
   {
     "source": "gfx/ui/MagicConch.png",

@@ -270,6 +270,10 @@ local function conchPearlHeld()
     return type(pearl) == "table" and type(pearl.isActive) == "function" and pearl.isActive() == true
 end
 
+--- Whether Underdog is asking the pool itself (its peeks are no draws of their
+--- own, so other draw hooks such as Cereal's leave them alone).
+function M.isPeeking() return peeking end
+
 -- MC_PRE_GET_COLLECTIBLE(poolType, decrease, seed): the item that appears, or nil
 -- to leave the draw to the engine.
 function M.onPreGetCollectible(_, poolType, decrease, seed)

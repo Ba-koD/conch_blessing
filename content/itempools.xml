@@ -50,6 +50,7 @@
         <Item Name="Landmine" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Underdog" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Aging Curve" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Cereal" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Rat" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Ox" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Tiger" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
@@ -67,6 +68,7 @@
         <Item Name="SOFLAM" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Severed Oath" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="AR Glasses" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Cereal" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Time = Money" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Hermit Crab" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
     </Pool>

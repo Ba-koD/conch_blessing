@@ -235,6 +235,10 @@ local function redraw(poolType, decrease, rng)
     return found, last
 end
 
+--- Whether Conch Pearl is drawing again itself (other draw hooks such as
+--- Cereal's leave those draws alone).
+function M.isRedrawing() return drawing end
+
 -- MC_POST_GET_COLLECTIBLE(selected, poolType, decrease, seed). Returns the ID that
 -- appears instead, or nil to keep the pool's choice.
 function M.onPostGetCollectible(_, selected, poolType, decrease, seed)

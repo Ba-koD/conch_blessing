@@ -718,6 +718,19 @@ return {
             },
         },
 
+        CEREAL = {
+            name = "시리얼",
+            description = "우유 먼저? 시리얼 먼저?",
+            eid = {
+                "아이템을 들고 있을 때 쓰면 아이템 번호대로 숫자 시리얼이 떨어집니다",
+                "#아이템이 10할 확률로 {c:BREAKFAST} 아침밥으로 바뀌며 가진 개수만큼 확률이 절반이 됩니다",
+                "#{{Warning}} 덧붙임 도우미(REPENTOGON)가 있어야 합니다!",
+            },
+            synergies = {
+                breakfast = "아무 숫자 시리얼 3개가 떨어집니다",
+            },
+        },
+
         -- Familiars
         TIME_MONEY = {
             name = "시간 = 돈",
@@ -992,6 +1005,18 @@ return {
         conch_ticket = {
             hint = "< > 고르기   %s 굳히기", confirm_card = "Q", confirm_glasses = "Space",
             waiting = "x%s", reserved = "미리 잡음: %s", separator = ", ",
+        },
+        cereal = {
+            hint_choose = " 고르기", hint_add = " 넣기", hint_remove = " 빼기",
+            hint_confirm = "%s 정하기", hint_close = "%s 닫기",
+            key_item = "Space", key_card = "Q", key_drop = "Ctrl/Esc",
+            result = "%s  %s",
+            nocraft = "%s  %s (만들 수 없음)",
+            none = "%s  없는 번호",
+            active = "플레이어 가까이에 소환",
+            no_milk = "우유가 없어요",
+            cancel_none = "%s번은 없는 번호라 그만뒀어요",
+            cancel_nocraft = "%s번은 만들 수 없는 아이템이라 그만뒀어요",
         },
         morph = {
             applied = "게임에 적용",
