@@ -1,40 +1,36 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- 지뢰 (Landmine), the Magic Conch's neutral answer to Ipecac (user design
--- 2026-11-15). Ipecac turns every tear into a bomb; this keeps the tears as
--- they are and drops a mine at the holder's feet on every attack they make,
--- enemies about or not (user decisions 2026-11-23 and 11-24: at first only in
--- a room with enemies, which left an empty room's shooting with nothing to
--- show). A holder drops at most one mine every `interval` updates (0.1 s,
--- user decision 2026-11-24), whatever the weapon: Brimstone's weapon trigger
--- fires every update its beam is out, so a beam once left about 18 mines, and
--- at tears 120 the engine fires four tears an update. Mines may lie on top of
--- one another: shooting in place piles them up, and an enemy stepping on the
--- pile sets off every mine in it. Earlier that day a mine dropped every two tiles
--- walked while shooting, never within a tile of another; before that each
--- tear dropped mines along its flight (2026-11-19, after Auri's Blue Eye),
--- which did not feel like mines: strong tears killed the enemies before any
--- reached a mine, and the mines lay where the tears flew rather than where
--- enemies walk. An attack is REPENTOGON's weapon trigger, once per attack
--- whatever the weapon; a familiar's weapon is its own, so its shots lay
--- nothing. Without REPENTOGON each tear the holder fires stands for an
--- attack, so a multishot attack drops several mines and other weapons none.
--- There is no cap (user decision, same day). The mine falls from the
--- holder's hands, lands in a splash of ooze and arms; none is dropped over a
--- wall, rock or pit. An enemy coming onto an armed mine sets it off: every
--- enemy within reach takes twice the damage the holder had when it was laid,
--- and other mines the blast reaches go off a moment later.
+-- 2026-11-15, reworked on 2026-11-25 into a tear that sows mines). Ipecac's
+-- stat changes are turned round: +40 flat range, a x0.33 damage multiplier,
+-- -0.2 tears, and the holder's attacks are locked to tears (REPENTOGON).
+-- Every tear the holder fires carries 3 mines, one more for every 5 luck with
+-- no upper limit, and scatters them to either side as it flies, one every two
+-- tiles; ground that already holds a mine is passed over and the mine carried
+-- on. Where the tear stops (an enemy, a wall, the floor) what it still carries
+-- spills out around it. A mine landing on an enemy goes off at once; the
+-- others lie until something steps on them, an enemy or a player, and a
+-- player who sets one off takes no damage (user decision 2026-11-25). The user
+-- wants no caps of any kind ("상한은 따로두지마"): mines stay until stepped on
+-- however many there are, and a spill with no free ground left piles up.
+-- A blast deals every enemy within reach twice the damage the holder had when
+-- the tear was fired, and other mines it reaches go off a moment later.
 --
--- Mines never hurt a player (user decision 2026-11-15). The blast is dealt
--- here, to enemies only, never through the engine's explosion, which would
--- also hit players and break rocks; the vanilla bomb explosion is spawned only
--- as a picture.
+-- Earlier forms (kept for the reasons the design moved on): a mine at the
+-- feet on every attack (2026-11-23/24), which never felt like sowing mines;
+-- before that tears dropped mines along their flight with nothing changed
+-- about the tears (2026-11-19), when strong tears killed everything before a
+-- mine was reached. The x0.33 damage moves the item's strength into the mines.
 --
--- Mines are effects that last as long as their room; nothing is saved.
--- Without a cap a room may hold a hundred mines or more, so they are also
--- filed by floor tile, and arming, stepping and chaining look only at the
--- tiles around a spot; a pile going off draws one explosion.
+-- The blast is dealt here, to enemies only, never through the engine's
+-- explosion, which would also hit players and break rocks; the vanilla bomb
+-- explosion is spawned only as a picture.
+--
+-- Mines are effects that last as long as their room; nothing is saved but
+-- StatsAPI's damage multiplier. A room may hold a hundred mines or more, so
+-- they are filed by floor tile, and arming, stepping and chaining look only
+-- at the tiles around a spot; mines going off together on one spot draw one
+-- explosion.
 local DamageProvenance = require("scripts.lib.damage_provenance")
-local WeaponAttackTracker = require("scripts.lib.weapon_attack_tracker")
 local Sound = require("scripts.lib.sound_volume")
 local definitions = require("scripts.entities.definitions")
 
@@ -45,30 +41,44 @@ local ID = Isaac.GetItemIdByName("Landmine")
 local PROC_KEY = "landmine"
 
 M.data = {
-    damageMultiplier = 2, -- of the holder's damage when the mine was laid
-    blastRadius = 60,     -- a tile and a half, plus each enemy's own size
-    triggerRadius = 8,    -- an enemy this close (plus its size) has stepped on it
-    armFrames = 8,        -- a mine arms this many updates after landing, as its Land animation ends
-    dropHeight = 20,      -- a mine falls from this high at the holder's feet
-    interval = 3,         -- a holder drops at most one mine every this many updates (0.1 s)
-    gravity = 1.5,        -- a dropped mine falls this much faster each update
+    damageMultiplier = 2, -- a blast, of the holder's damage when the tear was fired
+    statMultiplier = 0.33, -- the holder's damage multiplier (StatsAPI)
+    tears = -0.2,         -- shots a second
+    range = 40 * 40,      -- +40 tiles, in TearRange units
+    mines = 3,            -- mines a tear carries
+    luckStep = 5,         -- one more for every this much luck, with no upper limit
+    dropEvery = 80,       -- a tear drops a mine every two tiles flown, the first after one
+    scatter = 40,         -- a mine is flung up to a tile to either side
+    ahead = { 8, 36 },    -- and this far ahead of the tear
+    spill = { 10, 40 },   -- what a stopped tear still carries spills this far around it
+    gap = 26,             -- a free spot has no other mine this close
+    tries = 6,            -- spots tried for one mine
+    flight = 10,          -- updates a mine flies from the tear to the floor
+    gravity = 0.9,        -- its fall speeds up this much each update
+    landOn = 6,           -- landing this close to an enemy (plus its size) sets it off at once
+    blastRadius = 40,     -- a tile, plus each enemy's own size
+    triggerRadius = 8,    -- something this close (plus its size) has stepped on it
+    armFrames = 8,        -- a landed mine arms this many updates later, as its Land animation ends
     floorMargin = 6,      -- a mine stays this far inside the room's floor
     chainDelay = 3,       -- updates before a mine caught in a blast goes off
-    blastScale = 0.6,     -- the vanilla bomb explosion is drawn this size
+    blastScale = 0.45,    -- the vanilla bomb explosion is drawn this size
     pictureGap = 20,      -- mines this close going off in one update draw one explosion
 }
-
--- REPENTOGON reports each attack (CallbackManager's `weaponFiredOptional`
--- registers it under the same condition); without it the tears stand in.
-local WEAPON_EVENT = (function()
-    local repentogon = rawget(_G, "REPENTOGON")
-    return type(repentogon) == "table" and repentogon.Real == true
-        and type(ModCallbacks.MC_POST_TRIGGER_WEAPON_FIRED) == "number"
-end)()
 
 local BLAST_COLOR = Color(0.75, 1, 0.6, 1, 0, 0.06, 0) -- Ipecac's green
 local BLAST_SOUND = SoundEffect.SOUND_EXPLOSION_WEAK or SoundEffect.SOUND_BOOM
 local CELL = 40 -- a floor tile, the size of the filing grid
+local WEAPON_CACHE = CacheFlag and CacheFlag.CACHE_WEAPON or nil
+local TEARS_WEAPON = WeaponType and WeaponType.WEAPON_TEARS or nil
+-- Every primary weapon that replaces the tears. The active items' own weapons
+-- (Notched Axe, Urn of Souls) stay theirs.
+local OTHER_WEAPONS = {}
+for _, name in ipairs({ "WEAPON_BRIMSTONE", "WEAPON_LASER", "WEAPON_KNIFE", "WEAPON_BOMBS", "WEAPON_ROCKETS",
+    "WEAPON_MONSTROS_LUNGS", "WEAPON_LUDOVICO_TECHNIQUE", "WEAPON_TECH_X", "WEAPON_BONE", "WEAPON_SPIRIT_SWORD",
+    "WEAPON_FETUS", "WEAPON_UMBILICAL_WHIP" }) do
+    local value = WeaponType and WeaponType[name]
+    if type(value) == "number" then OTHER_WEAPONS[#OTHER_WEAPONS + 1] = value end
+end
 
 local function effectVariant(entry)
     local found = -1
@@ -88,22 +98,29 @@ local mineVariant = effectVariant(definitions.LANDMINE)
 
 M.available = mineVariant > 0
 
--- Every mine is a record { ref, owner, damage, x, y, key, lift, fall, landed,
--- landedAt, armed, idle, fuse, going, dead }; `lift` is its height above the
--- floor (negative, as PositionOffset) while it falls. `mines` keeps them in the order they were laid; a record that
--- went is marked dead and left there until the next compaction.
+-- Every mine is a record { ref, owner, damage, x, y, key, flying, landed,
+-- landedAt, armed, idle, fuse, going, dead }; (x, y) is where it lands, its
+-- place from the moment it is flung. A flying one also keeps { sx, sy, lift,
+-- vz, k }: it flies from (sx, sy) at `lift` above the floor (negative, as
+-- PositionOffset) and lands after `flight` updates. `mines` keeps them in the
+-- order they were laid; a record that went is marked dead and left there
+-- until the next compaction.
 local mines, cells, fresh, fused = {}, {}, {}, {}
+-- Every tear still carrying mines: { ref, owner, damage, load, travel, rng, x,
+-- y, vx, vy, lift }, (x, y) and the velocity as last seen.
+local carriers = {}
 local dirty = false     -- some record died since `mines` was last compacted
 local soundFrame = -1   -- one blast sound per update however many mines go off
--- The update each holder (GetPtrHash) last dropped a mine; never saved.
-local lastDrop = {}
 -- The explosions drawn this update ({ x, y }), so a pile draws one.
 local pictures, pictureFrame = {}, -1
+-- Whether each player (GetPtrHash) held the item when last seen; `sweep`
+-- looks at every player again once after a start or reload.
+local holding, sweep = {}, true
 -- Runtime evidence for cb test landmine; never saved.
 local evidence
 local function resetEvidence()
-    evidence = { laid = 0, landed = 0, blocked = 0, waited = 0, exploded = 0, struck = 0, chained = 0,
-        pictures = 0, last = nil }
+    evidence = { fired = 0, laid = 0, flung = 0, spilled = 0, piled = 0, lost = 0, carried = 0, landed = 0,
+        landedOn = 0, exploded = 0, struck = 0, chained = 0, pictures = 0, byPlayer = 0, last = nil }
 end
 resetEvidence()
 
@@ -115,14 +132,26 @@ local function isActingPlayer(player)
 end
 
 -- ------------------------------------------------------------------ pure rules
--- The blast a mine laid by a holder of `damage` deals to each enemy.
+-- The blast a mine from a holder of `damage` deals to each enemy.
 local function mineDamage(damage)
     return M.data.damageMultiplier * math.max(0, tonumber(damage) or 0)
+end
+
+-- The mines a tear carries at `luck`: 3, one more for every 5, no upper limit.
+local function payload(luck)
+    luck = math.max(0, tonumber(luck) or 0)
+    return M.data.mines + math.floor(luck / M.data.luckStep)
 end
 
 -- Whether something `distance` away whose own size is `size` is within `radius`.
 local function within(distance, radius, size)
     return distance <= radius + math.max(0, tonumber(size) or 0)
+end
+
+-- The upward speed that brings a mine from `lift` (negative) to the floor in
+-- `updates` under `gravity`.
+local function launchSpeed(lift, updates, gravity)
+    return (-lift - 0.5 * gravity * updates * updates) / updates
 end
 
 local function tileOf(value) return math.floor(value / CELL) end
@@ -171,6 +200,19 @@ local function gather(x, y, radius)
     return count
 end
 
+-- Whether no mine (flying or landed) has (x, y) within `gap`.
+local function freeSpot(x, y)
+    local gap = M.data.gap
+    for k = 1, gather(x, y, gap) do
+        local other = nearby[k]
+        if not other.dead then
+            local dx, dy = other.x - x, other.y - y
+            if dx * dx + dy * dy < gap * gap then return false end
+        end
+    end
+    return true
+end
+
 local function liveMine(record)
     local effect = record and record.ref and record.ref.Ref
     if effect and effect:Exists() then return effect end
@@ -199,7 +241,7 @@ local function compact(checkLive)
 end
 
 local function reset()
-    mines, cells, fresh, fused, pictures, lastDrop = {}, {}, {}, {}, {}, {}
+    mines, cells, fresh, fused, pictures, carriers = {}, {}, {}, {}, {}, {}
     dirty, soundFrame, pictureFrame = false, -1, -1
 end
 
@@ -210,27 +252,30 @@ local function isFloor(room, position)
 end
 
 local function land(record, mine)
-    record.lift, record.fall, record.landed, record.landedAt = 0, 0, true, mine.FrameCount
+    record.flying, record.landed, record.landedAt = false, true, mine.FrameCount
+    mine.Position = Vector(record.x, record.y)
     mine.PositionOffset = Vector.Zero
     mine:GetSprite():Play("Land", true)
     evidence.landed = evidence.landed + 1
 end
 
--- A mine for `position` on the floor, dropped from `lift` above it
--- (negative, as PositionOffset) or landing at once.
-local function lay(player, position, damage, snapshot, lift)
-    local mine = Isaac.Spawn(EntityType.ENTITY_EFFECT, mineVariant, 0, position, Vector.Zero, player)
+-- A mine of `player` for `to` on the floor: flung from `from` at `lift` above
+-- the floor (negative, as PositionOffset), or landing at once without them.
+local function lay(player, to, damage, from, lift)
+    local start = from or to
+    local mine = Isaac.Spawn(EntityType.ENTITY_EFFECT, mineVariant, 0, start, Vector.Zero, player)
     mine = mine and mine:ToEffect()
     if not mine then return nil end
     -- Lies on the floor: drawn under anything standing over it.
     mine.DepthOffset = -1000
-    DamageProvenance.markTriggeredAttack(mine, PROC_KEY, snapshot, PROC_KEY)
-    local x, y = position.X, position.Y
+    DamageProvenance.markTriggeredAttack(mine, PROC_KEY, nil, PROC_KEY)
+    local x, y = to.X, to.Y
     local record = { ref = EntityPtr(mine), owner = EntityPtr(player), damage = damage, x = x, y = y,
         key = keyOf(tileOf(x), tileOf(y)), frame = Game():GetFrameCount() }
     lift = math.min(0, tonumber(lift) or 0)
-    if lift < -1 then
-        record.lift, record.fall = lift, 0
+    if from then
+        record.flying, record.sx, record.sy, record.lift, record.k = true, start.X, start.Y, lift, 0
+        record.vz = launchSpeed(lift, M.data.flight, M.data.gravity)
         mine.PositionOffset = Vector(0, lift)
         mine:GetSprite():Play("Fall", true)
     else
@@ -240,8 +285,70 @@ local function lay(player, position, damage, snapshot, lift)
     fresh[#fresh + 1] = record
     file(record)
     evidence.laid = evidence.laid + 1
-    evidence.last = { x = x, y = y, damage = damage, lift = lift }
+    evidence.last = { x = x, y = y, damage = damage }
     return mine, record
+end
+
+local function carrierPlayer(carrier)
+    local entity = carrier.owner and carrier.owner.Ref
+    return entity and entity:ToPlayer() or nil
+end
+
+-- A mine flung from the flying tear to one side and a little ahead, onto free
+-- floor; false when no spot tried is free (the tear carries it on).
+local function fling(carrier)
+    local room, d = Game():GetRoom(), M.data
+    local speed = math.sqrt(carrier.vx * carrier.vx + carrier.vy * carrier.vy)
+    if speed <= 0 then return false end
+    local ux, uy = carrier.vx / speed, carrier.vy / speed
+    local rng = carrier.rng
+    for _ = 1, d.tries do
+        local side = rng:RandomFloat() < 0.5 and -1 or 1
+        local lateral = side * (0.15 + 0.85 * rng:RandomFloat()) * d.scatter
+        local ahead = d.ahead[1] + (d.ahead[2] - d.ahead[1]) * rng:RandomFloat()
+        local to = Vector(carrier.x + ux * ahead - uy * lateral, carrier.y + uy * ahead + ux * lateral)
+        if isFloor(room, to) and freeSpot(to.X, to.Y) then
+            lay(carrierPlayer(carrier), to, carrier.damage, Vector(carrier.x, carrier.y), carrier.lift)
+            evidence.flung = evidence.flung + 1
+            return true
+        end
+    end
+    return false
+end
+
+-- What a stopped tear still carries spills around where it stopped. Every
+-- mine finds floor if it can: free ground first, else the last floor spot
+-- tried, on top of what lies there (no cap, user decision 2026-11-25).
+local function spill(carrier)
+    if carrier.load <= 0 then return end
+    local room, d = Game():GetRoom(), M.data
+    local stop = Vector(carrier.x + carrier.vx, carrier.y + carrier.vy)
+    if type(room.GetClampedPosition) == "function" then stop = room:GetClampedPosition(stop, d.floorMargin) end
+    local rng = carrier.rng
+    for _ = 1, carrier.load do
+        local free, floor
+        for _ = 1, d.tries do
+            local angle = rng:RandomFloat() * 2 * math.pi
+            local distance = d.spill[1] + (d.spill[2] - d.spill[1]) * rng:RandomFloat()
+            local to = Vector(stop.X + math.cos(angle) * distance, stop.Y + math.sin(angle) * distance)
+            if isFloor(room, to) then
+                floor = to
+                if freeSpot(to.X, to.Y) then
+                    free = to
+                    break
+                end
+            end
+        end
+        local to = free or floor
+        if to then
+            lay(carrierPlayer(carrier), to, carrier.damage, Vector(carrier.x, carrier.y), carrier.lift)
+            evidence.spilled = evidence.spilled + 1
+            if not free then evidence.piled = evidence.piled + 1 end
+        else
+            evidence.lost = evidence.lost + 1
+        end
+    end
+    carrier.load = 0
 end
 
 -- ------------------------------------------------------------------ blasts
@@ -288,7 +395,7 @@ local function explode(record)
     end
     for k = 1, gather(record.x, record.y, radius) do
         local other = nearby[k]
-        if other ~= record and not other.dead and not other.fuse and not other.going then
+        if other ~= record and other.landed and not other.dead and not other.fuse and not other.going then
             local dx, dy = other.x - record.x, other.y - record.y
             if dx * dx + dy * dy <= radius * radius and liveMine(other) then
                 other.fuse = M.data.chainDelay
@@ -301,21 +408,46 @@ local function explode(record)
     drop(record, true)
 end
 
--- Mines not yet settled: a falling one drops toward the floor and lands; a
--- landed one hands Land over to Idle and arms.
+-- Whether an active enemy is within `reach` (plus its size) of (x, y).
+local function enemyAt(x, y, reach)
+    local spot = Vector(x, y)
+    for _, entity in ipairs(Isaac.FindInRadius(spot, reach + 80, EntityPartition.ENEMY)) do
+        if entity:IsActiveEnemy(false) and not entity:HasEntityFlags(EntityFlag.FLAG_FRIENDLY)
+            and within(entity.Position:Distance(spot), reach, entity.Size) then
+            return true
+        end
+    end
+    return false
+end
+
+-- Mines not yet settled: a flying one flies on toward its spot and lands,
+-- going off at once on an enemy; a landed one hands Land over to Idle and
+-- arms.
 local function settleFresh()
     if #fresh == 0 then return end
-    local still = {}
+    local still, onEnemy = {}, nil
+    local d, now = M.data, Game():GetFrameCount()
     for _, record in ipairs(fresh) do
         local effect = not record.dead and liveMine(record)
-        if effect then
-            if not record.landed then
-                record.fall = record.fall + M.data.gravity
-                record.lift = record.lift + record.fall
-                if record.lift >= 0 then
+        if effect and record.frame == now then
+            -- Laid this update: it starts its flight on the next one.
+            still[#still + 1] = record
+        elseif effect then
+            if record.flying then
+                record.k = record.k + 1
+                local k = record.k
+                if k >= d.flight then
                     land(record, effect)
+                    if enemyAt(record.x, record.y, d.landOn) then
+                        record.going = true
+                        onEnemy = onEnemy or {}
+                        onEnemy[#onEnemy + 1] = record
+                        evidence.landedOn = evidence.landedOn + 1
+                    end
                 else
-                    effect.PositionOffset = Vector(0, record.lift)
+                    local f = k / d.flight
+                    effect.Position = Vector(record.sx + (record.x - record.sx) * f, record.sy + (record.y - record.sy) * f)
+                    effect.PositionOffset = Vector(0, math.min(0, record.lift + record.vz * k + 0.5 * d.gravity * k * k))
                 end
             else
                 if not record.idle then
@@ -325,16 +457,19 @@ local function settleFresh()
                         record.idle = true
                     end
                 end
-                if not record.armed and effect.FrameCount - record.landedAt >= M.data.armFrames then
+                if not record.armed and effect.FrameCount - record.landedAt >= d.armFrames then
                     record.armed = true
                 end
             end
-            if not (record.idle and record.armed) then still[#still + 1] = record end
+            if not (record.idle and record.armed) and not record.going then still[#still + 1] = record end
         elseif not record.dead then
             drop(record, false)
         end
     end
     fresh = still
+    if onEnemy then
+        for _, record in ipairs(onEnemy) do explode(record) end
+    end
 end
 
 local function burnFuses()
@@ -350,28 +485,38 @@ local function burnFuses()
     for _, record in ipairs(ready) do explode(record) end
 end
 
--- Every armed mine an active enemy stands on (flying ones count too) goes off.
+-- Every armed mine something stands on goes off: an active enemy (flying ones
+-- too) or a living player, who takes no damage from it.
 local stepped = {}
 local function stepOn()
     local count, reach = 0, M.data.triggerRadius
-    local centre = Game():GetRoom():GetCenterPos()
-    for _, entity in ipairs(Isaac.FindInRadius(centre, 4000, EntityPartition.ENEMY)) do
-        if entity:IsActiveEnemy(false) and not entity:HasEntityFlags(EntityFlag.FLAG_FRIENDLY) then
-            local position = entity.Position
-            local x, y = position.X, position.Y
-            local radius = reach + math.max(0, tonumber(entity.Size) or 0)
-            for k = 1, gather(x, y, radius) do
-                local record = nearby[k]
-                if record.armed and not record.fuse and not record.going then
-                    local dx, dy = record.x - x, record.y - y
-                    if dx * dx + dy * dy <= radius * radius then
-                        record.going = true
-                        count = count + 1
-                        stepped[count] = record
-                    end
+    local function standing(entity, byPlayer)
+        local position = entity.Position
+        local x, y = position.X, position.Y
+        local radius = reach + math.max(0, tonumber(entity.Size) or 0)
+        for k = 1, gather(x, y, radius) do
+            local record = nearby[k]
+            if record.armed and not record.fuse and not record.going then
+                local dx, dy = record.x - x, record.y - y
+                if dx * dx + dy * dy <= radius * radius then
+                    record.going = true
+                    count = count + 1
+                    stepped[count] = record
+                    if byPlayer then evidence.byPlayer = evidence.byPlayer + 1 end
                 end
             end
         end
+    end
+    local game = Game()
+    local centre = game:GetRoom():GetCenterPos()
+    for _, entity in ipairs(Isaac.FindInRadius(centre, 4000, EntityPartition.ENEMY)) do
+        if entity:IsActiveEnemy(false) and not entity:HasEntityFlags(EntityFlag.FLAG_FRIENDLY) then
+            standing(entity, false)
+        end
+    end
+    for i = 0, game:GetNumPlayers() - 1 do
+        local player = Isaac.GetPlayer(i)
+        if isActingPlayer(player) then standing(player, true) end
     end
     for k = 1, count do
         local record = stepped[k]
@@ -380,43 +525,122 @@ local function stepOn()
     end
 end
 
+-- Every tear still carrying mines: one flying on drops one each two tiles,
+-- one that stopped spills the rest.
+local function carry()
+    local still = {}
+    local every = M.data.dropEvery
+    for _, carrier in ipairs(carriers) do
+        local tear = carrier.ref.Ref
+        if tear and tear:Exists() then
+            local position, velocity = tear.Position, tear.Velocity
+            local dx, dy = position.X - carrier.x, position.Y - carrier.y
+            carrier.x, carrier.y, carrier.vx, carrier.vy = position.X, position.Y, velocity.X, velocity.Y
+            carrier.lift = math.min(0, tonumber(tear.Height) or carrier.lift)
+            carrier.travel = carrier.travel - math.sqrt(dx * dx + dy * dy)
+            if carrier.travel <= 0 then
+                if fling(carrier) then
+                    carrier.load = carrier.load - 1
+                    carrier.travel = carrier.travel + every
+                else
+                    evidence.carried = evidence.carried + 1
+                end
+            end
+            if carrier.load > 0 then still[#still + 1] = carrier end
+        else
+            spill(carrier)
+        end
+    end
+    carriers = still
+end
+
+-- ------------------------------------------------------------------ stats
+local STAT_FLAGS = CacheFlag.CACHE_DAMAGE | CacheFlag.CACHE_FIREDELAY | CacheFlag.CACHE_RANGE | (WEAPON_CACHE or 0)
+
+-- The x0.33 damage multiplier is StatsAPI's item multiplier, kept in step with
+-- whether the player holds the item (copies do not stack).
+local function syncMultiplier(player, held)
+    local um = ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers
+    if not um or type(um.SetItemMultiplier) ~= "function" then return end
+    local state = ConchBlessing.getUnifiedMultiplierState and ConchBlessing.getUnifiedMultiplierState(player, um)
+    local row = state and state.itemMultipliers and state.itemMultipliers[ID]
+    local entry = row and row.Damage
+    local target = held and M.data.statMultiplier or nil
+    if target and (not entry or entry.value ~= target) then
+        um:SetItemMultiplier(player, ID, "Damage", target, "Landmine")
+    elseif not target and entry then
+        um:RemoveItemMultiplier(player, ID, "Damage")
+    else
+        return
+    end
+    if um.QueueCacheUpdate then um:QueueCacheUpdate(player, "Damage") end
+    if um.SaveToSaveManager then um:SaveToSaveManager(player) end
+end
+
+-- When a player gains or loses the item, its multiplier follows and their
+-- stats and weapons are evaluated again (the items.xml cache flags do the
+-- same on a pickup; this also covers a removal the engine does not report).
+local function syncHolder(player)
+    local hash = GetPtrHash(player)
+    local held = player:GetCollectibleNum(ID) > 0
+    local was = holding[hash]
+    if was == held and not sweep then return end
+    holding[hash] = held
+    syncMultiplier(player, held)
+    if was ~= nil or held then
+        player:AddCacheFlags(STAT_FLAGS)
+        player:EvaluateItems()
+    end
+end
+
+-- Locks a holder's attacks to tears inside their own weapon cache evaluation
+-- (REPENTOGON); the next evaluation without the item rebuilds the weapons.
+local function lockTears(player)
+    if type(player.EnableWeaponType) ~= "function" or type(TEARS_WEAPON) ~= "number" then return false end
+    for _, weapon in ipairs(OTHER_WEAPONS) do player:EnableWeaponType(weapon, false) end
+    player:EnableWeaponType(TEARS_WEAPON, true)
+    return true
+end
+
 -- ------------------------------------------------------------------ callbacks
--- An attack by `player`: a holder drops a mine at their feet over free floor,
--- on top of any mine already there, unless they dropped one within the last
--- `interval` updates.
-local function attack(player)
-    if not M.available or ID <= 0 or not player or player:GetCollectibleNum(ID) <= 0 then return end
-    if not isActingPlayer(player) then return end
-    local frame, key = Game():GetFrameCount(), GetPtrHash(player)
-    local last = lastDrop[key]
-    if last and frame - last < M.data.interval then
-        evidence.waited = evidence.waited + 1
-        return
+function M.onEvaluateCache(_, player, flag)
+    if ID <= 0 or not player or player:GetCollectibleNum(ID) <= 0 then return end
+    local stats = ConchBlessing.stats
+    if flag == CacheFlag.CACHE_FIREDELAY then
+        if stats and stats.tears and stats.tears.applyAddition then stats.tears.applyAddition(player, M.data.tears, nil) end
+    elseif flag == CacheFlag.CACHE_RANGE then
+        if stats and stats.range and stats.range.applyAddition then stats.range.applyAddition(player, M.data.range, nil) end
+    elseif WEAPON_CACHE and flag == WEAPON_CACHE then
+        lockTears(player)
     end
-    local room = Game():GetRoom()
-    local position = player.Position
-    if not isFloor(room, position) then
-        evidence.blocked = evidence.blocked + 1
-        return
-    end
-    lastDrop[key] = frame
-    lay(player, position, player.Damage, nil, -M.data.dropHeight)
 end
 
--- REPENTOGON: one weapon trigger is one attack, whatever the weapon; only a
--- player's own weapon counts, never a familiar's.
-function M.onWeaponFired(_, _, _, owner)
-    attack(WeaponAttackTracker.getDirectPlayerOwner(owner))
-end
-
--- Without REPENTOGON each tear the holder fires stands for an attack.
+-- Every tear a living holder fires carries its mines (familiars' tears are
+-- their own and carry none).
 function M.onFireTear(_, tear)
-    if WEAPON_EVENT or not tear then return end
+    if not M.available or ID <= 0 or not tear then return end
     local spawner = tear.SpawnerEntity
-    attack(spawner and spawner:ToPlayer())
+    local player = spawner and spawner:ToPlayer()
+    if not player or player:GetCollectibleNum(ID) <= 0 or not isActingPlayer(player) then return end
+    local rng = RNG()
+    rng:SetSeed(math.max(1, tear.InitSeed or 1), 35)
+    local position, velocity = tear.Position, tear.Velocity
+    carriers[#carriers + 1] = { ref = EntityPtr(tear), owner = EntityPtr(player), damage = player.Damage,
+        load = payload(player.Luck), travel = M.data.dropEvery / 2, rng = rng, x = position.X, y = position.Y,
+        vx = velocity.X, vy = velocity.Y, lift = math.min(0, tonumber(tear.Height) or 0) }
+    evidence.fired = evidence.fired + 1
 end
 
 function M.onUpdate()
+    if ID > 0 then
+        local game = Game()
+        for i = 0, game:GetNumPlayers() - 1 do
+            local player = Isaac.GetPlayer(i)
+            if player then syncHolder(player) end
+        end
+        sweep = false
+    end
+    if #carriers > 0 then carry() end
     if #mines == 0 then return end
     compact(false)
     settleFresh()
@@ -426,7 +650,10 @@ end
 
 -- Mines are effects of their room: a new room, game start and exit forget them.
 function M.onNewRoom() reset() end
-function M.onGameStarted() reset() end
+function M.onGameStarted()
+    reset()
+    holding, sweep = {}, true
+end
 function M.onGameExit() reset() end
 function M.onModUnload()
     for _, record in ipairs(mines) do drop(record, true) end
@@ -442,16 +669,20 @@ function M.mineVariant() return mineVariant end
 
 M._test = {
     mineDamage = mineDamage,
+    payload = payload,
     within = within,
+    launchSpeed = launchSpeed,
     isFloor = isFloor,
-    attack = attack,
+    freeSpot = freeSpot,
     lay = lay,
     land = land,
     explode = explode,
+    lockTears = lockTears,
+    otherWeapons = function() return OTHER_WEAPONS end,
+    carriers = function() return carriers end,
     tiles = function() return cells end,
     evidence = function() return evidence end,
     resetEvidence = resetEvidence,
-    weaponEvent = function() return WEAPON_EVENT end,
     procKey = PROC_KEY,
 }
 

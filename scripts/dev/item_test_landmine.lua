@@ -1,15 +1,16 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
--- 지뢰 (Landmine): the lifecycle contract and its cases. The player really
--- holds the shoot key (the engine reads it through MC_INPUT_ACTION) and is
--- moved a few units an update along a straight line, as walking moves them.
--- Every attack is the engine's own weapon trigger (REPENTOGON), recorded here
--- with where the player stood, and every mine is the module's own effect in
--- the room (its fall read from its own PositionOffset): a case compares the
--- two, one mine for each attack, at the same spot. Every blast is read from
--- the enemy's actual HP and the player's actual health. A case keeps one
--- harmless enemy pinned in the corner behind the walks (the room stays
--- uncleared and its doors shut), where the tears (fired to the right) never
--- reach it and it never comes near a mine; no_enemies shoots with none.
+-- 지뢰 (Landmine): the lifecycle contract and its cases, for the tear that
+-- sows mines (user design 2026-11-25). The player really holds the shoot key
+-- (the engine reads it through MC_INPUT_ACTION); every tear is the engine's
+-- own, recorded here as it is fired, and every mine is the module's own
+-- effect in the room (its flight read from its own PositionOffset). Every
+-- blast is read from the enemy's actual HP and the player's actual health;
+-- the expected numbers are the user's: +40 range, x0.33 damage, -0.2 tears,
+-- 3 mines a tear (+1 per 5 luck), a blast of twice the holder's damage. A
+-- case keeps one harmless enemy pinned in the corner behind the player (the
+-- room stays uncleared and its doors shut), where the tears (fired to the
+-- right) never reach it. Mines placed for the blast cases are laid with the
+-- module's own `lay`, landing at once where the case needs them.
 local S = require("scripts.dev.item_scenarios")
 local H = require("scripts.dev.item_test_support")
 local C = {}
@@ -18,40 +19,58 @@ local function M() return ConchBlessing.landmine end
 local function T() return M()._test end
 local function evidence() return T().evidence() end
 
-local STEP = 4      -- units walked an update (Isaac at speed 1 walks about 4.5)
-local WALK = 340    -- a walk long enough for several attacks
-
 -- ---------------------------------------------------------------- observers
 -- Every hit the player takes while `playerHits` is a table.
 local playerHits
+-- Every hit `watched` (GetPtrHash) takes while `targetHits` is a table:
+-- { amount, kind = "mine" | "tear" | "other" }.
+local targetHits, watched
 if ModCallbacks.MC_ENTITY_TAKE_DMG then
     ConchBlessing:AddCallback(ModCallbacks.MC_ENTITY_TAKE_DMG, function(_, entity, amount, flags, source)
-        if not playerHits or entity.Type ~= EntityType.ENTITY_PLAYER then return end
         local attack = source and source.Entity
-        playerHits[#playerHits + 1] = string.format("amt=%.2f flags=%d src=%s", amount, flags,
-            attack and string.format("%d.%d", attack.Type, attack.Variant) or "none")
+        if playerHits and entity.Type == EntityType.ENTITY_PLAYER then
+            playerHits[#playerHits + 1] = string.format("amt=%.2f flags=%d src=%s", amount, flags,
+                attack and string.format("%d.%d", attack.Type, attack.Variant) or "none")
+        end
+        if targetHits and watched and GetPtrHash(entity) == watched then
+            local kind = "other"
+            if attack and attack.Type == EntityType.ENTITY_EFFECT and attack.Variant == M().mineVariant() then
+                kind = "mine"
+            elseif attack and attack.Type == EntityType.ENTITY_TEAR then
+                kind = "tear"
+            end
+            targetHits[#targetHits + 1] = { amount = amount, kind = kind }
+        end
     end)
 end
 
--- Where the player stood at each of their own attacks while `attacks` is a
--- table (a familiar's weapon is its own owner and is not recorded).
-local attacks
-if ModCallbacks.MC_POST_TRIGGER_WEAPON_FIRED then
-    ConchBlessing:AddCallback(ModCallbacks.MC_POST_TRIGGER_WEAPON_FIRED, function(_, _, _, owner)
-        local player = attacks and owner and owner:ToPlayer()
-        if player then attacks[#attacks + 1] = Vector(player.Position.X, player.Position.Y) end
+-- Every tear the player fires while `fired` is a table: where it started.
+local fired
+if ModCallbacks.MC_POST_FIRE_TEAR then
+    ConchBlessing:AddCallback(ModCallbacks.MC_POST_FIRE_TEAR, function(_, tear)
+        local spawner = fired and tear.SpawnerEntity
+        if spawner and spawner:ToPlayer() then fired[#fired + 1] = Vector(tear.Position.X, tear.Position.Y) end
+    end)
+end
+
+-- Every laser a player's weapon makes while `lasers` is a number.
+local lasers
+if ModCallbacks.MC_POST_LASER_INIT then
+    ConchBlessing:AddCallback(ModCallbacks.MC_POST_LASER_INIT, function(_, laser)
+        local spawner = lasers and laser.SpawnerEntity
+        if spawner and spawner:ToPlayer() then lasers = lasers + 1 end
     end)
 end
 
 local function startShooting(player, ctx)
-    ctx.attacks = ctx.attacks or {}
-    attacks = ctx.attacks
+    ctx.fired = ctx.fired or {}
+    fired = ctx.fired
     H.shoot(player, "$tears", ctx)
 end
 
 local function stopShooting()
     H.stopShooting()
-    attacks = nil
+    fired = nil
 end
 
 -- The mines in the room, NO_QUERY included.
@@ -65,7 +84,14 @@ local function roomMines()
     return list
 end
 
+local function noTears()
+    return #Isaac.FindByType(EntityType.ENTITY_TEAR) == 0
+end
+
 local function clearMines()
+    for _, tear in ipairs(Isaac.FindByType(EntityType.ENTITY_TEAR)) do tear:Remove() end
+    local carriers = T().carriers()
+    for k = #carriers, 1, -1 do carriers[k] = nil end
     for _, mine in ipairs(roomMines()) do mine:Remove() end
     M().mines()
 end
@@ -80,43 +106,20 @@ local function describeMines()
         parts[#parts + 1] = string.format("%.0f,%.0f", mine.Position.X, mine.Position.Y)
     end
     local e = evidence()
-    return string.format("mines=[%s] laid=%d landed=%d blocked=%d exploded=%d chained=%d pictures=%d",
-        table.concat(parts, " "), e.laid, e.landed, e.blocked, e.exploded, e.chained, e.pictures)
+    return string.format("mines=[%s] fired=%d laid=%d flung=%d spilled=%d piled=%d lost=%d landed=%d landedOn=%d "
+        .. "exploded=%d byPlayer=%d chained=%d", table.concat(parts, " "), e.fired, e.laid, e.flung, e.spilled, e.piled,
+        e.lost, e.landed, e.landedOn, e.exploded, e.byPlayer, e.chained)
 end
 
-local function byPlace(a, b)
-    if a.X ~= b.X then return a.X < b.X end
-    return a.Y < b.Y
-end
-
--- Whether the room holds exactly one mine for each attack recorded (`spots`,
--- else every attack of the case), each where the player stood for it.
-local function matchesAttacks(ctx, spots)
-    local places, wanted = {}, {}
-    for k, mine in ipairs(roomMines()) do places[k] = mine.Position end
-    for k, spot in ipairs(spots or ctx.attacks or {}) do wanted[k] = spot end
-    table.sort(places, byPlace)
-    table.sort(wanted, byPlace)
-    local ok, worst = #places == #wanted and #wanted > 0, 0
-    for k = 1, math.min(#places, #wanted) do
-        worst = math.max(worst, places[k]:Distance(wanted[k]))
-    end
-    return ok and worst <= 1, string.format("attacks=%d worst=%.2f %s", #wanted, worst, describeMines())
-end
-
--- Cases that share one run per group (S.sequenceBundle below); each stays
--- callable alone. Mines drop with or without enemies; the cases keep one so
--- the room stays uncleared and its doors shut.
 local sharedConditions, sharedDamage = {}, {}
 local conditionsCase = S.caseIn(sharedConditions, "LANDMINE", { conditions = true })
 local damageCase = S.caseIn(sharedDamage, "LANDMINE", { damage = true })
 
 local function requireModule(plan)
-    plan.require("Landmine module, its mine effect and REPENTOGON's attack event ready", function()
+    plan.require("Landmine module and its mine effect ready", function()
         local m = M()
-        return m and m._test and m.available and m.mineVariant() > 0 and m._test.weaponEvent()
-            and ModCallbacks.MC_POST_TRIGGER_WEAPON_FIRED and true or nil,
-            "module missing, effect unregistered or no weapon-trigger callback"
+        return m and m._test and m.available and m.mineVariant() > 0 and ModCallbacks.MC_POST_FIRE_TEAR
+            and true or nil, "module missing, effect unregistered or no fire-tear callback"
     end)
 end
 
@@ -126,11 +129,10 @@ local function give(player, id, copies)
 end
 
 local function leftSide(room)
-    local centre = room:GetCenterPos()
-    return Vector(room:GetTopLeftPos().X + 60, centre.Y)
+    return Vector(room:GetTopLeftPos().X + 60, room:GetCenterPos().Y)
 end
 
--- The bottom-left corner: behind every walk, since the tears fly right.
+-- The bottom-left corner: behind the player, since the tears fly right.
 local function behind(room)
     return Vector(room:GetTopLeftPos().X + 20, room:GetBottomRightPos().Y - 20)
 end
@@ -159,20 +161,21 @@ local function setup(plan, id)
         ctx.cleanupFns = { function()
             stopShooting()
             clearMines()
-            playerHits = nil
+            playerHits, targetHits, watched, lasers = nil, nil, nil, nil
             if ctx.target and ctx.target:Exists() then ctx.target:Remove() end
         end }
         give(player, id, 1)
         clearMines()
         T().resetEvidence()
-        ctx.attacks = {}
+        ctx.fired = {}
     end)
 end
 
--- A harmless enemy waits in the corner behind the walks, so the room has one.
-local function withEnemy(plan)
+-- A harmless enemy waits at `place(room, player)` (else in the corner behind
+-- the player), so the room has one.
+local function withEnemy(plan, place)
     plan.act(function(player, ctx)
-        ctx.targetSpot = behind(Game():GetRoom())
+        ctx.targetSpot = (place or behind)(Game():GetRoom(), player)
         ctx.target = H.target(player, true)
         pin(ctx)
     end)
@@ -182,7 +185,7 @@ local function withEnemy(plan)
         if not ready then return false, why end
         local alive = Game():GetRoom():GetAliveEnemiesCount()
         return alive > 0, "alive enemies " .. alive
-    end, 30, "an enemy waits behind the walks")
+    end, 30, "an enemy waits")
 end
 
 -- Stands the player at `place(room, ctx)` for `updates` updates, holding the
@@ -203,96 +206,100 @@ local function stand(plan, place, updates, shoot)
     plan.act(function() stopShooting() end)
 end
 
--- Walks the player from `from(room)` by (dx, dy), STEP units an update,
--- holding the shoot key when `shoot`: two updates standing at the start,
--- the walk, two updates standing at the end, then the key is let go.
-local function walk(plan, label, from, dx, dy, shoot)
-    local length = math.sqrt(dx * dx + dy * dy)
-    local delta
-    plan.act(function(player, ctx)
-        delta = Vector(dx, dy)
-        ctx.from = from(Game():GetRoom())
-        ctx.walked, ctx.held = 0, 0
-        player.Position, player.Velocity = ctx.from, Vector.Zero
-        if shoot then startShooting(player, ctx) end
-    end)
+-- Waits, the player held where they stand, until every tear is gone, no tear
+-- carries a mine any more and every mine has landed.
+local function settle(plan)
     plan.waitUntil(function(player, ctx)
         pin(ctx)
         track(ctx)
-        ctx.held = ctx.held + 1
-        if ctx.held > 2 and ctx.walked < length then ctx.walked = math.min(length, ctx.walked + STEP) end
-        player.Position = ctx.from + delta * (ctx.walked / length)
-        player.Velocity = Vector.Zero
-        return ctx.walked >= length and ctx.held >= math.ceil(length / STEP) + 4,
-            string.format("%.0f of %.0f walked", ctx.walked, length)
-    end, math.ceil(length / STEP) + 40, label)
-    plan.act(function() stopShooting() end)
-end
-
--- Waits until every mine laid has landed.
-local function settle(plan)
-    plan.waitUntil(function(_, ctx)
-        pin(ctx)
-        track(ctx)
+        if ctx.spot then player.Position, player.Velocity = ctx.spot, Vector.Zero end
+        if not noTears() then return false, "tears still flying" end
+        if #T().carriers() > 0 then return false, #T().carriers() .. " tears still carry mines" end
         local e = evidence()
         return e.landed == e.laid, string.format("%d of %d landed", e.landed, e.laid)
-    end, 40, "every mine has landed")
+    end, 150, "the tears are gone and every mine has landed")
 end
 
--- The armed mine's record and entity, the only one in the room.
-local function onlyMine(ctx)
-    local list = roomMines()
-    ctx.mine = list[1]
-    ctx.record = nil
-    for _, record in ipairs(M().mines()) do
-        if record.ref.Ref and ctx.mine and GetPtrHash(record.ref.Ref) == GetPtrHash(ctx.mine) then ctx.record = record end
-    end
-    return #list == 1 and ctx.record ~= nil
+-- The mines laid for each tear fired: `per` each.
+local function everyTearCarried(plan, label, per)
+    plan.check(label, function(_, ctx)
+        local e, shots = evidence(), #ctx.fired
+        return shots >= 1 and e.fired == shots and e.laid == per * shots and e.lost == 0 and #roomMines() == e.laid,
+            string.format("observed tears=%d per=%d %s", shots, per, describeMines())
+    end)
 end
 
-local function noTears()
-    return #Isaac.FindByType(EntityType.ENTITY_TEAR) == 0
-end
-
--- Waits, the player held at `spot`, until the tears are gone and every mine
--- is armed.
-local function armed(plan, spot, label)
+-- Waits until every mine laid for a blast case has armed, the player held at
+-- `ctx.spot`.
+local function armed(plan, label)
     plan.waitUntil(function(player, ctx)
         pin(ctx)
-        player.Position, player.Velocity = spot(ctx), Vector.Zero
-        if not noTears() then return false, "tears still flying" end
+        player.Position, player.Velocity = ctx.spot, Vector.Zero
         for _, record in ipairs(M().mines()) do
             if not record.armed then return false, "a mine is not armed" end
         end
         return true
-    end, 90, label)
+    end, 30, label)
 end
 
--- Shooting in place in a room with an enemy: one mine for every attack, all
--- piled at the feet, whatever the number of copies; none without the item.
+local function lay(player, spot)
+    local _, record = T().lay(player, spot, player.Damage)
+    return record
+end
+
+-- ---------------------------------------------------------------- lifecycle
+local STATS = { "Damage", "Tears", "Range" }
+
+-- The item's share of the displayed stats: the stats while held, less the
+-- stats with every copy taken away (the damage as a ratio), then the copies
+-- are given back. StatsAPI's damage multiplier follows on the next update.
+local function measureShare(plan, id)
+    plan.act(function(player, ctx)
+        ctx.with = H.stats(player)
+        ctx.held = player:GetCollectibleNum(id)
+        give(player, id, 0)
+    end)
+    plan.wait(3)
+    plan.act(function(player, ctx)
+        local without = H.stats(player)
+        ctx.share = { Damage = ctx.with.Damage / without.Damage, Tears = ctx.with.Tears - without.Tears,
+            Range = ctx.with.Range - without.Range }
+        give(player, id, ctx.held)
+    end)
+    plan.wait(3)
+end
+
+-- n copies: +40 range, x0.33 damage and -0.2 tears once however many, and
+-- every tear carries 3 mines; nothing without the item.
 C.LANDMINE = { stage = function(plan, id, n)
     requireModule(plan)
     plan.act(function(_, ctx)
         clearMines()
         T().resetEvidence()
-        ctx.attacks = {}
+        ctx.fired = {}
     end)
     withEnemy(plan)
-    stand(plan, function(room, ctx)
-        ctx.from = leftSide(room)
-        return ctx.from
-    end, 30, true)
-    settle(plan)
-    plan.check(n > 0 and "every attack in place drops a mine at the feet, piled up"
-        or "without Landmine attacking drops nothing", function(_, ctx)
-        local list, shots = roomMines(), #ctx.attacks
-        if n == 0 then
-            return #list == 0 and shots >= 1, string.format("attacks=%d %s", shots, describeMines())
+    measureShare(plan, id)
+    plan.check(n > 0 and "+40 range, x0.33 damage and -0.2 tears, once whatever the copies"
+        or "without Landmine no stat moves", function(_, ctx)
+        local want = n > 0 and { Damage = 0.33, Tears = -0.2, Range = 40 } or { Damage = 1, Tears = 0, Range = 0 }
+        local ok, parts = true, {}
+        for _, stat in ipairs(STATS) do
+            if math.abs(ctx.share[stat] - want[stat]) > 0.005 then ok = false end
+            parts[#parts + 1] = string.format("%s %.4f (want %.4f)", stat, ctx.share[stat], want[stat])
         end
-        local ok, detail = matchesAttacks(ctx)
-        for _, mine in ipairs(list) do ok = ok and mine.Position:Distance(ctx.from) <= 1 end
-        return ok and shots >= 2, detail
+        return ok, string.format("%d cop%s: %s", n, n == 1 and "y" or "ies", table.concat(parts, " "))
     end)
+    stand(plan, function(room) return leftSide(room) end, 20, true)
+    settle(plan)
+    if n > 0 then
+        everyTearCarried(plan, "every tear the holder fires carries 3 mines", 3)
+    else
+        plan.check("without Landmine the tears carry nothing", function(_, ctx)
+            return #ctx.fired >= 1 and evidence().laid == 0 and #roomMines() == 0,
+                string.format("tears=%d %s", #ctx.fired, describeMines())
+        end)
+    end
     plan.act(function(_, ctx)
         clearMines()
         if ctx.target and ctx.target:Exists() then ctx.target:Remove() end
@@ -300,27 +307,42 @@ C.LANDMINE = { stage = function(plan, id, n)
     end)
 end }
 
--- Walking while shooting: a mine for every attack, where the player stood
--- for it, each falling from the holder and landing.
-conditionsCase("every_attack", function(plan, id)
+-- ---------------------------------------------------------------- conditions
+-- Shooting right in place: each tear flings its 3 mines to both sides of its
+-- line as it flies, each seen in the air and landed, a gap apart, holding the
+-- player's damage; nobody on them, they stay.
+conditionsCase("scatter", function(plan, id)
     setup(plan, id)
     withEnemy(plan)
-    walk(plan, "walk and shoot", leftSide, WALK, 0, true)
+    stand(plan, function(room) return leftSide(room) end, 25, true)
     settle(plan)
-    plan.check("a mine for every attack, where the player stood for it", function(_, ctx)
-        local ok, detail = matchesAttacks(ctx)
-        return ok and #ctx.attacks >= 4, detail
+    everyTearCarried(plan, "every tear carried 3 mines and all were laid", 3)
+    plan.check("flung to both sides of the tears' line, within a tile of it", function(_, ctx)
+        local line, above, below, worst = ctx.fired[1] and ctx.fired[1].Y or 0, 0, 0, 0
+        for _, mine in ipairs(roomMines()) do
+            local off = mine.Position.Y - line
+            if off < -2 then above = above + 1 elseif off > 2 then below = below + 1 end
+            worst = math.max(worst, math.abs(off))
+        end
+        return above >= 1 and below >= 1 and worst <= M().data.scatter + 12,
+            string.format("above=%d below=%d widest=%.1f line=%.1f", above, below, worst, line)
     end)
-    plan.check("each mine fell from the holder's hands and landed", function(_, ctx)
+    plan.check("no two mines closer than the gap, none piled", function()
+        local list, closest = roomMines(), math.huge
+        for a = 1, #list do
+            for b = a + 1, #list do closest = math.min(closest, list[a].Position:Distance(list[b].Position)) end
+        end
+        return #list >= 2 and closest >= M().data.gap - 0.5 and evidence().piled == 0,
+            string.format("closest=%.1f gap=%d piled=%d", closest, M().data.gap, evidence().piled)
+    end)
+    plan.check("each mine flew from the tear and landed", function(_, ctx)
         local parts, ok = {}, true
         for _, mine in ipairs(roomMines()) do
             local lift = ctx.lifts[GetPtrHash(mine)] or 0
             parts[#parts + 1] = string.format("%.1f->%.1f", lift, mine.PositionOffset.Y)
             ok = ok and lift <= -5 and mine.PositionOffset.Y == 0
         end
-        local e = evidence()
-        return #parts >= 1 and ok and e.landed == e.laid,
-            string.format("highest->now=[%s] landed=%d laid=%d", table.concat(parts, " "), e.landed, e.laid)
+        return #parts >= 1 and ok, "highest->now=[" .. table.concat(parts, " ") .. "]"
     end)
     plan.check("every mine is the player's and holds the player's damage", function(player)
         local bad = 0
@@ -330,142 +352,100 @@ conditionsCase("every_attack", function(plan, id)
                 bad = bad + 1
             end
         end
-        return #M().mines() >= 1 and bad == 0, string.format("bad=%d damage=%.2f", bad, player.Damage)
+        return #M().mines() >= 1 and bad == 0, string.format("bad=%d damage=%.3f", bad, player.Damage)
     end)
-    plan.act(function(_, ctx) ctx.mine = roomMines()[1] end)
-    plan.waitUntil(function(_, ctx)
-        pin(ctx)
-        local sprite = ctx.mine:GetSprite()
-        return sprite:IsPlaying("Idle"), "animation " .. tostring(sprite:GetAnimation())
-    end, 30, "the mine finishes landing and idles")
-    plan.waitUntil(function(_, ctx)
-        pin(ctx)
-        return noTears(), "tears still flying"
-    end, 60, "the tears are gone")
-    plan.check("armed mines with nobody on them stay", function(_, ctx)
-        return ctx.mine:Exists() and evidence().exploded == 0, describeMines()
+    plan.wait(20)
+    plan.check("armed mines with nobody on them stay", function()
+        return evidence().exploded == 0 and #roomMines() == evidence().laid, describeMines()
     end)
-    plan.section("LANDMINE / every_attack", "an olive mine drops from Isaac's hands at his feet with every shot as he walks, sinks into a green splash and settles; their red buttons blink")
+    plan.section("LANDMINE / scatter", "each tear flies to the far wall flinging olive mines to both sides; they arc down, land in a green splash and blink")
 end)
 
--- Walking without shooting drops nothing; the first shot then drops one at
--- once, at the feet.
-conditionsCase("not_shooting", function(plan, id)
-    setup(plan, id)
-    withEnemy(plan)
-    walk(plan, "walk without shooting", leftSide, WALK, 0, false)
-    plan.check("walking without shooting drops nothing", function()
-        return #roomMines() == 0 and evidence().laid == 0, describeMines()
-    end)
-    plan.act(function(player, ctx)
-        ctx.spot = Vector(player.Position.X, player.Position.Y)
-        ctx.shotAt = Game():GetFrameCount()
-        startShooting(player, ctx)
-    end)
-    plan.waitUntil(function(player, ctx)
-        pin(ctx)
-        player.Position, player.Velocity = ctx.spot, Vector.Zero
-        return evidence().laid > 0, "no mine yet"
-    end, 10, "a mine drops as soon as the shooting starts")
-    plan.act(function(_, ctx)
-        ctx.after = Game():GetFrameCount() - ctx.shotAt
-        stopShooting()
-    end)
-    plan.check("it came with the first attack, at the feet", function(_, ctx)
-        local ok, detail = matchesAttacks(ctx)
-        local list = roomMines()
-        return ok and #list == 1 and list[1].Position:Distance(ctx.spot) <= 1 and ctx.after <= 3,
-            string.format("after %d updates %s", ctx.after, detail)
-    end)
-end)
-
--- With no enemy in the room every attack still drops its mine (user decision
--- 2026-11-24), and an enemy coming in later sets one off.
-conditionsCase("no_enemies", function(plan, id)
-    setup(plan, id)
-    plan.require("no enemy in the room", function()
-        local alive = Game():GetRoom():GetAliveEnemiesCount()
-        return alive == 0, "alive enemies " .. alive
-    end)
-    walk(plan, "walk and shoot with no enemy about", leftSide, WALK, 0, true)
-    settle(plan)
-    plan.check("no enemy, still a mine for every attack where the player stood", function(_, ctx)
-        local ok, detail = matchesAttacks(ctx)
-        return ok and #ctx.attacks >= 4, detail
-    end)
-end)
-
--- At tears 120 (MaxFireDelay -0.75: four tears an update) a holder still
--- drops one mine every 3 updates, 0.1 s (user decision 2026-11-24); every
--- mine lies where the player stood.
-local fastPlayer = nil -- GetPtrHash of the player whose fire rate the case raises
+-- Luck 10: every tear carries 5 mines.
+local luckPlayer = nil -- GetPtrHash of the player whose luck the case sets
 if ModCallbacks.MC_EVALUATE_CACHE and ConchBlessing.AddPriorityCallback then
     local late = (CallbackPriority and CallbackPriority.LATE) or 100
     ConchBlessing:AddPriorityCallback(ModCallbacks.MC_EVALUATE_CACHE, late, function(_, player, flag)
-        if fastPlayer and flag == CacheFlag.CACHE_FIREDELAY and GetPtrHash(player) == fastPlayer then
-            player.MaxFireDelay = 30 / 120 - 1
-        end
+        if luckPlayer and flag == CacheFlag.CACHE_LUCK and GetPtrHash(player) == luckPlayer then player.Luck = 10 end
     end)
 end
-local function setFast(player, on)
-    fastPlayer = on and GetPtrHash(player) or nil
-    player:AddCacheFlags(CacheFlag.CACHE_FIREDELAY)
+local function setLuck(player, on)
+    luckPlayer = on and GetPtrHash(player) or nil
+    player:AddCacheFlags(CacheFlag.CACHE_LUCK)
     player:EvaluateItems()
 end
 
-conditionsCase("interval", function(plan, id)
-    local UPDATES = 60
+conditionsCase("luck", function(plan, id)
     setup(plan, id)
     withEnemy(plan)
     plan.act(function(player, ctx)
-        setFast(player, true)
-        table.insert(ctx.cleanupFns, 1, function() setFast(player, false) end)
+        setLuck(player, true)
+        table.insert(ctx.cleanupFns, 1, function() setLuck(player, false) end)
     end)
     plan.wait(2)
-    plan.require("tears 120", function(player)
-        local tears = 30 / (player.MaxFireDelay + 1)
-        return math.abs(tears - 120) < 0.5, string.format("tears %.1f", tears)
+    plan.require("luck 10", function(player)
+        return player.Luck == 10, string.format("luck %.2f", player.Luck)
     end)
-    stand(plan, function(room, ctx)
-        ctx.from = leftSide(room)
-        return ctx.from
-    end, UPDATES, true)
-    plan.act(function(player) setFast(player, false) end)
+    stand(plan, function(room) return leftSide(room) end, 20, true)
+    plan.act(function(player) setLuck(player, false) end)
     settle(plan)
-    plan.check("one mine every 3 updates however fast the attacks come", function(_, ctx)
-        local frames = {}
-        for _, record in ipairs(M().mines()) do frames[#frames + 1] = record.frame end
-        table.sort(frames)
-        local closest = math.huge
-        for k = 2, #frames do closest = math.min(closest, frames[k] - frames[k - 1]) end
-        local expected = UPDATES / M().data.interval
-        return #ctx.attacks >= 2 * #frames and #frames >= expected - 2 and #frames <= expected + 1
-            and closest >= M().data.interval,
-            string.format("attacks=%d mines=%d expected about %d closest %s updates apart waited=%d", #ctx.attacks,
-                #frames, expected, tostring(closest), evidence().waited)
-    end)
-    plan.check("every mine lies at the feet", function(_, ctx)
-        local list = roomMines()
-        for _, mine in ipairs(list) do
-            if mine.Position:Distance(ctx.from) > 1 then return false, describeMines() end
+    everyTearCarried(plan, "at luck 10 every tear carries 5 mines", 5)
+end)
+
+-- Shooting into the right wall from close by: the tear stops at the wall and
+-- spills everything it still carries there.
+conditionsCase("wall_spill", function(plan, id)
+    setup(plan, id)
+    withEnemy(plan)
+    stand(plan, function(room, ctx)
+        ctx.wall = room:GetBottomRightPos().X
+        return Vector(ctx.wall - 50, room:GetCenterPos().Y)
+    end, 15, true)
+    settle(plan)
+    everyTearCarried(plan, "every mine of every tear was laid", 3)
+    plan.check("what the tears still carried spilled by the wall", function(_, ctx)
+        local far = 0
+        for _, mine in ipairs(roomMines()) do
+            if mine.Position.X < ctx.wall - 100 then far = far + 1 end
         end
-        return #list >= 1, describeMines()
+        local e = evidence()
+        return e.spilled >= 1 and far == 0, string.format("wall=%.0f far=%d %s", ctx.wall, far, describeMines())
     end)
 end)
 
--- Three walks leave every mine laid, far more than the old ten.
-conditionsCase("no_cap", function(plan, id)
+-- REPENTOGON: with Brimstone held the holder's attacks are tears; once the
+-- item is gone Brimstone's beam comes back.
+conditionsCase("tears_only", function(plan, id)
     setup(plan, id)
+    plan.require("REPENTOGON weapon types and the laser callback", function(player)
+        local repentogon = rawget(_G, "REPENTOGON")
+        return type(repentogon) == "table" and repentogon.Real == true and type(player.EnableWeaponType) == "function"
+            and ModCallbacks.MC_POST_LASER_INIT and true or nil, "REPENTOGON missing"
+    end)
     withEnemy(plan)
-    for _, row in ipairs({ -80, 0, 80 }) do
-        walk(plan, "a walk on row " .. row, function(room) return leftSide(room) + Vector(0, row) end,
-            WALK, 0, true)
-    end
-    settle(plan)
-    plan.check("every mine laid is still there, one for every attack", function(_, ctx)
-        local e = evidence()
-        local ok, detail = matchesAttacks(ctx)
-        return ok and #ctx.attacks > 10 and #roomMines() == e.laid and #M().mines() == e.laid, detail
+    plan.act(function(player, ctx)
+        player:AddCollectible(CollectibleType.COLLECTIBLE_BRIMSTONE, 0, false)
+        lasers = 0
+        table.insert(ctx.cleanupFns, 1, function() lasers = nil end)
+    end)
+    plan.wait(3)
+    stand(plan, function(room) return leftSide(room) end, 45, true)
+    plan.wait(10)
+    plan.check("with Brimstone and Landmine the attacks are tears that carry mines", function(_, ctx)
+        return #ctx.fired >= 2 and lasers == 0 and evidence().fired == #ctx.fired,
+            string.format("tears=%d lasers=%d %s", #ctx.fired, lasers, describeMines())
+    end)
+    plan.act(function(player, ctx)
+        give(player, id, 0)
+        ctx.fired, lasers = {}, 0
+        T().resetEvidence()
+    end)
+    plan.wait(3)
+    stand(plan, function(room) return leftSide(room) end, 60, true)
+    plan.wait(15)
+    plan.check("without Landmine Brimstone's beam is back and nothing carries mines", function(_, ctx)
+        return lasers >= 1 and #ctx.fired == 0 and evidence().fired == 0,
+            string.format("tears=%d lasers=%d fired=%d", #ctx.fired, lasers, evidence().fired)
     end)
 end)
 
@@ -473,11 +453,12 @@ end)
 conditionsCase("room_change", function(plan, id)
     setup(plan, id)
     withEnemy(plan)
-    walk(plan, "a walk shooting", leftSide, WALK, 0, true)
-    plan.require("mines dropped", function() return #roomMines() >= 1, describeMines() end)
+    stand(plan, function(room) return leftSide(room) end, 15, true)
+    settle(plan)
+    plan.require("mines laid", function() return #roomMines() >= 1, describeMines() end)
     plan.act(function(_, ctx)
         if ctx.target and ctx.target:Exists() then ctx.target:Remove() end
-        ctx.target = nil
+        ctx.target, ctx.spot = nil, nil
     end)
     -- Any open door will do: the case needs another room, not an ordinary one.
     local function openDoor()
@@ -492,174 +473,191 @@ conditionsCase("room_change", function(plan, id)
     H.walkThroughDoor(plan, "leave the room", openDoor)
     plan.wait(10)
     plan.check("no mine in the new room and none remembered", function()
-        return #roomMines() == 0 and #M().mines() == 0, describeMines()
+        return #roomMines() == 0 and #M().mines() == 0 and #T().carriers() == 0, describeMines()
     end)
 end)
 
--- Flying over pits: an attack over a pit drops nothing, every other attack
--- drops its mine where the player stood. Pits stay, so the case runs alone.
-S.add("LANDMINE", "pit", { conditions = true }, function(plan, id)
-    setup(plan, id)
-    plan.act(function(player, ctx)
-        player:AddCollectible(CollectibleType.COLLECTIBLE_TRANSCENDENCE, 0, false)
-        player:AddCacheFlags(CacheFlag.CACHE_FLYING)
-        player:EvaluateItems()
-        local room = Game():GetRoom()
-        ctx.pits = {}
-        -- Three tiles of pit across the walk, wide enough for attacks over them.
-        for _, offset in ipairs({ 80, 120, 160 }) do
-            local index = room:GetGridIndex(leftSide(room) + Vector(offset, 0))
-            Isaac.GridSpawn(GridEntityType.GRID_PIT, 0, room:GetGridPosition(index), true)
-            -- A pit spawned in a loaded room blocks nothing until its
-            -- collision is updated (measured for 축 on 2026-10-31).
-            local grid = room:GetGridEntity(index)
-            local pit = grid and grid:ToPit()
-            if pit then
-                pcall(pit.PostInit, pit)
-                pit:UpdateCollision()
-            end
-            ctx.pits[#ctx.pits + 1] = index
-        end
-    end)
-    plan.wait(2)
-    plan.require("the player flies and three pits lie across the walk", function(player, ctx)
-        local room = Game():GetRoom()
-        for _, index in ipairs(ctx.pits) do
-            if room:GetGridCollision(index) ~= GridCollisionClass.COLLISION_PIT then
-                return false, "grid " .. index .. " collision " .. tostring(room:GetGridCollision(index))
-            end
-        end
-        return player.CanFly, "can fly " .. tostring(player.CanFly)
-    end)
-    withEnemy(plan)
-    walk(plan, "a walk shooting over the pits", leftSide, WALK, 0, true)
-    settle(plan)
-    plan.check("no mine on a pit; every attack over the floor dropped one where the player stood",
-        function(_, ctx)
-            local room, onPit, overPit, overFloor = Game():GetRoom(), 0, 0, {}
-            for _, mine in ipairs(roomMines()) do
-                if room:GetGridCollisionAtPos(mine.Position) ~= GridCollisionClass.COLLISION_NONE then
-                    onPit = onPit + 1
-                end
-            end
-            for _, spot in ipairs(ctx.attacks) do
-                if room:GetGridCollisionAtPos(spot) ~= GridCollisionClass.COLLISION_NONE then
-                    overPit = overPit + 1
-                else
-                    overFloor[#overFloor + 1] = spot
-                end
-            end
-            local ok, detail = matchesAttacks(ctx, overFloor)
-            return ok and onPit == 0 and overPit > 0 and evidence().blocked == overPit,
-                string.format("onPit=%d overPit=%d blocked=%d %s", onPit, overPit, evidence().blocked, detail)
-        end)
-end)
+-- ---------------------------------------------------------------- blasts
+-- A blast case watches the enemy's hits from here on. Its HP starts at 1000:
+-- at H.target's 100000 the engine's float HP rounds each hit to 1/128.
+local function watch(ctx)
+    ctx.target.MaxHitPoints, ctx.target.HitPoints = 1000, 1000
+    ctx.before = ctx.target.HitPoints
+    targetHits, watched = {}, GetPtrHash(ctx.target)
+    ctx.hits = targetHits
+end
 
--- Shooting in place piles mines up; an enemy stepping on the pile sets off
--- every mine in it at once (one explosion), losing twice the holder's damage
--- for each, and the player standing on it is never hurt.
-damageCase("pile", function(plan, id)
+-- Whether the enemy lost exactly what was recorded, every blast twice the
+-- holder's damage and every tear hit the holder's damage.
+local function exactLoss(ctx, damage)
+    local sum, bad, mines = 0, 0, 0
+    for _, hit in ipairs(ctx.hits or {}) do
+        sum = sum + hit.amount
+        if hit.kind == "mine" then
+            mines = mines + 1
+            if not H.near(hit.amount, 2 * damage) then bad = bad + 1 end
+        elseif hit.kind == "tear" then
+            if not H.near(hit.amount, damage) then bad = bad + 1 end
+        else
+            bad = bad + 1
+        end
+    end
+    local loss = ctx.before - ctx.target.HitPoints
+    return H.near(loss, sum) and bad == 0, mines,
+        string.format("loss=%.4f recorded=%.4f blasts=%d bad=%d damage=%.4f", loss, sum, mines, bad, damage)
+end
+
+-- Shooting at an enemy two and a half tiles away: what a tear still carries
+-- spills around it, and a mine landing on it goes off at once. The tears
+-- keep coming until one has.
+damageCase("on_enemy", function(plan, id)
     setup(plan, id)
-    withEnemy(plan)
-    stand(plan, function(room, ctx)
-        ctx.from = leftSide(room)
-        return ctx.from
-    end, 60, true)
-    settle(plan)
-    plan.require("a pile at the feet, one mine for every attack", function(_, ctx)
-        local ok, detail = matchesAttacks(ctx)
-        local list = roomMines()
-        for _, mine in ipairs(list) do ok = ok and mine.Position:Distance(ctx.from) <= 1 end
-        ctx.pile = #list
-        return ok and #list >= 3, detail
-    end)
+    withEnemy(plan, function(room) return leftSide(room) + Vector(100, 0) end)
     plan.act(function(player, ctx)
+        ctx.spot = leftSide(Game():GetRoom())
+        player.Position, player.Velocity = ctx.spot, Vector.Zero
         ctx.damage = player.Damage
-        ctx.health = health(player)
-        playerHits = {}
-    end)
-    armed(plan, function(ctx) return ctx.from end, "the tears are gone and the pile is armed")
-    plan.act(function(_, ctx)
-        ctx.before = ctx.target.HitPoints
-        ctx.targetSpot = ctx.from
+        watch(ctx)
+        startShooting(player, ctx)
     end)
     plan.waitUntil(function(player, ctx)
-        player.Position, player.Velocity = ctx.from, Vector.Zero
-        if evidence().exploded > 0 then return true end
         pin(ctx)
-        return false, "waiting for the enemy to step on the pile"
-    end, 30, "the enemy steps on the pile")
-    plan.wait(3)
-    plan.check("the whole pile went off at once, with one explosion", function(_, ctx)
+        player.Position, player.Velocity = ctx.spot, Vector.Zero
+        return evidence().landedOn >= 1, describeMines()
+    end, 300, "a mine lands on the enemy")
+    plan.act(function() stopShooting() end)
+    settle(plan)
+    plan.wait(12)
+    plan.check("a mine that landed on the enemy went off at once", function()
         local e = evidence()
-        return e.exploded == ctx.pile and e.chained == 0 and e.pictures == 1 and #roomMines() == 0,
-            string.format("pile=%d %s", ctx.pile, describeMines())
+        return e.landedOn >= 1 and e.spilled >= 1, describeMines()
     end)
-    plan.check("the enemy lost twice the holder's damage for every mine in the pile", function(_, ctx)
-        local loss, expected = ctx.before - ctx.target.HitPoints, 2 * ctx.damage * ctx.pile
-        return H.near(loss, expected) and evidence().struck == ctx.pile,
-            string.format("loss=%.4f expected=%.4f struck=%d pile=%d", loss, expected, evidence().struck, ctx.pile)
+    plan.check("the enemy lost exactly its tear hits and twice the damage for every blast", function(_, ctx)
+        local ok, blasts, detail = exactLoss(ctx, ctx.damage)
+        return ok and blasts >= 1, detail
     end)
-    plan.check("the player standing on the pile was not hurt", function(player, ctx)
+    plan.section("LANDMINE / on_enemy", "tears hit the maggot and burst into mines around it; those landing on it blow up in green at once")
+end)
+
+-- A player walking onto an armed mine sets it off and takes no damage; the
+-- enemy beside it loses twice the holder's damage.
+damageCase("player_steps", function(plan, id)
+    setup(plan, id)
+    withEnemy(plan, function(room) return leftSide(room) + Vector(154, 0) end)
+    plan.act(function(player, ctx)
+        ctx.spot = leftSide(Game():GetRoom())
+        ctx.mineSpot = ctx.spot + Vector(120, 0)
+        player.Position, player.Velocity = ctx.spot, Vector.Zero
+        ctx.damage = player.Damage
+        lay(player, ctx.mineSpot)
+    end)
+    armed(plan, "the mine is armed with nobody on it")
+    plan.require("one armed mine, the enemy within its blast but not on it", function(_, ctx)
+        local reach = M().data.triggerRadius + ctx.target.Size
+        local gap = ctx.target.Position:Distance(ctx.mineSpot)
+        return #roomMines() == 1 and evidence().exploded == 0 and gap > reach and gap <= M().data.blastRadius + ctx.target.Size,
+            string.format("enemy %.1f from the mine, reach %.1f %s", gap, reach, describeMines())
+    end)
+    plan.act(function(player, ctx)
+        ctx.health = health(player)
+        playerHits = {}
+        watch(ctx)
+        ctx.spot = ctx.mineSpot
+    end)
+    plan.waitUntil(function(player, ctx)
+        pin(ctx)
+        player.Position, player.Velocity = ctx.spot, Vector.Zero
+        return evidence().exploded >= 1, "waiting for the player to set it off"
+    end, 10, "the player steps on the mine")
+    plan.wait(3)
+    plan.check("the player set it off", function()
+        local e = evidence()
+        return e.byPlayer == 1 and e.exploded == 1 and #roomMines() == 0, describeMines()
+    end)
+    plan.check("the enemy beside it lost exactly twice the holder's damage", function(_, ctx)
+        local ok, blasts, detail = exactLoss(ctx, ctx.damage)
+        return ok and blasts == 1, detail
+    end)
+    plan.check("the player was not hurt", function(player, ctx)
         local hits = playerHits or {}
         return #hits == 0 and health(player) == ctx.health,
             string.format("playerHits=[%s] health %d -> %d", table.concat(hits, "; "), ctx.health, health(player))
     end)
-    plan.section("LANDMINE / pile", "one green explosion where the enemy stepped on the pile of mines")
+end)
+
+-- Two mines 30 apart: an enemy on one sets off the other a moment later, and
+-- both blasts reach it.
+damageCase("chain", function(plan, id)
+    setup(plan, id)
+    withEnemy(plan)
+    plan.act(function(player, ctx)
+        ctx.spot = leftSide(Game():GetRoom())
+        player.Position, player.Velocity = ctx.spot, Vector.Zero
+        ctx.damage = player.Damage
+        ctx.mineSpot = ctx.spot + Vector(200, 0)
+        lay(player, ctx.mineSpot)
+        lay(player, ctx.mineSpot + Vector(0, 30))
+    end)
+    armed(plan, "both mines are armed")
+    plan.act(function(_, ctx)
+        watch(ctx)
+        ctx.targetSpot = ctx.mineSpot
+    end)
+    plan.waitUntil(function(player, ctx)
+        player.Position, player.Velocity = ctx.spot, Vector.Zero
+        if evidence().exploded == 0 then pin(ctx) end
+        if ctx.target:Exists() then ctx.target.Velocity = Vector.Zero end
+        return evidence().exploded >= 2, "exploded " .. evidence().exploded
+    end, 30, "both mines go off")
+    plan.wait(3)
+    plan.check("the second mine went off from the first one's blast", function()
+        local e = evidence()
+        return e.chained == 1 and e.exploded == 2 and #roomMines() == 0, describeMines()
+    end)
+    plan.check("both blasts reached the enemy, twice the holder's damage each", function(_, ctx)
+        local ok, blasts, detail = exactLoss(ctx, ctx.damage)
+        return ok and blasts == 2, detail
+    end)
 end)
 
 -- An enemy walking onto an armed mine sets it off: it loses exactly twice the
--- holder's damage; the player standing on the same mine is never hurt, does
--- not set it off, and a rock beside it stays whole.
+-- holder's damage, the player far off is not hurt and a rock beside it stays
+-- whole.
 damageCase("trigger", function(plan, id)
     setup(plan, id)
     withEnemy(plan)
-    stand(plan, function(room, ctx)
-        ctx.from = leftSide(room)
-        return ctx.from
-    end, 6, true)
-    settle(plan)
-    plan.require("one mine at the feet", function(_, ctx)
-        return onlyMine(ctx) and ctx.mine.Position:Distance(ctx.from) <= 1, describeMines()
-    end)
     plan.act(function(player, ctx)
+        ctx.spot = leftSide(Game():GetRoom())
+        player.Position, player.Velocity = ctx.spot, Vector.Zero
         ctx.damage = player.Damage
-        ctx.health = health(player)
-        playerHits = {}
+        ctx.mineSpot = ctx.spot + Vector(200, 0)
+        lay(player, ctx.mineSpot)
         local room = Game():GetRoom()
-        ctx.rockIndex = room:GetGridIndex(ctx.mine.Position + Vector(0, 40))
+        ctx.rockIndex = room:GetGridIndex(ctx.mineSpot + Vector(0, 40))
         ctx.rockPlaced = Isaac.GridSpawn(GridEntityType.GRID_ROCK, 0, room:GetGridPosition(ctx.rockIndex), true) ~= nil
     end)
-    armed(plan, function(ctx) return ctx.from end, "the tears are gone and the mine is armed")
-    plan.wait(20)
-    plan.check("the player standing on the armed mine does not set it off", function(player, ctx)
-        player.Position, player.Velocity = ctx.from, Vector.Zero
-        return ctx.mine:Exists() and evidence().exploded == 0, describeMines()
-    end)
-    plan.check("the mine holds the player's damage", function(_, ctx)
-        return H.near(ctx.record.damage, ctx.damage), string.format("mine=%.4f player=%.4f", ctx.record.damage, ctx.damage)
-    end)
-    plan.act(function(_, ctx)
-        ctx.before = ctx.target.HitPoints
-        ctx.targetSpot = ctx.mine.Position
+    armed(plan, "the mine is armed")
+    plan.act(function(player, ctx)
+        ctx.health = health(player)
+        playerHits = {}
+        watch(ctx)
+        ctx.targetSpot = ctx.mineSpot
     end)
     plan.waitUntil(function(player, ctx)
-        player.Position, player.Velocity = ctx.from, Vector.Zero
+        player.Position, player.Velocity = ctx.spot, Vector.Zero
         if evidence().exploded > 0 then return true end
         pin(ctx)
         return false, "waiting for the enemy to set it off"
     end, 30, "the enemy steps on the mine")
     plan.wait(3)
     plan.check("the enemy lost exactly twice the holder's damage", function(_, ctx)
-        local loss, expected = ctx.before - ctx.target.HitPoints, 2 * ctx.damage
-        return H.near(loss, expected) and evidence().struck == 1,
-            string.format("loss=%.4f expected=%.4f struck=%d", loss, expected, evidence().struck)
+        local ok, blasts, detail = exactLoss(ctx, ctx.damage)
+        return ok and blasts == 1 and evidence().byPlayer == 0, detail
     end)
-    plan.check("the mine is gone and the player was not hurt", function(player, ctx)
+    plan.check("the player was not hurt", function(player, ctx)
         local hits = playerHits or {}
-        return not ctx.mine:Exists() and #hits == 0 and health(player) == ctx.health,
-            string.format("mine=%s playerHits=[%s] health %d -> %d", tostring(ctx.mine:Exists()),
-                table.concat(hits, "; "), ctx.health, health(player))
+        return #hits == 0 and health(player) == ctx.health,
+            string.format("playerHits=[%s] health %d -> %d", table.concat(hits, "; "), ctx.health, health(player))
     end)
     plan.check("a rock beside the mine is still whole", function(_, ctx)
         local room = Game():GetRoom()
@@ -669,66 +667,19 @@ damageCase("trigger", function(plan, id)
             string.format("placed=%s type=%s solid=%s", tostring(ctx.rockPlaced), tostring(grid and grid:GetType()),
                 tostring(solid))
     end)
-    plan.section("LANDMINE / trigger", "a small green explosion where the enemy stepped on the mine")
-end)
-
--- Two mines 50 apart (one shot in place, then another after walking away and
--- back below it): an enemy on one sets off the other a moment later, and both
--- blasts reach it.
-damageCase("chain", function(plan, id)
-    setup(plan, id)
-    withEnemy(plan)
-    stand(plan, function(room, ctx)
-        ctx.from = leftSide(room)
-        return ctx.from
-    end, 6, true)
-    stand(plan, function(_, ctx) return ctx.from + Vector(200, 0) end, 2, false)
-    -- Long enough for the next attack once the fire delay is over, not for two.
-    stand(plan, function(_, ctx) return ctx.from + Vector(0, 50) end, 8, true)
-    settle(plan)
-    plan.require("two mines 50 apart", function(_, ctx)
-        local list = roomMines()
-        local gap = #list == 2 and list[1].Position:Distance(list[2].Position) or -1
-        return #list == 2 and math.abs(gap - 50) <= 1, string.format("gap=%.1f %s", gap, describeMines())
-    end)
-    plan.act(function(player, ctx)
-        ctx.damage = player.Damage
-        ctx.spot = ctx.from + Vector(0, 50)
-    end)
-    armed(plan, function(ctx) return ctx.spot end, "the tears are gone and both mines are armed")
-    plan.act(function(_, ctx)
-        ctx.before = ctx.target.HitPoints
-        ctx.targetSpot = ctx.from
-    end)
-    plan.waitUntil(function(player, ctx)
-        player.Position, player.Velocity = ctx.spot, Vector.Zero
-        if evidence().exploded >= 2 then return true end
-        if evidence().exploded == 0 then pin(ctx) end
-        if ctx.target:Exists() then ctx.target.Velocity = Vector.Zero end
-        return false, "exploded " .. evidence().exploded
-    end, 30, "both mines go off")
-    plan.wait(3)
-    plan.check("the second mine went off from the first one's blast", function()
-        local e = evidence()
-        return e.chained == 1 and e.exploded == 2 and #roomMines() == 0, describeMines()
-    end)
-    plan.check("both blasts reached the enemy", function(_, ctx)
-        local loss, expected = ctx.before - ctx.target.HitPoints, 4 * ctx.damage
-        return H.near(loss, expected), string.format("loss=%.4f expected=%.4f", loss, expected)
-    end)
+    plan.section("LANDMINE / trigger", "a small green explosion where the maggot stepped on the mine")
 end)
 
 -- One run per group: between cases the mines go and S.resetPlayer proves the
 -- player is where a fresh run left it. room_change walks into the next room
--- and trigger leaves a rock, so each closes its run; pile and chain run
--- before trigger.
+-- and trigger leaves a rock, so each closes its run.
 local function fresh(plan)
     S.resetPlayer(plan, function()
         stopShooting()
         clearMines()
-        playerHits = nil
+        playerHits, targetHits, watched, lasers = nil, nil, nil, nil
     end, function()
-        return #M().mines() == 0 and #roomMines() == 0, describeMines()
+        return #M().mines() == 0 and #roomMines() == 0 and #T().carriers() == 0, describeMines()
     end)
     plan.act(function() T().resetEvidence() end)
 end

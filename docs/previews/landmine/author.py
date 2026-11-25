@@ -2,7 +2,10 @@
 
 The icon is a round pressure mine seen a little from above: an olive top face
 lit from the top left, a red pressure button in a grey collar, a darker side
-band, sitting in a puddle of Ipecac's green (the item answers Ipecac). The
+band with yellow warning stripes, sitting on a puddle of Ipecac's green (the
+item answers Ipecac). It was redrawn in Isaac's style on 2026-11-25 (the
+vanilla 2-pixel outline, larger flat clusters; the user chose the olive draft
+over a grey one and asked for the puddle as an even, rounded oval). The
 floor mine is the same object at gameplay size with a smaller puddle, so it
 reads on dark floors too; its button blinks red once a second when armed. A
 tear drops it from its own height (user request 2026-11-19): it falls as the
@@ -37,35 +40,59 @@ PAL = {
     "y": (170, 136, 44),   # warning stripe
     "z": (112, 88, 28),    # warning stripe, shadow
 }
+# The icon's own palette (2026-11-25 redraw, the user's olive choice): the
+# vanilla (8,0,0) outline and flatter, wider colour clusters than the floor
+# mine, which keeps PAL.
+ICON_PAL = {
+    "K": (8, 0, 0),       # outline (vanilla near-black)
+    "H": (182, 192, 108), # top face, highlight
+    "L": (148, 158, 84),  # top face, lit
+    "M": (112, 122, 60),  # top face
+    "S": (82, 90, 44),    # top face, shadow
+    "E": (74, 82, 40),    # side band, lit
+    "B": (56, 62, 30),    # side band
+    "D": (40, 44, 22),    # side band, shadow
+    "R": (214, 39, 39),   # button
+    "W": (255, 206, 196), # button highlight
+    "P": (176, 32, 32),   # button, shade
+    "r": (133, 19, 19),   # button, shadow
+    "C": (160, 160, 160), # collar, lit
+    "c": (96, 96, 100),   # collar
+    "G": (184, 236, 112), # Ipecac ooze, lit
+    "g": (124, 194, 60),  # Ipecac ooze
+    "q": (70, 130, 36),   # Ipecac ooze, shadow
+    "Y": (230, 192, 62),  # warning stripe, lit
+    "y": (164, 126, 36),  # warning stripe
+}
 ICON = [
     "................................",  # 0
     "................................",  # 1
     "................................",  # 2
     "................................",  # 3
     "................................",  # 4
-    "................................",  # 5
-    "................................",  # 6
-    "................................",  # 7
-    "..............KKKK..............",  # 8
-    "...........KKKWRRRKKK...........",  # 9
-    "........KKKLKrRRRrrKMKKK........",  # 10
-    "......KKHLLLKrrrrrrKMMMMKK......",  # 11
-    ".....KHHLLLLKCCccccKMMMMSSK.....",  # 12
-    ".....KLLLLLLLKKKKKKMMMSSSSK.....",  # 13
-    ".....KLLLLLMMMMMMMMMSSSSSSK.....",  # 14
-    ".....KLLLMMMMMMMMMSSSSSSSSK.....",  # 15
-    ".....KEEHHLMMMMMMSSSSSSSddK.....",  # 16
-    ".....KEEEEEHHLLLMMMSSDddddK.....",  # 17
-    ".....KEEYYEEDyyDDDyyDDdzzdK.....",  # 18
-    ".....KEYYEEEyyDDDyyDDDzzddK.....",  # 19
-    "....KgKKEEEYyDDDyyDDDyzdKKgK....",  # 20
-    "..KKGGggKKKYDDDyyDDDyKKKggggKK..",  # 21
-    ".KGGgggggggKKKKKKKKKKgggggggqqK.",  # 22
-    "..KKgggggGgggggggggggggqqqqqKK..",  # 23
-    "....KKKKKgggggggggqqqqqKKKKK....",  # 24
-    ".........KKKKKKKKKKKKKK.........",  # 25
-    "................................",  # 26
-    "................................",  # 27
+    ".............KKKKKK.............",  # 5
+    "...........KKKKKKKKKK...........",  # 6
+    "..........KKKRWWRRPKKK..........",  # 7
+    "......KKKKKKKRWRRRPKKKKKKK......",  # 8
+    ".....KKKKKLLKrrrrrrKMMKKKKK.....",  # 9
+    "....KKKLHLLCKrrrrrrKcMMSSKKK....",  # 10
+    "...KKKLLLLCCKKKKKKKKccMSSSKKK...",  # 11
+    "...KKLLLLLKCCCCCcccccKMSSSSKK...",  # 12
+    "...KKYLLLLLKKKKKKKKKKMSSSSyKK...",  # 13
+    "...KKYEHHHHLMMMMMMMSSMMMMyDKK...",  # 14
+    "...KKEEEYYBHHHHHHHMMMDDyyDDKK...",  # 15
+    "...KKEEYYBBBYYBBBYYBBDyyDDDKK...",  # 16
+    "...KKEYYEBBYYBBBYYBBByyDDDyKK...",  # 17
+    "...KKKYEEBYYBBBYYBBByyDDDyKKK...",  # 18
+    "...KKKKEEYYBBBYYBBBYyDDDyKKKK...",  # 19
+    "..KKGGgKKKKBBYYBBBYYBKKKKggqKK..",  # 20
+    ".KKGGggggggKKKKKKKKKKggggggqqKK.",  # 21
+    ".KKGGgggggggggggggggggggggqqqKK.",  # 22
+    ".KKggggggggggggggggggggqqqqqqKK.",  # 23
+    "..KKKgggggggggggggqqqqqqqqqKKK..",  # 24
+    "...KKKKKqqqqqqqqqqqqqqqqKKKKK...",  # 25
+    ".....KKKKKKKKKKKKKKKKKKKKKK.....",  # 26
+    ".........KKKKKKKKKKKKKK.........",  # 27
     "................................",  # 28
     "................................",  # 29
     "................................",  # 30
@@ -108,7 +135,7 @@ def paint(image, rows, at, palette, skip_rows=()):
                 continue
             tx, ty = at[0] + x, at[1] + y
             if 0 <= tx < image.width and 0 <= ty < image.height:
-                px[tx, ty] = palette.get(ch, PAL[ch]) + (255,)
+                px[tx, ty] = (palette[ch] if ch in palette else PAL[ch]) + (255,)
 
 
 def mine_frame(rise=0, lit=False):
@@ -191,7 +218,7 @@ def anm2():
 
 def icon():
     image = Image.new("RGBA", (32, 32))
-    paint(image, ICON, (0, 0), PAL)
+    paint(image, ICON, (0, 0), ICON_PAL)
     return image
 
 
@@ -205,11 +232,16 @@ def sheet():
 def check():
     assert len(ICON) == 32 and all(len(row) == 32 for row in ICON), "icon must be 32x32"
     assert len(MINE) == CELL[1] and all(len(row) == CELL[0] for row in MINE), "mine must fit its cell"
-    for rows in [ICON, MINE, FALL_BODY]:
+    for rows, palette in [(ICON, ICON_PAL), (MINE, PAL), (FALL_BODY, PAL)]:
         assert len({len(row) for row in rows}) == 1, "ragged grid"
         for row in rows:
             for ch in row:
-                assert ch == "." or ch in PAL, "unknown colour %r" % ch
+                assert ch == "." or ch in palette, "unknown colour %r" % ch
+    # The icon's outline is left-right symmetric (user request 2026-11-25:
+    # the base rounded off evenly, like the first icon's).
+    for row in ICON:
+        shape = "".join("." if ch == "." else "x" for ch in row)
+        assert shape == shape[::-1], "icon outline not symmetric: " + row
 
 
 def main():

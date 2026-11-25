@@ -998,14 +998,15 @@ ConchBlessing.ItemData = {
         },
     },
     LANDMINE = {
-        -- 지뢰 (user design 2026-11-15): every attack the holder makes drops a
-        -- mine at their feet, piling up where they stand (2026-11-23, enemies
-        -- about or not since 11-24); an enemy stepping on one sets it off. It
-        -- never hurts a player.
+        -- 지뢰 (user design 2026-11-15, reworked 2026-11-25): +40 range, x0.33
+        -- damage, -0.2 tears, attacks locked to tears, and every tear scatters
+        -- mines as it flies (3, +1 per 5 luck, no cap); whatever steps on a
+        -- mine sets it off, and it never hurts a player.
         type = "passive",
         id = Isaac.GetItemIdByName("Landmine"),
         gfx = "landmine.png",
         tags = "offensive",
+        cache = "damage firedelay range weapon",
         pool = {
             RoomType.ROOM_TREASURE
         },
@@ -1018,7 +1019,7 @@ ConchBlessing.ItemData = {
         script = "scripts/items/collectibles/landmine",
         callbacks = {
             postUpdate = "landmine.onUpdate",
-            weaponFiredOptional = "landmine.onWeaponFired",
+            evaluateCache = "landmine.onEvaluateCache",
             fireTear = "landmine.onFireTear",
             postNewRoom = "landmine.onNewRoom",
             gameStarted = "landmine.onGameStarted",

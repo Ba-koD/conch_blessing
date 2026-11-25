@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>지뢰 손맛 미리보기</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #17120f; color: #eadfd2; font: 13px/1.45 "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; }
+  .wrap { display: flex; gap: 14px; padding: 14px; align-items: flex-start; flex-wrap: wrap; }
+  canvas { background: #000; image-rendering: pixelated; border: 1px solid #3a302a; display: block; }
+  .panel { width: 340px; display: flex; flex-direction: column; gap: 10px; }
+  .box { background: #221b17; border: 1px solid #3a302a; border-radius: 6px; padding: 10px 12px; }
+  h1 { font-size: 15px; margin: 0 0 4px; }
+  h2 { font-size: 13px; margin: 0 0 6px; color: #f3c46a; }
+  .modes { display: flex; gap: 6px; flex-wrap: wrap; }
+  button { background: #33281f; color: #eadfd2; border: 1px solid #5a4a3c; border-radius: 4px; padding: 5px 9px; cursor: pointer; font: inherit; }
+  button.on { background: #6b4b1c; border-color: #c9953f; color: #fff2d6; }
+  .row { display: grid; grid-template-columns: 118px 1fr 50px; align-items: center; gap: 6px; margin: 3px 0; }
+  .row input[type=range] { width: 100%; }
+  .row output { text-align: right; font-variant-numeric: tabular-nums; color: #fff2d6; }
+  .check { display: flex; gap: 6px; align-items: center; margin: 4px 0; }
+  .stats { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-variant-numeric: tabular-nums; }
+  .stats b { color: #fff2d6; font-weight: 600; text-align: right; }
+  .bar { height: 10px; border-radius: 3px; background: #3a302a; overflow: hidden; display: flex; margin-top: 6px; }
+  .bar span { display: block; height: 100%; }
+  .note { color: #a89888; font-size: 12px; }
+  kbd { background: #33281f; border: 1px solid #5a4a3c; border-radius: 3px; padding: 0 4px; font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <canvas id="c" width="936" height="624"></canvas>
+    <div class="note" style="margin-top:6px">
+      <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 이동 · <kbd>←</kbd><kbd>↑</kbd><kbd>→</kbd><kbd>↓</kbd> 공격 (누르면 자동 조작이 꺼집니다) ·
+      <kbd>R</kbd> 다시 시작 · <kbd>P</kbd> 일시정지
+    </div>
+  </div>
+  <div class="panel">
+    <div class="box">
+      <h1>지뢰 손맛 미리보기</h1>
+      <div class="note">게임과 같은 1초 30업데이트, 1칸 = 40유닛으로 돌리는 시험판입니다. 숫자는 모두 초안입니다.</div>
+    </div>
+    <div class="box">
+      <h2>방식</h2>
+      <div class="modes">
+        <button id="mode-new" class="on">새 안: 살포 지뢰</button>
+        <button id="mode-old">지금 게임</button>
+        <button id="mode-none">아이템 없음</button>
+      </div>
+      <h2 style="margin-top:10px">상대</h2>
+      <div class="modes">
+        <button id="scen-mob" class="on">게이퍼 무리</button>
+        <button id="scen-tough">단단한 적</button>
+        <button id="scen-boss">보스 1마리</button>
+      </div>
+      <div class="check" style="margin-top:8px"><input type="checkbox" id="demo" checked><label for="demo">자동 조작</label>
+        <input type="checkbox" id="sound" checked style="margin-left:12px"><label for="sound">소리</label>
+        <input type="checkbox" id="bars" checked style="margin-left:12px"><label for="bars">체력 막대</label></div>
+    </div>
+    <div class="box" id="params"><h2>숫자</h2></div>
+    <div class="box" id="world"><h2>아이작과 적</h2></div>
+    <div class="box">
+      <h2>최근 10초</h2>
+      <div class="stats">
+        <span>초당 깐 지뢰</span><b id="s-rate">0</b>
+        <span>바닥의 지뢰</span><b id="s-alive">0</b>
+        <span>초당 피해 (눈물)</span><b id="s-tear">0</b>
+        <span>초당 피해 (지뢰)</span><b id="s-mine">0</b>
+        <span>초당 피해 (합)</span><b id="s-total">0</b>
+        <span>처치 (분당)</span><b id="s-kills">0</b>
+      </div>
+      <div class="bar"><span id="b-tear" style="background:#9fc6ff;width:50%"></span><span id="b-mine" style="background:#8fdc4e;width:50%"></span></div>
+      <div class="note">파랑 = 눈물 피해, 초록 = 지뢰 피해</div>
+    </div>
+  </div>
+</div>
+<script>
+const DATA = /*DATA*/null;
+const S = 26 / 40;            // sprite pixels per world unit
+const DS = 2;                 // display scale
+const TILE = 40;
+const ROOM = { x0: 60, x1: 580, y0: 140, y1: 420 };
+const TEAR_HEIGHT = -23.75;   // world units, as the game's default tear height
+const ISAAC_RANGE = 6.5;      // Isaac's own range in tiles
+
+// ---------------------------------------------------------------- numbers
+const MODES = {
+  new: {
+    tearMul: 1, damageMul: 0.33, tearsAdd: -0.2, mineMul: 2, rangeAdd: 40, base: 3, luckStep: 5, dropEvery: 2, scatter: 1, gap: 26,
+    radius: 40, arm: 4, chain: 3, blastScale: 0.45, dump: true, playerSteps: true,
+  },
+  old: { tearMul: 1, mineMul: 2, range: ISAAC_RANGE, interval: 3, radius: 60, arm: 8, chain: 3, blastScale: 0.6 },
+  none: { tearMul: 1, range: ISAAC_RANGE },
+};
+const DEFAULTS = JSON.parse(JSON.stringify(MODES));
+const SCENARIOS = {
+  mob: { enemies: 6, enemyHp: 10, enemySize: 13, enemySpeed: 2.2 },
+  tough: { enemies: 3, enemyHp: 45, enemySize: 15, enemySpeed: 1.9 },
+  boss: { enemies: 1, enemyHp: 600, enemySize: 30, enemySpeed: 1.6 },
+};
+const W = { damage: 3.5, tears: 2.73, luck: 0, scenario: "mob", ...SCENARIOS.mob };
+const SLIDERS = {
+  new: [
+    ["damageMul", "공격력 배율", 0.1, 1, 0.01, v => "x" + v.toFixed(2)],
+    ["tearsAdd", "연사 증감", -1, 1, 0.1, v => (v > 0 ? "+" : "") + v.toFixed(1)],
+    ["mineMul", "지뢰 피해 배수", 0.2, 5, 0.1, v => "x" + v.toFixed(1)],
+    ["rangeAdd", "사거리 추가 (칸)", 0, 40, 1, v => "+" + v.toFixed(0)],
+    ["base", "한 발의 지뢰", 1, 8, 1, v => v.toFixed(0) + "개"],
+    ["luckStep", "행운 몇마다 +1", 1, 10, 1, v => v.toFixed(0)],
+    ["dropEvery", "투하 간격 (칸)", 0.5, 4, 0.1, v => v.toFixed(1)],
+    ["scatter", "흩뿌림 폭 (칸)", 0, 3, 0.1, v => "±" + v.toFixed(1)],
+    ["gap", "지뢰 사이 거리", 0, 60, 2, v => v.toFixed(0)],
+    ["radius", "폭발 반경", 20, 80, 2, v => v.toFixed(0)],
+    ["arm", "무장 (업데이트)", 0, 15, 1, v => v.toFixed(0)],
+    ["chain", "연쇄 지연", 0, 6, 1, v => v.toFixed(0)],
+    ["blastScale", "폭발 그림 크기", 0.2, 1, 0.05, v => v.toFixed(2)],
+  ],
+  old: [
+    ["tearMul", "눈물 피해 배수", 0, 1, 0.05, v => "x" + v.toFixed(2)],
+    ["mineMul", "지뢰 피해 배수", 0.2, 3, 0.1, v => "x" + v.toFixed(1)],
+    ["range", "사거리 (칸)", 3, 20, 0.5, v => v.toFixed(1)],
+    ["radius", "폭발 반경", 20, 80, 2, v => v.toFixed(0)],
+    ["arm", "무장 (업데이트)", 0, 15, 1, v => v.toFixed(0)],
+    ["chain", "연쇄 지연", 0, 6, 1, v => v.toFixed(0)],
+    ["blastScale", "폭발 그림 크기", 0.2, 1, 0.05, v => v.toFixed(2)],
+  ],
+  none: [
+    ["range", "사거리 (칸)", 3, 20, 0.5, v => v.toFixed(1)],
+  ],
+};
+const WORLD_SLIDERS = [
+  ["damage", "공격력", 1, 10, 0.25, v => v.toFixed(2)],
+  ["tears", "연사", 1, 8, 0.1, v => v.toFixed(2)],
+  ["luck", "행운", -3, 15, 1, v => v.toFixed(0)],
+  ["enemies", "적 수", 1, 16, 1, v => v.toFixed(0)],
+  ["enemyHp", "적 체력", 5, 1000, 5, v => v.toFixed(0)],
+];
+const NOTES = {
+  new: "공격력 배율 x0.33, 연사 -0.2, 눈물로 고정, 사거리 +40이라 눈물은 벽까지 날아갑니다. 지뢰는 공격력의 2배 피해. 한 발에 지뢰 3개(행운 5마다 +1, 상한 없음)를 싣고 날아가며 투하 간격마다 좌우로 흩뿌립니다. 이미 지뢰가 있는 자리는 건너뛰고 더 멀리 가져가고, 적에게 맞거나 벽에 닿으면 남은 지뢰를 그 자리에 쏟습니다. 적 위에 떨어진 지뢰는 바로 터집니다. 지뢰는 밟힐 때까지 계속 깔려 있고(방을 나가면 사라짐), 바닥에 깔리는 개수에도 상한이 없습니다. 내가 밟아도 터지지만 나는 피해를 받지 않습니다.",
+  old: "지금 게임의 규칙: 공격마다 발밑에 지뢰 1개(0.1초 쿨), 공격력 2배, 반경 60, 연쇄 3업데이트, 수명·상한 없음.",
+  none: "비교용: 아이템 없이 아이작의 기본 눈물만 쏩니다.",
+};
+let mode = "new";
+let P = MODES[mode];
+let silent = false;
+
+// ---------------------------------------------------------------- images
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+ctx.imageSmoothingEnabled = false;
+const IMG = [], GREEN = [];
+let ROOMIMG;
+function loadImage(src) {
+  return new Promise(res => { const i = new Image(); i.onload = () => res(i); i.src = src; });
+}
+function tint(img, r, g, b, go) {
+  const c = document.createElement("canvas"); c.width = img.width; c.height = img.height;
+  const x = c.getContext("2d"); x.drawImage(img, 0, 0);
+  const d = x.getImageData(0, 0, c.width, c.height), p = d.data;
+  for (let i = 0; i < p.length; i += 4) {
+    p[i] = p[i] * r; p[i + 1] = Math.min(255, p[i + 1] * g + go * 255); p[i + 2] = p[i + 2] * b;
+  }
+  x.putImageData(d, 0, 0); return c;
+}
+
+// ---------------------------------------------------------------- animation
+function frameAt(layer, t, anim) {
+  const total = anim.frames;
+  const tt = anim.loop ? t % total : Math.min(t, total - 1);
+  let acc = 0;
+  for (const f of layer.frames) { if (tt < acc + f[11]) return f; acc += f[11]; }
+  return anim.loop ? layer.frames[0] : layer.frames[layer.frames.length - 1];
+}
+function drawAnim(key, name, t, x, y, o = {}) {
+  const anim = DATA.anims[key][name];
+  if (!anim) return;
+  for (const L of anim.layers) {
+    const f = frameAt(L, t, anim);
+    if (!f || !f[12]) continue;
+    const img = (o.green ? GREEN : IMG)[L.sheet];
+    ctx.save();
+    ctx.translate(x, y);
+    if (o.rot) ctx.rotate(o.rot);
+    const sc = o.scale || 1;
+    ctx.scale(sc * (o.flip ? -1 : 1), sc);
+    ctx.translate(f[6], f[7]);
+    if (f[10]) ctx.rotate(f[10] * Math.PI / 180);
+    ctx.scale(f[8], f[9]);
+    ctx.globalAlpha = (o.alpha ?? 1) * f[13];
+    if (o.flash) ctx.filter = "brightness(2.2)";
+    ctx.drawImage(img, f[0], f[1], f[2], f[3], -f[4], -f[5], f[2], f[3]);
+    ctx.restore();
+  }
+}
+const px = (x, y) => [234 + (x - 320) * S, 156 + (y - 280) * S];
+
+// ---------------------------------------------------------------- sound
+let audio = null, noise = null;
+function ensureAudio() {
+  if (audio || !document.getElementById("sound").checked) return;
+  audio = new (window.AudioContext || window.webkitAudioContext)();
+  noise = audio.createBuffer(1, audio.sampleRate * 0.4, audio.sampleRate);
+  const d = noise.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2);
+}
+function soundOn() { return !silent && audio && document.getElementById("sound").checked; }
+function pop(count, big) {
+  if (!soundOn()) return;
+  const t = audio.currentTime, vol = Math.min(0.5, 0.16 + 0.05 * count) * (big ? 1.4 : 1);
+  const src = audio.createBufferSource(); src.buffer = noise;
+  src.playbackRate.value = (big ? 0.55 : 0.8) + Math.random() * 0.5;
+  const f = audio.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = (big ? 700 : 1300) + Math.random() * 700;
+  const g = audio.createGain();
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.004);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + (big ? 0.35 : 0.16));
+  src.connect(f).connect(g).connect(audio.destination); src.start(t); src.stop(t + 0.4);
+  const o = audio.createOscillator(), og = audio.createGain();
+  o.frequency.setValueAtTime(big ? 120 : 170, t); o.frequency.exponentialRampToValueAtTime(45, t + 0.12);
+  og.gain.setValueAtTime(vol * 0.9, t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+  o.connect(og).connect(audio.destination); o.start(t); o.stop(t + 0.15);
+}
+function plip() {
+  if (!soundOn()) return;
+  const t = audio.currentTime, o = audio.createOscillator(), g = audio.createGain();
+  o.type = "triangle"; o.frequency.setValueAtTime(900, t); o.frequency.exponentialRampToValueAtTime(400, t + 0.06);
+  g.gain.setValueAtTime(0.05, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+  o.connect(g).connect(audio.destination); o.start(t); o.stop(t + 0.08);
+}
+
+// ---------------------------------------------------------------- world
+let tick = 0, resetTick = 0, paused = false, shake = 0;
+let player, tears, mines, enemies, effects, texts, log, total, spawnCd, mineSerial;
+const keys = new Set();
+function rnd(a, b) { return a + Math.random() * (b - a); }
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function reset() {
+  player = { x: 170, y: 280, vx: 0, vy: 0, fireCd: 0, dir: "Down", head: "Down", shootT: 0, walkT: 0, lastDrop: -99 };
+  tears = []; mines = []; enemies = []; effects = []; texts = []; log = []; spawnCd = 0; mineSerial = 0;
+  total = { laid: 0, tear: 0, mine: 0, kills: 0 };
+  resetTick = tick;
+}
+function record(kind, value) {
+  log.push({ t: tick, kind, value });
+  if (kind === "laid") total.laid += value;
+  else if (kind === "tear-dmg") total.tear += value;
+  else if (kind === "mine-dmg") total.mine += value;
+  else if (kind === "kill") total.kills += value;
+}
+
+function spawnEnemy() {
+  for (let n = 0; n < 30; n++) {
+    const x = rnd(ROOM.x0 + 30, ROOM.x1 - 30), y = rnd(ROOM.y0 + 30, ROOM.y1 - 30);
+    if (Math.hypot(x - player.x, y - player.y) < 200) continue;
+    enemies.push({ x, y, vx: 0, vy: 0, kx: 0, ky: 0, hp: W.enemyHp, max: W.enemyHp, size: W.enemySize, appear: 0, t: 0, flash: 0, dmg: 0, dmgTear: 0 });
+    return;
+  }
+}
+function clampRoom(o, m) {
+  o.x = clamp(o.x, ROOM.x0 + m, ROOM.x1 - m);
+  o.y = clamp(o.y, ROOM.y0 + m, ROOM.y1 - m);
+}
+
+// ---------------------------------------------------------------- the player
+const DIRS = { Right: [1, 0], Left: [-1, 0], Up: [0, -1], Down: [0, 1] };
+function controls() {
+  const demo = document.getElementById("demo").checked;
+  let mx = 0, my = 0, shoot = null;
+  if (demo) {
+    const tx = 170 + 50 * Math.cos(tick * 0.013), ty = 280 + 95 * Math.sin(tick * 0.021);
+    mx = tx - player.x; my = ty - player.y;
+    const m = Math.hypot(mx, my); if (m > 6) { mx /= m; my /= m; } else { mx = my = 0; }
+    let best = null, bd = 1e9;
+    for (const e of enemies) {
+      if (e.appear < 1) continue;
+      const d = Math.hypot(e.x - player.x, e.y - player.y);
+      if (d < bd) { bd = d; best = e; }
+    }
+    if (best) {
+      const dx = best.x - player.x, dy = best.y - player.y;
+      shoot = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "Right" : "Left") : (dy > 0 ? "Down" : "Up");
+    } else shoot = "Right";
+  } else {
+    if (keys.has("KeyA")) mx -= 1; if (keys.has("KeyD")) mx += 1;
+    if (keys.has("KeyW")) my -= 1; if (keys.has("KeyS")) my += 1;
+    const m = Math.hypot(mx, my); if (m) { mx /= m; my /= m; }
+    for (const [k, d] of [["ArrowRight", "Right"], ["ArrowLeft", "Left"], ["ArrowUp", "Up"], ["ArrowDown", "Down"]])
+      if (keys.has(k)) shoot = d;
+  }
+  return { mx, my, shoot };
+}
+function updatePlayer() {
+  const c = controls(), speed = 4.6;
+  player.vx = player.vx * 0.7 + c.mx * speed * 0.3;
+  player.vy = player.vy * 0.7 + c.my * speed * 0.3;
+  player.x += player.vx; player.y += player.vy; clampRoom(player, 12);
+  const moving = Math.hypot(player.vx, player.vy) > 0.4;
+  if (moving) {
+    player.dir = Math.abs(player.vx) > Math.abs(player.vy) ? (player.vx > 0 ? "Right" : "Left") : (player.vy > 0 ? "Down" : "Up");
+    player.walkT++;
+  }
+  player.head = c.shoot || (moving ? player.dir : "Down");
+  player.fireCd = Math.max(0, player.fireCd - 1);
+  if (c.shoot && player.fireCd <= 0) {
+    player.fireCd += 30 / playerTears();
+    fire(c.shoot);
+  }
+  if (player.shootT > 0) player.shootT--;
+}
+// mines a tear carries: 3, one more for every luckStep luck, with no upper limit
+function payload() {
+  return P.base + Math.floor(Math.max(0, W.luck) / P.luckStep);
+}
+function range() { return mode === "new" ? ISAAC_RANGE + P.rangeAdd : P.range; }
+// the player's own stats with the item's stat changes (only the new rule changes them)
+function playerDamage() { return W.damage * (mode === "new" ? P.damageMul : 1); }
+function playerTears() { return Math.max(0.1, W.tears + (mode === "new" ? P.tearsAdd : 0)); }
+function fire(dir) {
+  const [dx, dy] = DIRS[dir];
+  const speed = 10;
+  const t = {
+    x: player.x + dx * 6, y: player.y + dy * 4, vx: dx * speed + player.vx * 0.5, vy: dy * speed + player.vy * 0.5,
+    z: TEAR_HEIGHT, dist: 0, fall: false, fz: 0, load: 0, drop: 0,
+    damage: playerDamage() * P.tearMul, size: mode === "new" ? 4 : 6,
+  };
+  if (mode === "new") {
+    t.load = payload();
+    t.drop = P.dropEvery * TILE * 0.5;   // the first one half a step out
+  }
+  tears.push(t);
+  player.shootT = 6;
+  plip();
+  if (mode === "old" && tick - player.lastDrop >= P.interval) {   // every attack drops a mine at the feet
+    player.lastDrop = tick;
+    layMine(player.x, player.y, -20, player.x, player.y, 5, 1.5, W.damage);
+  }
+}
+
+// ---------------------------------------------------------------- tears
+function updateTears() {
+  for (const t of tears) {
+    t.x += t.vx; t.y += t.vy;
+    const sp = Math.hypot(t.vx, t.vy);
+    t.dist += sp;
+    if (mode === "new" && !t.fall && t.load > 0) {
+      t.drop -= sp;
+      // ground already mined: carry it on and try again on the next update
+      if (t.drop <= 0 && scatterMine(t, false)) { t.load--; t.drop += P.dropEvery * TILE; }
+    }
+    if (!t.fall && t.dist >= range() * TILE) t.fall = true;
+    if (t.fall) { t.fz += 1.2; t.z += t.fz; if (t.z >= -2) { poof(t); continue; } }
+    if (t.x < ROOM.x0 || t.x > ROOM.x1 || t.y < ROOM.y0 - 4 || t.y > ROOM.y1 + 4) { poof(t); continue; }
+    for (const e of enemies) {
+      if (e.appear < 1 || e.hp <= 0) continue;
+      if (Math.hypot(e.x - t.x, e.y - t.y) <= e.size + t.size) {
+        hurt(e, t.damage, "tear");
+        e.kx += t.vx * 0.12; e.ky += t.vy * 0.12;
+        poof(t); break;
+      }
+    }
+  }
+  tears = tears.filter(t => !t.dead);
+}
+function poof(t) {
+  if (t.dead) return;
+  t.dead = true;
+  if (mode === "new" && P.dump) {   // what the tear still carries spills out where it stops
+    t.x = clamp(t.x, ROOM.x0, ROOM.x1); t.y = clamp(t.y, ROOM.y0, ROOM.y1);
+    while (t.load > 0) { t.load--; scatterMine(t, true); }
+  }
+  effects.push({ key: "poof", name: "Poof", x: t.x, y: t.y, z: t.z, t: 0, scale: 0.6 });
+}
+
+// ---------------------------------------------------------------- mines
+// a mine flies from (x, y, z) to (tx, ty) on the floor in T updates under gravity g
+function layMine(x, y, z, tx, ty, T, g, damage) {
+  const m = {
+    id: mineSerial++, x, y, z, sx: x, sy: y, sz: z, tx, ty, T, g, k: 0, vz: (-z - 0.5 * g * T * T) / T,
+    rot: 0, vr: rnd(-0.45, 0.45), state: "fall", t: 0, damage, fuse: -1,
+  };
+  mines.push(m);
+  record("laid", 1);
+  return m;
+}
+function freeSpot(x, y) {
+  for (const m of mines) if (Math.hypot(m.tx - x, m.ty - y) < P.gap) return false;
+  return true;
+}
+function scatterMine(t, burst) {
+  const sp = Math.hypot(t.vx, t.vy) || 1, ux = t.vx / sp, uy = t.vy / sp;
+  for (let n = 0; n < 6; n++) {
+    let tx, ty;
+    if (burst) {   // a spilled load bursts out around the stop
+      const a = rnd(0, Math.PI * 2), r = rnd(0.25, 1) * Math.max(0.4, P.scatter) * TILE;
+      tx = t.x + Math.cos(a) * r; ty = t.y + Math.sin(a) * r;
+    } else {       // flung out to either side, a little ahead
+      const side = Math.random() < 0.5 ? -1 : 1, lat = side * rnd(0.15, 1) * P.scatter * TILE, fwd = rnd(0.2, 0.9) * TILE;
+      tx = t.x + ux * fwd - uy * lat; ty = t.y + uy * fwd + ux * lat;
+    }
+    tx = clamp(tx, ROOM.x0 + 8, ROOM.x1 - 8); ty = clamp(ty, ROOM.y0 + 8, ROOM.y1 - 8);
+    // a spilled load is never lost: with no free ground left it lands on the last spot tried
+    if (!freeSpot(tx, ty) && !(burst && n === 5)) continue;
+    layMine(t.x, t.y, t.z, tx, ty, 10, 0.9, playerDamage());
+    return true;
+  }
+  return false;
+}
+function landed() {
+  let n = 0;
+  for (const m of mines) if (!m.dead && m.state !== "fall") n++;
+  return n;
+}
+function enemyNear(x, y, extra) {
+  for (const e of enemies) if (e.appear >= 1 && e.hp > 0 && Math.hypot(e.x - x, e.y - y) <= e.size + extra) return e;
+  return null;
+}
+function updateMines() {
+  for (const m of mines) {
+    if (m.dead) continue;
+    if (m.state === "fall") {
+      m.k++;
+      const f = Math.min(1, m.k / m.T);
+      m.x = m.sx + (m.tx - m.sx) * f; m.y = m.sy + (m.ty - m.sy) * f;
+      m.z = m.sz + m.vz * m.k + 0.5 * m.g * m.k * m.k; m.rot += m.vr;
+      if (m.k >= m.T) {
+        m.x = m.tx; m.y = m.ty; m.z = 0; m.state = "land"; m.t = 0; m.rot = 0;
+        if (mode === "new" && enemyNear(m.x, m.y, 6)) m.fuse = 0;   // landed on someone: goes off at once
+      }
+    } else {
+      m.t++;
+      if (m.state === "land" && m.t >= 8) m.state = "idle";
+      if (m.t >= P.arm) m.armed = true;
+    }
+  }
+  // fuses
+  const ready = [];
+  for (const m of mines) if (!m.dead && m.fuse >= 0) { if (m.fuse <= 0) ready.push(m); else m.fuse--; }
+  // stepping: enemies, and in the new rule the player too (who takes no damage from it)
+  for (const m of mines) {
+    if (m.dead || !m.armed || m.fuse >= 0) continue;
+    const byPlayer = mode === "new" && P.playerSteps && Math.hypot(player.x - m.x, player.y - m.y) <= 10 + 8;
+    if (byPlayer || enemyNear(m.x, m.y, 8)) { m.fuse = 0; ready.push(m); }
+  }
+  let count = 0;
+  const pictures = [];
+  for (const m of ready) { if (!m.dead) { explode(m, pictures); count++; } }
+  if (count) { pop(count, mode === "old"); shake = Math.min(4, shake + 0.5 + 0.25 * count); }
+  mines = mines.filter(m => !m.dead);
+}
+function explode(m, pictures) {
+  m.dead = true;
+  if (!pictures.some(p => Math.hypot(p.x - m.x, p.y - m.y) < 20)) {
+    pictures.push(m);
+    effects.push({ key: "boom", name: "Explosion", x: m.x, y: m.y, z: 0, t: 0, scale: P.blastScale, green: true });
+  }
+  const dmg = P.mineMul * m.damage;
+  for (const e of enemies) {
+    if (e.appear < 1 || e.hp <= 0) continue;
+    const d = Math.hypot(e.x - m.x, e.y - m.y);
+    if (d <= P.radius + e.size) {
+      hurt(e, dmg, "mine");
+      const k = (4 * (1 - d / (P.radius + e.size)) + 1) * (13 / e.size);
+      e.kx += (e.x - m.x) / (d || 1) * k; e.ky += (e.y - m.y) / (d || 1) * k;
+    }
+  }
+  for (const o of mines) {
+    if (o.dead || o === m || o.fuse >= 0 || o.state === "fall") continue;
+    if (Math.hypot(o.x - m.x, o.y - m.y) <= P.radius) o.fuse = P.chain;
+  }
+}
+
+// ---------------------------------------------------------------- enemies
+function hurt(e, amount, kind) {
+  amount = Math.min(amount, Math.max(0, e.hp));   // count only what the enemy still had
+  if (amount <= 0) return;
+  e.hp -= amount; e.flash = 2;
+  if (kind === "mine") e.dmg += amount; else e.dmgTear += amount;
+  record(kind + "-dmg", amount);
+  if (e.hp <= 0) {
+    effects.push({ key: "blood", name: "Poof", x: e.x, y: e.y - 6, z: 0, t: 0, scale: e.size / 13 });
+    record("kill", 1);
+  }
+}
+function updateEnemies() {
+  for (const e of enemies) {
+    if (e.hp <= 0) continue;
+    e.t++;
+    if (e.appear < 1) { e.appear = Math.min(1, e.appear + 1 / 20); continue; }
+    const dx = player.x - e.x, dy = player.y - e.y, d = Math.hypot(dx, dy) || 1;
+    const sp = W.enemySpeed;
+    e.vx = e.vx * 0.8 + dx / d * sp * 0.2; e.vy = e.vy * 0.8 + dy / d * sp * 0.2;
+    for (const o of enemies) {
+      if (o === e || o.hp <= 0) continue;
+      const ox = e.x - o.x, oy = e.y - o.y, od = Math.hypot(ox, oy);
+      if (od > 0 && od < e.size + o.size) { e.vx += ox / od * 0.4; e.vy += oy / od * 0.4; }
+    }
+    if (d < e.size + 9) { e.vx -= dx / d * 1.2; e.vy -= dy / d * 1.2; }
+    e.x += e.vx + e.kx; e.y += e.vy + e.ky; e.kx *= 0.75; e.ky *= 0.75;
+    clampRoom(e, e.size + 1);
+    if (e.flash > 0) e.flash--;
+  }
+  for (const e of enemies) {
+    if (e.dmg > 0) { texts.push({ x: e.x, y: e.y - 18 - e.size, t: 0, s: e.dmg.toFixed(1), c: "#9cf05a" }); e.dmg = 0; }
+    if (e.dmgTear > 0) { texts.push({ x: e.x + 8, y: e.y - 12 - e.size, t: 0, s: e.dmgTear.toFixed(1), c: "#cfe3ff" }); e.dmgTear = 0; }
+  }
+  enemies = enemies.filter(e => e.hp > 0);
+  if (enemies.length < W.enemies) { if (--spawnCd <= 0) { spawnEnemy(); spawnCd = 12; } }
+}
+
+// ---------------------------------------------------------------- loop
+function update() {
+  tick++;
+  updatePlayer(); updateTears(); updateMines(); updateEnemies();
+  for (const f of effects) f.t++;
+  effects = effects.filter(f => f.t < DATA.anims[f.key][f.name].frames);
+  for (const x of texts) x.t++;
+  texts = texts.filter(x => x.t < 24);
+  shake *= 0.8;
+  log = log.filter(l => tick - l.t < 300);
+  if (tick % 6 === 0 && !silent) stats();
+}
+function stats() {
+  const span = Math.max(1, Math.min(tick - resetTick, 300)) / 30;
+  let laid = 0, tear = 0, mine = 0, kills = 0;
+  for (const l of log) {
+    if (l.kind === "laid") laid++;
+    else if (l.kind === "tear-dmg") tear += l.value;
+    else if (l.kind === "mine-dmg") mine += l.value;
+    else if (l.kind === "kill") kills++;
+  }
+  document.getElementById("s-rate").textContent = (laid / span).toFixed(1);
+  document.getElementById("s-alive").textContent = landed();
+  document.getElementById("s-tear").textContent = (tear / span).toFixed(1);
+  document.getElementById("s-mine").textContent = (mine / span).toFixed(1);
+  document.getElementById("s-total").textContent = ((tear + mine) / span).toFixed(1);
+  document.getElementById("s-kills").textContent = (kills / span * 60).toFixed(0);
+  const sum = tear + mine || 1;
+  document.getElementById("b-tear").style.width = (tear / sum * 100) + "%";
+  document.getElementById("b-mine").style.width = (mine / sum * 100) + "%";
+}
+// for checking numbers from the console: average of `runs` fresh runs of `seconds` each
+function measure(modeKey, scen, o = {}) {
+  const seconds = o.seconds || 30, runs = o.runs || 4;
+  const keepMode = mode, keepScen = W.scenario, keepW = { ...W };
+  const demo = document.getElementById("demo"), keepDemo = demo.checked;
+  silent = true; demo.checked = true;
+  mode = modeKey; P = Object.assign(JSON.parse(JSON.stringify(DEFAULTS[modeKey])), o.mode || {});
+  Object.assign(W, SCENARIOS[scen], o.world || {});
+  const sum = { laid: 0, tear: 0, mine: 0, kills: 0, floor: 0, peak: 0 };
+  for (let r = 0; r < runs; r++) {
+    reset();
+    let floor = 0;
+    for (let i = 0; i < seconds * 30; i++) { update(); const n = landed(); floor += n; sum.peak = Math.max(sum.peak, n); }
+    for (const k of ["laid", "tear", "mine", "kills"]) sum[k] += total[k];
+    sum.floor += floor / (seconds * 30);
+  }
+  const n = runs * seconds;
+  const out = {
+    laidPerSec: +(sum.laid / n).toFixed(1), floor: +(sum.floor / runs).toFixed(1), peak: sum.peak,
+    tearDps: +(sum.tear / n).toFixed(2), mineDps: +(sum.mine / n).toFixed(2), dps: +((sum.tear + sum.mine) / n).toFixed(2),
+    killsPerMin: +(sum.kills / n * 60).toFixed(1),
+  };
+  silent = false; demo.checked = keepDemo;
+  mode = keepMode; P = MODES[mode]; Object.assign(W, keepW); W.scenario = keepScen;
+  reset();
+  return out;
+}
+
+// ---------------------------------------------------------------- drawing
+function shadow(x, y, w, h, a = 0.35) {
+  const [sx, sy] = px(x, y);
+  ctx.fillStyle = `rgba(0,0,0,${a})`;
+  ctx.beginPath(); ctx.ellipse(sx, sy, w, h, 0, 0, Math.PI * 2); ctx.fill();
+}
+function render() {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const sx = (Math.random() * 2 - 1) * shake, sy = (Math.random() * 2 - 1) * shake;
+  ctx.setTransform(DS, 0, 0, DS, sx * DS, sy * DS);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(ROOMIMG, 0, 0);
+  // mines on the floor
+  const floor = mines.filter(m => m.state !== "fall").sort((a, b) => a.y - b.y);
+  for (const m of floor) {
+    const [x, y] = px(m.x, m.y);
+    const blink = m.fuse >= 0 && tick % 2 === 0;
+    const name = m.state === "land" ? "Land" : "Idle";
+    drawAnim("mine", name, m.state === "land" ? m.t : m.t + m.id * 7, Math.round(x), Math.round(y), { flash: blink });
+  }
+  // everything standing, by depth
+  const list = [];
+  list.push({ y: player.y, draw: drawPlayer });
+  for (const e of enemies) list.push({ y: e.y, draw: () => drawEnemy(e) });
+  for (const t of tears) list.push({ y: t.y, draw: () => drawTear(t) });
+  for (const m of mines) if (m.state === "fall") list.push({ y: m.y, draw: () => drawFalling(m) });
+  for (const f of effects) list.push({ y: f.y + 1, draw: () => drawEffect(f) });
+  list.sort((a, b) => a.y - b.y);
+  for (const it of list) it.draw();
+  // text on top, at display scale
+  ctx.setTransform(1, 0, 0, 1, sx * DS, sy * DS);
+  ctx.font = "bold 13px 'Malgun Gothic', sans-serif"; ctx.textAlign = "center";
+  for (const t of texts) {
+    const [x, y] = px(t.x, t.y - t.t * 0.8);
+    ctx.globalAlpha = 1 - Math.max(0, t.t - 14) / 10;
+    ctx.lineWidth = 3; ctx.strokeStyle = "#000"; ctx.strokeText(t.s, x * DS, y * DS);
+    ctx.fillStyle = t.c; ctx.fillText(t.s, x * DS, y * DS);
+  }
+  ctx.globalAlpha = 1;
+  if (document.getElementById("bars").checked) {
+    for (const e of enemies) {
+      if (e.appear < 1) continue;
+      const [x, y] = px(e.x, e.y), w = e.size > 20 ? 70 : 30;
+      ctx.fillStyle = "#000"; ctx.fillRect(x * DS - w / 2, y * DS - 46 - e.size * 2, w, 5);
+      ctx.fillStyle = "#e0423a"; ctx.fillRect(x * DS - w / 2 + 1, y * DS - 45 - e.size * 2, (w - 2) * Math.max(0, e.hp / e.max), 3);
+    }
+  }
+  if (mode === "new") {   // what the next tear carries and how full the floor is
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.textAlign = "left"; ctx.font = "bold 14px 'Malgun Gothic', sans-serif";
+    const s = `한 발 지뢰 ${payload()}개 · 바닥 ${landed()}개`;
+    ctx.lineWidth = 4; ctx.strokeStyle = "#000"; ctx.strokeText(s, 14, canvas.height - 14);
+    ctx.fillStyle = "#d8f0b0"; ctx.fillText(s, 14, canvas.height - 14);
+  }
+  if (paused) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.textAlign = "center";
+    ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#fff"; ctx.font = "bold 22px 'Malgun Gothic'"; ctx.fillText("일시정지 (P)", canvas.width / 2, canvas.height / 2);
+  }
+}
+function drawPlayer() {
+  shadow(player.x, player.y, 9, 3.5);
+  const [x, y] = px(player.x, player.y);
+  const moving = Math.hypot(player.vx, player.vy) > 0.4;
+  const body = "Walk" + (moving ? player.dir : "Down");
+  drawAnim("isaac", body, moving ? player.walkT : 0, Math.round(x), Math.round(y), { flip: false });
+  drawAnim("isaac", "Head" + player.head, player.shootT > 2 ? 2 : 0, Math.round(x), Math.round(y));
+}
+function drawEnemy(e) {
+  const sc = e.size / 13;
+  shadow(e.x, e.y, 9 * sc, 3.5 * sc, 0.35 * e.appear);
+  const [x, y] = px(e.x, e.y);
+  const hori = Math.abs(e.vx) > Math.abs(e.vy);
+  const o = { alpha: e.appear, flip: hori && e.vx < 0, flash: e.flash > 0, scale: sc };
+  drawAnim("gaper", hori ? "WalkHori" : "WalkVert", e.t, Math.round(x), Math.round(y), o);
+  drawAnim("gaper", "Head", 0, Math.round(x), Math.round(y), { alpha: e.appear, flash: e.flash > 0, scale: sc });
+}
+function drawTear(t) {
+  shadow(t.x, t.y, 3, 1.3, 0.3);
+  const [x, y] = px(t.x, t.y);
+  drawAnim("tear", mode === "new" ? "RegularTear4" : "RegularTear6", 0, x, y + t.z * S);
+}
+function drawFalling(m) {
+  shadow(m.x, m.y, 5, 2, 0.3);
+  const [x, y] = px(m.x, m.y);
+  drawAnim("mine", "Fall", 0, x, y + m.z * S, { rot: m.rot });
+}
+function drawEffect(f) {
+  const [x, y] = px(f.x, f.y);
+  drawAnim(f.key, f.name, f.t, x, y + (f.z || 0) * S, { scale: f.scale, green: f.green });
+}
+
+// ---------------------------------------------------------------- panel
+function sliderRow(obj, [key, label, min, max, step, fmt]) {
+  const row = document.createElement("div"); row.className = "row";
+  row.innerHTML = `<label>${label}</label><input type="range" min="${min}" max="${max}" step="${step}" value="${obj[key]}"><output>${fmt(obj[key])}</output>`;
+  const input = row.querySelector("input"), out = row.querySelector("output");
+  input.addEventListener("input", () => { obj[key] = parseFloat(input.value); out.textContent = fmt(obj[key]); });
+  return row;
+}
+function buildParams() {
+  const box = document.getElementById("params");
+  box.innerHTML = "<h2>숫자</h2>";
+  for (const s of SLIDERS[mode]) box.appendChild(sliderRow(P, s));
+  if (mode === "new") {
+    const row = document.createElement("div"); row.className = "check";
+    row.innerHTML = `<input type="checkbox" ${P.dump ? "checked" : ""}><label>맞거나 벽에 닿으면 남은 지뢰를 쏟음</label>`;
+    row.querySelector("input").addEventListener("change", ev => { P.dump = ev.target.checked; });
+    box.appendChild(row);
+    const row2 = document.createElement("div"); row2.className = "check";
+    row2.innerHTML = `<input type="checkbox" ${P.playerSteps ? "checked" : ""}><label>내가 밟아도 터짐 (피해는 없음)</label>`;
+    row2.querySelector("input").addEventListener("change", ev => { P.playerSteps = ev.target.checked; });
+    box.appendChild(row2);
+  }
+  const note = document.createElement("div"); note.className = "note"; note.style.marginTop = "6px";
+  note.textContent = NOTES[mode];
+  box.appendChild(note);
+}
+function buildWorld() {
+  const box = document.getElementById("world");
+  box.innerHTML = "<h2>아이작과 적</h2>";
+  for (const s of WORLD_SLIDERS) box.appendChild(sliderRow(W, s));
+}
+function setMode(m) {
+  mode = m; P = MODES[m];
+  for (const k of Object.keys(MODES)) document.getElementById("mode-" + k).classList.toggle("on", k === m);
+  buildParams(); reset();
+}
+function setScenario(s) {
+  Object.assign(W, SCENARIOS[s]); W.scenario = s;
+  for (const k of Object.keys(SCENARIOS)) document.getElementById("scen-" + k).classList.toggle("on", k === s);
+  buildWorld(); reset();
+}
+for (const k of Object.keys(MODES)) document.getElementById("mode-" + k).onclick = () => setMode(k);
+for (const k of Object.keys(SCENARIOS)) document.getElementById("scen-" + k).onclick = () => setScenario(k);
+addEventListener("keydown", ev => {
+  ensureAudio();
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(ev.code)) ev.preventDefault();
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD"].includes(ev.code))
+    document.getElementById("demo").checked = false;
+  if (ev.code === "KeyR") reset();
+  if (ev.code === "KeyP") paused = !paused;
+  keys.add(ev.code);
+});
+addEventListener("keyup", ev => keys.delete(ev.code));
+addEventListener("pointerdown", ensureAudio);
+document.getElementById("sound").addEventListener("change", ensureAudio);
+
+(async function start() {
+  for (const src of DATA.sheets) {
+    const img = await loadImage(src);
+    IMG.push(img); GREEN.push(tint(img, 0.75, 1, 0.6, 0.06));
+  }
+  ROOMIMG = await loadImage(DATA.room);
+  buildParams(); buildWorld(); reset();
+  let last = performance.now(), acc = 0;
+  function frame(now) {
+    acc += Math.min(250, now - last); last = now;
+    while (acc >= 1000 / 30) { if (!paused) update(); acc -= 1000 / 30; }
+    render();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
