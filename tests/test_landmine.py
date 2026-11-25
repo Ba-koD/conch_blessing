@@ -240,7 +240,7 @@ class LandmineTests(unittest.TestCase):
         entry = kr[kr.index('LANDMINE = {'):kr.index('UNDERDOG = {')]
         for line in ('{{Range}} 고정 사거리 +40', '#{{Damage}} 공격력 배율 x0.33', '#{{Tears}} 연사 0.2 감소',
                      '#공격이 눈물로 고정되며 눈물이 지속적으로 지뢰를 뿌립니다',
-                     '#{{Luck}} 행운 5마다 지뢰가 1개씩 늘어납니다', '#지뢰는 내 공격력의 2배 피해를 줍니다',
+                     '#{{Luck}} 행운 5마다 지뢰가 1개씩 늘어납니다(기본 3개)', '#지뢰는 내 공격력의 2배 피해를 줍니다',
                      '#{{Warning}} REPENTOGON 권장'):
             self.assertIn('"' + line + '"', entry)
         warnings = {
