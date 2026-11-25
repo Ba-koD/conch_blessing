@@ -50,4 +50,15 @@ return {
         mimiccharge = 4,
         script = "scripts.items.cards.uruz",
     },
+    GEBO = {
+        -- Cereal's rune (user design 2026-11-25): the nearest pedestal's item
+        -- turns into another item whose number uses the same digits.
+        type = "rune",
+        pickup = 7793,
+        hud = "Gebo",
+        anm2 = "005.300_gebo.anm2",
+        gfx = "items/pick ups/pickup_gebo.png",
+        mimiccharge = 4,
+        script = "scripts.items.cards.gebo",
+    },
 }

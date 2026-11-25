@@ -5,4 +5,5 @@ return {
     THURISAZ = { width = 10, height = 9, left = 4, top = 7 },
     CONCH_TICKET = { width = 14, height = 9, left = 6, top = 6 },
     URUZ = { width = 10, height = 9, left = 4, top = 7 },
+    GEBO = { width = 10, height = 9, left = 4, top = 7 },
 }

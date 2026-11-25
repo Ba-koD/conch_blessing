@@ -935,6 +935,14 @@ return {
                 "이 방에서 적을 쓰러뜨릴 때마다 {{Damage}} 때리는 힘이 영영 0.05 늘어납니다",
             },
         },
+        GEBO = {
+            name = "게보",
+            description = "맞바꿈",
+            eid = {
+                "가장 가까운 아이템의 번호 자리를 다시 늘어놓아 아이템을 바꿉니다",
+                "#{{Warning}} 덧붙임 도우미(REPENTOGON)를 쓰면 좋습니다",
+            },
+        },
     },
     ui = {
         -- Mod Config Menu, in this language; the language setting and its
@@ -1019,6 +1027,10 @@ return {
             cancel_none = "%s번은 없는 번호라 그만뒀어요",
             cancel_nocraft = "%s번은 만들 수 없는 아이템이라 그만뒀어요",
             chance = "#{{ColorYellow}}지금 아침밥으로 바뀔 확률 : %s{{CR}}",
+        },
+        gebo = {
+            options = "#{{Card%s}} 게보: %s 가운데 하나로 바뀝니다",
+            none = "#{{Card%s}} 게보로 바꿀 수 없습니다",
         },
         morph = {
             applied = "게임에 적용",

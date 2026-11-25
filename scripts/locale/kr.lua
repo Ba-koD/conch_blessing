@@ -935,6 +935,14 @@ return {
                 "현재 방에서 적을 처치할 때마다 {{Damage}} 공격력이 영구히 +0.05 증가합니다",
             },
         },
+        GEBO = {
+            name = "게보",
+            description = "맞교환",
+            eid = {
+                "가장 가까운 아이템의 번호 자리를 재배치하여 아이템을 바꿉니다",
+                "#{{Warning}} REPENTOGON 권장",
+            },
+        },
     },
     ui = {
         -- Mod Config Menu, in this language; the language setting and its
@@ -1019,6 +1027,10 @@ return {
             cancel_none = "%s번은 없는 번호라 취소됐어요",
             cancel_nocraft = "%s번은 만들 수 없는 아이템이라 취소됐어요",
             chance = "#{{ColorYellow}}현재 아침밥으로 변할 확률 : %s{{CR}}",
+        },
+        gebo = {
+            options = "#{{Card%s}} 게보: %s 중 하나로 바뀝니다",
+            none = "#{{Card%s}} 게보로 바꿀 수 없습니다",
         },
         morph = {
             applied = "인게임 적용",

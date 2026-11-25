@@ -2,7 +2,8 @@
 
 Thurisaz (the Kronos rune) is a charcoal stone shard with its own rune ᚦ
 inlaid in gold and a dim crimson glow under it. Uruz (the Tyrfing rune) is the
-same shard with the rune ᚢ inlaid and an amber glow. The Conch Ticket is a cream
+same shard with the rune ᚢ inlaid and an amber glow, and Gebo (the Cereal rune)
+the same shard with the rune ᚷ inlaid and a milk-white glow. The Conch Ticket is a cream
 claim ticket tilted like the vanilla floor cards, with a red stub behind a
 perforation and the Magic Conch's lavender spiral shell printed on it. Both
 are drawn on the native 32x32 grid from plain geometry with no randomness, so
@@ -16,6 +17,7 @@ at x=64, each 32x32; the pocket slot reads that third frame through
 content/gfx/ui_cardfronts.anm2, which generate_xml.py writes from the registry.
     resources/gfx/items/pick ups/pickup_thurisaz.png, resources/gfx/005.300_thurisaz.anm2
     resources/gfx/items/pick ups/pickup_uruz.png, resources/gfx/005.300_uruz.anm2
+    resources/gfx/items/pick ups/pickup_gebo.png, resources/gfx/005.300_gebo.anm2
     resources/gfx/items/pick ups/pickup_conch_ticket.png, resources/gfx/005.300_conch_ticket.anm2
 Each floor pickup has Idle, Appear, Collect, Sparkle, HUD and HUDSmall.
 
@@ -39,6 +41,8 @@ THURISAZ_ANM2 = '005.300_thurisaz.anm2'
 TICKET_SHEET = 'items/pick ups/pickup_conch_ticket.png'
 URUZ_SHEET = 'items/pick ups/pickup_uruz.png'
 URUZ_ANM2 = '005.300_uruz.anm2'
+GEBO_SHEET = 'items/pick ups/pickup_gebo.png'
+GEBO_ANM2 = '005.300_gebo.anm2'
 TICKET_ANM2 = '005.300_conch_ticket.anm2'
 FRAME = 32
 BODY_X, GLOW_X, HUD_X = 0, 32, 64
@@ -55,6 +59,7 @@ GOLD = (214, 160, 52, 255)
 GOLD_LIGHT = (255, 224, 116, 255)
 GLOW = (214, 52, 46)
 URUZ_GLOW = (232, 132, 40)
+GEBO_GLOW = (236, 232, 214)  # milk white: Cereal's milk
 HUD_SHADOW = (0, 0, 0, 96)
 
 # The shard leans a little like the vanilla runes; hand-placed vertices.
@@ -99,6 +104,23 @@ URUZ_GLYPH = [
     "##...##",
 ]
 URUZ_GLYPH_AT = (12, 9)
+
+# Gebo (ᚷ): an X, two strokes trading places (user pick 2026-11-25 for the
+# rune that swaps an item number's digits); 2px strokes like the others.
+GEBO_GLYPH = [
+    "##...##",
+    "##...##",
+    ".##.##.",
+    ".##.##.",
+    "..###..",
+    "..###..",
+    "..###..",
+    ".##.##.",
+    ".##.##.",
+    "##...##",
+    "##...##",
+]
+GEBO_GLYPH_AT = (12, 9)
 
 NEIGHBOURS = ((1, 0), (-1, 0), (0, 1), (0, -1))
 
@@ -431,6 +453,8 @@ POCKETS = {
     'THURISAZ': (THURISAZ_SHEET, THURISAZ_ANM2, stone, glow, THURISAZ_ANIMATIONS),
     'CONCH_TICKET': (TICKET_SHEET, TICKET_ANM2, ticket, None, TICKET_ANIMATIONS),
     'URUZ': (URUZ_SHEET, URUZ_ANM2, lambda: stone(URUZ_GLYPH, URUZ_GLYPH_AT), lambda: glow(URUZ_GLOW),
+             THURISAZ_ANIMATIONS),
+    'GEBO': (GEBO_SHEET, GEBO_ANM2, lambda: stone(GEBO_GLYPH, GEBO_GLYPH_AT), lambda: glow(GEBO_GLOW),
              THURISAZ_ANIMATIONS),
 }
 

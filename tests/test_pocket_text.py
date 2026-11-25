@@ -21,6 +21,7 @@ class PocketTextTests(unittest.TestCase):
             package.loaded['scripts.items.cards.thurisaz'] = true
             package.loaded['scripts.items.cards.conch_ticket'] = true
             package.loaded['scripts.items.cards.uruz'] = true
+            package.loaded['scripts.items.cards.gebo'] = true
             lang = 'kr'
             package.loaded['scripts.conch_blessing_config'] = { GetCurrentLanguage = function() return lang end }
             ModCallbacks = { MC_PRE_ITEM_TEXT_DISPLAY = 1484 }
@@ -32,6 +33,8 @@ class PocketTextTests(unittest.TestCase):
                                  description = { en = 'Reserved', kr = '예약됨', urimal = '미리 잡아 둠' } },
                 URUZ = { name = { en = 'Uruz', kr = '우루즈', urimal = '우루즈' },
                          description = { en = 'Strength', kr = '힘', urimal = '굳센 힘' } },
+                GEBO = { name = { en = 'Gebo', kr = '게보', urimal = '게보' },
+                         description = { en = 'Exchange', kr = '맞교환', urimal = '맞바꿈' } },
             }
             ConchBlessing = {
                 Locale = { applyPocketData = function(data)
@@ -41,7 +44,7 @@ class PocketTextTests(unittest.TestCase):
             }
             function ConchBlessing:AddCallback(id, fn) callbacks[id] = fn end
             Isaac = { GetCardIdByName = function(name)
-                return name == 'Thurisaz' and 98 or name == 'Uruz' and 100 or 99
+                return name == 'Thurisaz' and 98 or name == 'Uruz' and 100 or name == 'Gebo' and 101 or 99
             end }
             hud = {}
             function hud:ShowItemText(name, description)

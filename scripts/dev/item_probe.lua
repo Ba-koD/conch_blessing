@@ -242,7 +242,7 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
     end
     -- Cards and runes: their own case suites and manual helpers.
     local pocketBenches = { thurisaz = "scripts.dev.thurisaz_probe", conch_ticket = "scripts.dev.conch_ticket_probe",
-        uruz = "scripts.dev.uruz_probe" }
+        uruz = "scripts.dev.uruz_probe", gebo = "scripts.dev.gebo_probe" }
     if action == "ticket" then action = "conch_ticket" end
     if pocketBenches[action] then
         local loaded, Pocket = pcall(require, pocketBenches[action])
@@ -357,6 +357,7 @@ ConchBlessing:AddCallback(ModCallbacks.MC_EXECUTE_CMD, function(_, command, para
         out("Pocket items: cb test thurisaz [CASE | list | give [N] | spawn | familiars | ledger] (the Kronos rune),")
         out("  cb test conch_ticket [CASE | list | give [N] | spawn | queue | clear] (the Conch Ticket; short name: ticket),")
         out("  cb test uruz [CASE | list | give [N] | spawn | earned] (the Tyrfing rune).")
+        out("  cb test gebo [CASE | list | give [N] | spawn] (the Cereal rune).")
         out("Stat math: cb test rounding [multiplier | sweep [stacks]] [pN].")
         return
     end

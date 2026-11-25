@@ -950,6 +950,14 @@ return {
                 "For the current room, every enemy killed permanently grants {{Damage}} +0.05 damage",
             },
         },
+        GEBO = {
+            name = "Gebo",
+            description = "Exchange",
+            eid = {
+                "Rearranges the digits of the nearest item's number to change the item",
+                "#{{Warning}} REPENTOGON recommended",
+            },
+        },
     },
     ui = {
         -- The mod's name EID shows beside our items.
@@ -976,6 +984,10 @@ return {
             cancel_none = "No item %s: cancelled",
             cancel_nocraft = "Item %s can't be made: cancelled",
             chance = "#{{ColorYellow}}Current chance of Breakfast: %s{{CR}}",
+        },
+        gebo = {
+            options = "#{{Card%s}} Gebo: turns into one of %s",
+            none = "#{{Card%s}} Gebo cannot change this item",
         },
         morph = {
             applied = "APPLIED",
