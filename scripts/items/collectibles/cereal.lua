@@ -12,9 +12,10 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 --   * used otherwise, it opens a bowl Isaac holds over his head: the shooting
 --     keys choose cereal to put in, the key that used it confirms and the drop
 --     key or Esc closes. The digits put in (never starting with 0) make the
---     item with that number for one milk: a passive or familiar is held up and
---     taken, an active stands on a pedestal nearby. A number no item has, or
---     one no item pool lists, is cancelled with nothing spent.
+--     item with that number for milk, one for quality 0-2 and two for quality
+--     3-4: a passive or familiar is held up and taken, an active stands on a
+--     pedestal nearby. A number no item has, or one no item pool lists, is
+--     cancelled with nothing spent.
 --   * while anyone living holds it, every item pool draw turns into Breakfast
 --     (one milk) with chance 1/2 x 1/2 ^ (milk held), answered before the draw
 --     so the pool loses nothing.
@@ -39,6 +40,9 @@ M.data = {
     -- 50% with no milk (user decision 2026-11-24, was 100%), halved per milk.
     milkBase = 0.5,
     milkChance = 0.5,
+    -- The milk a made item costs by its quality (user decision 2026-11-25): one
+    -- for quality 0-2, two from quality 3 (other mods' qualities above 4 too).
+    milkCost = { low = 1, high = 2, highFrom = 3 },
     grindRange = 80,     -- reach to grind a pedestal (Quick Pick's default pick-up reach)
     markerLift = 52,     -- screen pixels from a pedestal up to its grind marker
     rowGap = 20,         -- world units between the cereal of a broken number, left to right
@@ -270,6 +274,14 @@ function M.lookup(entered)
     if entered[1] == 0 or n <= 0 or n > maxId() then return "none", n end
     local state, config = craftable(n)
     return state, n, config
+end
+
+--- The milk making the item of `config` costs: one for quality 0-2, two for
+--- quality 3 and up (user decision 2026-11-25).
+function M.milkCost(config)
+    local quality = config and tonumber(config.Quality) or 0
+    local cost = M.data.milkCost
+    return quality >= cost.highFrom and cost.high or cost.low
 end
 
 -- ------------------------------------------------------------------ input
@@ -690,8 +702,8 @@ end
 
 -- Confirm what is in the bowl: the item is made, or the bowl is cancelled
 -- with nothing spent. An empty bowl just closes (user request 2026-11-24: the
--- bowl doubles as the way to look at the cereal held), and without milk
--- nothing is made and the bowl stays open.
+-- bowl doubles as the way to look at the cereal held), and without the milk
+-- the item costs nothing is made and the bowl stays open.
 local function confirm(key, player, picker)
     if #picker.entered == 0 then
         close(key, player, picker)
@@ -704,9 +716,10 @@ local function confirm(key, player, picker)
         sfx(SoundEffect.SOUND_BOSS2INTRO_ERRORBUZZ, 0.5)
         return false
     end
-    if state == "ok" and M.milk() < 1 then
+    local cost = state == "ok" and M.milkCost(config) or 0
+    if state == "ok" and M.milk() < cost then
         picker.shake = 8
-        toast(key, View.text("ui.cereal.no_milk"))
+        toast(key, View.text("ui.cereal.no_milk", tostring(cost)))
         sfx(SoundEffect.SOUND_BOSS2INTRO_ERRORBUZZ, 0.6)
         return false, "NO_MILK"
     end
@@ -719,14 +732,14 @@ local function confirm(key, player, picker)
         return false, state
     end
     local s = store(true)
-    if not s or s.milk < 1 then return false, "NO_MILK" end
+    if not s or s.milk < cost then return false, "NO_MILK" end
     local need = {}
     for _, d in ipairs(picker.entered) do need[d] = (need[d] or 0) + 1 end
     for d, k in pairs(need) do
         if s.digits[d + 1] < k then return false, "NO_CEREAL" end
     end
     for d, k in pairs(need) do s.digits[d + 1] = s.digits[d + 1] - k end
-    s.milk = s.milk - 1
+    s.milk = s.milk - cost
     sfx(SoundEffect.SOUND_VAMP_GULP, 0.8)
     queueCount(player, picker.slot)
     if config.Type == ItemType.ITEM_ACTIVE then
@@ -741,7 +754,7 @@ local function confirm(key, player, picker)
         player:QueueItem(config, config.InitCharge or 0, false, false, 0)
         showName(player, config)
     end
-    ConchBlessing.printDebug("[Cereal] player %d made item %d", player.ControllerIndex, n)
+    ConchBlessing.printDebug("[Cereal] player %d made item %d for %d milk", player.ControllerIndex, n, cost)
     return true, n
 end
 
@@ -1064,6 +1077,15 @@ function M.layout(footY, bowlTop, active, nameH, noteH, countH)
     return L
 end
 
+-- The line above the bowl for an item it can make: the number, the name, its
+-- quality and the milk it costs (user request 2026-11-25), and whether there
+-- is milk enough (the line turns red without).
+local function resultLine(typed, n, config)
+    local cost = M.milkCost(config)
+    local quality = tostring(math.floor(tonumber(config.Quality) or 0))
+    return View.text("ui.cereal.result", typed, itemName(n) or "", quality, tostring(cost)), M.milk() >= cost
+end
+
 local function draw(player, picker)
     local foot = Isaac.WorldToScreen(player.Position)
     local shake = picker.shake > 0 and math.floor(math.sin(picker.shake * 2.2) * 2 + 0.5) or 0
@@ -1172,7 +1194,8 @@ local function draw(player, picker)
         end
         local name = itemName(n) or ""
         if state == "ok" then
-            centered(View.text("ui.cereal.result", typed, name), cx, nameY, nameScale, NAME_RGB)
+            local line, enough = resultLine(typed, n, config)
+            centered(line, cx, nameY, nameScale, enough and NAME_RGB or BAD_RGB)
             if active then centered(View.text("ui.cereal.active"), cx, L.noteY, noteScale, NOTE_RGB) end
         else
             centered(View.text("ui.cereal.nocraft", typed, name), cx, nameY, nameScale, BAD_RGB)
@@ -1398,6 +1421,11 @@ M._test = {
     setMaxId = function(n) maxIdCache = n end,
     resetCaches = function() maxIdCache, pooledCache = nil, nil end,
     picker = function(player) return player and pickers[GetPtrHash(player)] end,
+    resultLine = function(entered)
+        local state, n, config = M.lookup(entered)
+        if state ~= "ok" then return nil end
+        return resultLine(table.concat(entered, ""), n, config)
+    end,
     watch = function(player) return player and watches[GetPtrHash(player)] end,
     toast = function(player) local t = player and toasts[GetPtrHash(player)]; return t and t.text end,
     countedUses = function() return countedUses end,

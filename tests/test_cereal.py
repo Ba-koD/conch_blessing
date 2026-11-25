@@ -3,7 +3,7 @@ Breakfast's positive answer, a zero-charge active. Used while an item is held
 up it breaks that item into its number's cereal pickups (as the number is
 written; Breakfast gives three random ones); used otherwise it opens a bowl
 where the shooting keys put cereal in, centred, and the use key makes the item
-of that number for one milk (a passive is held up and taken, an active stands
+of that number for milk, one for quality 0-2 and two for 3-4 (a passive is held up and taken, an active stands
 on a pedestal), a number with no item being cancelled with nothing spent. Every
 draw becomes Breakfast with chance 1/2 ^ milk while anyone holds it. These are
 Lua regressions with doubles, not proof of engine behaviour (`cb test cereal`).
@@ -79,15 +79,16 @@ end
 keys={}
 Input={IsActionPressed=function(action) return keys[action]==true end}
 items={
-    [4]={Type=1}, [25]={Type=1}, [105]={Type=3}, [118]={Type=1}, [182]={Type=1}, [300]={Type=1,quest=true},
-    [301]={Type=1,Hidden=true}, [302]={Type=1}, [303]={Type=1,locked=true}, [780]={Type=3},
+    [4]={Type=1,Quality=1}, [21]={Type=1,Quality=2}, [25]={Type=1,Quality=1}, [105]={Type=3,Quality=4},
+    [118]={Type=1,Quality=4}, [182]={Type=1,Quality=3}, [300]={Type=1,quest=true},
+    [301]={Type=1,Hidden=true}, [302]={Type=1}, [303]={Type=1,locked=true}, [780]={Type=3,Quality=4},
 }
 for id,item in pairs(items) do
     item.ID=id; item.GfxFileName='gfx/x.png'; item.InitCharge=0
     item.HasTags=function(self,tag) return self.quest==true and tag==ItemConfig.TAG_QUEST end
     item.IsAvailable=function(self) return not self.locked end
 end
-pooled={4,25,105,118,182,300,303,780} -- 302 is in no pool, 301 hidden
+pooled={4,21,25,105,118,182,300,303,780} -- 302 is in no pool, 301 hidden
 spawned={}
 regs={}
 paused=false
@@ -552,7 +553,7 @@ class CerealTests(unittest.TestCase):
             local ok,why=T.confirm(p)
             return r.Discharge, open, ok, why, M.picking(p), T.toast(p), digits(), list(p.queued)
         ''')
-        self.assertEqual(result, (False, True, False, 'NO_MILK', True, 'ui.cereal.no_milk', '0200000010', ''))
+        self.assertEqual(result, (False, True, False, 'NO_MILK', True, 'ui.cereal.no_milk:2', '0200000010', ''))
 
     def test_the_use_key_on_an_empty_bowl_closes_it(self):
         result = self.run_lua('''
@@ -567,18 +568,19 @@ class CerealTests(unittest.TestCase):
 
     def test_the_bowl_makes_a_passive_and_spends_its_cereal_and_milk(self):
         result = self.run_lua('''
-            local p=player(); M.addMilk(2); M.addDigit(1,2); M.addDigit(8,1); M.addDigit(3,1)
+            local p=player(); M.addMilk(3); M.addDigit(1,2); M.addDigit(8,1); M.addDigit(3,1)
             M.onUseItem(nil,CEREAL,nil,p,0,0)
             local open=M.picking(p)
             T.type(p,{1,1,8})
             local ok,id=T.confirm(p)
             return open, ok, id, list(p.queued), p.animated, list(hudShown), digits(), M.milk(), M.picking(p)
         ''')
+        # Brimstone is quality 4: two milk (user decision 2026-11-25)
         self.assertEqual(result, (True, True, 118, '118', 118, '118', '0001000000', 1, False))
 
     def test_an_active_is_set_down_on_a_pedestal_nearby(self):
         result = self.run_lua('''
-            local p=player(); M.addMilk(1); M.addDigit(1,1); M.addDigit(0,1); M.addDigit(5,1)
+            local p=player(); M.addMilk(2); M.addDigit(1,1); M.addDigit(0,1); M.addDigit(5,1)
             M.onUseItem(nil,CEREAL,nil,p,0,0)
             T.type(p,{1,0,5})
             T.confirm(p)
@@ -606,6 +608,53 @@ class CerealTests(unittest.TestCase):
             return ok, why, T.toast(p), M.milk(), digits()
         ''')
         self.assertEqual(result, (False, 'nocraft', 'ui.cereal.cancel_nocraft:302', 1, '1011000000'))
+
+    def test_the_milk_an_item_costs_follows_its_quality(self):
+        # User decision 2026-11-25: one milk for quality 0-2, two for 3-4; other
+        # mods' qualities above 4 cost two, a missing quality one.
+        result = self.run_lua('''
+            local out={}
+            for _,q in ipairs({0,1,2,3,4,7}) do out[#out+1]=M.milkCost({Quality=q}) end
+            out[#out+1]=M.milkCost({}); out[#out+1]=M.milkCost(nil)
+            return list(out)
+        ''')
+        self.assertEqual(result, '1,1,1,2,2,2,1,1')
+
+    def test_one_milk_is_short_for_a_quality_4_item_and_spends_nothing(self):
+        result = self.run_lua('''
+            local p=player(); M.addMilk(1); M.addDigit(1,2); M.addDigit(8,1)
+            M.onUseItem(nil,CEREAL,nil,p,0,0)
+            T.type(p,{1,1,8})
+            local ok,why=T.confirm(p)
+            return ok, why, T.toast(p), M.milk(), digits(), M.picking(p), list(p.queued)
+        ''')
+        self.assertEqual(result, (False, 'NO_MILK', 'ui.cereal.no_milk:2', 1, '0200000010', True, ''))
+
+    def test_one_milk_makes_a_quality_2_item(self):
+        result = self.run_lua('''
+            local p=player(); M.addMilk(1); M.addDigit(2,1); M.addDigit(1,1)
+            M.onUseItem(nil,CEREAL,nil,p,0,0)
+            T.type(p,{2,1})
+            local ok,id=T.confirm(p)
+            return ok, id, list(p.queued), M.milk(), digits()
+        ''')
+        self.assertEqual(result, (True, 21, '21', 0, '0000000000'))
+
+    def test_the_result_line_shows_the_quality_and_the_milk(self):
+        # User request 2026-11-25: the line above the bowl names the item's
+        # quality and the milk it costs, red (not enough) while milk is short.
+        result = self.run_lua('''
+            M.addMilk(1)
+            local a,okA=T.resultLine({1,1,8})
+            local b,okB=T.resultLine({2,1})
+            local none=T.resultLine({6,6,6})
+            return a, okA, b, okB, tostring(none)
+        ''')
+        self.assertEqual(result[1], False)
+        self.assertEqual(result[3], True)
+        self.assertRegex(result[0], r'^ui\.cereal\.result:118\|.*\|4\|2$')
+        self.assertRegex(result[2], r'^ui\.cereal\.result:21\|.*\|2\|1$')
+        self.assertEqual(result[4], 'nil')
 
     def test_a_single_digit_makes_its_item(self):
         result = self.run_lua('''
@@ -649,7 +698,7 @@ class CerealTests(unittest.TestCase):
 
     def test_the_keys_drive_the_bowl(self):
         result = self.run_lua('''
-            local p=player(); M.addMilk(1); M.addDigit(1,2); M.addDigit(8,1)
+            local p=player(); M.addMilk(2); M.addDigit(1,2); M.addDigit(8,1)
             M.onUseItem(nil,CEREAL,nil,p,0,0)
             local function tap(action) keys[action]=true; M.onUpdate(); keys[action]=nil; M.onUpdate() end
             -- down puts the framed cereal in, up takes the last one out (user request)
@@ -795,7 +844,7 @@ class CerealTests(unittest.TestCase):
 
     def test_making_an_item_counts_one_real_use_on_the_next_update(self):
         result = self.run_lua('''
-            local p=player(); M.addMilk(1); M.addDigit(1,2); M.addDigit(8,1)
+            local p=player(); M.addMilk(2); M.addDigit(1,2); M.addDigit(8,1)
             M.onPreUseItem(nil,CEREAL,nil,p,0,0)
             T.type(p,{1,1,8}); T.confirm(p)
             local queued=T.pendingCounts()

@@ -227,7 +227,9 @@ function breakHeld() {
 }
 // The bowl opens with or without milk (it is also how the cereal held are
 // looked at); the use key on an empty bowl closes it, and milk is spent only
-// when an item is made.
+// when an item is made: one for quality 0-2, two for 3-4 (user decision
+// 2026-11-25).
+const milkCost = item => (item && item.q >= 3 ? 2 : 1);
 function openBowl() {
   state = { mode: 'bowl', entered: [], sel: lastSel, fx: [] };
 }
@@ -235,13 +237,13 @@ function closeBowl(msg) { lastSel = state.sel; state = { mode: 'idle' }; if (msg
 function confirmBowl() {
   if (state.entered.length === 0) { closeBowl(); return; }
   const res = lookup(state.entered);
-  if (res.state === 'ok' && milk < 1) { shake = 8; say('우유가 없어요'); return; }
+  if (res.state === 'ok' && milk < milkCost(res.item)) { shake = 8; say(`우유가 ${milkCost(res.item)}개 필요해요`); return; }
   if (res.state !== 'ok') {
     closeBowl(res.state === 'nocraft' ? `${res.n}번은 만들 수 없는 아이템이라 취소됐어요` : `${res.n}번은 없는 번호라 취소됐어요`);
     return;
   }
   state.entered.forEach(d => counts[d]--);
-  milk--;
+  milk -= milkCost(res.item);
   lastSel = state.sel;
   if (res.item.active) {
     peds.push({ item: res.item, t: 0 });
@@ -442,7 +444,8 @@ function drawBowlUI() {
   const ty = nameY + nameH / 2, ny = noteY + noteH / 2;
   if (res.state === 'ok') {
     icon(res.item, cx, iy, 24);
-    text(`${num}  ${name(res.item)}`, cx, ty, 7);
+    const cost = milkCost(res.item);
+    text(`${num}  ${name(res.item)} (${res.item.q}등급, 우유 ${cost})`, cx, ty, 7, milk >= cost ? undefined : '#ff8a7a');
     if (active) text('플레이어 근처에 소환', cx, ny, 5.2, '#f0c060');
   } else if (res.state === 'nocraft') {
     icon(res.item, cx, iy, 24, 0.3);

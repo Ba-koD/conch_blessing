@@ -8,9 +8,10 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- behaviour is the user's design (2026-11-24): the use key while an item is
 -- held up breaks it into its number's cereal (as it is written; Breakfast three
 -- random ones), walking onto cereal takes it, a Breakfast taken is one milk,
--- the bowl makes the item of the number put in for one milk (an active on a
--- pedestal), a number with no item is cancelled with nothing spent, and every
--- draw becomes Breakfast with chance 1/2 ^ milk.
+-- the bowl makes the item of the number put in for milk, one for quality 0-2
+-- and two for 3-4 (an active on a pedestal), a number with no item is
+-- cancelled with nothing spent, and every draw becomes Breakfast with chance
+-- 1/2 x 1/2 ^ milk.
 local S = require("scripts.dev.item_scenarios")
 local H = require("scripts.dev.item_test_support")
 local C = {}
@@ -317,33 +318,78 @@ S.add("CEREAL", "milk", { conditions = true }, function(plan, id)
     end)
 end)
 
--- The bowl makes a passive: 1, 1, 8 is Brimstone, held up and taken.
+-- The bowl makes a passive for milk by its quality (user decision 2026-11-25:
+-- one for quality 0-2, two for 3-4). With one milk Brimstone (1, 1, 8,
+-- quality 4) is refused with nothing spent; with three it is made, held up and
+-- taken for two, and The Compass (2, 1, quality 1) for the last one.
 S.add("CEREAL", "craft", { conditions = true }, function(plan, id)
+    local compass = CollectibleType.COLLECTIBLE_COMPASS
     requireModule(plan)
     cleanup(plan)
     holdCereal(plan, id)
     observeUses(plan, id)
-    plan.act(function() M().addMilk(2); M().addDigit(1, 2); M().addDigit(8, 1); M().addDigit(4, 1) end)
+    plan.require("Brimstone is quality 3-4 and The Compass 0-2 and makeable", function()
+        local config = Isaac.GetItemConfig()
+        local b, c = config:GetCollectible(brimstone()), config:GetCollectible(compass)
+        local ok = b and c and b.Quality >= 3 and c.Quality <= 2 and c:IsAvailable()
+        return ok or nil, string.format("Brimstone quality %s, The Compass quality %s available %s",
+            tostring(b and b.Quality), tostring(c and c.Quality), tostring(c and c:IsAvailable()))
+    end)
+    plan.act(function() M().addMilk(1); M().addDigit(1, 3); M().addDigit(8, 1); M().addDigit(2, 1); M().addDigit(4, 1) end)
     use(plan, id)
     plan.require("the bowl is open", function(player) return M().picking(player) or nil, "closed" end)
     plan.require("1, 1, 8 go in", function(player) return M()._test.type(player, { 1, 1, 8 }) or nil, "refused" end)
+    plan.note("the line above the bowl", function()
+        local line, enough = M()._test.resultLine({ 1, 1, 8 })
+        return tostring(line) .. " enough=" .. tostring(enough)
+    end)
+    plan.check("the line names Brimstone's quality and two milk, red with one milk", function()
+        local line, enough = M()._test.resultLine({ 1, 1, 8 })
+        local quality = tostring(Isaac.GetItemConfig():GetCollectible(brimstone()).Quality)
+        local ok = type(line) == "string" and line:find("118", 1, true) ~= nil and line:find(quality, 4, true) ~= nil
+            and line:find("2", 4, true) ~= nil and enough == false
+        return ok, tostring(line) .. " enough=" .. tostring(enough)
+    end)
+    press(plan, "ACTION_ITEM")
+    plan.check("with one milk Brimstone is refused, nothing spent and the bowl stays open", function(player)
+        local toast = M()._test.toast(player)
+        return M().picking(player) and M().milk() == 1 and M().count(1) == 3 and M().count(8) == 1
+            and player:GetCollectibleNum(brimstone(), true) == 0 and player:IsItemQueueEmpty() and toast ~= nil,
+            stock() .. " toast " .. tostring(toast)
+    end)
+    press(plan, "ACTION_DROP")
+    plan.act(function() M().addMilk(2) end)
+    use(plan, id)
+    plan.require("the bowl is open again", function(player) return M().picking(player) or nil, "closed" end)
+    plan.require("1, 1, 8 go in again", function(player) return M()._test.type(player, { 1, 1, 8 }) or nil, "refused" end)
     press(plan, "ACTION_ITEM")
     plan.waitUntil(function(player)
-        return player:GetCollectibleNum(CollectibleType.COLLECTIBLE_BRIMSTONE, true) == 1 and player:IsItemQueueEmpty()
+        return player:GetCollectibleNum(brimstone(), true) == 1 and player:IsItemQueueEmpty()
     end, 120, "Brimstone is taken")
-    expectUses(plan, "opening the bowl was no use, making Brimstone one", 1)
-    plan.check("Brimstone is made for three cereal and one milk", function(player)
-        return M().count(1) == 0 and M().count(8) == 0 and M().count(4) == 1 and M().milk() == 1
+    expectUses(plan, "opening the bowl and the refusal were no use, making Brimstone one", 1)
+    plan.check("Brimstone is made for three cereal and two milk", function(player)
+        return M().count(1) == 1 and M().count(8) == 0 and M().count(2) == 1 and M().count(4) == 1 and M().milk() == 1
             and player:GetActiveItem(ActiveSlot.SLOT_PRIMARY) == id, stock()
+    end)
+    use(plan, id)
+    plan.require("2, 1 go in", function(player) return M()._test.type(player, { 2, 1 }) or nil, "refused" end)
+    press(plan, "ACTION_ITEM")
+    plan.waitUntil(function(player)
+        return player:GetCollectibleNum(compass, true) == 1 and player:IsItemQueueEmpty()
+    end, 120, "The Compass is taken")
+    expectUses(plan, "making The Compass is one more use", 2)
+    plan.check("The Compass is made for two cereal and the last milk", function()
+        return M().count(1) == 0 and M().count(2) == 0 and M().count(4) == 1 and M().milk() == 0, stock()
     end)
 end)
 
--- An active is set down on a pedestal nearby: 1, 0, 5 is The D6.
+-- An active is set down on a pedestal nearby: 1, 0, 5 is The D6 (quality 4,
+-- two milk).
 S.add("CEREAL", "craft_active", { conditions = true }, function(plan, id)
     requireModule(plan)
     cleanup(plan)
     holdCereal(plan, id)
-    plan.act(function() M().addMilk(1); M().addDigit(1, 1); M().addDigit(0, 1); M().addDigit(5, 1) end)
+    plan.act(function() M().addMilk(2); M().addDigit(1, 1); M().addDigit(0, 1); M().addDigit(5, 1) end)
     use(plan, id)
     plan.require("1, 0, 5 go in", function(player) return M()._test.type(player, { 1, 0, 5 }) or nil, "refused" end)
     press(plan, "ACTION_ITEM")
