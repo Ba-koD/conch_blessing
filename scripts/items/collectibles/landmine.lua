@@ -25,11 +25,17 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- explosion, which would also hit players and break rocks; the vanilla bomb
 -- explosion is spawned only as a picture.
 --
--- Mines are effects that last as long as their room; nothing is saved but
--- StatsAPI's damage multiplier. A room may hold a hundred mines or more, so
--- they are filed by floor tile, and arming, stepping and chaining look only
--- at the tiles around a spot; mines going off together on one spot draw one
--- explosion.
+-- Mines last as long as their room; nothing is saved but StatsAPI's damage
+-- multiplier. A room may hold a thousand mines or more, so a mine is no entity
+-- of its own: it is a record here, and one effect per room (the "field", drawn
+-- before every other entity) draws them all from a few static sprites, one per
+-- animation frame. Measured 2026-11-25 with `cb test landmine headroom_compare`:
+-- 228 mines as entities of their own cost 4.19 ms of each frame (every mod's
+-- per-effect callbacks ran for each), drawn by the field 0.88 ms. Mines are
+-- filed by floor tile,
+-- and arming, stepping and chaining look only at the tiles around a spot;
+-- mines going off together on one spot draw one explosion. A blast's source is
+-- the mine's owner, marked with the landmine proc so it never triggers itself.
 local DamageProvenance = require("scripts.lib.damage_provenance")
 local Sound = require("scripts.lib.sound_volume")
 local definitions = require("scripts.entities.definitions")
@@ -98,14 +104,30 @@ local mineVariant = effectVariant(definitions.LANDMINE)
 
 M.available = mineVariant > 0
 
--- Every mine is a record { ref, owner, damage, x, y, key, flying, landed,
--- landedAt, armed, idle, fuse, going, dead }; (x, y) is where it lands, its
--- place from the moment it is flung. A flying one also keeps { sx, sy, lift,
--- vz, k }: it flies from (sx, sy) at `lift` above the floor (negative, as
--- PositionOffset) and lands after `flight` updates. `mines` keeps them in the
--- order they were laid; a record that went is marked dead and left there
--- until the next compaction.
+-- The mine's sheet, and the frames of its animations: Fall (in the air), Land
+-- (on the way down into its splash) and Idle (its button blinking).
+local SHEET = "gfx/" .. (definitions.LANDMINE and definitions.LANDMINE.anm2path or "effects/conch_landmine.anm2")
+local FRAMES = { Fall = 1, Land = 8, Idle = 30 }
+local FIELD_DEPTH = -100000 -- the field draws before every other entity
+
+-- Every mine is a record { owner, damage, x, y, spot, key, frame, flying,
+-- landed, landedAt, idle, idleAt, armed, fuse, going, dead }; (x, y) = spot is
+-- where it lands, its place from the moment it is flung. A flying one also
+-- keeps { sx, sy, px, py, z, lift, vz, k }: it flies from (sx, sy) at `lift`
+-- above the floor (negative, screen pixels as PositionOffset), is drawn at
+-- (px, py) raised by z, and lands after `flight` updates. `mines` keeps them
+-- in the order they were laid; a record that went is marked dead and left
+-- there until the next compaction.
 local mines, cells, fresh, fused = {}, {}, {}, {}
+-- The room's field effect (EntityPtr), and one static sprite per frame of
+-- each animation ({ Fall = { s0 }, Land = { s0 .. s7 }, Idle = { ... } }),
+-- false once loading failed.
+local field, frames
+-- Whether a blast is striking right now (the bench reads it).
+local blasting = false
+-- The render offset the mines were last drawn with, and a stamp that changes
+-- with it (a mine's kept place is good while its stamp matches).
+local drawX, drawY, drawStamp = nil, nil, 0
 -- Every tear still carrying mines: { ref, owner, damage, load, travel, rng, x,
 -- y, vx, vy, lift }, (x, y) and the velocity as last seen.
 local carriers = {}
@@ -120,7 +142,8 @@ local holding, sweep = {}, true
 local evidence
 local function resetEvidence()
     evidence = { fired = 0, laid = 0, flung = 0, spilled = 0, piled = 0, lost = 0, carried = 0, landed = 0,
-        landedOn = 0, exploded = 0, struck = 0, chained = 0, pictures = 0, byPlayer = 0, last = nil }
+        landedOn = 0, exploded = 0, struck = 0, chained = 0, pictures = 0, byPlayer = 0, drawn = 0,
+        drawnMines = 0, last = nil }
 end
 resetEvidence()
 
@@ -213,36 +236,89 @@ local function freeSpot(x, y)
     return true
 end
 
-local function liveMine(record)
-    local effect = record and record.ref and record.ref.Ref
-    if effect and effect:Exists() then return effect end
-    return nil
-end
-
-local function drop(record, remove)
+local function drop(record)
     if record.dead then return end
     record.dead = true
     unfile(record)
     dirty = true
-    local effect = remove and liveMine(record)
-    if effect then effect:Remove() end
 end
 
--- Forgets the records that went; with `checkLive`, also those whose effect
--- something else removed.
-local function compact(checkLive)
-    if not dirty and not checkLive then return end
+-- Forgets the records that went.
+local function compact()
+    if not dirty then return end
     local kept = {}
     for _, record in ipairs(mines) do
-        if not record.dead and checkLive and not liveMine(record) then drop(record, false) end
         if not record.dead then kept[#kept + 1] = record end
     end
     mines, dirty = kept, false
 end
 
+-- ------------------------------------------------------------------ the field
+local function fieldEntity()
+    local effect = field and field.Ref
+    if effect and effect:Exists() then return effect end
+    return nil
+end
+
+local function removeField()
+    local effect = fieldEntity()
+    if effect then effect:Remove() end
+    field = nil
+end
+
+-- The room's one field effect, spawned with the first mine and kept on the
+-- first player (where the camera looks), drawn before everything else.
+local function keepField()
+    local player = Isaac.GetPlayer(0)
+    local at = player and player.Position or Game():GetRoom():GetCenterPos()
+    local effect = fieldEntity()
+    if not effect then
+        effect = Isaac.Spawn(EntityType.ENTITY_EFFECT, mineVariant, 0, at, Vector.Zero, nil)
+        effect = effect and effect:ToEffect()
+        if not effect then return end
+        effect.DepthOffset = FIELD_DEPTH
+        effect.Color = Color(1, 1, 1, 0) -- its own picture stays unseen; it draws the mines
+        field = EntityPtr(effect)
+    end
+    effect.Position, effect.Velocity = at, Vector.Zero
+end
+
+-- One static sprite per frame of each animation, loaded on the first draw.
+local function frameSprites()
+    if frames ~= nil then return frames or nil end
+    local ok, built = pcall(function()
+        local set = {}
+        for name, count in pairs(FRAMES) do
+            set[name] = {}
+            for f = 0, count - 1 do
+                local sprite = Sprite()
+                sprite:Load(SHEET, true)
+                sprite:SetFrame(name, f)
+                set[name][f + 1] = sprite
+            end
+        end
+        if type(set.Fall[1].IsLoaded) == "function" and not set.Fall[1]:IsLoaded() then error("sheet not loaded") end
+        return set
+    end)
+    if not ok then
+        ConchBlessing.printError("Landmine: could not load " .. SHEET .. ": " .. tostring(built))
+        frames = false
+        return nil
+    end
+    frames = built
+    return built
+end
+
+local function isReflectionPass()
+    local room = Game():GetRoom()
+    return RenderMode ~= nil and type(room.GetRenderMode) == "function"
+        and room:GetRenderMode() == RenderMode.RENDER_WATER_REFLECT
+end
+
 local function reset()
+    removeField()
     mines, cells, fresh, fused, pictures, carriers = {}, {}, {}, {}, {}, {}
-    dirty, soundFrame, pictureFrame = false, -1, -1
+    dirty, soundFrame, pictureFrame, blasting = false, -1, -1, false
 end
 
 -- ------------------------------------------------------------------ placement
@@ -251,42 +327,35 @@ local function isFloor(room, position)
     return room:GetGridCollisionAtPos(position) == GridCollisionClass.COLLISION_NONE
 end
 
-local function land(record, mine)
-    record.flying, record.landed, record.landedAt = false, true, mine.FrameCount
-    mine.Position = Vector(record.x, record.y)
-    mine.PositionOffset = Vector.Zero
-    mine:GetSprite():Play("Land", true)
+local function land(record)
+    record.flying, record.landed, record.landedAt = false, true, Game():GetFrameCount()
+    record.px, record.py, record.z = record.x, record.y, 0
     evidence.landed = evidence.landed + 1
 end
 
 -- A mine of `player` for `to` on the floor: flung from `from` at `lift` above
--- the floor (negative, as PositionOffset), or landing at once without them.
+-- the floor (negative, screen pixels as PositionOffset), or landing at once
+-- without them. Returns its record.
 local function lay(player, to, damage, from, lift)
-    local start = from or to
-    local mine = Isaac.Spawn(EntityType.ENTITY_EFFECT, mineVariant, 0, start, Vector.Zero, player)
-    mine = mine and mine:ToEffect()
-    if not mine then return nil end
-    -- Lies on the floor: drawn under anything standing over it.
-    mine.DepthOffset = -1000
-    DamageProvenance.markTriggeredAttack(mine, PROC_KEY, nil, PROC_KEY)
+    if not M.available then return nil end
     local x, y = to.X, to.Y
-    local record = { ref = EntityPtr(mine), owner = EntityPtr(player), damage = damage, x = x, y = y,
-        key = keyOf(tileOf(x), tileOf(y)), frame = Game():GetFrameCount() }
+    local record = { owner = player and EntityPtr(player) or nil, damage = damage, x = x, y = y,
+        spot = Vector(x, y), key = keyOf(tileOf(x), tileOf(y)), frame = Game():GetFrameCount() }
     lift = math.min(0, tonumber(lift) or 0)
     if from then
-        record.flying, record.sx, record.sy, record.lift, record.k = true, start.X, start.Y, lift, 0
+        record.flying, record.sx, record.sy, record.lift, record.k = true, from.X, from.Y, lift, 0
+        record.px, record.py, record.z = from.X, from.Y, lift
         record.vz = launchSpeed(lift, M.data.flight, M.data.gravity)
-        mine.PositionOffset = Vector(0, lift)
-        mine:GetSprite():Play("Fall", true)
     else
-        land(record, mine)
+        land(record)
     end
     mines[#mines + 1] = record
     fresh[#fresh + 1] = record
     file(record)
+    keepField()
     evidence.laid = evidence.laid + 1
     evidence.last = { x = x, y = y, damage = damage }
-    return mine, record
+    return record
 end
 
 local function carrierPlayer(carrier)
@@ -365,13 +434,23 @@ local function newPicture(x, y, frame)
     return true
 end
 
-local function explode(record)
-    local effect = liveMine(record)
-    if not effect then
-        drop(record, false)
-        return
+-- Every vulnerable, unfriendly enemy within `radius` (plus its size) of
+-- `position` takes `damage` from `source`.
+local function strike(position, radius, damage, source)
+    blasting = true
+    for _, entity in ipairs(Isaac.FindInRadius(position, radius + 80, EntityPartition.ENEMY)) do
+        if entity:IsVulnerableEnemy() and not entity:HasEntityFlags(EntityFlag.FLAG_FRIENDLY)
+            and within(entity.Position:Distance(position), radius, entity.Size) then
+            entity:TakeDamage(damage, DamageFlag.DAMAGE_EXPLOSION, source, 0)
+            evidence.struck = evidence.struck + 1
+        end
     end
-    local position = effect.Position
+    blasting = false
+end
+
+local function explode(record)
+    if record.dead then return end
+    local position = record.spot
     local frame = Game():GetFrameCount()
     if newPicture(position.X, position.Y, frame) then
         local blast = Isaac.Spawn(EntityType.ENTITY_EFFECT, EffectVariant.BOMB_EXPLOSION, 0, position, Vector.Zero, nil)
@@ -385,19 +464,24 @@ local function explode(record)
         soundFrame = frame
         SFXManager():Play(BLAST_SOUND, Sound.volume(0.8), 0, false, 1.1)
     end
-    local damage, radius, source = mineDamage(record.damage), M.data.blastRadius, EntityRef(effect)
-    for _, entity in ipairs(Isaac.FindInRadius(position, radius + 80, EntityPartition.ENEMY)) do
-        if entity:IsVulnerableEnemy() and not entity:HasEntityFlags(EntityFlag.FLAG_FRIENDLY)
-            and within(entity.Position:Distance(position), radius, entity.Size) then
-            entity:TakeDamage(damage, DamageFlag.DAMAGE_EXPLOSION, source, 0)
-            evidence.struck = evidence.struck + 1
-        end
+    local damage, radius = mineDamage(record.damage), M.data.blastRadius
+    -- The owner is the source, marked with this proc so the blast's hits
+    -- never set off mines again through it; a mine whose owner left the run
+    -- strikes with no source.
+    local owner = record.owner and record.owner.Ref
+    owner = owner and owner:Exists() and owner:ToPlayer() or nil
+    if owner then
+        DamageProvenance.withTriggeredSource(owner, PROC_KEY, nil, PROC_KEY, function()
+            strike(position, radius, damage, EntityRef(owner))
+        end)
+    else
+        strike(position, radius, damage, EntityRef(nil))
     end
     for k = 1, gather(record.x, record.y, radius) do
         local other = nearby[k]
         if other ~= record and other.landed and not other.dead and not other.fuse and not other.going then
             local dx, dy = other.x - record.x, other.y - record.y
-            if dx * dx + dy * dy <= radius * radius and liveMine(other) then
+            if dx * dx + dy * dy <= radius * radius then
                 other.fuse = M.data.chainDelay
                 fused[#fused + 1] = other
                 evidence.chained = evidence.chained + 1
@@ -405,7 +489,7 @@ local function explode(record)
         end
     end
     evidence.exploded = evidence.exploded + 1
-    drop(record, true)
+    drop(record)
 end
 
 -- Whether an active enemy is within `reach` (plus its size) of (x, y).
@@ -428,16 +512,17 @@ local function settleFresh()
     local still, onEnemy = {}, nil
     local d, now = M.data, Game():GetFrameCount()
     for _, record in ipairs(fresh) do
-        local effect = not record.dead and liveMine(record)
-        if effect and record.frame == now then
+        if record.dead then
+            -- gone (a blast): nothing to settle
+        elseif record.frame == now then
             -- Laid this update: it starts its flight on the next one.
             still[#still + 1] = record
-        elseif effect then
+        else
             if record.flying then
                 record.k = record.k + 1
                 local k = record.k
                 if k >= d.flight then
-                    land(record, effect)
+                    land(record)
                     if enemyAt(record.x, record.y, d.landOn) then
                         record.going = true
                         onEnemy = onEnemy or {}
@@ -446,24 +531,18 @@ local function settleFresh()
                     end
                 else
                     local f = k / d.flight
-                    effect.Position = Vector(record.sx + (record.x - record.sx) * f, record.sy + (record.y - record.sy) * f)
-                    effect.PositionOffset = Vector(0, math.min(0, record.lift + record.vz * k + 0.5 * d.gravity * k * k))
+                    record.px = record.sx + (record.x - record.sx) * f
+                    record.py = record.sy + (record.y - record.sy) * f
+                    record.z = math.min(0, record.lift + record.vz * k + 0.5 * d.gravity * k * k)
                 end
             else
-                if not record.idle then
-                    local sprite = effect:GetSprite()
-                    if sprite:IsFinished("Land") then
-                        sprite:Play("Idle", true)
-                        record.idle = true
-                    end
+                local age = now - record.landedAt
+                if not record.idle and age >= FRAMES.Land then
+                    record.idle, record.idleAt = true, now
                 end
-                if not record.armed and effect.FrameCount - record.landedAt >= d.armFrames then
-                    record.armed = true
-                end
+                if not record.armed and age >= d.armFrames then record.armed = true end
             end
             if not (record.idle and record.armed) and not record.going then still[#still + 1] = record end
-        elseif not record.dead then
-            drop(record, false)
         end
     end
     fresh = still
@@ -642,27 +721,74 @@ function M.onUpdate()
     end
     if #carriers > 0 then carry() end
     if #mines == 0 then return end
-    compact(false)
+    compact()
     settleFresh()
     burnFuses()
     if #mines > 0 then stepOn() end
+    compact()
+    if #mines > 0 then keepField() else removeField() end
 end
 
--- Mines are effects of their room: a new room, game start and exit forget them.
+-- The field draws every mine: a flying one in the air, a landing one on its
+-- frame of Land, a lying one on its frame of Idle (from when it began).
+function M.onFieldRender(_, effect, offset)
+    local own = fieldEntity()
+    if not own or GetPtrHash(effect) ~= GetPtrHash(own) or #mines == 0 or isReflectionPass() then return end
+    local set = frameSprites()
+    if not set then return end
+    offset = offset or Vector.Zero
+    local now = Game():GetFrameCount()
+    local fall, land, idle = set.Fall[1], set.Land, set.Idle
+    local landCount, idleCount = FRAMES.Land, FRAMES.Idle
+    -- A lying mine's place on the render plane never moves, and the offset
+    -- (the camera and the shake) seldom does, so each mine keeps where it was
+    -- last drawn and works it out again only when the offset changed: a
+    -- thousand mines make no new Vector a frame (each one is garbage to
+    -- collect, which cost more than the drawing; measured 2026-11-25).
+    local ox, oy = offset.X, offset.Y
+    if ox ~= drawX or oy ~= drawY then drawX, drawY, drawStamp = ox, oy, drawStamp + 1 end
+    local stamp = drawStamp
+    local drew = 0
+    local toRender = Isaac.WorldToRenderPosition
+    for k = 1, #mines do
+        local r = mines[k]
+        if not r.dead then
+            drew = drew + 1
+            if r.flying then
+                fall:Render(toRender(Vector(r.px, r.py)) + offset + Vector(0, r.z))
+            else
+                local at = r.drawAt
+                if r.drawStamp ~= stamp then
+                    at = toRender(r.spot) + offset
+                    r.drawAt, r.drawStamp = at, stamp
+                end
+                if r.idle then
+                    idle[(now - r.idleAt) % idleCount + 1]:Render(at)
+                else
+                    land[math.max(0, math.min(landCount - 1, now - r.landedAt)) + 1]:Render(at)
+                end
+            end
+        end
+    end
+    evidence.drawn, evidence.drawnMines = evidence.drawn + 1, drew
+end
+
+if ModCallbacks and ModCallbacks.MC_POST_EFFECT_RENDER and mineVariant > 0 then
+    ConchBlessing:AddCallback(ModCallbacks.MC_POST_EFFECT_RENDER, M.onFieldRender, mineVariant)
+end
+
+-- Mines belong to their room: a new room, game start and exit forget them.
 function M.onNewRoom() reset() end
 function M.onGameStarted()
     reset()
     holding, sweep = {}, true
 end
 function M.onGameExit() reset() end
-function M.onModUnload()
-    for _, record in ipairs(mines) do drop(record, true) end
-    reset()
-end
+function M.onModUnload() reset() end
 
 -- The live mines in the order they were laid.
 function M.mines()
-    compact(true)
+    compact()
     return mines
 end
 function M.mineVariant() return mineVariant end
@@ -681,6 +807,10 @@ M._test = {
     otherWeapons = function() return OTHER_WEAPONS end,
     carriers = function() return carriers end,
     tiles = function() return cells end,
+    blasting = function() return blasting end,
+    field = fieldEntity,
+    clear = reset,
+    frames = FRAMES,
     evidence = function() return evidence end,
     resetEvidence = resetEvidence,
     procKey = PROC_KEY,

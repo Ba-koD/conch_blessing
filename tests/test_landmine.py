@@ -87,6 +87,15 @@ function ConchBlessing:AddCallback(id,fn) callbacks[id]=fn end
 function GetPtrHash(e) return e.hash end
 function EntityPtr(e) return {Ref=e} end
 function EntityRef(e) return {Entity=e} end
+-- Static sprites record what they draw.
+renders={}
+function Sprite()
+    local sp={}
+    function sp:Load(path) self.path=path end
+    function sp:SetFrame(anim,f) self.anim=anim; self.frame=f end
+    function sp:Render(pos) renders[#renders+1]={anim=self.anim,frame=self.frame,pos=pos} end
+    return sp
+end
 
 serial=0; entities={}; players={}; frame=0
 local E={}; E.__index=E
@@ -123,6 +132,7 @@ Isaac={
     GetEntityTypeByName=function() return 1000 end,
     GetEntityVariantByName=function(name) return name=="Conch Blessing Landmine" and MINE_VARIANT or -1 end,
     GetPlayer=function(i) return players[i+1] end,
+    WorldToRenderPosition=function(v) return Vector(v.X*0.65,v.Y*0.65) end,
     Spawn=function(t,v,s,pos,vel,spawner)
         return entity({Type=t,Variant=v,SubType=s,Position=pos,Velocity=vel,SpawnerEntity=spawner})
     end,
@@ -174,7 +184,15 @@ function update(n)
     end
 end
 function enemy(x,y,size) return entity({Type=10,Variant=0,Position=Vector(x,y),Size=size or 10,enemy=true}) end
-function liveMines() local n=0 for _,r in ipairs(M.mines()) do if r.ref.Ref:Exists() then n=n+1 end end return n end
+function liveMines() return #M.mines() end
+-- The live effects of the mine's variant: the field.
+function fieldEffects()
+    local n=0
+    for _,e in ipairs(entities) do
+        if e.Type==EntityType.ENTITY_EFFECT and e.Variant==MINE_VARIANT and not e.removed then n=n+1 end
+    end
+    return n
+end
 function tileCount() local n=0 for _,list in pairs(T.tiles()) do n=n+#list end return n end
 function explosions()
     local n=0
@@ -264,7 +282,7 @@ class LandmineTests(unittest.TestCase):
                 worst=math.max(worst,math.abs(off))
             end
             return laid[3],laid[4],laid[11],laid[12],laid[20],T.evidence().laid,#T.carriers(),sides.up==true,
-                sides.down==true,worst,M.mines()[1].damage,M.mines()[1].ref.Ref.SpawnerEntity==p,closest()
+                sides.down==true,worst,M.mines()[1].damage,M.mines()[1].owner.Ref==p,closest()
         ''')
         (before, first, _, second, third, laid, carriers, up, down, worst, damage, owner, gap) = result
         # The first after one tile (40 units, the 4th update), then every two.
@@ -278,16 +296,16 @@ class LandmineTests(unittest.TestCase):
         result = self.run_lua('''
             local p=player(); local t=tear(p,20,150,10,0)
             update(4)
-            local r=M.mines()[1]; local m=r.ref.Ref
-            local start,anim,lifts=m.Position.X,m.sprite.anim,{}
-            for i=1,10 do update(1); lifts[i]=m.PositionOffset.Y end
-            return start, anim, lifts[1]<-23.75, lifts[9]<0, lifts[10], m.Position.X==r.x and m.Position.Y==r.y,
-                m.sprite.anim, r.landed, T.evidence().landed
+            local r=M.mines()[1]
+            local start,flying,lifts=r.px,r.flying,{}
+            for i=1,10 do update(1); lifts[i]=r.z end
+            return start, flying, lifts[1]<-23.75, lifts[9]<0, lifts[10], r.px==r.x and r.py==r.y,
+                r.flying, r.idle==true, r.landed, T.evidence().landed
         ''')
-        start, anim, rose, airborne, last, placed, landed_anim, landed, count = result
-        self.assertEqual((start, anim), (60, 'Fall'))
+        start, flying, rose, airborne, last, placed, still_flying, idle, landed, count = result
+        self.assertEqual((start, flying), (60, True))
         self.assertTrue(rose and airborne)
-        self.assertEqual((last, placed, landed_anim, landed, count), (0, True, 'Land', True, 1))
+        self.assertEqual((last, placed, still_flying, idle, landed, count), (0, True, False, False, True, 1))
 
     def test_ground_with_a_mine_is_passed_over(self):
         result = self.run_lua('''
@@ -380,14 +398,16 @@ class LandmineTests(unittest.TestCase):
             local far=enemy(200,200,10)         -- outside
             local friend=enemy(110,160,10); friend.flags=EntityFlag.FLAG_FRIENDLY
             update(M.data.armFrames-1)
-            local before=m.removed==true
+            local before=m.dead==true
             update(1)
             local function took(e) return e.hits and #e.hits or 0 end
             local hit=stepper.hits[1]
-            return before, m.removed==true, took(stepper), took(near), took(far), took(friend),
-                hit.amount, hit.flags, hit.source.Entity==m, took(p), #played, #M.mines(), tileCount()
+            return before, m.dead==true, took(stepper), took(near), took(far), took(friend),
+                hit.amount, hit.flags, hit.source.Entity==p, took(p), #played, #M.mines(), tileCount(),
+                T.blasting(), fieldEffects()
         ''')
-        self.assertEqual(result, (False, True, 1, 1, 0, 0, 6, 4, True, 0, 1, 0, 0))
+        # The owner is the blast's source; the field goes with the last mine.
+        self.assertEqual(result, (False, True, 1, 1, 0, 0, 6, 4, True, 0, 1, 0, 0, False, 0))
 
     def test_a_player_stepping_on_an_armed_mine_sets_it_off_unhurt(self):
         result = self.run_lua('''
@@ -395,10 +415,10 @@ class LandmineTests(unittest.TestCase):
             local m=T.lay(p,Vector(100,150),3)
             local near=enemy(134,150,10)
             update(M.data.armFrames)
-            local waited=m.removed==true
+            local waited=m.dead==true
             p.Position=Vector(110,150)
             update(1)
-            return waited, m.removed==true, T.evidence().byPlayer, near.hits and #near.hits or 0, p.hits==nil
+            return waited, m.dead==true, T.evidence().byPlayer, near.hits and #near.hits or 0, p.hits==nil
         ''')
         self.assertEqual(result, (False, True, 1, 1, True))
 
@@ -408,7 +428,7 @@ class LandmineTests(unittest.TestCase):
             local g=player(); g.ghost=true; g.Position=Vector(100,150)
             local m=T.lay(p,Vector(100,150),3)
             update(M.data.armFrames+2)
-            return m.removed==true, T.evidence().byPlayer
+            return m.dead==true, T.evidence().byPlayer
         ''')
         self.assertEqual(result, (False, 0))
 
@@ -497,27 +517,50 @@ class LandmineTests(unittest.TestCase):
 
     def test_land_hands_over_to_idle(self):
         result = self.run_lua('''
-            local p=player(); local m=T.lay(p,Vector(100,150),3)
-            local anim=m.sprite.anim
-            m.finished=true
+            local p=player(); p.Position=Vector(500,280); local m=T.lay(p,Vector(100,150),3)
+            update(T.frames.Land-1)
+            local early=m.idle==true
             update(1)
-            return anim, m.sprite.anim
+            return early, m.idle==true, m.idleAt==frame, m.armed==true
         ''')
-        self.assertEqual(result, ('Land', 'Idle'))
+        self.assertEqual(result, (False, True, True, True))
 
-    def test_a_mine_removed_elsewhere_is_forgotten(self):
+    def test_one_field_draws_every_mine_on_its_frame(self):
         result = self.run_lua('''
-            local p=player(); local m=T.lay(p,Vector(100,150),3); T.lay(p,Vector(200,150),3)
-            m:Remove()
-            return #M.mines(), tileCount()
+            local p=player(); p.Position=Vector(500,280)
+            local lying=T.lay(p,Vector(100,150),3)      -- lands at once
+            update(T.frames.Land+5)                     -- then 5 updates idle
+            local landing=T.lay(p,Vector(200,150),3)
+            update(2)
+            local t=tear(p,20,150,10,0); update(4)      -- one flung, in the air
+            local f=T.field()
+            renders={}
+            M.onFieldRender(nil,f,Vector(1,2))
+            local drawn={}
+            for _,r in ipairs(renders) do drawn[#drawn+1]=r.anim..r.frame end
+            table.sort(drawn)
+            local idlePos
+            for _,r in ipairs(renders) do if r.anim=="Idle" then idlePos=r.pos end end
+            local count=T.evidence().drawnMines
+            local stray=Isaac.Spawn(EntityType.ENTITY_EFFECT,MINE_VARIANT,0,Vector(0,0),Vector.Zero,nil)
+            local before=#renders
+            M.onFieldRender(nil,stray,Vector(0,0))
+            return fieldEffects(), f.DepthOffset<-10000, f.Color[4], table.concat(drawn," "),
+                #renders-before, idlePos.X, idlePos.Y, count
         ''')
-        self.assertEqual(result, (1, 1))
+        fields, under, alpha, drawn, stray, x, y, count = result
+        # The field plus the stray this test spawned; the lying mine is 11
+        # updates into Idle, the landing one on Land frame 6, the flung one Fall.
+        self.assertEqual((fields, under, alpha), (2, True, 0))
+        self.assertEqual(drawn, 'Fall0 Idle11 Land6')
+        self.assertEqual((stray, x, y, count), (0, 100 * 0.65 + 1, 150 * 0.65 + 2, 3))
 
     def test_new_room_forgets_mines_and_tears_and_unload_removes_them(self):
         result = self.run_lua('''
             local p=player(); local m=T.lay(p,Vector(100,150),3)
+            local f=T.field()
             M.onModUnload()
-            local removed=m.removed==true
+            local removed=f.removed==true and T.field()==nil
             tear(p,20,150,10,0)
             local carried=#T.carriers()
             M.onNewRoom()

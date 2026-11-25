@@ -3,7 +3,8 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- sows mines (user design 2026-11-25). The player really holds the shoot key
 -- (the engine reads it through MC_INPUT_ACTION); every tear is the engine's
 -- own, recorded here as it is fired, and every mine is the module's own
--- effect in the room (its flight read from its own PositionOffset). Every
+-- record (its flight read from its own height; one field effect draws them
+-- all). Every
 -- blast is read from the enemy's actual HP and the player's actual health;
 -- the expected numbers are the user's: +40 range, x0.33 damage, -0.2 tears,
 -- 3 mines a tear (+1 per 5 luck), a blast of twice the holder's damage. A
@@ -34,7 +35,7 @@ if ModCallbacks.MC_ENTITY_TAKE_DMG then
         end
         if targetHits and watched and GetPtrHash(entity) == watched then
             local kind = "other"
-            if attack and attack.Type == EntityType.ENTITY_EFFECT and attack.Variant == M().mineVariant() then
+            if T().blasting() then
                 kind = "mine"
             elseif attack and attack.Type == EntityType.ENTITY_TEAR then
                 kind = "tear"
@@ -73,8 +74,13 @@ local function stopShooting()
     fired = nil
 end
 
--- The mines in the room, NO_QUERY included.
+-- The mines in the room: the module's live records.
 local function roomMines()
+    return M().mines()
+end
+
+-- The field effects in the room (NO_QUERY included): one while mines lie there.
+local function fields()
     local list, variant = {}, M().mineVariant()
     for _, entity in ipairs(Isaac.GetRoomEntities()) do
         if entity.Type == EntityType.ENTITY_EFFECT and entity.Variant == variant and entity:Exists() then
@@ -90,10 +96,7 @@ end
 
 local function clearMines()
     for _, tear in ipairs(Isaac.FindByType(EntityType.ENTITY_TEAR)) do tear:Remove() end
-    local carriers = T().carriers()
-    for k = #carriers, 1, -1 do carriers[k] = nil end
-    for _, mine in ipairs(roomMines()) do mine:Remove() end
-    M().mines()
+    T().clear()
 end
 
 local function health(player)
@@ -103,7 +106,7 @@ end
 local function describeMines()
     local parts = {}
     for _, mine in ipairs(roomMines()) do
-        parts[#parts + 1] = string.format("%.0f,%.0f", mine.Position.X, mine.Position.Y)
+        parts[#parts + 1] = string.format("%.0f,%.0f", mine.x, mine.y)
     end
     local e = evidence()
     return string.format("mines=[%s] fired=%d laid=%d flung=%d spilled=%d piled=%d lost=%d landed=%d landedOn=%d "
@@ -145,13 +148,12 @@ local function pin(ctx)
     end
 end
 
--- The highest each mine was seen above the floor (PositionOffset is negative
--- upward).
+-- The highest each mine was seen above the floor (its height is negative
+-- upward, as PositionOffset).
 local function track(ctx)
     ctx.lifts = ctx.lifts or {}
     for _, mine in ipairs(roomMines()) do
-        local hash = GetPtrHash(mine)
-        ctx.lifts[hash] = math.min(ctx.lifts[hash] or 0, mine.PositionOffset.Y)
+        ctx.lifts[mine] = math.min(ctx.lifts[mine] or 0, mine.z or 0)
     end
 end
 
@@ -243,8 +245,7 @@ local function armed(plan, label)
 end
 
 local function lay(player, spot)
-    local _, record = T().lay(player, spot, player.Damage)
-    return record
+    return T().lay(player, spot, player.Damage)
 end
 
 -- ---------------------------------------------------------------- lifecycle
@@ -320,7 +321,7 @@ conditionsCase("scatter", function(plan, id)
     plan.check("flung to both sides of the tears' line, within a tile of it", function(_, ctx)
         local line, above, below, worst = ctx.fired[1] and ctx.fired[1].Y or 0, 0, 0, 0
         for _, mine in ipairs(roomMines()) do
-            local off = mine.Position.Y - line
+            local off = mine.y - line
             if off < -2 then above = above + 1 elseif off > 2 then below = below + 1 end
             worst = math.max(worst, math.abs(off))
         end
@@ -330,7 +331,7 @@ conditionsCase("scatter", function(plan, id)
     plan.check("no two mines closer than the gap, none piled", function()
         local list, closest = roomMines(), math.huge
         for a = 1, #list do
-            for b = a + 1, #list do closest = math.min(closest, list[a].Position:Distance(list[b].Position)) end
+            for b = a + 1, #list do closest = math.min(closest, list[a].spot:Distance(list[b].spot)) end
         end
         return #list >= 2 and closest >= M().data.gap - 0.5 and evidence().piled == 0,
             string.format("closest=%.1f gap=%d piled=%d", closest, M().data.gap, evidence().piled)
@@ -338,16 +339,22 @@ conditionsCase("scatter", function(plan, id)
     plan.check("each mine flew from the tear and landed", function(_, ctx)
         local parts, ok = {}, true
         for _, mine in ipairs(roomMines()) do
-            local lift = ctx.lifts[GetPtrHash(mine)] or 0
-            parts[#parts + 1] = string.format("%.1f->%.1f", lift, mine.PositionOffset.Y)
-            ok = ok and lift <= -5 and mine.PositionOffset.Y == 0
+            local lift = ctx.lifts[mine] or 0
+            parts[#parts + 1] = string.format("%.1f->%.1f", lift, mine.z)
+            ok = ok and lift <= -5 and mine.z == 0
         end
         return #parts >= 1 and ok, "highest->now=[" .. table.concat(parts, " ") .. "]"
+    end)
+    plan.check("one field effect draws every mine, and nothing else of the mine's variant lies there", function()
+        local list, own, e = fields(), T().field(), evidence()
+        return #list == 1 and own ~= nil and GetPtrHash(list[1]) == GetPtrHash(own) and e.drawn >= 1
+            and e.drawnMines == #roomMines(), string.format("fields=%d draws=%d last drew %d of %d mines", #list,
+                e.drawn, e.drawnMines, #roomMines())
     end)
     plan.check("every mine is the player's and holds the player's damage", function(player)
         local bad = 0
         for _, record in ipairs(M().mines()) do
-            local owner = record.ref.Ref and record.ref.Ref.SpawnerEntity
+            local owner = record.owner and record.owner.Ref
             if not owner or GetPtrHash(owner) ~= GetPtrHash(player) or not H.near(record.damage, player.Damage) then
                 bad = bad + 1
             end
@@ -406,7 +413,7 @@ conditionsCase("wall_spill", function(plan, id)
     plan.check("what the tears still carried spilled by the wall", function(_, ctx)
         local far = 0
         for _, mine in ipairs(roomMines()) do
-            if mine.Position.X < ctx.wall - 100 then far = far + 1 end
+            if mine.x < ctx.wall - 100 then far = far + 1 end
         end
         local e = evidence()
         return e.spilled >= 1 and far == 0, string.format("wall=%.0f far=%d %s", ctx.wall, far, describeMines())
@@ -576,6 +583,298 @@ S.add("LANDMINE", "weapon_probe", { conditions = true }, function(plan, id)
         local itemId = CollectibleType["COLLECTIBLE_" .. name]
         if type(itemId) == "number" and itemId > 0 then weaponRound(plan, id, name, itemId, 60, true) end
     end
+end)
+S.rows[#S.rows].manual = true
+
+-- Measurement only (run by name): what mines on the floor cost. Each window
+-- logs the wall time between updates (average, worst, and how many took over
+-- 40 ms, a dropped frame at 30 updates a second), the process CPU time per
+-- update (engine and every mod), this mod's own handlers (callback_profiler)
+-- and the entity count, with 0, 300 and 1000 mines, while shooting, and as a
+-- pile of 60 goes off under the player.
+local Profiler = require("scripts.dev.callback_profiler")
+local PERF_WINDOW, PERF_TOP = 150, 5
+
+local function perfWindow(plan, label, updates, shoot)
+    updates = updates or PERF_WINDOW
+    plan.act(function(player, ctx)
+        Profiler.start()
+        ctx.perf = { updates = 0, cpu0 = os.clock(), wall0 = Isaac.GetTime(), last = Isaac.GetTime(), worst = 0,
+            slow = 0 }
+        if shoot then startShooting(player, ctx) end
+    end)
+    plan.waitUntil(function(player, ctx)
+        pin(ctx)
+        if ctx.spot then player.Position, player.Velocity = ctx.spot, Vector.Zero end
+        local p, now = ctx.perf, Isaac.GetTime()
+        if p.updates > 0 then
+            local step = now - p.last
+            if step > p.worst then p.worst = step end
+            if step > 40 then p.slow = p.slow + 1 end
+        end
+        p.last, p.updates = now, p.updates + 1
+        return p.updates >= updates, p.updates .. " updates"
+    end, updates + 5, label)
+    plan.act(function(_, ctx)
+        stopShooting()
+        local p = ctx.perf
+        p.cpu = (os.clock() - p.cpu0) * 1000 / math.max(1, p.updates)
+        p.wall = (Isaac.GetTime() - p.wall0) / math.max(1, p.updates)
+        Profiler.stop()
+        p.top, p.total = Profiler.report(PERF_TOP)
+        p.entities, p.mines = #Isaac.GetRoomEntities(), #M().mines()
+    end)
+    plan.note(label, function(_, ctx)
+        local p = ctx.perf
+        return string.format("%d mines, %d entities: wall %.1f ms/update (worst %d, %d over 40 ms), CPU %.2f ms/update,"
+            .. " this mod %.3f ms/update", p.mines, p.entities, p.wall, p.worst, p.slow, p.cpu,
+            p.total / p.updates)
+    end)
+    for i = 1, PERF_TOP do
+        plan.note(label .. " #" .. i, function(_, ctx)
+            local row, p = ctx.perf.top[i], ctx.perf
+            if not row then return "-" end
+            return string.format("%.4f ms/update, %d calls (%.2f us/call): %s", row.ms / p.updates, row.calls,
+                row.calls > 0 and row.ms * 1000 / row.calls or 0, row.label)
+        end)
+    end
+end
+
+-- Lays landed mines over the room's floor until `total` lie there, kept two
+-- tiles from the player and the enemy.
+local function fillMines(plan, total)
+    plan.act(function(player, ctx)
+        local room = Game():GetRoom()
+        local tl, br = room:GetTopLeftPos(), room:GetBottomRightPos()
+        local step = total > 1200 and 8 or total > 400 and 12 or 22
+        local count = #M().mines()
+        for y = tl.Y + 10, br.Y - 10, step do
+            for x = tl.X + 10, br.X - 10, step do
+                if count >= total then return end
+                local spot = Vector(x, y)
+                if spot:Distance(ctx.spot) > 80 and spot:Distance(ctx.targetSpot) > 80 and T().isFloor(room, spot) then
+                    lay(player, spot)
+                    count = count + 1
+                end
+            end
+        end
+    end)
+    plan.wait(15)
+end
+
+-- Other mods' handlers that run for every effect (no variant filter) or for
+-- the mine's variant: each runs once per mine every update or render.
+local function effectHandlers()
+    local parts = {}
+    for _, name in ipairs({ "MC_POST_EFFECT_INIT", "MC_POST_EFFECT_UPDATE", "MC_POST_EFFECT_RENDER",
+        "MC_PRE_EFFECT_RENDER" }) do
+        local id = ModCallbacks[name]
+        if id then
+            local mods = {}
+            for _, entry in ipairs(Isaac.GetCallbacks(id, false) or {}) do
+                if entry.Param == nil or entry.Param == -1 or entry.Param == M().mineVariant() then
+                    mods[#mods + 1] = tostring(entry.Mod and entry.Mod.Name)
+                end
+            end
+            parts[#parts + 1] = name:gsub("^MC_", "") .. "=" .. #mods .. " [" .. table.concat(mods, ", ") .. "]"
+        end
+    end
+    return table.concat(parts, "; ")
+end
+
+S.add("LANDMINE", "perf", { conditions = true }, function(plan, id)
+    setup(plan, id)
+    plan.require("callback profiler and wall clock available", function()
+        return Profiler.available() and type(Isaac.GetTime) == "function" or nil, "needs Isaac.GetCallbacks"
+    end)
+    withEnemy(plan)
+    plan.act(function(player, ctx)
+        ctx.spot = leftSide(Game():GetRoom())
+        player.Position, player.Velocity = ctx.spot, Vector.Zero
+        table.insert(ctx.cleanupFns, 1, function() Profiler.stop() end)
+    end)
+    plan.note("handlers run for every effect", function() return effectHandlers() end)
+    plan.wait(10)
+    perfWindow(plan, "no mines")
+    fillMines(plan, 300)
+    perfWindow(plan, "300 mines")
+    fillMines(plan, 1000)
+    perfWindow(plan, "1000 mines")
+    perfWindow(plan, "1000 mines, shooting", nil, true)
+    plan.act(function(player, ctx)
+        clearMines()
+        ctx.pile = Vector(ctx.spot.X + 120, ctx.spot.Y)
+        for _ = 1, 60 do lay(player, ctx.pile) end
+    end)
+    plan.wait(15)
+    plan.act(function(_, ctx) ctx.spot = ctx.pile end)
+    perfWindow(plan, "a pile of 60 going off under the player", 30)
+end)
+S.rows[#S.rows].manual = true
+
+-- Measurement only (run by name): the real cost of mines, free of the game's
+-- fixed 33.3 ms update. While work fits in a frame the game waits out the rest,
+-- so an update always looks 33.3 ms long; here every render frame is given
+-- extra busy work (a loop calibrated against the wall clock, so loads finer
+-- than its 1 ms ticks) and a search finds the largest load that still keeps
+-- updates on time. That load is the frame's headroom; the headroom with no
+-- mines less the headroom with N mines is what N mines cost each frame, the
+-- engine, every mod and this one included.
+local spinLoops = 0         -- the busy loop's length, while a window runs
+local spinSink = 0
+local function spin(loops)
+    local x = spinSink
+    for i = 1, loops do x = x + i % 7 end
+    spinSink = x
+end
+ConchBlessing:AddCallback(ModCallbacks.MC_POST_RENDER, function()
+    if spinLoops > 0 then spin(spinLoops) end
+end)
+
+-- Windows of 90 updates after 10 to settle; an update over 34.0 ms on average
+-- is late; the search runs 9 halvings of 0-32 ms (to 0.06 ms).
+local HEADROOM = { settle = 10, window = 90, late = 34.0, top = 32, steps = 9 }
+
+-- One window at the current load: the average wall time between updates.
+local function headroomWindow(state, now)
+    local w = state.window
+    if not w then
+        state.window = { from = nil, count = -HEADROOM.settle }
+        return false
+    end
+    w.count = w.count + 1
+    if w.count == 0 then w.from = now end
+    if w.count < HEADROOM.window then return false end
+    state.window = nil
+    return true, (now - w.from) / HEADROOM.window
+end
+
+-- A search over the load, in ms of work per frame: lo keeps updates on time,
+-- hi does not.
+local function headroomSearch(plan, label)
+    plan.act(function(_, ctx)
+        ctx.search = { lo = 0, hi = HEADROOM.top, step = 0, load = 0, base = true, log = {} }
+        spinLoops = 0
+    end)
+    plan.waitUntil(function(player, ctx)
+        pin(ctx)
+        if ctx.spot then player.Position, player.Velocity = ctx.spot, Vector.Zero end
+        local s = ctx.search
+        local done, interval = headroomWindow(s, Isaac.GetTime())
+        if not done then return false, string.format("load %.2f ms, step %d", s.load, s.step) end
+        s.log[#s.log + 1] = string.format("%.2f->%.1f", s.load, interval)
+        local onTime = interval <= HEADROOM.late
+        if s.base then
+            -- The first window has no load: is the scene on time at all?
+            s.base, s.baseInterval, s.baseOnTime = false, interval, onTime
+            if not onTime then
+                spinLoops = 0
+                return true
+            end
+        else
+            if onTime then s.lo = s.load else s.hi = s.load end
+            s.step = s.step + 1
+            if s.step >= HEADROOM.steps then
+                spinLoops = 0
+                return true
+            end
+        end
+        s.load = (s.lo + s.hi) / 2
+        spinLoops = math.floor(s.load * ctx.loopsPerMs + 0.5)
+        return false, string.format("load %.2f ms", s.load)
+    end, (HEADROOM.window + HEADROOM.settle + 5) * (HEADROOM.steps + 2) * 2, label)
+    plan.act(function(_, ctx)
+        spinLoops = 0
+        local s = ctx.search
+        ctx.headroom = ctx.headroom or {}
+        ctx.headroom[label] = s.baseOnTime and s.lo or 0
+        ctx.last = { label = label, headroom = ctx.headroom[label], base = s.baseInterval, onTime = s.baseOnTime,
+            log = table.concat(s.log, " "), mines = #M().mines(), entities = #Isaac.GetRoomEntities() }
+    end)
+    plan.note(label, function(_, ctx)
+        local l, zero = ctx.last, ctx.headroom["no mines"]
+        local cost = zero and l.onTime and string.format(", so they cost %.2f ms of each frame (%.2f ms an update)",
+            zero - l.headroom, 2 * (zero - l.headroom)) or ""
+        return string.format("%d mines, %d entities: %s %.1f ms/update with no load; headroom %.2f ms of work per"
+            .. " frame%s [load->interval: %s]", l.mines, l.entities, l.onTime and "on time" or "LATE", l.base,
+            l.headroom, cost, l.log)
+    end)
+end
+
+-- Sets the scene up for a headroom search: the player at the left, the enemy
+-- pinned, and the busy loop calibrated (how many loops make a millisecond,
+-- timed over about a third of a second so the 1 ms clock is a fraction of a
+-- percent).
+local function headroomSetup(plan, id)
+    setup(plan, id)
+    plan.require("wall clock available", function()
+        return type(Isaac.GetTime) == "function" or nil, "needs Isaac.GetTime"
+    end)
+    withEnemy(plan)
+    plan.act(function(player, ctx)
+        ctx.spot = leftSide(Game():GetRoom())
+        player.Position, player.Velocity = ctx.spot, Vector.Zero
+        table.insert(ctx.cleanupFns, 1, function() spinLoops = 0 end)
+        local loops, t0 = 200000, Isaac.GetTime()
+        while true do
+            local start = Isaac.GetTime()
+            spin(loops)
+            local took = Isaac.GetTime() - start
+            if took >= 300 then
+                ctx.loopsPerMs = loops / took
+                break
+            end
+            loops = loops * 2
+            if Isaac.GetTime() - t0 > 5000 then error("calibration took too long") end
+        end
+    end)
+    plan.note("busy loop", function(_, ctx) return string.format("%.0f loops per ms", ctx.loopsPerMs) end)
+    plan.wait(30)
+end
+
+S.add("LANDMINE", "headroom", { conditions = true }, function(plan, id)
+    headroomSetup(plan, id)
+    headroomSearch(plan, "no mines")
+    fillMines(plan, 300)
+    headroomSearch(plan, "300 mines")
+    fillMines(plan, 1000)
+    headroomSearch(plan, "1000 mines")
+    fillMines(plan, 2000)
+    headroomSearch(plan, "2000 mines")
+end)
+S.rows[#S.rows].manual = true
+
+-- Measurement only (run by name): the same 250 mines drawn by the field and
+-- as 250 effect entities of their own (the way mines were drawn before
+-- 2026-11-25), each against the headroom with no mines.
+S.add("LANDMINE", "headroom_compare", { conditions = true }, function(plan, id)
+    headroomSetup(plan, id)
+    headroomSearch(plan, "no mines")
+    fillMines(plan, 250)
+    headroomSearch(plan, "250 mines drawn by the field")
+    plan.act(function(player, ctx)
+        local spots = {}
+        for _, record in ipairs(M().mines()) do spots[#spots + 1] = record.spot end
+        clearMines()
+        ctx.entityMines = {}
+        for _, spot in ipairs(spots) do
+            local effect = Isaac.Spawn(EntityType.ENTITY_EFFECT, M().mineVariant(), 0, spot, Vector.Zero, player)
+            effect = effect and effect:ToEffect()
+            if effect then
+                effect.DepthOffset = -1000
+                effect:GetSprite():Play("Idle", true)
+                ctx.entityMines[#ctx.entityMines + 1] = effect
+            end
+        end
+        table.insert(ctx.cleanupFns, 1, function()
+            for _, effect in ipairs(ctx.entityMines or {}) do
+                if effect:Exists() then effect:Remove() end
+            end
+        end)
+    end)
+    plan.wait(15)
+    headroomSearch(plan, "250 mines as entities (the old way)")
+    plan.note("entity mines", function(_, ctx) return #ctx.entityMines .. " effect entities of the mine's variant" end)
 end)
 S.rows[#S.rows].manual = true
 
