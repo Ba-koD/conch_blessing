@@ -561,8 +561,76 @@ ConchBlessing.EID.registerAllItems = function()
     return true
 end
 
+-- EID's own "Overridden by" / "Overrides" lines, the ones Brimstone and Epic Fetus
+-- show for the weapons they replace. A row's `eidOverrides` names the collectibles
+-- (CollectibleType without its prefix) whose attacks the item replaces; holding the
+-- item shows "<item>에 의해 무효화" on theirs, holding one of them shows "<it>을(를)
+-- 무효화" on the item's, in EID's own words and language. The layer sits above every
+-- vanilla weapon override (Spirit Sword's 1000), so those lines give way to ours.
+-- The entries carry `conchBlessing` = the row key: they are added once per provider,
+-- and a reload or unload takes ours out first, since EID only ever appends them.
+local OVERRIDE_LAYER = 1100
+local overridesProvider
+
+local function removeOwnConditionals(provider)
+    local conditions = type(provider) == "table" and provider.DescriptionConditions
+    if type(conditions) ~= "table" then return end
+    for _, list in pairs(conditions) do
+        if type(list) == "table" then
+            for k = #list, 1, -1 do
+                if type(list[k]) == "table" and list[k].conchBlessing then table.remove(list, k) end
+            end
+        end
+    end
+end
+
+-- The collectible IDs a row's `eidOverrides` names (nil for a row without them).
+function ConchBlessing.EID.overriddenIds(itemData)
+    local names = type(itemData) == "table" and itemData.eidOverrides
+    if type(names) ~= "table" then return nil end
+    local ids = {}
+    for _, name in ipairs(names) do
+        local id = type(CollectibleType) == "table" and CollectibleType["COLLECTIBLE_" .. tostring(name)]
+        if type(id) == "number" and id > 0 then
+            ids[#ids + 1] = id
+        else
+            ConchBlessing.printError("[EID] eidOverrides names no collectible: " .. tostring(name))
+        end
+    end
+    return ids
+end
+
+local function registerOverrides()
+    if not EID or overridesProvider == EID then return end
+    if type(EID.AddSynergyConditional) ~= "function" or type(EID.DescriptionConditions) ~= "table" then return end
+    removeOwnConditionals(EID)
+    for key, itemData in pairs(ConchBlessing.ItemData) do
+        local ids = ConchBlessing.EID.overriddenIds(itemData)
+        if ids and #ids > 0 and type(itemData.id) == "number" and itemData.id > 0 then
+            local ok, err = pcall(EID.AddSynergyConditional, EID, ids, itemData.id, "Overridden", "Overrides",
+                { layer = OVERRIDE_LAYER, checkLayers = true, conchBlessing = key })
+            if not ok then
+                removeOwnConditionals(EID)
+                overridesProvider = EID -- reported once, not again every update
+                ConchBlessing.printError("[EID] Override lines failed for " .. key .. ": " .. tostring(err))
+                return
+            end
+        end
+    end
+    overridesProvider = EID
+end
+
+if ModCallbacks.MC_PRE_MOD_UNLOAD then
+    ConchBlessing:AddCallback(ModCallbacks.MC_PRE_MOD_UNLOAD, function(_, unloaded)
+        if unloaded ~= ConchBlessing and unloaded ~= ConchBlessing.originalMod then return end
+        removeOwnConditionals(overridesProvider)
+        overridesProvider = nil
+    end)
+end
+
 local function ensureDescriptionsRegistered(force)
     if not EID or type(EID.addCollectible) ~= "function" or type(EID.addTrinket) ~= "function" then return false end
+    if overridesProvider ~= EID then registerOverrides() end
     local specialsReady = type(EID.CreateDescriptionTableIfMissing) == "function"
         and type(EID.addGoldenTrinketTable) == "function" and type(EID.descriptions) == "table"
     -- Asked every update and render: compare the parts before building a string.

@@ -449,6 +449,136 @@ conditionsCase("tears_only", function(plan, id)
     end)
 end)
 
+-- WeaponType numbers by name, for the logs.
+local WEAPON_NAMES = {}
+for name, value in pairs(WeaponType or {}) do WEAPON_NAMES[value] = name:gsub("^WEAPON_", "") end
+
+-- The weapons other than tears `player` has now.
+local function otherWeaponsHeld(player)
+    local held = {}
+    for _, weapon in ipairs(T().otherWeapons()) do
+        if player:HasWeaponType(weapon) then held[#held + 1] = WEAPON_NAMES[weapon] or tostring(weapon) end
+    end
+    return held
+end
+
+-- Knives, bombs and Epic Fetus targets in the room: attacks that are no tear.
+local function otherAttacks()
+    local count = 0
+    for _, entity in ipairs(Isaac.GetRoomEntities()) do
+        if entity.Type == EntityType.ENTITY_KNIFE or entity.Type == EntityType.ENTITY_BOMB
+            or (entity.Type == EntityType.ENTITY_EFFECT and entity.Variant == EffectVariant.TARGET) then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+local function requireWeapons(plan)
+    plan.require("REPENTOGON weapon types and the laser callback", function(player)
+        local repentogon = rawget(_G, "REPENTOGON")
+        return type(repentogon) == "table" and repentogon.Real == true and type(player.EnableWeaponType) == "function"
+            and type(player.HasWeaponType) == "function" and ModCallbacks.MC_POST_LASER_INIT and true or nil,
+            "REPENTOGON missing"
+    end)
+end
+
+-- Holds `itemId` with Landmine, shoots for `updates` and checks or (`probe`)
+-- only reports what came out, then reads its weapons without Landmine.
+local function weaponRound(plan, id, name, itemId, updates, probe)
+    plan.act(function(player, ctx)
+        player:AddCollectible(itemId, 0, false)
+        ctx.fired, lasers = {}, 0
+        T().resetEvidence()
+    end)
+    plan.wait(3)
+    local function report(label, fn)
+        if probe then plan.note(label, function(player, ctx) return select(2, fn(player, ctx)) end)
+        else plan.check(label, fn) end
+    end
+    report(name .. ": with Landmine its only weapon is tears", function(player)
+        local held = otherWeaponsHeld(player)
+        return #held == 0 and player:HasWeaponType(WeaponType.WEAPON_TEARS),
+            "other weapons=[" .. table.concat(held, " ") .. "] tears=" .. tostring(player:HasWeaponType(WeaponType.WEAPON_TEARS))
+    end)
+    stand(plan, function(room) return leftSide(room) end, updates, true)
+    plan.wait(15)
+    report(name .. ": with Landmine its attacks are tears that carry mines", function(_, ctx)
+        local others = otherAttacks()
+        return #ctx.fired >= 1 and lasers == 0 and others == 0 and evidence().fired == #ctx.fired,
+            string.format("tears=%d lasers=%d knives/bombs/targets=%d carried=%d", #ctx.fired, lasers, others,
+                evidence().fired)
+    end)
+    plan.act(function(player, ctx)
+        give(player, id, 0)
+        clearMines()
+        ctx.fired, lasers = {}, 0
+    end)
+    plan.wait(3)
+    if probe then
+        stand(plan, function(room) return leftSide(room) end, updates, true)
+        plan.wait(15)
+        plan.note(name .. ": without Landmine", function(player, ctx)
+            return string.format("other weapons=[%s] tears=%d lasers=%d knives/bombs/targets=%d",
+                table.concat(otherWeaponsHeld(player), " "), #ctx.fired, lasers, otherAttacks())
+        end)
+    else
+        plan.check(name .. ": without Landmine it has a weapon of its own", function(player)
+            local held = otherWeaponsHeld(player)
+            return #held >= 1, "other weapons=[" .. table.concat(held, " ") .. "]"
+        end)
+    end
+    plan.act(function(player)
+        player:RemoveCollectible(itemId)
+        clearMines()
+        give(player, id, 1)
+    end)
+    plan.wait(3)
+end
+
+-- REPENTOGON: every item Landmine's EID says it overrides (its row's
+-- `eidOverrides`) has a weapon of its own, and with Landmine held its attacks
+-- are tears that carry mines, with no beam, knife, bomb or target.
+conditionsCase("weapon_items", function(plan, id)
+    setup(plan, id)
+    requireWeapons(plan)
+    withEnemy(plan)
+    plan.act(function(_, ctx)
+        lasers = 0
+        table.insert(ctx.cleanupFns, 1, function() lasers = nil end)
+    end)
+    local row = ConchBlessing.ItemData.LANDMINE
+    local names = row and row.eidOverrides or {}
+    plan.require("Landmine's row names the items it overrides", function()
+        return #names > 0 or nil, #names .. " names"
+    end)
+    for _, name in ipairs(names) do
+        local itemId = CollectibleType["COLLECTIBLE_" .. name]
+        plan.require(name .. " is a collectible", function()
+            return type(itemId) == "number" and itemId > 0 or nil, tostring(itemId)
+        end)
+        weaponRound(plan, id, name, itemId, 30)
+    end
+end)
+
+-- A measurement, run by name: attacks that may or may not be weapons of their
+-- own (lasers that come with tears, charged beams), with and without Landmine.
+S.add("LANDMINE", "weapon_probe", { conditions = true }, function(plan, id)
+    setup(plan, id)
+    requireWeapons(plan)
+    withEnemy(plan)
+    plan.act(function(_, ctx)
+        lasers = 0
+        table.insert(ctx.cleanupFns, 1, function() lasers = nil end)
+    end)
+    for _, name in ipairs({ "TECHNOLOGY_2", "TECH_5", "TECHNOLOGY_ZERO", "MAW_OF_THE_VOID", "REVELATION",
+        "C_SECTION" }) do
+        local itemId = CollectibleType["COLLECTIBLE_" .. name]
+        if type(itemId) == "number" and itemId > 0 then weaponRound(plan, id, name, itemId, 60, true) end
+    end
+end)
+S.rows[#S.rows].manual = true
+
 -- Leaving the room leaves its mines behind; none follows into the next room.
 conditionsCase("room_change", function(plan, id)
     setup(plan, id)

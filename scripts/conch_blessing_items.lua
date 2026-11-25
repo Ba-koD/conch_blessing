@@ -1007,6 +1007,10 @@ ConchBlessing.ItemData = {
         gfx = "landmine.png",
         tags = "offensive",
         cache = "damage firedelay range weapon",
+        -- The items whose weapon its tears replace (EID's "Overridden by" lines;
+        -- `cb test landmine weapon_items` checks each in game).
+        eidOverrides = { "TECHNOLOGY", "DR_FETUS", "MOMS_KNIFE", "BRIMSTONE", "EPIC_FETUS",
+            "MONSTROS_LUNG", "LUDOVICO_TECHNIQUE", "TECH_X", "SPIRIT_SWORD", "C_SECTION" },
         pool = {
             RoomType.ROOM_TREASURE
         },

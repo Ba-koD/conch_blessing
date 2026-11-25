@@ -188,6 +188,76 @@ class EIDLanguageTests(unittest.TestCase):
             EID=makeProvider();tick();assert(EID.descriptions.pl==nil)
         ''')
 
+    def test_eid_overrides_add_eids_own_override_lines_once(self):
+        # A double of EID's AddConditional/AddItemConditional/AddSynergyConditional
+        # (features/eid_conditionals_funcs.lua): each condition is a copy of the
+        # options with its owned item's name and icon, appended per ID.
+        self.lua.execute('''
+            CollectibleType={COLLECTIBLE_BRIMSTONE=118,COLLECTIBLE_TECHNOLOGY=68}
+            ConchBlessing.ItemData.C.eidOverrides={'BRIMSTONE','TECHNOLOGY','NOPE'}
+            local function copy(t) local n={};for k,v in pairs(t or {}) do n[k]=v end;return n end
+            function withConditionals(p)
+                p.DescriptionConditions={['5.100.118']={{layer=666,modifierText='Overrides',foreign=true}}}
+                p.collectiblesToCheck={}
+                function p:AddConditional(IDs,fn,mod,extra)
+                    if type(IDs)~='table' then IDs={IDs} end
+                    for _,id in ipairs(IDs) do
+                        local key=type(id)=='string' and id or '5.100.'..id
+                        self.DescriptionConditions[key]=self.DescriptionConditions[key] or {}
+                        local n=copy(extra);n.func=fn;n.modifierText=mod
+                        table.insert(self.DescriptionConditions[key],n)
+                    end
+                end
+                function p:AddItemConditional(IDs,owned,mod,extra)
+                    if type(owned)~='table' then owned={owned} end
+                    for _,o in ipairs(owned) do
+                        self.collectiblesToCheck[o]=true
+                        local n=copy(extra);n.variableText='{{NameOnly5.100.'..o..'}}';n.bulletpoint='Item5.100.'..o
+                        self:AddConditional(IDs,function() return true end,mod,n)
+                    end
+                end
+                function p:AddSynergyConditional(IDs,owned,m1,m2,e1,e2)
+                    self:AddItemConditional(IDs,owned,m1,e1);self:AddItemConditional(owned,IDs,m2 or m1,e2 or e1)
+                end
+                return p
+            end
+            function ours(key)
+                local list,found={},EID.DescriptionConditions[key] or {}
+                for _,c in ipairs(found) do if c.conchBlessing then list[#list+1]=c end end
+                return list,#found
+            end
+            function expectRegistered(label)
+                local onBrimstone,all=ours('5.100.118')
+                assert(#onBrimstone==1 and all==2,label..': one line on Brimstone beside the foreign one')
+                local c=onBrimstone[1]
+                assert(c.modifierText=='Overridden' and c.conchBlessing=='C' and c.layer==1100 and c.checkLayers
+                    and c.variableText=='{{NameOnly5.100.900}}' and c.bulletpoint=='Item5.100.900',label..': Overridden')
+                assert(#ours('5.100.68')==1,label..': one line on Technology')
+                local onItem=ours('5.100.900')
+                assert(#onItem==2 and onItem[1].modifierText=='Overrides' and onItem[2].modifierText=='Overrides',
+                    label..': the item lists both')
+                assert(EID.DescriptionConditions['5.100.118'][1].foreign,label..': the foreign line stays first')
+            end
+            EID=withConditionals(makeProvider());tick()
+            expectRegistered('first')
+            assert(#errors==1 and errors[1]:find('NOPE',1,true),'an unknown name reports once')
+            for i=1,50 do tick();callbacks[3]() end
+            expectRegistered('after updates')
+            assert(#errors==1,'no report again')
+        ''')
+        self.lua.execute("ModCallbacks.MC_PRE_MOD_UNLOAD=74")
+        self.load()  # a luamod reload runs the file again over the same provider
+        self.lua.execute('''
+            tick();expectRegistered('after reload')
+            callbacks[74](nil,ConchBlessing)
+            local _,all=ours('5.100.118')
+            assert(#ours('5.100.118')==0 and #ours('5.100.68')==0 and #ours('5.100.900')==0 and all==1,
+                'unload takes ours out and leaves the foreign line')
+            local before=EID;EID=withConditionals(makeProvider());tick()
+            expectRegistered('a new provider')
+            assert(#ours('5.100.900')==2)
+        ''')
+
     def test_replaced_late_or_partial_provider_rebuilds_owned_registration(self):
         self.lua.execute('''
             effective='urimal';EID=nil;tick();EID=makeProvider();tick()

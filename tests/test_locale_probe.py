@@ -35,13 +35,14 @@ class LocaleProbeTests(unittest.TestCase):
             local locale={tables={},problems={}}
             function locale.languages() return {'en','kr','urimal'} end
             function locale.get(path,lang) return {lang..' first line'} end
-            for _,lang in ipairs(locale.languages()) do locale.tables[lang]={items={LIVE_EYE={name=lang},KRONOS={name=lang}}} end
-            ConchBlessing={Locale=locale,ItemData={LIVE_EYE={id=1,name={en='en',kr='kr',urimal='urimal'}},KRONOS={id=2,name={en='en',kr='kr',urimal='urimal'}}},
+            for _,lang in ipairs(locale.languages()) do locale.tables[lang]={items={LIVE_EYE={name=lang},KRONOS={name=lang},LANDMINE={name=lang}}} end
+            ConchBlessing={Locale=locale,ItemData={LIVE_EYE={id=1,name={en='en',kr='kr',urimal='urimal'}},KRONOS={id=2,name={en='en',kr='kr',urimal='urimal'}},
+                LANDMINE={id=3,name={en='en',kr='kr',urimal='urimal'}}},
                 PocketData={THURISAZ={id=77}},EID={}}
             function ConchBlessing.EID.refreshLanguage()
                 refreshed[#refreshed+1]=config.GetCurrentLanguage()
             end
-            CollectibleType={COLLECTIBLE_BOBS_BRAIN=273}
+            CollectibleType={COLLECTIBLE_BOBS_BRAIN=273,COLLECTIBLE_BRIMSTONE=118}
             added={}
             player={AddCollectible=function(_,id) added[#added+1]='c'..id end,
                 AddCard=function(_,id) added[#added+1]='k'..id end}
@@ -104,8 +105,8 @@ class LocaleProbeTests(unittest.TestCase):
         self.lua.execute(r"""
             for _,step in ipairs(steps) do if step.kind=='act' then step.fn(player,ctx) end end
             assert(table.concat(switches,',')=='en,kr,urimal,kr_standard,auto')
-            -- Thurisaz and Bob's Brain before the languages, Kronos only after them.
-            assert(table.concat(added,',')=='c1,k77,c273,c2',table.concat(added,','))
+            -- Thurisaz, Bob's Brain, Landmine and Brimstone before the languages, Kronos only after them.
+            assert(table.concat(added,',')=='c1,k77,c273,c3,c118,c2',table.concat(added,','))
             assert(check('the original mod language preference is restored'))
             assert(check('EID\'s global language still matches the player\'s setting'))
         """)

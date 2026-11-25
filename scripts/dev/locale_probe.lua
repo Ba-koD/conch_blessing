@@ -67,6 +67,24 @@ local function modNameShown(lang)
             tostring(entry and entry.Name), expected, tostring(display), shown)
 end
 
+-- EID's own override line, as EID writes it on an item's description while
+-- `other` is held: `key` is "Overridden" or "Overrides" (EID's ConditionalDescs).
+local function overrideLine(other, key)
+    local text = EID:getDescriptionEntry("ConditionalDescs", key, true)
+    if type(text) ~= "string" then return nil end
+    local tvs = "5.100." .. tostring(other)
+    return "#{{Item" .. tvs .. "}} " .. EID:ReplaceVariableStr(text, "{{NameOnly" .. tvs .. "}}")
+end
+
+local function occurrences(text, part)
+    local count, from = 0, 1
+    while true do
+        local at = text:find(part, from, true)
+        if not at then return count end
+        count, from = count + 1, at + #part
+    end
+end
+
 local function describeCard(id)
     return EID:getDescriptionObj(EntityType.ENTITY_PICKUP, PickupVariant.PICKUP_TAROTCARD, id).Description or ""
 end
@@ -176,8 +194,12 @@ local function build(plan)
         -- Thurisaz in a pocket slot and Bob's Brain held, Kronos not yet.
         player:AddCard(ConchBlessing.PocketData.THURISAZ.id)
         player:AddCollectible(CollectibleType.COLLECTIBLE_BOBS_BRAIN, 0, false)
+        -- Landmine and Brimstone for EID's override lines.
+        player:AddCollectible(ConchBlessing.ItemData.LANDMINE.id, 0, false)
+        player:AddCollectible(CollectibleType.COLLECTIBLE_BRIMSTONE, 0, false)
     end)
-    plan.wait(5)
+    -- EID reads which items are held every 15 updates.
+    plan.wait(20)
     plan.check("Thurisaz sits in a pocket slot and nobody holds Kronos", function(player)
         local card = player:GetCard(0)
         return card == ConchBlessing.PocketData.THURISAZ.id and not player:HasCollectible(ConchBlessing.ItemData.KRONOS.id),
@@ -253,6 +275,16 @@ local function build(plan)
             local icon = "{{Collectible" .. tostring(ConchBlessing.ItemData.LIVE_EYE.id) .. "}}"
             local expected = "#" .. (line:sub(1, #icon) == icon and line or icon .. " " .. line)
             return contains(describe(CollectibleType.COLLECTIBLE_ROCK_BOTTOM), expected), expected
+        end)
+        plan.check(lang .. ": with Landmine and Brimstone held, each shows EID's override line once", function()
+            if not EID then return nil, "EID is not installed" end
+            local landmine, brimstone = ConchBlessing.ItemData.LANDMINE.id, CollectibleType.COLLECTIBLE_BRIMSTONE
+            local overridden, overrides = overrideLine(landmine, "Overridden"), overrideLine(brimstone, "Overrides")
+            if not overridden or not overrides then return nil, "EID has no override text in " .. tostring(EID:getLanguage()) end
+            local onBrimstone = occurrences(describe(brimstone), overridden)
+            local onLandmine = occurrences(describe(landmine), overrides)
+            return onBrimstone == 1 and onLandmine == 1,
+                string.format("Brimstone %dx '%s'; Landmine %dx '%s'", onBrimstone, overridden, onLandmine, overrides)
         end)
         plan.check(lang .. ": with Thurisaz held, Bob's Brain shows Kronos's line after the rune's icon", function(_, ctx)
             if not EID then return nil, "EID is not installed" end
