@@ -7,7 +7,7 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- all). Every
 -- blast is read from the enemy's actual HP and the player's actual health;
 -- the expected numbers are the user's: +40 range, x0.33 damage, -0.2 tears,
--- 3 mines a tear (+1 per 5 luck), a blast of twice the holder's damage. A
+-- 3 mines a tear (+1 per 5 luck), a blast of half the holder's damage. A
 -- case keeps one harmless enemy pinned in the corner behind the player (the
 -- room stays uncleared and its doors shut), where the tears (fired to the
 -- right) never reach it. Mines placed for the blast cases are laid with the
@@ -916,7 +916,10 @@ local function watch(ctx)
     ctx.hits = targetHits
 end
 
--- Whether the enemy lost exactly what was recorded, every blast twice the
+-- A blast is half the holder's damage (user decision 2026-11-25; it was twice).
+local BLAST = 0.5
+
+-- Whether the enemy lost exactly what was recorded, every blast half the
 -- holder's damage and every tear hit the holder's damage.
 local function exactLoss(ctx, damage)
     local sum, bad, mines = 0, 0, 0
@@ -924,7 +927,7 @@ local function exactLoss(ctx, damage)
         sum = sum + hit.amount
         if hit.kind == "mine" then
             mines = mines + 1
-            if not H.near(hit.amount, 2 * damage) then bad = bad + 1 end
+            if not H.near(hit.amount, BLAST * damage) then bad = bad + 1 end
         elseif hit.kind == "tear" then
             if not H.near(hit.amount, damage) then bad = bad + 1 end
         else
@@ -961,7 +964,7 @@ damageCase("on_enemy", function(plan, id)
         local e = evidence()
         return e.landedOn >= 1 and e.spilled >= 1, describeMines()
     end)
-    plan.check("the enemy lost exactly its tear hits and twice the damage for every blast", function(_, ctx)
+    plan.check("the enemy lost exactly its tear hits and half the damage for every blast", function(_, ctx)
         local ok, blasts, detail = exactLoss(ctx, ctx.damage)
         return ok and blasts >= 1, detail
     end)
@@ -969,7 +972,7 @@ damageCase("on_enemy", function(plan, id)
 end)
 
 -- A player walking onto an armed mine sets it off and takes no damage; the
--- enemy beside it loses twice the holder's damage.
+-- enemy beside it loses half the holder's damage.
 damageCase("player_steps", function(plan, id)
     setup(plan, id)
     withEnemy(plan, function(room) return leftSide(room) + Vector(154, 0) end)
@@ -1003,7 +1006,7 @@ damageCase("player_steps", function(plan, id)
         local e = evidence()
         return e.byPlayer == 1 and e.exploded == 1 and #roomMines() == 0, describeMines()
     end)
-    plan.check("the enemy beside it lost exactly twice the holder's damage", function(_, ctx)
+    plan.check("the enemy beside it lost exactly half the holder's damage", function(_, ctx)
         local ok, blasts, detail = exactLoss(ctx, ctx.damage)
         return ok and blasts == 1, detail
     end)
@@ -1043,13 +1046,13 @@ damageCase("chain", function(plan, id)
         local e = evidence()
         return e.chained == 1 and e.exploded == 2 and #roomMines() == 0, describeMines()
     end)
-    plan.check("both blasts reached the enemy, twice the holder's damage each", function(_, ctx)
+    plan.check("both blasts reached the enemy, half the holder's damage each", function(_, ctx)
         local ok, blasts, detail = exactLoss(ctx, ctx.damage)
         return ok and blasts == 2, detail
     end)
 end)
 
--- An enemy walking onto an armed mine sets it off: it loses exactly twice the
+-- An enemy walking onto an armed mine sets it off: it loses exactly half the
 -- holder's damage, the player far off is not hurt and a rock beside it stays
 -- whole.
 damageCase("trigger", function(plan, id)
@@ -1079,7 +1082,7 @@ damageCase("trigger", function(plan, id)
         return false, "waiting for the enemy to set it off"
     end, 30, "the enemy steps on the mine")
     plan.wait(3)
-    plan.check("the enemy lost exactly twice the holder's damage", function(_, ctx)
+    plan.check("the enemy lost exactly half the holder's damage", function(_, ctx)
         local ok, blasts, detail = exactLoss(ctx, ctx.damage)
         return ok and blasts == 1 and evidence().byPlayer == 0, detail
     end)

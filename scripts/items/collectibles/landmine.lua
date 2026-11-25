@@ -12,8 +12,9 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- player who sets one off takes no damage (user decision 2026-11-25). The user
 -- wants no caps of any kind ("상한은 따로두지마"): mines stay until stepped on
 -- however many there are, and a spill with no free ground left piles up.
--- A blast deals every enemy within reach twice the damage the holder had when
--- the tear was fired, and other mines it reaches go off a moment later.
+-- A blast deals every enemy within reach half the damage the holder had when
+-- the tear was fired (user decision 2026-11-25, it was twice), and other mines
+-- it reaches go off a moment later.
 --
 -- Earlier forms (kept for the reasons the design moved on): a mine at the
 -- feet on every attack (2026-11-23/24), which never felt like sowing mines;
@@ -47,7 +48,7 @@ local ID = Isaac.GetItemIdByName("Landmine")
 local PROC_KEY = "landmine"
 
 M.data = {
-    damageMultiplier = 2, -- a blast, of the holder's damage when the tear was fired
+    damageMultiplier = 0.5, -- a blast, of the holder's damage when the tear was fired
     statMultiplier = 0.33, -- the holder's damage multiplier (StatsAPI)
     tears = -0.2,         -- shots a second
     range = 40 * 40,      -- +40 tiles, in TearRange units

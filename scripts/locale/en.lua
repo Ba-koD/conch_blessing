@@ -693,7 +693,7 @@ return {
                 "#{{Tears}} -0.2 tears",
                 "#Attacks are locked to tears, which keep scattering mines as they fly",
                 "#{{Luck}} +1 mine for every 5 luck (3 at base)",
-                "#Mines deal 2x your damage",
+                "#Mines deal half your damage",
                 "#{{Warning}} REPENTOGON recommended",
             },
         },

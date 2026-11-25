@@ -4,7 +4,7 @@ tears; every tear the holder fires carries 3 mines, one more for every 5 luck
 with no cap, flings them to either side as it flies (passing over ground that
 already holds one) and spills the rest where it stops; a mine landing on an
 enemy goes off at once, the rest lie until an enemy or a player steps on them,
-and a player is never hurt. A blast is twice the holder's damage. These are
+and a player is never hurt. A blast is half the holder's damage. These are
 Lua regressions with doubles, not proof of engine behaviour
 (`cb test landmine`).
 """
@@ -240,7 +240,7 @@ class LandmineTests(unittest.TestCase):
         entry = kr[kr.index('LANDMINE = {'):kr.index('UNDERDOG = {')]
         for line in ('{{Range}} 고정 사거리 +40', '#{{Damage}} 공격력 배율 x0.33', '#{{Tears}} 연사 0.2 감소',
                      '#공격이 눈물로 고정되며 눈물이 지속적으로 지뢰를 뿌립니다',
-                     '#{{Luck}} 행운 5마다 지뢰가 1개씩 늘어납니다(기본 3개)', '#지뢰는 내 공격력의 2배 피해를 줍니다',
+                     '#{{Luck}} 행운 5마다 지뢰가 1개씩 늘어납니다(기본 3개)', '#지뢰는 내 공격력의 절반만큼 피해를 줍니다',
                      '#{{Warning}} REPENTOGON 권장'):
             self.assertIn('"' + line + '"', entry)
         warnings = {
@@ -266,7 +266,7 @@ class LandmineTests(unittest.TestCase):
                 -23.75+vz*10+0.5*0.9*100
         ''')
         damage, negative, edge, outside, landing = result
-        self.assertEqual((damage, negative, edge, outside), (7, 0, True, False))
+        self.assertEqual((damage, negative, edge, outside), (1.75, 0, True, False))
         self.assertAlmostEqual(landing, 0, places=9)
 
     def test_a_tear_flings_its_three_mines_to_both_sides_as_it_flies(self):
@@ -387,7 +387,8 @@ class LandmineTests(unittest.TestCase):
             return early, r.dead==true, T.evidence().landedOn, victim.hits and #victim.hits or 0,
                 victim.hits and victim.hits[1].amount
         ''')
-        self.assertEqual(result, (False, True, 1, 1, 4))
+        # half the holder's 2 (user decision 2026-11-25)
+        self.assertEqual(result, (False, True, 1, 1, 1))
 
     def test_armed_mine_blasts_enemies_only_and_waits_unarmed(self):
         result = self.run_lua('''
@@ -407,7 +408,7 @@ class LandmineTests(unittest.TestCase):
                 T.blasting(), fieldEffects()
         ''')
         # The owner is the blast's source; the field goes with the last mine.
-        self.assertEqual(result, (False, True, 1, 1, 0, 0, 6, 4, True, 0, 1, 0, 0, False, 0))
+        self.assertEqual(result, (False, True, 1, 1, 0, 0, 1.5, 4, True, 0, 1, 0, 0, False, 0))
 
     def test_a_player_stepping_on_an_armed_mine_sets_it_off_unhurt(self):
         result = self.run_lua('''
@@ -458,8 +459,8 @@ class LandmineTests(unittest.TestCase):
             local function total(e) local n=0 for _,h in ipairs(e.hits or {}) do n=n+h.amount end return n end
             return T.evidence().exploded, total(stepper), explosions(), #played, #M.mines()
         ''')
-        # Four mines of 2 x 3 each.
-        self.assertEqual(result, (4, 24, 1, 1, 0))
+        # Four mines of 0.5 x 3 each.
+        self.assertEqual(result, (4, 6, 1, 1, 0))
 
     def test_stepping_looks_only_near_each_enemy(self):
         result = self.run_lua('''
