@@ -1029,8 +1029,8 @@ return {
             chance = "#{{ColorYellow}}지금 아침밥으로 바뀔 확률 : %s{{CR}}",
         },
         gebo = {
-            options = "#{{Card%s}} 게보: %s 가운데 하나로 바뀝니다",
-            none = "#{{Card%s}} 게보로 바꿀 수 없습니다",
+            options = "#{{Card%s}} %s 가운데 하나로 바뀝니다",
+            none = "#{{Card%s}} 바꿀 수 없습니다",
         },
         morph = {
             applied = "게임에 적용",

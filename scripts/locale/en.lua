@@ -986,8 +986,8 @@ return {
             chance = "#{{ColorYellow}}Current chance of Breakfast: %s{{CR}}",
         },
         gebo = {
-            options = "#{{Card%s}} Gebo: turns into one of %s",
-            none = "#{{Card%s}} Gebo cannot change this item",
+            options = "#{{Card%s}} Turns into one of %s",
+            none = "#{{Card%s}} Cannot change",
         },
         morph = {
             applied = "APPLIED",
