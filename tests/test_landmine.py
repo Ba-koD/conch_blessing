@@ -51,8 +51,9 @@ WeaponType={WEAPON_TEARS=1,WEAPON_BRIMSTONE=2,WEAPON_LASER=3,WEAPON_KNIFE=4,WEAP
     WEAPON_MONSTROS_LUNGS=7,WEAPON_LUDOVICO_TECHNIQUE=8,WEAPON_TECH_X=9,WEAPON_BONE=10,WEAPON_NOTCHED_AXE=11,
     WEAPON_URN_OF_SOULS=12,WEAPON_SPIRIT_SWORD=13,WEAPON_FETUS=14,WEAPON_UMBILICAL_WHIP=15}
 EntityType={ENTITY_PLAYER=1,ENTITY_TEAR=2,ENTITY_FAMILIAR=3,ENTITY_EFFECT=1000}
-EffectVariant={BOMB_EXPLOSION=1,POOF01=15,HUNGRY_SOUL=186}
-TearFlags={TEAR_HOMING=1<<2,TEAR_SCATTER_BOMB=1<<36,TEAR_CROSS_BOMB=1<<45,TEAR_GHOST_BOMB=1<<50}
+EffectVariant={BOMB_EXPLOSION=1,POOF01=15,HUNGRY_SOUL=186,PURGATORY=189}
+LaserVariant={THICK_RED=1}
+TearFlags={TEAR_HOMING=1<<2,TEAR_SCATTER_BOMB=1<<36,TEAR_CROSS_BOMB=1<<45,TEAR_GHOST_BOMB=1<<50,TEAR_BRIMSTONE_BOMB=1<<41}
 EntityPartition={ENEMY=8}
 EntityFlag={FLAG_FRIENDLY=1<<29}
 DamageFlag={DAMAGE_EXPLOSION=1<<2}
@@ -65,6 +66,7 @@ function SFXManager() return {Play=function(_,id,volume) played[#played+1]={id=i
 function RNG()
     local r={n=0,seed=1}
     function r:SetSeed(seed) self.seed=seed self.n=0 end
+    function r:Next() self.n=self.n+1 return (self.seed*31+self.n*7)%100000 end
     function r:RandomFloat()
         self.n=self.n+1
         return ((self.seed*7919+self.n*104729)%1000)/1000
@@ -180,9 +182,20 @@ function room:GetGridCollisionAtPos(p)
     return GridCollisionClass.COLLISION_NONE
 end
 engineBombs=false   -- whether Game() offers BombDamage and BombTearflagEffects
+-- Lasers shot by angle: what was asked of each one.
+lasers={}
+EntityLaser={ShootAngle=function(variant,pos,angle,timeout,offset,source)
+    local l=entity({Type=7,Variant=variant,Position=pos,Velocity=Vector.Zero,SpawnerEntity=source,
+        angle=angle,Timeout=timeout,MaxDistance=0})
+    lasers[#lasers+1]=l
+    return l
+end}
 function Game()
     local g={GetRoom=function() return room end,GetFrameCount=function() return frame end,
-        GetNumPlayers=function() return #players end}
+        GetNumPlayers=function() return #players end,
+        Spawn=function(_,t,v,pos,vel,spawner,s,seed)
+            return entity({Type=t,Variant=v,SubType=s,Position=pos,Velocity=vel,SpawnerEntity=spawner,InitSeed=seed})
+        end}
     if engineBombs then
         -- The engine's bomb damage hurts every enemy within radius + its size.
         g.BombDamage=function(_,pos,damage,radius,line,source,flags)
@@ -738,7 +751,7 @@ class LandmineTests(unittest.TestCase):
             update(1)
             local e=T.evidence()
             local ghosts=0
-            for _,x in ipairs(entities) do if x.Type==EntityType.ENTITY_EFFECT and x.Variant==186 and x.SubType==1 then ghosts=ghosts+1 end end
+            for _,x in ipairs(entities) do if x.Type==EntityType.ENTITY_EFFECT and x.Variant==189 and x.SubType==1 then ghosts=ghosts+1 end end
             local queued=#T.scattered()
             update(M.data.scatterDelay)
             return #bombCalls>=1, bombCalls[1].radius, bombCalls[1].pos.X, #flagCalls>=1, flagCalls[1].pos.X,
@@ -747,11 +760,70 @@ class LandmineTests(unittest.TestCase):
         ''')
         (damaged, radius, at, effects, effects_at, crossed, ghosts, queued, scattered, beside, source) = result
         # Engine bomb damage at the enemy's own spot with radius 1; the flags'
-        # effects once at the mine; the cross, a soul and scatter blasts made here.
+        # effects once at the mine; the cross, a Purgatory soul (인's 창귀,
+        # 1000.189.1) and scatter blasts made here.
         self.assertEqual((damaged, radius, at, effects, effects_at), (True, 1, 142, True, 140))
         self.assertEqual((crossed, ghosts, queued, scattered), (True, True, True, True))
         self.assertGreaterEqual(beside, 1)
         self.assertTrue(source)
+
+    def test_brimstone_bombs_shoot_four_short_beams_of_our_own(self):
+        # User decision 2026-11-27: four Brimstone beams as long as the blast
+        # reaches, shot here from the mine; the engine's own beams across the
+        # room are left out by dropping the flag from its flag effects.
+        result = self.run_lua('''
+            engineBombs=true
+            local p=player(); p.Position=Vector(500,280); p.Damage=3
+            p.bombFlags=TearFlags.TEAR_BRIMSTONE_BOMB|TearFlags.TEAR_HOMING
+            local m=T.lay(p,Vector(140,150),3)
+            local victim=enemy(142,150,10)
+            update(M.data.armFrames)
+            update(1)
+            local angles,lengths,damages,detached,at={}, {}, {}, true, true
+            for _,l in ipairs(lasers) do
+                angles[#angles+1]=l.angle; lengths[#lengths+1]=l.MaxDistance; damages[#damages+1]=l.CollisionDamage
+                detached=detached and l.DisableFollowParent==true
+                at=at and l.Position.X==m.spot.X and l.Position.Y==m.spot.Y and l.SpawnerEntity==p and l.Timeout==M.data.beamTime
+            end
+            local passed=flagCalls[1] and flagCalls[1].flags
+            return #lasers, table.concat(angles," "), table.concat(lengths," "), table.concat(damages," "), detached, at,
+                passed==TearFlags.TEAR_HOMING, T.evidence().beams
+        ''')
+        # Each hit a tenth of the mine's 3 (a beam hits about 14 times).
+        self.assertEqual(result, (4, '0 90 180 270', '40 40 40 40', '0.3 0.3 0.3 0.3', True, True, True, 4))
+
+    def test_the_ghost_is_handed_to_tigers_soul_handling_at_half_damage(self):
+        # User decision 2026-11-27: the Purgatory soul's burst hits each enemy
+        # once for half the mine's damage, through 인's own soul handling.
+        result = self.run_lua('''
+            engineBombs=true
+            local handed={}
+            ConchBlessing.tiger={adoptSoul=function(soul,owner,opts) handed[#handed+1]={soul=soul,owner=owner,opts=opts} return true end}
+            local p=player(); p.Position=Vector(500,280)
+            p.bombFlags=TearFlags.TEAR_GHOST_BOMB
+            T.lay(p,Vector(140,150),4)
+            enemy(142,150,10)
+            update(M.data.armFrames)
+            update(1)
+            ConchBlessing.tiger=nil
+            local h=handed[1]
+            return #handed, h.soul.Variant, h.soul.SubType, h.soul.SpawnerEntity==p, h.owner==p, h.opts.damage,
+                h.opts.fear, h.opts.procKey
+        ''')
+        self.assertEqual(result, (1, 189, 1, True, True, 2, False, 'landmine'))
+
+    def test_without_brimstone_bombs_no_beams_and_flags_pass_whole(self):
+        result = self.run_lua('''
+            engineBombs=true
+            local p=player(); p.Position=Vector(500,280)
+            p.bombFlags=TearFlags.TEAR_HOMING|TearFlags.TEAR_GHOST_BOMB
+            T.lay(p,Vector(140,150),3)
+            enemy(142,150,10)
+            update(M.data.armFrames)
+            update(1)
+            return #lasers, flagCalls[1].flags==(TearFlags.TEAR_HOMING|TearFlags.TEAR_GHOST_BOMB), T.evidence().ghosts
+        ''')
+        self.assertEqual(result, (0, True, 1))
 
     def test_the_cross_and_scatter_blasts_set_off_mines_too(self):
         result = self.run_lua('''

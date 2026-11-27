@@ -43,11 +43,17 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- own spot with radius 1 (damage, burn, poison, slowing, confusion; a rock
 -- beside the enemy stays, one under a flying enemy would not, so that enemy is
 -- struck plainly), Game():BombTearflagEffects at the mine (Sad Bombs' tears,
--- Brimstone Bombs' beams, Sticky and Butt Bombs), and three parts made here
--- because neither carries them: Bomber Boy's cross (two more blasts along each
--- arm), Scatter Bombs (four small blasts a moment later) and Ghost Bombs (the
--- engine's own hungry soul). With the homing flag (Bobby-Bomb) a lying mine
--- stands up on legs and creeps toward the nearest enemy. Mr. Mega is no bomb
+-- Sticky and Butt Bombs), and parts made here because neither carries them or
+-- the user wanted them otherwise: Bomber Boy's cross (two more blasts along
+-- each arm), Scatter Bombs (four small blasts a moment later), Brimstone Bombs
+-- (four short Brimstone beams of our own, as long as the blast reaches, in
+-- place of the engine's beams across the room) and Ghost Bombs (the engine's
+-- Purgatory soul, 인's 창귀, which flies at an enemy and bursts on it, in place
+-- of its hungry soul; user decisions 2026-11-27), handed to 인's own soul
+-- handling so its burst deals each enemy one hit of half the mine's damage
+-- instead of the engine's ticks of twice the holder's. With the homing flag
+-- (Bobby-Bomb) a lying mine stands up on legs and creeps toward the nearest
+-- enemy. Mr. Mega is no bomb
 -- flag and Glitter Bombs' pickups come only from a real bomb, so neither
 -- follows. A player is never hurt by a blast (cancelled at IMPORTANT priority).
 --
@@ -103,6 +109,10 @@ M.data = {
     scatterDistance = { 40, 64 }, -- this far from it
     scatterDamage = 0.5,  -- of the mine's damage
     scatterRadius = 0.65, -- of its radius
+    beamLength = 40,      -- Brimstone Bombs: each of the four beams reaches as far as the blast
+    beamTime = 19,        -- updates a beam lasts
+    beamDamage = 0.1,     -- each beam's hit, of the mine's damage (a beam hits about 14 times)
+    ghostDamage = 0.5,    -- Ghost Bombs: the ghost's burst, once on each enemy, of the mine's damage
     crawlSpeed = 0.9,     -- Bobby-Bomb: units an update a lying mine creeps
     crawlReach = 200,     -- toward the nearest enemy this close
     gridClear = 30,       -- the engine's bomb damage is dealt only where no grid entity is this close
@@ -112,7 +122,12 @@ local BLAST_COLOR = Color(0.75, 1, 0.6, 1, 0, 0.06, 0) -- Ipecac's green
 local TF = TearFlags or {}
 local CROSS_FLAG, SCATTER_FLAG, GHOST_FLAG, HOMING_FLAG = TF.TEAR_CROSS_BOMB, TF.TEAR_SCATTER_BOMB, TF.TEAR_GHOST_BOMB,
     TF.TEAR_HOMING
-local GHOST_SOUL = EffectVariant and EffectVariant.HUNGRY_SOUL or 186 -- Ghost Bombs' soul is its subtype 1
+local BRIM_FLAG = TF.TEAR_BRIMSTONE_BOMB
+-- Ghost Bombs: the Purgatory soul (1000.189.1), the same red-tailed ghost 인
+-- raises as its 창귀; the engine flies it at an enemy and bursts it there.
+local GHOST_SOUL = EffectVariant and EffectVariant.PURGATORY or 189
+local GHOST_SUBTYPE = 1
+local THICK_LASER = LaserVariant and LaserVariant.THICK_RED or 1
 local BLAST_SOUND = SoundEffect.SOUND_EXPLOSION_WEAK or SoundEffect.SOUND_BOOM
 local CELL = 40 -- a floor tile, the size of the filing grid
 local WEAPON_CACHE = CacheFlag and CacheFlag.CACHE_WEAPON or nil
@@ -198,6 +213,7 @@ local evidence
 local function resetEvidence()
     evidence = { fired = 0, laid = 0, flung = 0, placed = 0, reloads = 0, spilled = 0, piled = 0, lost = 0,
         carried = 0, landed = 0, bombDamage = 0, flagEffects = 0, crossed = 0, scattered = 0, ghosts = 0, crawled = 0,
+        beams = 0,
         flags = nil,
         landedOn = 0, exploded = 0, struck = 0, chained = 0, pictures = 0, byPlayer = 0, drawn = 0,
         drawnMines = 0, last = nil }
@@ -614,12 +630,41 @@ local function bombEffects(position, radius, damage, owner, flags, rng)
             end
         end
     end
+    local brimstone = hasFlag(flags, BRIM_FLAG)
     if type(game.BombTearflagEffects) == "function" then
-        game:BombTearflagEffects(position, radius, flags, owner, 1)
+        -- The engine's own Brimstone Bombs beams cross the whole room; ours below
+        -- take their place, so the flag is left out of this call.
+        local rest = flags
+        if brimstone then
+            local ok, without = pcall(function() return flags ~ BRIM_FLAG end)
+            if not ok then ok, without = pcall(function() return flags & ~BRIM_FLAG end) end
+            rest = ok and without or flags
+        end
+        game:BombTearflagEffects(position, radius, rest, owner, 1)
         evidence.flagEffects = evidence.flagEffects + 1
     end
+    if brimstone and EntityLaser and type(EntityLaser.ShootAngle) == "function" then
+        -- Four Brimstone beams from the mine, each ending where the blast ends.
+        for k = 0, 3 do
+            local laser = EntityLaser.ShootAngle(THICK_LASER, position, k * 90, d.beamTime, Vector.Zero, owner)
+            if laser then
+                laser.DisableFollowParent = true
+                laser.Position = position
+                if type(laser.SetMaxDistance) == "function" then laser:SetMaxDistance(d.beamLength)
+                else laser.MaxDistance = d.beamLength end
+                laser.CollisionDamage = damage * d.beamDamage
+                evidence.beams = evidence.beams + 1
+            end
+        end
+    end
     if hasFlag(flags, GHOST_FLAG) then
-        Isaac.Spawn(EntityType.ENTITY_EFFECT, GHOST_SOUL, 1, position, Vector.Zero, owner)
+        local seed = rng:Next()
+        if seed == 0 then seed = 1 end
+        local soul = game:Spawn(EntityType.ENTITY_EFFECT, GHOST_SOUL, position, Vector.Zero, owner, GHOST_SUBTYPE, seed)
+        local tiger = ConchBlessing.tiger
+        if soul and tiger and type(tiger.adoptSoul) == "function" then
+            tiger.adoptSoul(soul, owner, { damage = damage * d.ghostDamage, fear = false, procKey = PROC_KEY })
+        end
         evidence.ghosts = evidence.ghosts + 1
     end
     if hasFlag(flags, SCATTER_FLAG) then

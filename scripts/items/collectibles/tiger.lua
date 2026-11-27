@@ -53,8 +53,10 @@ M.data = {
     blastReach = 160,        -- a sourceless tick this close to our explosion is one of its ticks
 }
 
-local souls = {}   -- [GetPtrHash(soul)] = { ref, owner, provenance, x, y, burst }
-local blasts = {}  -- [GetPtrHash(blast)] = { ref, owner, provenance, damage, hit = {}, queue = {} }
+-- A soul another module handed over (adoptSoul) also keeps `fixed` (its
+-- explosion's hit), `fear` (false: no fear) and `procKey`.
+local souls = {}   -- [GetPtrHash(soul)] = { ref, owner, provenance, x, y, burst, fixed, fear, procKey }
+local blasts = {}  -- [GetPtrHash(blast)] = { ref, owner, provenance, damage, hit = {}, queue = {}, fixed, fear, procKey }
 -- Runtime evidence for cb test tiger; never saved.
 local evidence
 local function resetEvidence()
@@ -211,10 +213,12 @@ function M.onEffectInit(_, effect)
     if effect.Variant ~= EffectVariant.ENEMY_GHOST or effect.SubType ~= BLAST_SUBTYPE or not next(souls) then return end
     local soul = claimSoul(effect)
     if not soul then return end
-    DamageProvenance.markTriggeredAttack(effect, PROC_KEY, soul.provenance, PROC_KEY)
+    local key = soul.procKey or PROC_KEY
+    DamageProvenance.markTriggeredAttack(effect, key, soul.provenance, key)
     local owner = ownerOf(soul)
     blasts[GetPtrHash(effect)] = { ref = EntityPtr(effect), owner = soul.owner,
-        provenance = DamageProvenance.getSnapshot(effect), damage = owner and owner.Damage or 0, hit = {}, queue = {} }
+        provenance = DamageProvenance.getSnapshot(effect), damage = owner and owner.Damage or 0, hit = {}, queue = {},
+        fixed = soul.fixed, fear = soul.fear, procKey = soul.procKey }
     evidence.claimed = evidence.claimed + 1
 end
 
@@ -235,7 +239,7 @@ end
 local function strike(blast)
     local effect = blast.ref.Ref
     local owner = ownerOf(blast)
-    local damage = blastDamage(owner and owner.Damage or blast.damage)
+    local damage = blast.fixed or blastDamage(owner and owner.Damage or blast.damage)
     for _, ref in ipairs(blast.queue) do
         local target = ref.Ref
         if target and target:Exists() and not target:IsDead() and (effect and effect:Exists() or owner) then
@@ -243,13 +247,14 @@ local function strike(blast)
                 target:TakeDamage(damage, 0, EntityRef(effect), 0)
             else
                 -- The explosion ended this update: the holder is the source, with its lineage.
-                DamageProvenance.withTriggeredSource(owner, PROC_KEY, blast.provenance, PROC_KEY, function()
+                local key = blast.procKey or PROC_KEY
+                DamageProvenance.withTriggeredSource(owner, key, blast.provenance, key, function()
                     target:TakeDamage(damage, 0, EntityRef(owner), 0)
                 end)
             end
             evidence.hits = evidence.hits + 1
             local npc = target:ToNPC()
-            if EnemyUtils.isMonsterKind(npc) then
+            if blast.fear ~= false and EnemyUtils.isMonsterKind(npc) then
                 npc:AddFear(EntityRef(owner or effect), M.data.fearFrames)
                 evidence.feared = evidence.feared + 1
             end
@@ -274,6 +279,20 @@ function M.onUpdate()
             soul.x, soul.y = ref.Position.X, ref.Position.Y
         end
     end
+end
+
+-- Another module's Purgatory soul, handled as a 창귀's is: its explosion's
+-- own ticks are cancelled and every enemy it reaches takes one hit of
+-- `opts.damage` with the explosion as source; `opts.fear` false leaves fear
+-- out and `opts.procKey` names the proc its hits carry. Landmine's Ghost
+-- Bombs ghost comes here (user decision 2026-11-27: half the holder's damage).
+function M.adoptSoul(soul, player, opts)
+    if not soul or not player or not soul:Exists() then return false end
+    opts = opts or {}
+    souls[GetPtrHash(soul)] = { ref = EntityPtr(soul), owner = EntityPtr(player),
+        provenance = DamageProvenance.getSnapshot(soul), x = soul.Position.X, y = soul.Position.Y,
+        fixed = tonumber(opts.damage), fear = opts.fear, procKey = opts.procKey }
+    return true
 end
 
 -- A new room, game start, exit and unload drop every 창귀 and explosion record.

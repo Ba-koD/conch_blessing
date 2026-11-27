@@ -639,9 +639,10 @@ end)
 -- The bomb synergies (user design 2026-11-27): a mine's fake explosion carries
 -- the holder's bomb flags. For each bomb item: a mine laid on a pinned enemy
 -- goes off, and the item's own mark shows (a cross of blasts, a status on the
--- enemy, Sad Bombs' tears that lay no mines, Brimstone beams, a ghost, small
--- scatter blasts, a random flag, or, with Bobby-Bomb, a mine creeping to the
--- enemy); every time the player is unhurt and a rock beside the mine stays.
+-- enemy, Sad Bombs' tears that lay no mines, four short Brimstone beams that
+-- miss an enemy three tiles away, a Purgatory soul that bursts on the enemy,
+-- small scatter blasts, a random flag, or, with Bobby-Bomb, a mine creeping to
+-- the enemy); every time the player is unhurt and a rock beside the mine stays.
 local BOMB_SYNERGIES = {
     { "BOMBER_BOY", "bomber_boy" }, { "HOT_BOMBS", "hot_bombs" }, { "BOBS_CURSE", "bobs_curse" },
     { "SAD_BOMBS", "sad_bombs" }, { "SCATTER_BOMBS", "scatter_bombs" }, { "BRIMSTONE_BOMBS", "brimstone_bombs" },
@@ -670,11 +671,22 @@ local function bombRound(plan, itemName, key)
         ctx.targetSpot = crawls and ctx.spot + Vector(110, 0) or ctx.spot
         pin(ctx)
         ctx.seen, ctx.statuses, ctx.tears, ctx.lasers, ctx.souls = {}, {}, 0, 0, 0
+        ctx.reach, ctx.bursts, ctx.longSouls = {}, 0, 0
+        -- Brimstone Bombs: an enemy 120 along the beam to the right, past its reach
+        if key == "brimstone_bombs" then
+            ctx.far = H.target(player, true)
+            ctx.farSpot = ctx.spot + Vector(120, 0)
+        end
         for _, entity in ipairs(Isaac.GetRoomEntities()) do ctx.seen[GetPtrHash(entity)] = true end
         playerHits = {}
     end)
+    local function pinFar(ctx)
+        if ctx.far and ctx.far:Exists() then ctx.far.Position, ctx.far.Velocity = ctx.farSpot, Vector.Zero end
+    end
     plan.waitUntil(function(player, ctx)
         pin(ctx)
+        pinFar(ctx)
+        if ctx.far and not H.targetReady(ctx.far) then return false, "far enemy" end
         return H.targetReady(ctx.target)
     end, 30, label .. ": an enemy waits")
     plan.act(function(player, ctx)
@@ -682,10 +694,13 @@ local function bombRound(plan, itemName, key)
         -- Bomber Boy: a second mine 75 away, past the mine's own blast but inside its arm's.
         if key == "bomber_boy" then ctx.extra = lay(player, ctx.spot + Vector(75, 0)) end
         ctx.firedBefore = evidence().fired
-        ctx.until_ = Game():GetFrameCount() + (crawls and 240 or 90)
+        ctx.hpBefore = ctx.target and ctx.target.HitPoints
+        ctx.farBefore = ctx.far and ctx.far.HitPoints
+        ctx.until_ = Game():GetFrameCount() + ((crawls or key == "ghost_bombs") and 240 or 90)
     end)
     plan.waitUntil(function(player, ctx)
         pin(ctx)
+        pinFar(ctx)
         player.Position, player.Velocity = ctx.spot + Vector(-160, 80), Vector.Zero
         for _, entity in ipairs(Isaac.GetRoomEntities()) do
             local hash = GetPtrHash(entity)
@@ -693,8 +708,22 @@ local function bombRound(plan, itemName, key)
                 ctx.seen[hash] = true
                 if entity.Type == EntityType.ENTITY_TEAR then ctx.tears = ctx.tears + 1 end
                 if entity.Type == EntityType.ENTITY_LASER then ctx.lasers = ctx.lasers + 1 end
-                if entity.Type == EntityType.ENTITY_EFFECT and entity.Variant == (EffectVariant.HUNGRY_SOUL or 186)
+                if entity.Type == EntityType.ENTITY_EFFECT and entity.Variant == (EffectVariant.PURGATORY or 189)
                     and entity.SubType == 1 then ctx.souls = ctx.souls + 1 end
+                if entity.Type == EntityType.ENTITY_EFFECT and entity.Variant == (EffectVariant.HUNGRY_SOUL or 186) then
+                    ctx.longSouls = ctx.longSouls + 1
+                end
+                if entity.Type == EntityType.ENTITY_EFFECT and entity.Variant == (EffectVariant.ENEMY_GHOST or 144)
+                    and entity.SubType == 1 then ctx.bursts = ctx.bursts + 1 end
+            end
+            -- how far each beam reaches, the most seen once it has been
+            -- updated (its end point reads (0, 0) before its first update)
+            local laser = entity.Type == EntityType.ENTITY_LASER and entity:ToLaser()
+            if laser and laser.FrameCount >= 1 and type(laser.GetEndPoint) == "function" then
+                local finish = laser:GetEndPoint()
+                if finish.X ~= 0 or finish.Y ~= 0 then
+                    ctx.reach[hash] = math.max(ctx.reach[hash] or 0, laser.Position:Distance(finish))
+                end
             end
         end
         local target = ctx.target
@@ -728,9 +757,28 @@ local function bombRound(plan, itemName, key)
         scatter_bombs = { "small blasts went off around it", function()
             return evidence().scattered >= 2, string.format("scattered=%d", evidence().scattered)
         end },
-        brimstone_bombs = { "Brimstone beams fired", function(_, ctx) return ctx.lasers >= 4, "lasers=" .. ctx.lasers end },
-        ghost_bombs = { "a ghost rose from it", function(_, ctx)
-            return ctx.souls >= 1 and evidence().ghosts >= 1, string.format("souls=%d", ctx.souls)
+        brimstone_bombs = { "four short beams, none reaching the enemy 120 away", function(_, ctx)
+            local reaches, longest = {}, 0
+            for _, reach in pairs(ctx.reach) do
+                reaches[#reaches + 1] = string.format("%.0f", reach)
+                longest = math.max(longest, reach)
+            end
+            local farLost = (ctx.farBefore or 0) - (ctx.far and ctx.far:Exists() and ctx.far.HitPoints or 0)
+            local nearLost = (ctx.hpBefore or 0) - (ctx.target and ctx.target:Exists() and ctx.target.HitPoints or 0)
+            return ctx.lasers == 4 and evidence().beams == 4 and #reaches == 4 and longest <= 60 and farLost == 0
+                and nearLost > 0,
+                string.format("lasers=%d reaches=[%s] nearLost=%.2f farLost=%.2f", ctx.lasers,
+                    table.concat(reaches, " "), nearLost, farLost)
+        end },
+        ghost_bombs = { "a Purgatory soul burst on the enemy for half the mine's damage", function(_, ctx)
+            local lost = (ctx.hpBefore or 0) - (ctx.target and ctx.target:Exists() and ctx.target.HitPoints or 0)
+            -- the blast, then the ghost's one hit of half of it
+            local blast = T().mineDamage(ctx.mine and ctx.mine.damage or 0)
+            local expected = blast * (1 + M().data.ghostDamage)
+            return ctx.souls >= 1 and evidence().ghosts >= 1 and ctx.bursts >= 1 and ctx.longSouls == 0
+                and math.abs(lost - expected) <= 0.01 * expected,
+                string.format("souls=%d bursts=%d hungrySouls=%d enemyLost=%.3f expected=%.3f (blast %.3f)",
+                    ctx.souls, ctx.bursts, ctx.longSouls, lost, expected, blast)
         end },
         sticky_bombs = { "the enemy was slowed", function(_, ctx) return ctx.statuses.FLAG_SLOW == true, "slow" end },
         butt_bombs = { "the enemy was confused", function(_, ctx) return ctx.statuses.FLAG_CONFUSION == true, "confusion" end },
@@ -759,7 +807,8 @@ local function bombRound(plan, itemName, key)
     plan.act(function(player, ctx)
         playerHits = nil
         if ctx.target and ctx.target:Exists() then ctx.target:Remove() end
-        ctx.target = nil
+        if ctx.far and ctx.far:Exists() then ctx.far:Remove() end
+        ctx.target, ctx.far = nil, nil
         clearMines()
         for _, entity in ipairs(Isaac.GetRoomEntities()) do
             local t = entity.Type

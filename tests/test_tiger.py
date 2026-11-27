@@ -233,6 +233,27 @@ class TigerTests(unittest.TestCase):
             assert(e.cancelled==4 and e.hits==2 and e.feared==2)
         ''')
 
+    def test_an_adopted_soul_hits_for_its_own_damage_without_fear(self):
+        # Landmine's Ghost Bombs ghost (user decision 2026-11-27): another
+        # module's Purgatory soul, handled like a 창귀, its explosion hitting
+        # each enemy once for the damage it was handed and fearing nothing.
+        self.run_lua(r'''
+            local p=newPlayer(0,3.5); players={p}
+            local soul=newEntity({Type=1000,Variant=EffectVariant.PURGATORY,SubType=1,Position=Vector(100,0),SpawnerEntity=p})
+            assert(M.adoptSoul(soul,p,{damage=0.6,fear=false,procKey='landmine'})==true)
+            M.onEntityRemove(nil,soul)
+            local blast=newEntity({Type=1000,Variant=EffectVariant.ENEMY_GHOST,SubType=1,
+                Position=Vector(105,0),SpawnerEntity=p,CollisionDamage=7})
+            M.onEffectInit(nil,blast)
+            assert(blast.data.__ConchBlessingDamageProvenance.procChain.landmine,'the hits carry its proc')
+            local a=newNPC(1000); a.Position=Vector(120,0)
+            assert(M.onTakeDamageEarly(nil,a,7,0,EntityRef(nil))==false,'the vanilla tick is cancelled')
+            assert(M.onTakeDamageEarly(nil,a,7,0,EntityRef(nil))==false)
+            M.onUpdate()
+            assert(#hits==1 and hits[1].amount==0.6 and hits[1].source==blast,'one hit of the damage handed over')
+            assert(#fears==0,'no fear')
+        ''')
+
     def test_only_its_own_ticks_are_cancelled(self):
         self.run_lua(r'''
             local p=newPlayer(3,3.5); players={p}

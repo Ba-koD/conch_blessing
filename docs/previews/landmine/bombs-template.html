@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>지뢰 폭탄 시너지 미리보기</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #17120f; color: #eadfd2; font: 13px/1.45 "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; }
+  .top { padding: 12px 14px 0; display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; }
+  .box { background: #221b17; border: 1px solid #3a302a; border-radius: 6px; padding: 10px 12px; }
+  h1 { font-size: 15px; margin: 0 0 4px; }
+  h2 { font-size: 13px; margin: 0 0 4px; color: #f3c46a; }
+  .note { color: #a89888; font-size: 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(440px, 1fr)); gap: 12px; padding: 12px 14px; max-width: 1300px; }
+  .cell h2 { margin: 0 0 4px; }
+  .cell .note { margin-bottom: 5px; min-height: 18px; }
+  canvas { width: 100%; background: #000; image-rendering: pixelated; border: 1px solid #3a302a; display: block; }
+  .row { display: grid; grid-template-columns: 150px 220px 64px; align-items: center; gap: 6px; margin: 3px 0; }
+  .row output { text-align: right; font-variant-numeric: tabular-nums; color: #fff2d6; }
+  button { background: #33281f; color: #eadfd2; border: 1px solid #5a4a3c; border-radius: 4px; padding: 5px 9px; cursor: pointer; font: inherit; }
+  button.on { background: #6b4b1c; border-color: #c9953f; color: #fff2d6; }
+  .check { display: inline-flex; gap: 5px; align-items: center; margin-right: 12px; }
+  .old { color: #b9a89a; } .new { color: #9fe07a; }
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="box" style="max-width:560px">
+    <h1>지뢰 + 폭탄 시너지 미리보기</h1>
+    <div class="note">게임과 같은 1초 30업데이트, 1칸 = 40유닛, 지뢰 폭발 반경 1칸으로 돌립니다. 그림은 모두 게임 원본(혈사포 줄기·충돌, 빨간 유령과 그 폭발, 게이퍼)입니다.</div>
+    <div class="note" style="margin-top:4px">왼쪽이 <span class="old">지금 게임</span>, 오른쪽이 <span class="new">바꿀 안</span>입니다. 적이 반짝이면 맞은 것입니다.</div>
+  </div>
+  <div class="box">
+    <h2>장면</h2>
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <button id="scene-one" class="on">지뢰 1개</button>
+      <button id="scene-pile">지뢰 8개가 연달아</button>
+      <button id="replay">다시</button>
+    </div>
+    <div class="row"><label>혈사 지속</label><input type="range" id="dur" min="8" max="40" step="1" value="19"><output id="dur-out"></output></div>
+    <div><span class="check"><input type="checkbox" id="slow"><label for="slow">느리게 (1/4)</label></span>
+      <span class="check"><input type="checkbox" id="ring" checked><label for="ring">폭발 반경 표시</label></span></div>
+  </div>
+</div>
+<div class="grid">
+  <div class="cell"><h2 class="old">혈사폭탄 · 지금: 방 끝까지 4줄기</h2><div class="note" id="n0"></div><canvas id="c0" width="936" height="624"></canvas></div>
+  <div class="cell"><h2 class="new">혈사폭탄 · 폭발 범위만큼 짧은 4줄기</h2><div class="note" id="n1"></div><canvas id="c1" width="936" height="624"></canvas></div>
+  <div class="cell"><h2 class="old">유령폭탄 · 지금: 쫓아다니며 몸으로 피해, 10초 뒤 폭발</h2><div class="note" id="n2"></div><canvas id="c2" width="936" height="624"></canvas></div>
+  <div class="cell"><h2 class="new">유령폭탄 · 빨간 유령: 날아가서 닿자마자 펑</h2><div class="note" id="n3"></div><canvas id="c3" width="936" height="624"></canvas></div>
+</div>
+<script>
+const DATA = /*DATA*/null;
+const S = 26 / 40, DS = 2, TILE = 40;
+const ROOM = { x0: 60, x1: 580, y0: 140, y1: 420 };
+const px = (x, y) => [234 + (x - 320) * S, 156 + (y - 280) * S];
+const BLAST = TILE; // the mine's blast radius (plus each enemy's size), and the short beams' length
+const W = { scene: "one", dur: 19, slow: false, ring: true };
+const IMG = [], RED = [], SPLASH = [], GREEN = [];
+let ROOMIMG;
+function loadImage(src) { return new Promise(res => { const i = new Image(); i.onload = () => res(i); i.src = src; }); }
+// The anm2's own RGB tint (the laser layers are R 255, G 0, B 0) and the
+// engine's colouring of the impact and the blast, done once per sheet.
+function tint(img, r, g, b, ro = 0, go = 0, bo = 0) {
+  const c = document.createElement("canvas"); c.width = img.width; c.height = img.height;
+  const x = c.getContext("2d"); x.drawImage(img, 0, 0);
+  const d = x.getImageData(0, 0, c.width, c.height), p = d.data;
+  for (let i = 0; i < p.length; i += 4) {
+    p[i] = Math.min(255, p[i] * r + ro * 255); p[i + 1] = Math.min(255, p[i + 1] * g + go * 255); p[i + 2] = Math.min(255, p[i + 2] * b + bo * 255);
+  }
+  x.putImageData(d, 0, 0); return c;
+}
+function frameAt(layer, t, anim) {
+  const total = anim.frames;
+  const tt = anim.loop ? ((t % total) + total) % total : Math.max(0, Math.min(t, total - 1));
+  let acc = 0;
+  for (const f of layer.frames) { if (tt < acc + f[11]) return f; acc += f[11]; }
+  return anim.loop ? layer.frames[0] : layer.frames[layer.frames.length - 1];
+}
+function rnd(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+
+// ------------------------------------------------------------------ one room
+class Room {
+  constructor(i, kind, short) {
+    this.canvas = document.getElementById("c" + i); this.note = document.getElementById("n" + i);
+    this.ctx = this.canvas.getContext("2d"); this.kind = kind; this.short = short;
+    this.reset(true);
+  }
+  // A loop starts over by itself; the counters below keep adding up until
+  // the scene changes or 다시 is pressed.
+  reset(full) {
+    this.t = 0; this.effects = []; this.beams = []; this.souls = [];
+    if (full) { this.hits = 0; this.bursts = 0; this.loops = 0; } else this.loops++;
+    const pile = W.scene === "pile";
+    const r = rnd(pile ? 77 : 5);
+    this.mines = [];
+    if (pile) {
+      for (let k = 0; k < 8; k++) this.mines.push({ x: 140 + r() * 360, y: 180 + r() * 200, at: 40 + k * 8 });
+    } else this.mines.push({ x: 320, y: this.kind === "brim" ? 280 : 300, at: 40 });
+    for (const m of this.mines) Object.assign(m, { dead: false, t: 0 });
+    // gapers: on the cross at a few distances, and some off it
+    const spots = this.kind === "brim"
+      ? (pile ? [[110, 200], [530, 230], [320, 170], [200, 400], [460, 400], [560, 330], [90, 330]]
+        : [[357, 280], [450, 280], [540, 280], [230, 280], [130, 280], [320, 244], [320, 385], [420, 190], [200, 380]])
+      : (pile ? [[110, 190], [540, 200], [520, 390], [120, 390], [330, 170]]
+        : [[150, 190], [500, 210], [480, 390], [170, 380]]);
+    this.enemies = spots.map(([x, y], k) => ({ x, y, size: 13, flash: 0, hit: false, cd: 0, dir: k }));
+    this.lastLoop = null;
+  }
+  wallDistance(x, y, dx, dy) {
+    if (dx > 0) return ROOM.x1 - x; if (dx < 0) return x - ROOM.x0;
+    if (dy > 0) return ROOM.y1 - y; return y - ROOM.y0;
+  }
+  hurt(e) {
+    e.flash = 4;
+    if (!e.hit) { e.hit = true; this.effects.push({ key: "blood", name: "Poof", x: e.x, y: e.y - 6, t: 0, scale: 0.7 }); }
+    this.hits++;
+  }
+  explode(m) {
+    m.dead = true;
+    this.effects.push({ key: "boom", name: "Explosion", x: m.x, y: m.y, t: 0, scale: 0.45, green: true });
+    for (const e of this.enemies) if (Math.hypot(e.x - m.x, e.y - m.y) <= BLAST + e.size) this.hurt(e);
+    if (this.kind === "brim") {
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const wall = this.wallDistance(m.x, m.y, dx, dy);
+        const len = this.short ? Math.min(BLAST, wall) : wall;
+        this.beams.push({ x: m.x, y: m.y, dx, dy, len, t: 0, dur: W.dur });
+      }
+    } else {
+      this.souls.push(this.short
+        ? { x: m.x, y: m.y, vx: 0, vy: 0, t: 0, kind: "burst", face: 1 + (this.souls.length + this.bursts + this.loops) % 4 }
+        : { x: m.x, y: m.y, vx: 0, vy: 0, t: 0, kind: "chase", life: 300 });
+    }
+  }
+  nearest(x, y) {
+    let best = null, bd = 1e9;
+    for (const e of this.enemies) { const d = Math.hypot(e.x - x, e.y - y); if (d < bd) { bd = d; best = e; } }
+    return best;
+  }
+  update() {
+    this.t++;
+    for (const m of this.mines) { m.t++; if (!m.dead && this.t >= m.at) this.explode(m); }
+    for (const e of this.enemies) { e.flash = Math.max(0, e.flash - 1); e.cd = Math.max(0, e.cd - 1); }
+    for (const b of this.beams) {
+      b.t++;
+      if (b.t % 2 === 1) for (const e of this.enemies) {
+        const along = (e.x - b.x) * b.dx + (e.y - b.y) * b.dy, across = Math.abs((e.x - b.x) * b.dy - (e.y - b.y) * b.dx);
+        if (along > 0 && along <= b.len + e.size && across <= e.size + 12) this.hurt(e);
+      }
+    }
+    this.beams = this.beams.filter(b => b.t < b.dur);
+    for (const s of this.souls) this.updateSoul(s);
+    this.souls = this.souls.filter(s => !s.gone);
+    for (const f of this.effects) f.t++;
+    this.effects = this.effects.filter(f => f.t < DATA.anims[f.key][f.name].frames + 2);
+    const done = this.mines.every(m => m.dead) && !this.beams.length && !this.souls.length && !this.effects.length;
+    if (done) { this.wait = (this.wait || 0) + 1; if (this.wait > 30) { this.wait = 0; this.reset(); } }
+  }
+  updateSoul(s) {
+    s.t++;
+    if (s.kind === "burst") {
+      // the red Enemy Ghost: it rises out of the blast, flies at the nearest
+      // enemy, swells (Explode) on it and bursts (Explosion)
+      if (s.pop !== undefined) {
+        s.pop++;
+        if (s.pop === 6) {
+          s.gone = true; this.bursts++;
+          this.effects.push({ key: "eghost", name: "Explosion", x: s.x, y: s.y - 10, t: 0, scale: 1 });
+          for (const o of this.enemies) if (Math.hypot(o.x - s.x, o.y - s.y) <= 45 + o.size) this.hurt(o);
+        }
+        return;
+      }
+      if (s.t < 12) return;
+      const e = this.nearest(s.x, s.y);
+      if (!e) { s.gone = true; return; }
+      const dx = e.x - s.x, dy = e.y - s.y, d = Math.hypot(dx, dy) || 1;
+      const speed = Math.min(7, 1 + (s.t - 12) * 0.35);
+      s.vx = s.vx * 0.75 + dx / d * speed * 0.25; s.vy = s.vy * 0.75 + dy / d * speed * 0.25;
+      s.x += s.vx; s.y += s.vy;
+      if (d <= e.size + 6) s.pop = 0;
+    } else {
+      // Ghost Bombs' hungry soul: it chases, hurts what it touches, and after
+      // ten seconds bursts where it is
+      s.life--;
+      if (s.life <= 0) {
+        s.gone = true; this.bursts++;
+        this.effects.push({ key: "hsoul", name: "Die", x: s.x, y: s.y, t: 0, scale: 1 });
+        this.effects.push({ key: "eghost", name: "Explosion", x: s.x, y: s.y - 8, t: 0, scale: 1 });
+        for (const o of this.enemies) if (Math.hypot(o.x - s.x, o.y - s.y) <= 45 + o.size) this.hurt(o);
+        return;
+      }
+      if (s.t < 32) return;
+      const e = this.nearest(s.x, s.y);
+      if (!e) return;
+      const dx = e.x - s.x, dy = e.y - s.y, d = Math.hypot(dx, dy) || 1;
+      s.vx = s.vx * 0.85 + dx / d * 1.1; s.vy = s.vy * 0.85 + dy / d * 1.1;
+      s.x += s.vx; s.y += s.vy;
+      if (d <= e.size + 8 && e.cd === 0) { e.cd = 8; this.hurt(e); }
+    }
+  }
+  // ---------------------------------------------------------------- drawing
+  anim(key, name, t, x, y, o = {}) {
+    const ctx = this.ctx, anim = DATA.anims[key][name];
+    if (!anim) return;
+    for (const L of anim.layers) {
+      const f = frameAt(L, t, anim);
+      if (!f || !f[12]) continue;
+      const img = (o.sheets || IMG)[L.sheet];
+      ctx.save();
+      ctx.translate(x, y);
+      if (o.rot) ctx.rotate(o.rot);
+      const sc = o.scale || 1;
+      ctx.scale(sc * (o.flip ? -1 : 1), sc);
+      ctx.translate(f[6], f[7]);
+      if (f[10]) ctx.rotate(f[10] * Math.PI / 180);
+      ctx.scale(f[8], f[9]);
+      ctx.globalAlpha = (o.alpha ?? 1) * f[13];
+      if (o.flash) ctx.filter = "brightness(2.2)";
+      ctx.drawImage(img, f[0], f[1], f[2], f[3], -f[4], -f[5], f[2], f[3]);
+      ctx.restore();
+    }
+  }
+  shadow(x, y, w, h, a = 0.35) {
+    const [sx, sy] = px(x, y), ctx = this.ctx;
+    ctx.fillStyle = `rgba(0,0,0,${a})`;
+    ctx.beginPath(); ctx.ellipse(sx, sy, w, h, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  // The thick red laser as the engine lays it: the tip layer at the start,
+  // the 64-pixel body tiled along the beam, the impact where it ends. It
+  // thins over its last four updates.
+  beam(b) {
+    const ctx = this.ctx, anim = DATA.anims.laser.LargeRedLaser;
+    const tip = anim.layers.find(l => l.name === "tip"), body = anim.layers.find(l => l.name === "laser");
+    const fb = frameAt(body, b.t, anim), ft = frameAt(tip, b.t, anim);
+    const [x, y] = px(b.x, b.y), height = -7, len = b.len * S;
+    const thin = Math.min(1, (b.dur - b.t) / 4);
+    ctx.save();
+    ctx.translate(x, y + height);
+    ctx.rotate(Math.atan2(b.dy, b.dx) - Math.PI / 2);
+    ctx.scale(thin, 1);
+    const w = fb[2] * fb[8];
+    for (let s = 16; s < len; s += 64) {
+      const h = Math.min(64, len - s);
+      ctx.drawImage(RED[body.sheet], fb[0], fb[1], fb[2], h, -w / 2, s, w, h);
+    }
+    const tw = ft[2] * ft[8];
+    ctx.drawImage(RED[tip.sheet], ft[0], ft[1], ft[2], ft[3], -tw / 2, ft[7], tw, ft[3]);
+    ctx.restore();
+    const ex = x + b.dx * len, ey = y + height + b.dy * len;
+    this.anim("impact", b.t < 4 ? "Start" : "Loop", b.t, ex, ey, { sheets: SPLASH, scale: thin });
+  }
+  draw() {
+    const ctx = this.ctx;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = "#000"; ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    ctx.setTransform(DS, 0, 0, DS, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(ROOMIMG, 0, 0);
+    for (const m of this.mines) {
+      if (m.dead) continue;
+      const [x, y] = px(m.x, m.y);
+      if (W.ring) {
+        ctx.strokeStyle = "rgba(160,230,110,0.35)"; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.ellipse(x, y, BLAST * S, BLAST * S, 0, 0, Math.PI * 2); ctx.stroke();
+      }
+      const soon = this.t >= m.at - 12 && (this.t >> 1) % 2 === 0;
+      this.anim("mine", m.t < 8 ? "Land" : "Idle", m.t < 8 ? m.t : m.t + 7, x, y, { flash: soon });
+    }
+    const list = [];
+    for (const e of this.enemies) list.push({ y: e.y, draw: () => {
+      this.shadow(e.x, e.y, 9, 3.5);
+      const [x, y] = px(e.x, e.y);
+      this.anim("gaper", "WalkVert", 0, Math.round(x), Math.round(y), { flash: e.flash > 0 });
+      this.anim("gaper", "Head", 0, Math.round(x), Math.round(y), { flash: e.flash > 0 });
+    } });
+    for (const s of this.souls) list.push({ y: s.y, draw: () => {
+      const [x, y] = px(s.x, s.y);
+      if (s.kind === "burst") {
+        const rise = Math.min(1, s.t / 12), lift = -12 * rise + Math.sin(s.t * 0.25) * 1.5;
+        this.shadow(s.x, s.y, 6, 2.2, 0.25 * rise);
+        if (s.pop !== undefined) this.anim("eghost", "Explode", s.pop, x, y + lift);
+        else this.anim("eghost", "Idle" + s.face, s.t, x, y + lift, { alpha: rise, flip: s.vx < 0 });
+      } else {
+        this.shadow(s.x, s.y, 5, 2, 0.25);
+        this.anim("hsoul", s.t < 32 ? "Appear" : "Idle", s.t < 32 ? s.t : s.t - 32, x, y, { flip: s.vx < 0 });
+      }
+    } });
+    for (const f of this.effects) list.push({ y: f.y + 1, draw: () => {
+      const [x, y] = px(f.x, f.y);
+      this.anim(f.key, f.name, f.t, x, y, { scale: f.scale, sheets: f.green ? GREEN : IMG });
+    } });
+    list.sort((a, b) => a.y - b.y);
+    for (const it of list) it.draw();
+    for (const b of this.beams) this.beam(b);
+    // a soul's timer, over it
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.font = "bold 13px 'Malgun Gothic', sans-serif"; ctx.textAlign = "center";
+    for (const s of this.souls) if (s.kind === "chase" && s.t >= 32) {
+      const [x, y] = px(s.x, s.y);
+      const txt = `${Math.ceil(s.life / 30)}초 뒤 폭발`;
+      ctx.lineWidth = 3; ctx.strokeStyle = "#000"; ctx.strokeText(txt, x * DS, (y - 34) * DS);
+      ctx.fillStyle = "#e8f0ff"; ctx.fillText(txt, x * DS, (y - 34) * DS);
+    }
+  }
+  status() {
+    if (this.kind === "brim")
+      return (this.short ? `줄기 폭발 범위만큼 (${BLAST}유닛)` : "줄기 방 끝까지")
+        + ` · ${(W.dur / 30).toFixed(2)}초 · 지금까지 적이 맞은 횟수 ${this.hits} (${this.loops + 1}번째)`;
+    return (this.short ? "유령이 닿으면 바로 터짐" : "유령이 10초 동안 쫓아다님")
+      + ` · 지금까지 적이 맞은 횟수 ${this.hits} (${this.loops + 1}번째)`;
+  }
+}
+
+// ------------------------------------------------------------------ page
+let rooms = [];
+function resetAll() { for (const r of rooms) r.reset(true); }
+function bind() {
+  const dur = document.getElementById("dur");
+  const show = () => { document.getElementById("dur-out").textContent = `${(W.dur / 30).toFixed(2)}초`; };
+  dur.addEventListener("input", () => { W.dur = parseInt(dur.value, 10); show(); });
+  show();
+  document.getElementById("slow").addEventListener("change", e => { W.slow = e.target.checked; });
+  document.getElementById("ring").addEventListener("change", e => { W.ring = e.target.checked; });
+  for (const name of ["one", "pile"]) {
+    document.getElementById("scene-" + name).addEventListener("click", () => {
+      W.scene = name;
+      document.getElementById("scene-one").classList.toggle("on", name === "one");
+      document.getElementById("scene-pile").classList.toggle("on", name === "pile");
+      resetAll();
+    });
+  }
+  document.getElementById("replay").addEventListener("click", resetAll);
+}
+async function main() {
+  for (const src of DATA.sheets) {
+    const img = await loadImage(src);
+    IMG.push(img);
+    RED.push(tint(img, 1, 0, 0));
+    SPLASH.push(tint(img, 1, 0.22, 0.18));
+    GREEN.push(tint(img, 0.75, 1, 0.6, 0, 0.06, 0));
+  }
+  ROOMIMG = await loadImage(DATA.room);
+  rooms = [new Room(0, "brim", false), new Room(1, "brim", true), new Room(2, "ghost", false), new Room(3, "ghost", true)];
+  bind();
+  let last = performance.now(), acc = 0;
+  function frame(now) {
+    acc += Math.min(200, now - last); last = now;
+    const step = 1000 / 30 * (W.slow ? 4 : 1);
+    while (acc >= step) { acc -= step; for (const r of rooms) r.update(); }
+    for (let i = 0; i < rooms.length; i++) { rooms[i].draw(); rooms[i].note.textContent = rooms[i].status(); }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+main();
+</script>
+</body>
+</html>
