@@ -8,17 +8,20 @@
   body { margin: 0; background: #17120f; color: #eadfd2; font: 13px/1.45 "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; }
   .wrap { display: flex; gap: 14px; padding: 14px; align-items: flex-start; flex-wrap: wrap; }
   canvas { background: #000; image-rendering: pixelated; border: 1px solid #3a302a; display: block; }
-  .panel { width: 340px; display: flex; flex-direction: column; gap: 10px; }
+  .panel { width: 360px; display: flex; flex-direction: column; gap: 10px; }
   .box { background: #221b17; border: 1px solid #3a302a; border-radius: 6px; padding: 10px 12px; }
   h1 { font-size: 15px; margin: 0 0 4px; }
   h2 { font-size: 13px; margin: 0 0 6px; color: #f3c46a; }
   .modes { display: flex; gap: 6px; flex-wrap: wrap; }
   button { background: #33281f; color: #eadfd2; border: 1px solid #5a4a3c; border-radius: 4px; padding: 5px 9px; cursor: pointer; font: inherit; }
   button.on { background: #6b4b1c; border-color: #c9953f; color: #fff2d6; }
-  .row { display: grid; grid-template-columns: 118px 1fr 50px; align-items: center; gap: 6px; margin: 3px 0; }
+  .row { display: grid; grid-template-columns: 128px 1fr 50px; align-items: center; gap: 6px; margin: 3px 0; }
   .row input[type=range] { width: 100%; }
   .row output { text-align: right; font-variant-numeric: tabular-nums; color: #fff2d6; }
   .check { display: flex; gap: 6px; align-items: center; margin: 4px 0; }
+  .syn { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; }
+  .syn label { display: flex; gap: 5px; align-items: center; cursor: pointer; }
+  .syn label:hover { color: #fff2d6; }
   .stats { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-variant-numeric: tabular-nums; }
   .stats b { color: #fff2d6; font-weight: 600; text-align: right; }
   .bar { height: 10px; border-radius: 3px; background: #3a302a; overflow: hidden; display: flex; margin-top: 6px; }
@@ -35,6 +38,21 @@
       <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 이동 · <kbd>←</kbd><kbd>↑</kbd><kbd>→</kbd><kbd>↓</kbd> 공격 (누르면 자동 조작이 꺼집니다) ·
       <kbd>R</kbd> 다시 시작 · <kbd>P</kbd> 일시정지
     </div>
+    <div class="box" style="margin-top:10px;width:912px">
+      <h2>최근 10초</h2>
+      <div class="stats" style="grid-template-columns: repeat(4, 1fr auto)">
+        <span>초당 깐 지뢰</span><b id="s-rate">0</b>
+        <span>공격 1번당 지뢰</span><b id="s-per">0</b>
+        <span>바닥의 지뢰</span><b id="s-alive">0</b>
+        <span>처치 (분당)</span><b id="s-kills">0</b>
+        <span>초당 피해 (눈물)</span><b id="s-tear">0</b>
+        <span>초당 피해 (지뢰)</span><b id="s-mine">0</b>
+        <span>초당 피해 (합)</span><b id="s-total">0</b>
+        <span></span><b></b>
+      </div>
+      <div class="bar"><span id="b-tear" style="background:#9fc6ff;width:50%"></span><span id="b-mine" style="background:#8fdc4e;width:50%"></span></div>
+      <div class="note">파랑 = 눈물 피해, 초록 = 지뢰 피해 (폭탄 효과로 생긴 피해 포함)</div>
+    </div>
   </div>
   <div class="panel">
     <div class="box">
@@ -44,8 +62,9 @@
     <div class="box">
       <h2>방식</h2>
       <div class="modes">
-        <button id="mode-new" class="on">새 안: 살포 지뢰</button>
-        <button id="mode-old">지금 게임</button>
+        <button id="mode-refill" class="on">새 안: 리필</button>
+        <button id="mode-interval">이전 안: 주기</button>
+        <button id="mode-now">지금 게임</button>
         <button id="mode-none">아이템 없음</button>
       </div>
       <h2 style="margin-top:10px">상대</h2>
@@ -58,21 +77,10 @@
         <input type="checkbox" id="sound" checked style="margin-left:12px"><label for="sound">소리</label>
         <input type="checkbox" id="bars" checked style="margin-left:12px"><label for="bars">체력 막대</label></div>
     </div>
+    <div class="box" id="syn-tear"><h2>눈물 시너지</h2></div>
+    <div class="box" id="syn-bomb"><h2>폭탄 시너지</h2></div>
     <div class="box" id="params"><h2>숫자</h2></div>
     <div class="box" id="world"><h2>아이작과 적</h2></div>
-    <div class="box">
-      <h2>최근 10초</h2>
-      <div class="stats">
-        <span>초당 깐 지뢰</span><b id="s-rate">0</b>
-        <span>바닥의 지뢰</span><b id="s-alive">0</b>
-        <span>초당 피해 (눈물)</span><b id="s-tear">0</b>
-        <span>초당 피해 (지뢰)</span><b id="s-mine">0</b>
-        <span>초당 피해 (합)</span><b id="s-total">0</b>
-        <span>처치 (분당)</span><b id="s-kills">0</b>
-      </div>
-      <div class="bar"><span id="b-tear" style="background:#9fc6ff;width:50%"></span><span id="b-mine" style="background:#8fdc4e;width:50%"></span></div>
-      <div class="note">파랑 = 눈물 피해, 초록 = 지뢰 피해</div>
-    </div>
   </div>
 </div>
 <script>
@@ -83,15 +91,24 @@ const TILE = 40;
 const ROOM = { x0: 60, x1: 580, y0: 140, y1: 420 };
 const TEAR_HEIGHT = -23.75;   // world units, as the game's default tear height
 const ISAAC_RANGE = 6.5;      // Isaac's own range in tiles
+const SHOT_SPEED = 10;        // world units an update at shot speed 1
 
 // ---------------------------------------------------------------- numbers
 const MODES = {
-  new: {
-    tearMul: 1, damageMul: 0.33, tearsAdd: -0.2, mineMul: 0.5, rangeAdd: 40, base: 3, luckStep: 5, dropEvery: 2, scatter: 1, gap: 26,
-    radius: 40, arm: 4, chain: 3, blastScale: 0.45, dump: true, playerSteps: true,
+  refill: {
+    damageMul: 0.33, tearsAdd: -0.2, mineMul: 1, rangeAdd: 40, stock: "tear", base: 3, luckStep: 5, place: 0.2, perPlace: 2,
+    reload: true, reloadMul: 5, refillAmt: 1, refillMul: 1, bagBase: 9, bagLuck: 3, bagRefill: 3, stop: 1,
+    scatter: 1, gap: 26, radius: 40, arm: 8, chain: 3, blastScale: 0.45, playerSteps: true,
   },
-  old: { tearMul: 1, mineMul: 2, range: ISAAC_RANGE, interval: 3, radius: 60, arm: 8, chain: 3, blastScale: 0.6 },
-  none: { tearMul: 1, range: ISAAC_RANGE },
+  interval: {
+    damageMul: 0.33, tearsAdd: -0.2, mineMul: 0.5, rangeAdd: 40, perDrop: 2, periodMode: "luck", intervalMul: 1, period: 0.4, luckHalf: 10, stopLuck: true, first: 0, stop: 1, luckStep: 5,
+    scatter: 1, gap: 26, radius: 40, arm: 8, chain: 3, blastScale: 0.45, playerSteps: true,
+  },
+  now: {
+    damageMul: 0.33, tearsAdd: -0.2, mineMul: 0.5, rangeAdd: 40, base: 3, luckStep: 5, dropEvery: 2, scatter: 1, gap: 26,
+    radius: 40, arm: 8, chain: 3, blastScale: 0.45, dump: true, playerSteps: true,
+  },
+  none: { range: ISAAC_RANGE },
 };
 const DEFAULTS = JSON.parse(JSON.stringify(MODES));
 const SCENARIOS = {
@@ -100,30 +117,54 @@ const SCENARIOS = {
   boss: { enemies: 1, enemyHp: 600, enemySize: 30, enemySpeed: 1.6 },
 };
 const W = { damage: 3.5, tears: 2.73, luck: 0, scenario: "mob", ...SCENARIOS.mob };
+const COMMON = [
+  ["damageMul", "공격력 배율", 0.1, 1, 0.01, v => "x" + v.toFixed(2)],
+  ["tearsAdd", "연사 증감", -1, 1, 0.1, v => (v > 0 ? "+" : "") + v.toFixed(1)],
+  ["mineMul", "지뢰 피해 배수", 0.2, 5, 0.1, v => "x" + v.toFixed(1)],
+  ["rangeAdd", "사거리 추가 (칸)", 0, 40, 1, v => "+" + v.toFixed(0)],
+];
+const BLAST = [
+  ["scatter", "흩뿌림 폭 (칸)", 0, 3, 0.1, v => "±" + v.toFixed(1)],
+  ["gap", "지뢰 사이 거리", 0, 60, 2, v => v.toFixed(0)],
+  ["radius", "폭발 반경", 20, 80, 2, v => v.toFixed(0)],
+  ["arm", "무장 (업데이트)", 0, 15, 1, v => v.toFixed(0)],
+  ["chain", "연쇄 지연", 0, 6, 1, v => v.toFixed(0)],
+  ["blastScale", "폭발 그림 크기", 0.2, 1, 0.05, v => v.toFixed(2)],
+];
+const TEAR_STOCK = P => P.stock === "tear", BAG_STOCK = P => P.stock === "bag";
 const SLIDERS = {
-  new: [
-    ["damageMul", "공격력 배율", 0.1, 1, 0.01, v => "x" + v.toFixed(2)],
-    ["tearsAdd", "연사 증감", -1, 1, 0.1, v => (v > 0 ? "+" : "") + v.toFixed(1)],
-    ["mineMul", "지뢰 피해 배수", 0.2, 5, 0.1, v => "x" + v.toFixed(1)],
-    ["rangeAdd", "사거리 추가 (칸)", 0, 40, 1, v => "+" + v.toFixed(0)],
+  refill: [
+    ...COMMON,
+    ["base", "한 발 소지 (쌍)", 1, 8, 1, v => v.toFixed(0) + "쌍", TEAR_STOCK],
+    ["bagBase", "아이작 소지 지뢰", 1, 30, 1, v => v.toFixed(0) + "개", BAG_STOCK],
+    ["luckStep", "행운 몇마다 1쌍 +", 1, 10, 1, v => v.toFixed(0)],
+    ["bagLuck", "그때 늘어나는 개수", 1, 6, 1, v => "+" + v.toFixed(0), BAG_STOCK],
+    ["place", "까는 주기 (초)", 0.05, 1, 0.05, v => v.toFixed(2) + " (" + (v * 30 * SHOT_SPEED / TILE).toFixed(1) + "칸)"],
+    ["perPlace", "한 번에 (개)", 1, 2, 1, v => v === 2 ? "1쌍" : "1개"],
+    ["reloadMul", "다 쓰면 기다림 (연사 간격 x)", 1, 15, 1, v => "x" + v.toFixed(0), P => P.stock === "tear" && P.reload],
+    ["refillMul", "리필 = 연사 간격 x", 0.25, 3, 0.25, v => "x" + v.toFixed(2), P => !(P.stock === "tear" && P.reload)],
+    ["refillAmt", "리필마다 (쌍)", 1, 4, 1, v => "+" + v.toFixed(0) + "쌍", P => P.stock === "tear" && !P.reload],
+    ["bagRefill", "리필마다 (개)", 1, 8, 1, v => "+" + v.toFixed(0), BAG_STOCK],
+    ["stop", "멈춘 자리 (소지에서)", 0, 4, 1, v => v.toFixed(0) + "개", BAG_STOCK],
+    ...BLAST,
+  ],
+  interval: [
+    ...COMMON,
+    ["perDrop", "간격마다 지뢰", 1, 4, 1, v => v.toFixed(0) + "개"],
+    ["intervalMul", "간격 = 연사 간격 x", 0.5, 3, 0.25, v => "x" + v.toFixed(2), "fire"],
+    ["period", "기본 주기 (초)", 0.1, 1.5, 0.05, v => v.toFixed(2), "fixed luck"],
+    ["luckHalf", "행운 몇에 주기 절반", 2, 30, 1, v => v.toFixed(0), "luck"],
+    ["first", "첫 투하 (간격 x)", 0, 1, 0.25, v => "x" + v.toFixed(2)],
+    ["stop", "멈춘 자리 지뢰", 0, 4, 1, v => v.toFixed(0) + "개"],
+    ["luckStep", "행운 몇마다 멈춘 자리 +1", 1, 10, 1, v => v.toFixed(0)],
+    ...BLAST,
+  ],
+  now: [
+    ...COMMON,
     ["base", "한 발의 지뢰", 1, 8, 1, v => v.toFixed(0) + "개"],
     ["luckStep", "행운 몇마다 +1", 1, 10, 1, v => v.toFixed(0)],
     ["dropEvery", "투하 간격 (칸)", 0.5, 4, 0.1, v => v.toFixed(1)],
-    ["scatter", "흩뿌림 폭 (칸)", 0, 3, 0.1, v => "±" + v.toFixed(1)],
-    ["gap", "지뢰 사이 거리", 0, 60, 2, v => v.toFixed(0)],
-    ["radius", "폭발 반경", 20, 80, 2, v => v.toFixed(0)],
-    ["arm", "무장 (업데이트)", 0, 15, 1, v => v.toFixed(0)],
-    ["chain", "연쇄 지연", 0, 6, 1, v => v.toFixed(0)],
-    ["blastScale", "폭발 그림 크기", 0.2, 1, 0.05, v => v.toFixed(2)],
-  ],
-  old: [
-    ["tearMul", "눈물 피해 배수", 0, 1, 0.05, v => "x" + v.toFixed(2)],
-    ["mineMul", "지뢰 피해 배수", 0.2, 3, 0.1, v => "x" + v.toFixed(1)],
-    ["range", "사거리 (칸)", 3, 20, 0.5, v => v.toFixed(1)],
-    ["radius", "폭발 반경", 20, 80, 2, v => v.toFixed(0)],
-    ["arm", "무장 (업데이트)", 0, 15, 1, v => v.toFixed(0)],
-    ["chain", "연쇄 지연", 0, 6, 1, v => v.toFixed(0)],
-    ["blastScale", "폭발 그림 크기", 0.2, 1, 0.05, v => v.toFixed(2)],
+    ...BLAST,
   ],
   none: [
     ["range", "사거리 (칸)", 3, 20, 0.5, v => v.toFixed(1)],
@@ -137,11 +178,41 @@ const WORLD_SLIDERS = [
   ["enemyHp", "적 체력", 5, 1000, 5, v => v.toFixed(0)],
 ];
 const NOTES = {
-  new: "공격력 배율 x0.33, 연사 -0.2, 눈물로 고정, 사거리 +40이라 눈물은 벽까지 날아갑니다. 지뢰는 공격력의 2배 피해. 한 발에 지뢰 3개(행운 5마다 +1, 상한 없음)를 싣고 날아가며 투하 간격마다 좌우로 흩뿌립니다. 이미 지뢰가 있는 자리는 건너뛰고 더 멀리 가져가고, 적에게 맞거나 벽에 닿으면 남은 지뢰를 그 자리에 쏟습니다. 적 위에 떨어진 지뢰는 바로 터집니다. 지뢰는 밟힐 때까지 계속 깔려 있고(방을 나가면 사라짐), 바닥에 깔리는 개수에도 상한이 없습니다. 내가 밟아도 터지지만 나는 피해를 받지 않습니다.",
-  old: "지금 게임의 규칙: 공격마다 발밑에 지뢰 1개(0.1초 쿨), 공격력 2배, 반경 60, 연쇄 3업데이트, 수명·상한 없음.",
-  none: "비교용: 아이템 없이 아이작의 기본 눈물만 쏩니다.",
+  refill: "공격력 배율 x0.33, 연사 -0.2, 사거리 +40, 공격은 눈물로 고정. 눈물마다: 한 발이 지뢰 3쌍(행운 5마다 +1쌍)을 지니고 나가 0.2초마다(기본 탄속에서 1.5칸) 좌우 1쌍씩 깔고, 다 쓰고 나면 연사 간격 5번(= 5 / 연사 초, 게임에서는 5 x (MaxFireDelay + 1) 업데이트)을 기다렸다가 3쌍이 한꺼번에 다시 차며, 멈추면 남은 것을 그 자리에 쏟습니다. 체크를 끄면 연사 간격마다 1쌍씩 채워지는 이전 방식입니다. 아이작이: 아이작이 지뢰를 모아 두고(소지 9개, 행운 5마다 +3) 연사 간격마다 3개씩 채워지며, 모든 눈물이 거기서 꺼내 깝니다. 이때는 눈물이 오래 살거나 많아도 총 개수는 늘지 않고 더 빨리 꺼내 쓸 뿐입니다.",
+  interval: "공격력 배율 x0.33, 연사 -0.2, 사거리 +40, 공격은 눈물로 고정. 내 눈물은 나가자마자, 그리고 살아 있는 동안 주기마다 지뢰 2개를 좌우로 하나씩 흩뿌리고, 멈춘 자리에 1개를 남깁니다. 주기는 셋 중 고릅니다: 연사 간격(연사가 오르면 눈물 수와 깔기 횟수가 함께 늘어 지뢰가 연사의 제곱으로 늘어남, 멈춘 자리는 행운 5마다 +1), 고정 시간(지뢰가 연사에 정비례, 멈춘 자리는 행운 5마다 +1), 행운 비례(기본 주기 x k/(k+행운): 행운 k에 절반, 2k에 3분의 1, 바닥 없음. 이때 행운은 주기에만 씀). 오래 살거나 많거나 갈라지는 눈물일수록 지뢰가 저절로 늘어납니다. 깔 자리가 없으면 자리가 날 때까지 기다리며, 기다리는 동안의 간격은 쌓이지 않습니다. 지뢰가 터지며 생긴 눈물(슬픈 폭탄)은 지뢰를 깔지 않아 끝없이 이어지지 않습니다.",
+  now: "지금 게임의 규칙: 쏜 눈물 한 발이 지뢰 3개(행운 5마다 +1)를 싣고 2칸마다 하나씩 흩뿌리고, 맞거나 벽에 닿으면 남은 지뢰를 그 자리에 쏟습니다. 쏜 눈물만 싣기 때문에 갈라진 눈물은 깔지 않습니다. 비교를 위해 루도비코 같은 시너지도 그대로 돌립니다(실제 게임에서는 막혀 있음).",
+  none: "비교용: 아이템 없이 아이작의 기본 눈물만 쏩니다. 눈물 시너지는 그대로 적용됩니다.",
 };
-let mode = "new";
+// what each synergy box can switch on; in the game these come from the items themselves
+const SYN = {
+  multishot: 1, ludo: false, antigrav: false, planet: false, rubber: false, wrap: false, parasite: false, homing: false,
+  bobby: false, cross: false, mega: false, hot: false, poison: false, sticky: false, butt: false, scatter: false, sad: false,
+  brim: false, ghost: false,
+};
+const SYN_DEFAULTS = { ...SYN };
+const TEAR_SYN = [
+  ["ludo", "루도비코", "눈물 하나를 조종합니다. 살아 있는 동안 계속 깝니다"],
+  ["antigrav", "Anti-Gravity", "눈물이 1초 떠 있다가 날아갑니다"],
+  ["planet", "Tiny Planet", "눈물이 아이작 둘레를 돕니다"],
+  ["rubber", "Rubber Cement", "눈물이 벽에 튕깁니다"],
+  ["wrap", "Continuum", "눈물이 벽을 넘어 반대편에서 나옵니다"],
+  ["parasite", "Parasite", "맞으면 작은 눈물 2개로 갈라집니다"],
+  ["homing", "Spoon Bender", "눈물이 적을 따라갑니다"],
+];
+const BOMB_SYN = [
+  ["bobby", "Bobby-Bomb", "로봇 지뢰: 무장하면 다리를 펴고 가까운 적에게 기어갑니다"],
+  ["cross", "Bomber Boy", "십자 폭발"],
+  ["mega", "Mr. Mega", "폭발이 커지고 피해 x1.85"],
+  ["hot", "Hot Bombs", "불 붙임 (피해 3번)"],
+  ["poison", "Bob's Curse", "독 (피해 4번)"],
+  ["sticky", "Sticky Bombs", "3초 느리게"],
+  ["butt", "Butt Bombs", "3초 혼란"],
+  ["scatter", "Scatter Bombs", "작은 폭탄 4개로 흩어짐"],
+  ["sad", "Sad Bombs", "눈물 10발이 둘레로 퍼짐"],
+  ["brim", "Brimstone Bombs", "십자로 혈사포"],
+  ["ghost", "Ghost Bombs", "유령이 나와 적에게 날아가 터짐"],
+];
+let mode = "refill";
 let P = MODES[mode];
 let silent = false;
 
@@ -189,6 +260,7 @@ function drawAnim(key, name, t, x, y, o = {}) {
     ctx.scale(f[8], f[9]);
     ctx.globalAlpha = (o.alpha ?? 1) * f[13];
     if (o.flash) ctx.filter = "brightness(2.2)";
+    else if (o.filter) ctx.filter = o.filter;
     ctx.drawImage(img, f[0], f[1], f[2], f[3], -f[4], -f[5], f[2], f[3]);
     ctx.restore();
   }
@@ -220,24 +292,34 @@ function pop(count, big) {
   og.gain.setValueAtTime(vol * 0.9, t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
   o.connect(og).connect(audio.destination); o.start(t); o.stop(t + 0.15);
 }
+let lastPlip = -9;
 function plip() {
-  if (!soundOn()) return;
+  if (!soundOn() || tick - lastPlip < 2) return;
+  lastPlip = tick;
   const t = audio.currentTime, o = audio.createOscillator(), g = audio.createGain();
   o.type = "triangle"; o.frequency.setValueAtTime(900, t); o.frequency.exponentialRampToValueAtTime(400, t + 0.06);
   g.gain.setValueAtTime(0.05, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
   o.connect(g).connect(audio.destination); o.start(t); o.stop(t + 0.08);
 }
+function zap() {
+  if (!soundOn()) return;
+  const t = audio.currentTime, o = audio.createOscillator(), g = audio.createGain();
+  o.type = "sawtooth"; o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(60, t + 0.25);
+  g.gain.setValueAtTime(0.06, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
+  o.connect(g).connect(audio.destination); o.start(t); o.stop(t + 0.3);
+}
 
 // ---------------------------------------------------------------- world
 let tick = 0, resetTick = 0, paused = false, shake = 0;
-let player, tears, mines, enemies, effects, texts, log, total, spawnCd, mineSerial;
+let player, tears, mines, enemies, effects, texts, lasers, ghosts, log, total, spawnCd, mineSerial;
 const keys = new Set();
 function rnd(a, b) { return a + Math.random() * (b - a); }
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 function reset() {
-  player = { x: 170, y: 280, vx: 0, vy: 0, fireCd: 0, dir: "Down", head: "Down", shootT: 0, walkT: 0, lastDrop: -99 };
-  tears = []; mines = []; enemies = []; effects = []; texts = []; log = []; spawnCd = 0; mineSerial = 0;
-  total = { laid: 0, tear: 0, mine: 0, kills: 0 };
+  player = { x: 170, y: 280, vx: 0, vy: 0, fireCd: 0, dir: "Down", head: "Down", shootT: 0, walkT: 0, aim: null, target: null, ludo: null, bag: 0, bagCd: 0 };
+  if (mode === "refill") { player.bag = capacity(); player.bagCd = refillInterval(); }
+  tears = []; mines = []; enemies = []; effects = []; texts = []; lasers = []; ghosts = []; log = []; spawnCd = 0; mineSerial = 0;
+  total = { laid: 0, tear: 0, mine: 0, kills: 0, shots: 0 };
   resetTick = tick;
 }
 function record(kind, value) {
@@ -246,13 +328,17 @@ function record(kind, value) {
   else if (kind === "tear-dmg") total.tear += value;
   else if (kind === "mine-dmg") total.mine += value;
   else if (kind === "kill") total.kills += value;
+  else if (kind === "shot") total.shots += value;
 }
 
 function spawnEnemy() {
   for (let n = 0; n < 30; n++) {
     const x = rnd(ROOM.x0 + 30, ROOM.x1 - 30), y = rnd(ROOM.y0 + 30, ROOM.y1 - 30);
     if (Math.hypot(x - player.x, y - player.y) < 200) continue;
-    enemies.push({ x, y, vx: 0, vy: 0, kx: 0, ky: 0, hp: W.enemyHp, max: W.enemyHp, size: W.enemySize, appear: 0, t: 0, flash: 0, dmg: 0, dmgTear: 0 });
+    enemies.push({
+      x, y, vx: 0, vy: 0, kx: 0, ky: 0, hp: W.enemyHp, max: W.enemyHp, size: W.enemySize, appear: 0, t: 0, flash: 0, dmg: 0, dmgTear: 0,
+      burn: null, poison: null, slow: 0, confuse: 0, wx: 0, wy: 0,
+    });
     return;
   }
 }
@@ -260,24 +346,29 @@ function clampRoom(o, m) {
   o.x = clamp(o.x, ROOM.x0 + m, ROOM.x1 - m);
   o.y = clamp(o.y, ROOM.y0 + m, ROOM.y1 - m);
 }
+function inRoom(x, y) { return x >= ROOM.x0 && x <= ROOM.x1 && y >= ROOM.y0 && y <= ROOM.y1; }
+function nearestEnemy(x, y, reach = 1e9) {
+  let best = null, bd = reach;
+  for (const e of enemies) {
+    if (e.appear < 1 || e.hp <= 0) continue;
+    const d = Math.hypot(e.x - x, e.y - y);
+    if (d < bd) { bd = d; best = e; }
+  }
+  return best;
+}
 
 // ---------------------------------------------------------------- the player
 const DIRS = { Right: [1, 0], Left: [-1, 0], Up: [0, -1], Down: [0, 1] };
 function controls() {
   const demo = document.getElementById("demo").checked;
-  let mx = 0, my = 0, shoot = null;
+  let mx = 0, my = 0, shoot = null, target = null;
   if (demo) {
     const tx = 170 + 50 * Math.cos(tick * 0.013), ty = 280 + 95 * Math.sin(tick * 0.021);
     mx = tx - player.x; my = ty - player.y;
     const m = Math.hypot(mx, my); if (m > 6) { mx /= m; my /= m; } else { mx = my = 0; }
-    let best = null, bd = 1e9;
-    for (const e of enemies) {
-      if (e.appear < 1) continue;
-      const d = Math.hypot(e.x - player.x, e.y - player.y);
-      if (d < bd) { bd = d; best = e; }
-    }
-    if (best) {
-      const dx = best.x - player.x, dy = best.y - player.y;
+    target = nearestEnemy(player.x, player.y);
+    if (target) {
+      const dx = target.x - player.x, dy = target.y - player.y;
       shoot = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "Right" : "Left") : (dy > 0 ? "Down" : "Up");
     } else shoot = "Right";
   } else {
@@ -287,7 +378,7 @@ function controls() {
     for (const [k, d] of [["ArrowRight", "Right"], ["ArrowLeft", "Left"], ["ArrowUp", "Up"], ["ArrowDown", "Down"]])
       if (keys.has(k)) shoot = d;
   }
-  return { mx, my, shoot };
+  return { mx, my, shoot, target, demo };
 }
 function updatePlayer() {
   const c = controls(), speed = 4.6;
@@ -299,64 +390,190 @@ function updatePlayer() {
     player.dir = Math.abs(player.vx) > Math.abs(player.vy) ? (player.vx > 0 ? "Right" : "Left") : (player.vy > 0 ? "Down" : "Up");
     player.walkT++;
   }
+  player.aim = c.shoot; player.target = c.demo ? c.target : null;
   player.head = c.shoot || (moving ? player.dir : "Down");
   player.fireCd = Math.max(0, player.fireCd - 1);
   if (c.shoot && player.fireCd <= 0) {
-    player.fireCd += 30 / playerTears();
+    player.fireCd += fireInterval();
     fire(c.shoot);
   }
   if (player.shootT > 0) player.shootT--;
+  // Isaac's own stock refills every refill interval
+  if (mode === "refill" && P.stock === "bag" && --player.bagCd <= 0) {
+    player.bag = Math.min(capacity(), player.bag + P.bagRefill); player.bagCd += refillInterval();
+  }
 }
-// mines a tear carries: 3, one more for every luckStep luck, with no upper limit
-function payload() {
-  return P.base + Math.floor(Math.max(0, W.luck) / P.luckStep);
+// the refill rule: what a tear (or Isaac) can hold, more with luck, and how often it refills
+function capacity() {
+  const steps = Math.floor(Math.max(0, W.luck) / P.luckStep);
+  return P.stock === "bag" ? P.bagBase + steps * P.bagLuck : (P.base + steps) * P.perPlace;
 }
-function range() { return mode === "new" ? ISAAC_RANGE + P.rangeAdd : P.range; }
-// the player's own stats with the item's stat changes (only the new rule changes them)
-function playerDamage() { return W.damage * (mode === "new" ? P.damageMul : 1); }
-function playerTears() { return Math.max(0.1, W.tears + (mode === "new" ? P.tearsAdd : 0)); }
+function refillInterval() { return fireInterval() * P.refillMul; }
+function reloadInterval() { return fireInterval() * P.reloadMul; }   // updates: reloadMul x (MaxFireDelay + 1)
+const item = () => mode !== "none";
+// mines a tear carries in the current game: 3, one more for every luckStep luck, with no upper limit
+function payload() { return P.base + Math.floor(Math.max(0, W.luck) / P.luckStep); }
+// mines a tear leaves where it stops in the new rule
+// (the luck rule spends luck on the period instead)
+function stopCount() {
+  return P.stop + (P.periodMode === "luck" && !P.stopLuck ? 0 : Math.floor(Math.max(0, W.luck) / P.luckStep));
+}
+function range() { return item() ? ISAAC_RANGE + P.rangeAdd : P.range; }
+// the player's own stats with the item's stat changes
+function playerDamage() { return W.damage * (item() ? P.damageMul : 1); }
+function playerTears() { return Math.max(0.1, W.tears + (item() ? P.tearsAdd : 0)); }
+function fireInterval() { return 30 / playerTears(); }           // updates between shots
+// updates between drops: the fire interval, a fixed period, or a period luck shortens
+// (period x half / (half + luck): halved at luck = half, a third at twice that, never a floor)
+const PERIOD_MODES = { fire: "연사 간격", fixed: "고정 시간", luck: "행운 비례" };
+function dropInterval() {
+  if (P.periodMode === "fixed") return P.period * 30;
+  if (P.periodMode === "luck") return P.period * 30 * P.luckHalf / (P.luckHalf + Math.max(0, W.luck));
+  return fireInterval() * P.intervalMul;
+}
 function fire(dir) {
   const [dx, dy] = DIRS[dir];
-  const speed = 10;
-  const t = {
-    x: player.x + dx * 6, y: player.y + dy * 4, vx: dx * speed + player.vx * 0.5, vy: dy * speed + player.vy * 0.5,
-    z: TEAR_HEIGHT, dist: 0, fall: false, fz: 0, load: 0, drop: 0,
-    damage: playerDamage() * P.tearMul, size: mode === "new" ? 4 : 6,
-  };
-  if (mode === "new") {
-    t.load = payload();
-    t.drop = P.dropEvery * TILE * 0.5;   // the first one half a step out
-  }
-  tears.push(t);
   player.shootT = 6;
+  record("shot", 1);
   plip();
-  if (mode === "old" && tick - player.lastDrop >= P.interval) {   // every attack drops a mine at the feet
-    player.lastDrop = tick;
-    layMine(player.x, player.y, -20, player.x, player.y, 5, 1.5, W.damage);
+  if (SYN.ludo) {   // the one tear is steered, not fired again
+    if (!player.ludo || player.ludo.dead) player.ludo = spawnTear(player.x + dx * 10, player.y + dy * 8, dx * 3, dy * 3, { ludo: true, fired: true });
+    return;
+  }
+  const n = SYN.multishot;
+  for (let i = 0; i < n; i++) {
+    const a = (i - (n - 1) / 2) * 0.13, c = Math.cos(a), s = Math.sin(a);
+    const vx = (dx * c - dy * s) * SHOT_SPEED + player.vx * 0.5, vy = (dx * s + dy * c) * SHOT_SPEED + player.vy * 0.5;
+    spawnTear(player.x + dx * 6, player.y + dy * 4, vx, vy, { fired: true });
   }
 }
 
 // ---------------------------------------------------------------- tears
+function spawnTear(x, y, vx, vy, o = {}) {
+  const sp = Math.hypot(vx, vy) || 1;
+  const t = {
+    x, y, vx, vy, z: TEAR_HEIGHT, dist: 0, fall: false, fz: 0, age: 0, dirx: vx / sp, diry: vy / sp,
+    damage: o.damage ?? playerDamage(), size: o.size ?? (item() ? 4 : 6), fromMine: !!o.fromMine, child: !!o.child,
+    ludo: !!o.ludo, hits: new Map(), ignore: o.ignore || null, ignoreT: o.ignore ? 8 : 0, cd: 0, pending: 0, load: 0, drop: 0,
+  };
+  if (t.ludo) t.size = 13;
+  if (mode === "interval" && !t.fromMine) t.cd = dropInterval() * P.first;   // 0: the first pair as it leaves
+  if (mode === "refill" && !t.fromMine) {
+    if (P.stock === "tear") { t.load = capacity(); t.refillCd = refillInterval(); }
+    t.placeCd = P.place * 30 * 0.5; t.side = 1;
+  }
+  // the current game loads only the tears the player fires
+  if (mode === "now" && o.fired) { t.load = payload(); t.drop = P.dropEvery * TILE * 0.5; }
+  if (!t.ludo && !t.fromMine && !t.child) {
+    if (SYN.antigrav) { t.hover = 30; t.hvx = vx; t.hvy = vy; t.vx = 0; t.vy = 0; }
+    else if (SYN.planet) { t.orbit = { a: Math.atan2(y - player.y, x - player.x) || Math.atan2(vy, vx), r: 24 }; }
+  }
+  tears.push(t);
+  return t;
+}
+function moveTear(t) {
+  if (t.ludo) {   // goes where the player aims, eases to a stop when they let go
+    let ax = 0, ay = 0;
+    if (player.target) {
+      const dx = player.target.x - t.x, dy = player.target.y - t.y, d = Math.hypot(dx, dy) || 1;
+      if (d > 6) { ax = dx / d; ay = dy / d; }
+    } else if (player.aim) [ax, ay] = DIRS[player.aim];
+    t.vx = t.vx * 0.86 + ax * 5 * 0.14; t.vy = t.vy * 0.86 + ay * 5 * 0.14;
+    t.x += t.vx; t.y += t.vy; clampRoom(t, t.size);
+    return true;
+  }
+  if (t.hover > 0) {
+    if (--t.hover === 0) { t.vx = t.hvx; t.vy = t.hvy; }
+    return true;
+  }
+  if (t.orbit) {
+    const o = t.orbit;
+    o.a += SHOT_SPEED * 0.8 / o.r; o.r = Math.min(72, o.r + 1.1);
+    const nx = player.x + Math.cos(o.a) * o.r, ny = player.y + Math.sin(o.a) * o.r * 0.9;
+    t.vx = nx - t.x; t.vy = ny - t.y; t.x = nx; t.y = ny;
+    t.dist += SHOT_SPEED * 0.8;
+    return true;   // spectral: walls never stop it
+  }
+  if (SYN.homing) {
+    const e = nearestEnemy(t.x, t.y, 220);
+    if (e) {
+      const sp = Math.hypot(t.vx, t.vy) || 1, dx = e.x - t.x, dy = e.y - t.y, d = Math.hypot(dx, dy) || 1;
+      t.vx += dx / d * 0.9; t.vy += dy / d * 0.9;
+      const ns = Math.hypot(t.vx, t.vy) || 1; t.vx *= sp / ns; t.vy *= sp / ns;
+    }
+  }
+  t.x += t.vx; t.y += t.vy;
+  t.dist += Math.hypot(t.vx, t.vy);
+  if (!inRoom(t.x, t.y)) {
+    if (SYN.rubber) {
+      if (t.x < ROOM.x0 || t.x > ROOM.x1) { t.vx = -t.vx; t.x = clamp(t.x, ROOM.x0, ROOM.x1); }
+      if (t.y < ROOM.y0 || t.y > ROOM.y1) { t.vy = -t.vy; t.y = clamp(t.y, ROOM.y0, ROOM.y1); }
+    } else if (SYN.wrap) {
+      if (t.x < ROOM.x0) t.x += ROOM.x1 - ROOM.x0; else if (t.x > ROOM.x1) t.x -= ROOM.x1 - ROOM.x0;
+      if (t.y < ROOM.y0) t.y += ROOM.y1 - ROOM.y0; else if (t.y > ROOM.y1) t.y -= ROOM.y1 - ROOM.y0;
+    } else return false;
+  }
+  return true;
+}
 function updateTears() {
   for (const t of tears) {
-    t.x += t.vx; t.y += t.vy;
+    if (t.dead) continue;
+    t.age++;
+    if (!moveTear(t)) { poof(t); continue; }
     const sp = Math.hypot(t.vx, t.vy);
-    t.dist += sp;
-    if (mode === "new" && !t.fall && t.load > 0) {
+    if (sp > 0.3) { t.dirx = t.vx / sp; t.diry = t.vy / sp; }
+    if (mode === "interval" && !t.fromMine && !t.fall) {
+      // every drop interval the tear flings perDrop mines, one to each side in turn;
+      // with no free ground it waits, and intervals spent waiting are not banked
+      if (--t.cd <= 0) { t.pending = P.perDrop; t.cd += dropInterval(); }
+      while (t.pending > 0 && scatterMine(t, false, t.pending % 2 ? 1 : -1)) t.pending--;
+    }
+    if (mode === "refill" && !t.fromMine && !t.fall) {
+      // a tear's own stock refills while it lives; it places one mine a placing period from
+      // its stock (or Isaac's), alternating sides, and waits when the ground is taken
+      if (P.stock === "tear" && P.reload) {
+        // emptied: wait reloadMul fire intervals, then the whole stock comes back at once
+        if (t.load < P.perPlace) {
+          if (t.reloadCd == null) t.reloadCd = reloadInterval();
+          if (--t.reloadCd <= 0) { t.load = capacity(); t.reloadCd = null; }
+        }
+      } else if (P.stock === "tear" && --t.refillCd <= 0) { t.load = Math.min(capacity(), t.load + P.refillAmt * P.perPlace); t.refillCd += refillInterval(); }
+      // a pair goes down one to each side; a lone leftover waits for a refill or the stop
+      const have = P.stock === "tear" ? t.load : player.bag;
+      if (--t.placeCd <= 0 && have >= P.perPlace) {
+        let placed = 0;
+        for (let i = 0; i < P.perPlace; i++) if (scatterMine(t, false, t.side * (i ? -1 : 1))) placed++;
+        if (placed > 0) {
+          if (P.stock === "tear") t.load -= placed; else player.bag -= placed;
+          t.side = -t.side; t.placeCd = P.place * 30;
+        }
+      }
+    }
+    if (mode === "now" && !t.fall && t.load > 0) {
       t.drop -= sp;
-      // ground already mined: carry it on and try again on the next update
       if (t.drop <= 0 && scatterMine(t, false)) { t.load--; t.drop += P.dropEvery * TILE; }
     }
-    if (!t.fall && t.dist >= range() * TILE) t.fall = true;
+    if (!t.ludo && !t.fall && t.dist >= range() * TILE) t.fall = true;
     if (t.fall) { t.fz += 1.2; t.z += t.fz; if (t.z >= -2) { poof(t); continue; } }
-    if (t.x < ROOM.x0 || t.x > ROOM.x1 || t.y < ROOM.y0 - 4 || t.y > ROOM.y1 + 4) { poof(t); continue; }
+    if (t.ignoreT > 0 && --t.ignoreT === 0) t.ignore = null;
     for (const e of enemies) {
-      if (e.appear < 1 || e.hp <= 0) continue;
-      if (Math.hypot(e.x - t.x, e.y - t.y) <= e.size + t.size) {
-        hurt(e, t.damage, "tear");
-        e.kx += t.vx * 0.12; e.ky += t.vy * 0.12;
-        poof(t); break;
+      if (e.appear < 1 || e.hp <= 0 || e === t.ignore) continue;
+      if (Math.hypot(e.x - t.x, e.y - t.y) > e.size + t.size) continue;
+      if (t.ludo) {   // a Ludovico tear hits each enemy it touches once a shot
+        if (tick - (t.hits.get(e) ?? -1e9) >= fireInterval()) { t.hits.set(e, tick); hurt(e, t.damage, "tear"); }
+        continue;
       }
+      hurt(e, t.damage, t.fromMine ? "mine" : "tear");
+      e.kx += t.vx * 0.12; e.ky += t.vy * 0.12;
+      if (SYN.parasite && !t.child && !t.fromMine) {
+        const a = Math.atan2(t.vy, t.vx);
+        for (const s of [-1, 1]) {
+          const b = a + s * 1.0;
+          spawnTear(t.x, t.y, Math.cos(b) * SHOT_SPEED * 0.9, Math.sin(b) * SHOT_SPEED * 0.9,
+            { child: true, damage: t.damage * 0.5, size: t.size * 0.75, ignore: e });
+        }
+      }
+      poof(t); break;
     }
   }
   tears = tears.filter(t => !t.dead);
@@ -364,41 +581,46 @@ function updateTears() {
 function poof(t) {
   if (t.dead) return;
   t.dead = true;
-  if (mode === "new" && P.dump) {   // what the tear still carries spills out where it stops
-    t.x = clamp(t.x, ROOM.x0, ROOM.x1); t.y = clamp(t.y, ROOM.y0, ROOM.y1);
+  t.x = clamp(t.x, ROOM.x0, ROOM.x1); t.y = clamp(t.y, ROOM.y0, ROOM.y1);
+  if (mode === "interval" && !t.fromMine) {   // a few more where it stops
+    for (let i = stopCount(); i > 0; i--) scatterMine(t, true);
+  } else if (mode === "refill" && !t.fromMine) {   // spills its stock, or takes a few from Isaac's
+    if (P.stock === "tear") while (t.load > 0) { t.load--; scatterMine(t, true); }
+    else for (let i = P.stop; i > 0 && player.bag > 0; i--) { player.bag--; scatterMine(t, true); }
+  } else if (mode === "now" && P.dump) {      // what the tear still carries spills out where it stops
     while (t.load > 0) { t.load--; scatterMine(t, true); }
   }
-  effects.push({ key: "poof", name: "Poof", x: t.x, y: t.y, z: t.z, t: 0, scale: 0.6 });
+  effects.push({ key: "poof", name: "Poof", x: t.x, y: t.y, z: t.z, t: 0, scale: t.ludo ? 1.4 : 0.6 });
 }
 
 // ---------------------------------------------------------------- mines
 // a mine flies from (x, y, z) to (tx, ty) on the floor in T updates under gravity g
-function layMine(x, y, z, tx, ty, T, g, damage) {
+function layMine(x, y, z, tx, ty, T, g, damage, o = {}) {
   const m = {
     id: mineSerial++, x, y, z, sx: x, sy: y, sz: z, tx, ty, T, g, k: 0, vz: (-z - 0.5 * g * T * T) / T,
-    rot: 0, vr: rnd(-0.45, 0.45), state: "fall", t: 0, damage, fuse: -1,
+    rot: 0, vr: rnd(-0.45, 0.45), state: "fall", t: 0, damage, fuse: -1, small: !!o.small, legs: 0,
   };
   mines.push(m);
-  record("laid", 1);
+  if (!m.small) record("laid", 1);
   return m;
 }
 function freeSpot(x, y) {
-  for (const m of mines) if (Math.hypot(m.tx - x, m.ty - y) < P.gap) return false;
+  for (const m of mines) if (!m.small && Math.hypot(m.tx - x, m.ty - y) < P.gap) return false;
   return true;
 }
-function scatterMine(t, burst) {
-  const sp = Math.hypot(t.vx, t.vy) || 1, ux = t.vx / sp, uy = t.vy / sp;
+function scatterMine(t, burst, side) {
+  const ux = t.dirx, uy = t.diry;
   for (let n = 0; n < 6; n++) {
     let tx, ty;
-    if (burst) {   // a spilled load bursts out around the stop
+    if (burst) {   // a stop bursts out around the spot
       const a = rnd(0, Math.PI * 2), r = rnd(0.25, 1) * Math.max(0.4, P.scatter) * TILE;
       tx = t.x + Math.cos(a) * r; ty = t.y + Math.sin(a) * r;
-    } else {       // flung out to either side, a little ahead
-      const side = Math.random() < 0.5 ? -1 : 1, lat = side * rnd(0.15, 1) * P.scatter * TILE, fwd = rnd(0.2, 0.9) * TILE;
+    } else {       // flung out to one side, a little ahead
+      const sd = side || (Math.random() < 0.5 ? -1 : 1), lat = sd * rnd(0.15, 1) * P.scatter * TILE, fwd = rnd(0.2, 0.9) * TILE;
       tx = t.x + ux * fwd - uy * lat; ty = t.y + uy * fwd + ux * lat;
     }
     tx = clamp(tx, ROOM.x0 + 8, ROOM.x1 - 8); ty = clamp(ty, ROOM.y0 + 8, ROOM.y1 - 8);
-    // a spilled load is never lost: with no free ground left it lands on the last spot tried
+    // a stop is never lost: with no free ground left it lands on the last spot tried
     if (!freeSpot(tx, ty) && !(burst && n === 5)) continue;
     layMine(t.x, t.y, t.z, tx, ty, 10, 0.9, playerDamage());
     return true;
@@ -407,7 +629,7 @@ function scatterMine(t, burst) {
 }
 function landed() {
   let n = 0;
-  for (const m of mines) if (!m.dead && m.state !== "fall") n++;
+  for (const m of mines) if (!m.dead && !m.small && m.state !== "fall") n++;
   return n;
 }
 function enemyNear(x, y, extra) {
@@ -424,49 +646,118 @@ function updateMines() {
       m.z = m.sz + m.vz * m.k + 0.5 * m.g * m.k * m.k; m.rot += m.vr;
       if (m.k >= m.T) {
         m.x = m.tx; m.y = m.ty; m.z = 0; m.state = "land"; m.t = 0; m.rot = 0;
-        if (mode === "new" && enemyNear(m.x, m.y, 6)) m.fuse = 0;   // landed on someone: goes off at once
+        if (m.small) m.fuse = 8;                                  // a scattered bomblet goes off by itself
+        else if (enemyNear(m.x, m.y, 6)) m.fuse = 0;              // landed on someone: goes off at once
       }
     } else {
       m.t++;
       if (m.state === "land" && m.t >= 8) m.state = "idle";
       if (m.t >= P.arm) m.armed = true;
+      // Bobby-Bomb: an armed mine stands up on its legs and creeps to the nearest enemy
+      if (SYN.bobby && m.armed && !m.small && m.fuse < 0) {
+        const e = nearestEnemy(m.x, m.y, 200);
+        m.legs = Math.min(1, m.legs + 0.1);
+        if (e && m.legs >= 1) {
+          const dx = e.x - m.x, dy = e.y - m.y, d = Math.hypot(dx, dy) || 1;
+          m.x += dx / d * 0.9; m.y += dy / d * 0.9; m.tx = m.x; m.ty = m.y; m.walk = (m.walk || 0) + 1;
+        }
+      } else m.legs = Math.max(0, m.legs - 0.1);
     }
   }
   // fuses
   const ready = [];
   for (const m of mines) if (!m.dead && m.fuse >= 0) { if (m.fuse <= 0) ready.push(m); else m.fuse--; }
-  // stepping: enemies, and in the new rule the player too (who takes no damage from it)
+  // stepping: enemies, and the player too (who takes no damage from it)
   for (const m of mines) {
-    if (m.dead || !m.armed || m.fuse >= 0) continue;
-    const byPlayer = mode === "new" && P.playerSteps && Math.hypot(player.x - m.x, player.y - m.y) <= 10 + 8;
+    if (m.dead || !m.armed || m.fuse >= 0 || m.small) continue;
+    const byPlayer = P.playerSteps && Math.hypot(player.x - m.x, player.y - m.y) <= 10 + 8;
     if (byPlayer || enemyNear(m.x, m.y, 8)) { m.fuse = 0; ready.push(m); }
   }
   let count = 0;
   const pictures = [];
   for (const m of ready) { if (!m.dead) { explode(m, pictures); count++; } }
-  if (count) { pop(count, mode === "old"); shake = Math.min(4, shake + 0.5 + 0.25 * count); }
+  if (count) { pop(count, SYN.mega); shake = Math.min(4, shake + 0.5 + 0.25 * count); }
   mines = mines.filter(m => !m.dead);
+}
+// one blast: damage, knockback, the bomb's status effects and its picture
+function blastAt(x, y, radius, dmg, scale, pictures) {
+  if (!pictures.some(p => Math.hypot(p.x - x, p.y - y) < 20)) {
+    pictures.push({ x, y });
+    effects.push({ key: "boom", name: "Explosion", x, y, z: 0, t: 0, scale, green: true });
+  }
+  for (const e of enemies) {
+    if (e.appear < 1 || e.hp <= 0) continue;
+    const d = Math.hypot(e.x - x, e.y - y);
+    if (d > radius + e.size) continue;
+    hurt(e, dmg, "mine");
+    const k = (4 * (1 - d / (radius + e.size)) + 1) * (13 / e.size);
+    e.kx += (e.x - x) / (d || 1) * k; e.ky += (e.y - y) / (d || 1) * k;
+    if (SYN.hot) e.burn = { n: 3, cd: 20, dmg: dmg * 0.5 };
+    if (SYN.poison) e.poison = { n: 4, cd: 20, dmg: dmg * 0.4 };
+    if (SYN.sticky) e.slow = 90;
+    if (SYN.butt) e.confuse = 90;
+  }
 }
 function explode(m, pictures) {
   m.dead = true;
-  if (!pictures.some(p => Math.hypot(p.x - m.x, p.y - m.y) < 20)) {
-    pictures.push(m);
-    effects.push({ key: "boom", name: "Explosion", x: m.x, y: m.y, z: 0, t: 0, scale: P.blastScale, green: true });
-  }
-  const dmg = P.mineMul * m.damage;
-  for (const e of enemies) {
-    if (e.appear < 1 || e.hp <= 0) continue;
-    const d = Math.hypot(e.x - m.x, e.y - m.y);
-    if (d <= P.radius + e.size) {
-      hurt(e, dmg, "mine");
-      const k = (4 * (1 - d / (P.radius + e.size)) + 1) * (13 / e.size);
-      e.kx += (e.x - m.x) / (d || 1) * k; e.ky += (e.y - m.y) / (d || 1) * k;
+  const mega = SYN.mega ? 1 : 0;
+  const radius = P.radius * (mega ? 1.35 : 1) * (m.small ? 0.65 : 1);
+  const dmg = P.mineMul * m.damage * (mega ? 1.85 : 1) * (m.small ? 0.5 : 1);
+  const scale = P.blastScale * (mega ? 1.4 : 1) * (m.small ? 0.65 : 1);
+  blastAt(m.x, m.y, radius, dmg, scale, pictures);
+  if (SYN.cross) {   // Bomber Boy: the blast runs out along a cross
+    for (const [dx, dy] of Object.values(DIRS)) for (const k of [1, 2]) {
+      const x = m.x + dx * radius * 0.9 * k, y = m.y + dy * radius * 0.9 * k;
+      if (inRoom(x, y)) blastAt(x, y, radius * 0.75, dmg, scale * 0.85, pictures);
     }
   }
+  if (SYN.scatter && !m.small) {   // breaks into four small bombs that go off by themselves
+    for (let i = 0; i < 4; i++) {
+      const a = i * Math.PI / 2 + rnd(-0.5, 0.5), r = rnd(0.8, 1.6) * TILE;
+      layMine(m.x, m.y, -2, clamp(m.x + Math.cos(a) * r, ROOM.x0 + 8, ROOM.x1 - 8), clamp(m.y + Math.sin(a) * r, ROOM.y0 + 8, ROOM.y1 - 8),
+        10, 0.9, m.damage, { small: true });
+    }
+  }
+  if (SYN.sad && !m.small) {   // ten tears in a ring; tears a mine made lay no mines
+    for (let i = 0; i < 10; i++) {
+      const a = i * Math.PI / 5;
+      spawnTear(m.x, m.y, Math.cos(a) * 8, Math.sin(a) * 8, { fromMine: true, damage: playerDamage(), size: 4 });
+    }
+  }
+  if (SYN.brim && !m.small) {   // four Brimstone beams across the room
+    for (const [dx, dy] of Object.values(DIRS)) {
+      lasers.push({ x: m.x, y: m.y, dx, dy, t: 0 });
+      for (const e of enemies) {
+        if (e.appear < 1 || e.hp <= 0) continue;
+        const along = (e.x - m.x) * dx + (e.y - m.y) * dy, across = Math.abs((e.x - m.x) * dy - (e.y - m.y) * dx);
+        if (along > 0 && across <= e.size + 9) hurt(e, dmg, "mine");
+      }
+    }
+    zap();
+  }
+  if (SYN.ghost && !m.small) ghosts.push({ x: m.x, y: m.y, z: 0, t: 0, damage: dmg });
   for (const o of mines) {
     if (o.dead || o === m || o.fuse >= 0 || o.state === "fall") continue;
-    if (Math.hypot(o.x - m.x, o.y - m.y) <= P.radius) o.fuse = P.chain;
+    if (Math.hypot(o.x - m.x, o.y - m.y) <= radius) o.fuse = P.chain;
   }
+}
+function updateGhosts() {
+  const pictures = [];
+  for (const g of ghosts) {
+    g.t++;
+    g.z = Math.max(-18, g.z - 1.5);
+    if (g.t < 12) continue;   // rises first
+    const e = nearestEnemy(g.x, g.y);
+    if (e) {
+      const dx = e.x - g.x, dy = e.y - g.y, d = Math.hypot(dx, dy) || 1;
+      g.x += dx / d * 3.2; g.y += dy / d * 3.2;
+      if (d <= e.size + 8) { g.dead = true; blastAt(g.x, g.y, 30, g.damage, P.blastScale * 0.8, pictures); pop(1, false); }
+    }
+    if (g.t > 150 && !g.dead) { g.dead = true; blastAt(g.x, g.y, 30, g.damage, P.blastScale * 0.8, pictures); }
+  }
+  ghosts = ghosts.filter(g => !g.dead);
+  for (const l of lasers) l.t++;
+  lasers = lasers.filter(l => l.t < 14);
 }
 
 // ---------------------------------------------------------------- enemies
@@ -481,13 +772,26 @@ function hurt(e, amount, kind) {
     record("kill", 1);
   }
 }
+function tickStatus(e, key) {
+  const s = e[key];
+  if (!s) return;
+  if (--s.cd <= 0) { hurt(e, s.dmg, "mine"); s.cd = 20; if (--s.n <= 0) e[key] = null; }
+}
 function updateEnemies() {
   for (const e of enemies) {
     if (e.hp <= 0) continue;
     e.t++;
     if (e.appear < 1) { e.appear = Math.min(1, e.appear + 1 / 20); continue; }
-    const dx = player.x - e.x, dy = player.y - e.y, d = Math.hypot(dx, dy) || 1;
-    const sp = W.enemySpeed;
+    tickStatus(e, "burn"); tickStatus(e, "poison");
+    if (e.hp <= 0) continue;
+    let dx = player.x - e.x, dy = player.y - e.y, d = Math.hypot(dx, dy) || 1;
+    if (e.confuse > 0) {   // wanders instead of chasing
+      e.confuse--;
+      if (e.t % 20 === 0) { const a = rnd(0, Math.PI * 2); e.wx = Math.cos(a); e.wy = Math.sin(a); }
+      dx = e.wx * d; dy = e.wy * d;
+    }
+    const sp = W.enemySpeed * (e.slow > 0 ? 0.4 : 1);
+    if (e.slow > 0) e.slow--;
     e.vx = e.vx * 0.8 + dx / d * sp * 0.2; e.vy = e.vy * 0.8 + dy / d * sp * 0.2;
     for (const o of enemies) {
       if (o === e || o.hp <= 0) continue;
@@ -510,7 +814,8 @@ function updateEnemies() {
 // ---------------------------------------------------------------- loop
 function update() {
   tick++;
-  updatePlayer(); updateTears(); updateMines(); updateEnemies();
+  if (!SYN.ludo && player.ludo) { poof(player.ludo); player.ludo = null; }
+  updatePlayer(); updateTears(); updateMines(); updateGhosts(); updateEnemies();
   for (const f of effects) f.t++;
   effects = effects.filter(f => f.t < DATA.anims[f.key][f.name].frames);
   for (const x of texts) x.t++;
@@ -521,14 +826,16 @@ function update() {
 }
 function stats() {
   const span = Math.max(1, Math.min(tick - resetTick, 300)) / 30;
-  let laid = 0, tear = 0, mine = 0, kills = 0;
+  let laid = 0, tear = 0, mine = 0, kills = 0, shots = 0;
   for (const l of log) {
     if (l.kind === "laid") laid++;
     else if (l.kind === "tear-dmg") tear += l.value;
     else if (l.kind === "mine-dmg") mine += l.value;
     else if (l.kind === "kill") kills++;
+    else if (l.kind === "shot") shots++;
   }
   document.getElementById("s-rate").textContent = (laid / span).toFixed(1);
+  document.getElementById("s-per").textContent = shots ? (laid / shots).toFixed(1) : "-";
   document.getElementById("s-alive").textContent = landed();
   document.getElementById("s-tear").textContent = (tear / span).toFixed(1);
   document.getElementById("s-mine").textContent = (mine / span).toFixed(1);
@@ -539,29 +846,32 @@ function stats() {
   document.getElementById("b-mine").style.width = (mine / sum * 100) + "%";
 }
 // for checking numbers from the console: average of `runs` fresh runs of `seconds` each
+// measure("interval", "mob", { syn: { ludo: true }, world: { tears: 5 } })
 function measure(modeKey, scen, o = {}) {
   const seconds = o.seconds || 30, runs = o.runs || 4;
-  const keepMode = mode, keepScen = W.scenario, keepW = { ...W };
+  const keepMode = mode, keepScen = W.scenario, keepW = { ...W }, keepSyn = { ...SYN };
   const demo = document.getElementById("demo"), keepDemo = demo.checked;
   silent = true; demo.checked = true;
   mode = modeKey; P = Object.assign(JSON.parse(JSON.stringify(DEFAULTS[modeKey])), o.mode || {});
   Object.assign(W, SCENARIOS[scen], o.world || {});
-  const sum = { laid: 0, tear: 0, mine: 0, kills: 0, floor: 0, peak: 0 };
+  Object.assign(SYN, SYN_DEFAULTS, o.syn || {});
+  const sum = { laid: 0, tear: 0, mine: 0, kills: 0, shots: 0, floor: 0, peak: 0 };
   for (let r = 0; r < runs; r++) {
     reset();
     let floor = 0;
     for (let i = 0; i < seconds * 30; i++) { update(); const n = landed(); floor += n; sum.peak = Math.max(sum.peak, n); }
-    for (const k of ["laid", "tear", "mine", "kills"]) sum[k] += total[k];
+    for (const k of ["laid", "tear", "mine", "kills", "shots"]) sum[k] += total[k];
     sum.floor += floor / (seconds * 30);
   }
   const n = runs * seconds;
   const out = {
-    laidPerSec: +(sum.laid / n).toFixed(1), floor: +(sum.floor / runs).toFixed(1), peak: sum.peak,
+    laidPerSec: +(sum.laid / n).toFixed(1), perShot: +(sum.laid / Math.max(1, sum.shots)).toFixed(1),
+    floor: +(sum.floor / runs).toFixed(1), peak: sum.peak,
     tearDps: +(sum.tear / n).toFixed(2), mineDps: +(sum.mine / n).toFixed(2), dps: +((sum.tear + sum.mine) / n).toFixed(2),
     killsPerMin: +(sum.kills / n * 60).toFixed(1),
   };
   silent = false; demo.checked = keepDemo;
-  mode = keepMode; P = MODES[mode]; Object.assign(W, keepW); W.scenario = keepScen;
+  mode = keepMode; P = MODES[mode]; Object.assign(W, keepW); W.scenario = keepScen; Object.assign(SYN, keepSyn);
   reset();
   return out;
 }
@@ -581,18 +891,16 @@ function render() {
   ctx.drawImage(ROOMIMG, 0, 0);
   // mines on the floor
   const floor = mines.filter(m => m.state !== "fall").sort((a, b) => a.y - b.y);
-  for (const m of floor) {
-    const [x, y] = px(m.x, m.y);
-    const blink = m.fuse >= 0 && tick % 2 === 0;
-    const name = m.state === "land" ? "Land" : "Idle";
-    drawAnim("mine", name, m.state === "land" ? m.t : m.t + m.id * 7, Math.round(x), Math.round(y), { flash: blink });
-  }
+  for (const m of floor) drawMine(m);
+  // Brimstone beams
+  for (const l of lasers) drawLaser(l);
   // everything standing, by depth
   const list = [];
   list.push({ y: player.y, draw: drawPlayer });
   for (const e of enemies) list.push({ y: e.y, draw: () => drawEnemy(e) });
   for (const t of tears) list.push({ y: t.y, draw: () => drawTear(t) });
   for (const m of mines) if (m.state === "fall") list.push({ y: m.y, draw: () => drawFalling(m) });
+  for (const g of ghosts) list.push({ y: g.y, draw: () => drawGhost(g) });
   for (const f of effects) list.push({ y: f.y + 1, draw: () => drawEffect(f) });
   list.sort((a, b) => a.y - b.y);
   for (const it of list) it.draw();
@@ -614,10 +922,20 @@ function render() {
       ctx.fillStyle = "#e0423a"; ctx.fillRect(x * DS - w / 2 + 1, y * DS - 45 - e.size * 2, (w - 2) * Math.max(0, e.hp / e.max), 3);
     }
   }
-  if (mode === "new") {   // what the next tear carries and how full the floor is
+  // the rule in force, at the bottom
+  let s = null;
+  if (mode === "refill")
+    s = P.stock === "tear"
+      ? `한 발 소지 ${capacity() / P.perPlace}${P.perPlace === 2 ? "쌍" : "개"} · ${P.place.toFixed(2)}초마다 ${P.perPlace === 2 ? "1쌍" : "1개"} · `
+        + (P.reload ? `다 쓰면 ${(reloadInterval() / 30).toFixed(2)}초 뒤 다시 가득` : `${(refillInterval() / 30).toFixed(2)}초마다 +${P.refillAmt}${P.perPlace === 2 ? "쌍" : "개"}`)
+        + ` · 바닥 ${landed()}개`
+      : `아이작 소지 ${player.bag}/${capacity()} · ${P.place.toFixed(2)}초마다 ${P.perPlace === 2 ? "1쌍" : "1개"} · ${(refillInterval() / 30).toFixed(2)}초마다 +${P.bagRefill} · 바닥 ${landed()}개`;
+  else if (mode === "interval")
+    s = `[${PERIOD_MODES[P.periodMode]}] ${(dropInterval() / 30).toFixed(2)}초마다 ${P.perDrop}개 · 멈추면 ${stopCount()}개 · 눈물 ${tears.filter(t => !t.fromMine).length}개 · 바닥 ${landed()}개`;
+  else if (mode === "now") s = `한 발 지뢰 ${payload()}개 · 바닥 ${landed()}개`;
+  if (s) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.textAlign = "left"; ctx.font = "bold 14px 'Malgun Gothic', sans-serif";
-    const s = `한 발 지뢰 ${payload()}개 · 바닥 ${landed()}개`;
     ctx.lineWidth = 4; ctx.strokeStyle = "#000"; ctx.strokeText(s, 14, canvas.height - 14);
     ctx.fillStyle = "#d8f0b0"; ctx.fillText(s, 14, canvas.height - 14);
   }
@@ -626,6 +944,44 @@ function render() {
     ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = "#fff"; ctx.font = "bold 22px 'Malgun Gothic'"; ctx.fillText("일시정지 (P)", canvas.width / 2, canvas.height / 2);
   }
+}
+function drawMine(m) {
+  const [x, y] = px(m.x, m.y);
+  const rx = Math.round(x), ry = Math.round(y);
+  if (m.legs > 0) {   // Bobby-Bomb: four little legs, stepping while it walks
+    ctx.strokeStyle = "#1c1a14"; ctx.lineWidth = 1.2;
+    const step = Math.sin((m.walk || 0) * 0.6) * 1.5 * m.legs;
+    for (const [lx, ly, s] of [[-4, -1, 1], [4, -1, -1], [-4, 1, -1], [4, 1, 1]]) {
+      ctx.beginPath(); ctx.moveTo(rx + lx * 0.5, ry + ly - 2);
+      ctx.lineTo(rx + lx * (1 + 0.5 * m.legs), ry + ly + 2 * m.legs + s * step); ctx.stroke();
+    }
+  }
+  const blink = m.fuse >= 0 && tick % 2 === 0;
+  const name = m.state === "land" ? "Land" : "Idle";
+  drawAnim("mine", name, m.state === "land" ? m.t : m.t + m.id * 7, rx, ry - 2 * m.legs,
+    { flash: blink, scale: m.small ? 0.65 : 1 });
+}
+function drawLaser(l) {
+  const [x, y] = px(l.x, l.y);
+  const len = 900, a = 1 - l.t / 14;
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.strokeStyle = "#ff3a2a"; ctx.lineWidth = 6 * a + 1; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(x, y - 8); ctx.lineTo(x + l.dx * len, y - 8 + l.dy * len); ctx.stroke();
+  ctx.strokeStyle = "#ffd0c0"; ctx.lineWidth = 2 * a + 0.5;
+  ctx.beginPath(); ctx.moveTo(x, y - 8); ctx.lineTo(x + l.dx * len, y - 8 + l.dy * len); ctx.stroke();
+  ctx.restore();
+}
+function drawGhost(g) {
+  const [x, y] = px(g.x, g.y + g.z);
+  const bob = Math.sin(g.t * 0.3) * 1.2;
+  ctx.save();
+  ctx.globalAlpha = 0.8;
+  ctx.fillStyle = "#e8f0ff";
+  ctx.beginPath(); ctx.ellipse(x, y + bob, 5, 6, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#1a2030";
+  ctx.fillRect(x - 3, y - 2 + bob, 2, 2); ctx.fillRect(x + 1, y - 2 + bob, 2, 2);
+  ctx.restore();
 }
 function drawPlayer() {
   shadow(player.x, player.y, 9, 3.5);
@@ -640,19 +996,22 @@ function drawEnemy(e) {
   shadow(e.x, e.y, 9 * sc, 3.5 * sc, 0.35 * e.appear);
   const [x, y] = px(e.x, e.y);
   const hori = Math.abs(e.vx) > Math.abs(e.vy);
-  const o = { alpha: e.appear, flip: hori && e.vx < 0, flash: e.flash > 0, scale: sc };
+  const filter = e.burn ? "sepia(1) saturate(3) hue-rotate(-25deg) brightness(1.1)" : e.poison ? "sepia(1) saturate(3) hue-rotate(50deg)"
+    : e.slow > 0 ? "grayscale(0.7) brightness(1.3)" : e.confuse > 0 ? "sepia(0.8)" : null;
+  const o = { alpha: e.appear, flip: hori && e.vx < 0, flash: e.flash > 0, scale: sc, filter };
   drawAnim("gaper", hori ? "WalkHori" : "WalkVert", e.t, Math.round(x), Math.round(y), o);
-  drawAnim("gaper", "Head", 0, Math.round(x), Math.round(y), { alpha: e.appear, flash: e.flash > 0, scale: sc });
+  drawAnim("gaper", "Head", 0, Math.round(x), Math.round(y), { alpha: e.appear, flash: e.flash > 0, scale: sc, filter });
 }
 function drawTear(t) {
   shadow(t.x, t.y, 3, 1.3, 0.3);
   const [x, y] = px(t.x, t.y);
-  drawAnim("tear", mode === "new" ? "RegularTear4" : "RegularTear6", 0, x, y + t.z * S);
+  const name = t.ludo ? "RegularTear10" : t.child ? "RegularTear2" : item() ? "RegularTear4" : "RegularTear6";
+  drawAnim("tear", name, 0, x, y + t.z * S, t.fromMine ? { filter: "hue-rotate(-60deg) saturate(1.5)" } : {});
 }
 function drawFalling(m) {
   shadow(m.x, m.y, 5, 2, 0.3);
   const [x, y] = px(m.x, m.y);
-  drawAnim("mine", "Fall", 0, x, y + m.z * S, { rot: m.rot });
+  drawAnim("mine", "Fall", 0, x, y + m.z * S, { rot: m.rot, scale: m.small ? 0.65 : 1 });
 }
 function drawEffect(f) {
   const [x, y] = px(f.x, f.y);
@@ -667,23 +1026,75 @@ function sliderRow(obj, [key, label, min, max, step, fmt]) {
   input.addEventListener("input", () => { obj[key] = parseFloat(input.value); out.textContent = fmt(obj[key]); });
   return row;
 }
+function checkRow(obj, key, label) {
+  const row = document.createElement("div"); row.className = "check";
+  row.innerHTML = `<input type="checkbox" ${obj[key] ? "checked" : ""}><label>${label}</label>`;
+  row.querySelector("input").addEventListener("change", ev => { obj[key] = ev.target.checked; });
+  return row;
+}
 function buildParams() {
   const box = document.getElementById("params");
   box.innerHTML = "<h2>숫자</h2>";
-  for (const s of SLIDERS[mode]) box.appendChild(sliderRow(P, s));
-  if (mode === "new") {
-    const row = document.createElement("div"); row.className = "check";
-    row.innerHTML = `<input type="checkbox" ${P.dump ? "checked" : ""}><label>맞거나 벽에 닿으면 남은 지뢰를 쏟음</label>`;
-    row.querySelector("input").addEventListener("change", ev => { P.dump = ev.target.checked; });
+  if (mode === "refill") {   // who holds the mines
+    const row = document.createElement("div"); row.className = "modes"; row.style.margin = "2px 0 6px";
+    for (const [key, label] of [["tear", "소지: 눈물마다"], ["bag", "소지: 아이작이"]]) {
+      const b = document.createElement("button"); b.textContent = label;
+      b.classList.toggle("on", P.stock === key);
+      b.onclick = () => { P.stock = key; buildParams(); reset(); };
+      row.appendChild(b);
+    }
     box.appendChild(row);
-    const row2 = document.createElement("div"); row2.className = "check";
-    row2.innerHTML = `<input type="checkbox" ${P.playerSteps ? "checked" : ""}><label>내가 밟아도 터짐 (피해는 없음)</label>`;
-    row2.querySelector("input").addEventListener("change", ev => { P.playerSteps = ev.target.checked; });
-    box.appendChild(row2);
   }
+  if (mode === "interval") {   // which period the tears drop on
+    const row = document.createElement("div"); row.className = "modes"; row.style.margin = "2px 0 6px";
+    for (const [key, label] of Object.entries(PERIOD_MODES)) {
+      const b = document.createElement("button"); b.textContent = "주기: " + label;
+      b.classList.toggle("on", P.periodMode === key);
+      b.onclick = () => { P.periodMode = key; buildParams(); };
+      row.appendChild(b);
+    }
+    box.appendChild(row);
+  }
+  for (const s of SLIDERS[mode]) {
+    const show = !s[6] || (typeof s[6] === "function" ? s[6](P) : s[6].split(" ").includes(P.periodMode));
+    if (show) box.appendChild(sliderRow(P, s));
+  }
+  if (mode === "now") box.appendChild(checkRow(P, "dump", "맞거나 벽에 닿으면 남은 지뢰를 쏟음"));
+  if (mode === "interval" && P.periodMode === "luck") box.appendChild(checkRow(P, "stopLuck", "행운이 멈춘 자리 지뢰도 늘림"));
+  if (mode === "refill" && P.stock === "tear") {
+    const row = checkRow(P, "reload", "다 쓰고 나서 기다렸다가 한꺼번에 채움");
+    row.querySelector("input").addEventListener("change", () => buildParams());
+    box.appendChild(row);
+  }
+  if (item()) box.appendChild(checkRow(P, "playerSteps", "내가 밟아도 터짐 (피해는 없음)"));
   const note = document.createElement("div"); note.className = "note"; note.style.marginTop = "6px";
   note.textContent = NOTES[mode];
   box.appendChild(note);
+}
+function buildSynergies() {
+  const tear = document.getElementById("syn-tear");
+  tear.innerHTML = "<h2>눈물 시너지</h2>";
+  tear.appendChild(sliderRow(SYN, ["multishot", "멀티샷 (눈물 수)", 1, 4, 1, v => v.toFixed(0) + "발"]));
+  const grid = document.createElement("div"); grid.className = "syn";
+  for (const [key, name, tip] of TEAR_SYN) grid.appendChild(synBox(key, name, tip));
+  tear.appendChild(grid);
+  const n1 = document.createElement("div"); n1.className = "note"; n1.style.marginTop = "6px";
+  n1.textContent = "켜면 그 아이템을 가진 것처럼 눈물이 바뀝니다(아이템의 능력치 변화는 빼고). 시너지 코드는 따로 없고, 바뀐 눈물에 같은 규칙이 그대로 적용될 뿐입니다.";
+  tear.appendChild(n1);
+  const bomb = document.getElementById("syn-bomb");
+  bomb.innerHTML = "<h2>폭탄 시너지</h2>";
+  const grid2 = document.createElement("div"); grid2.className = "syn";
+  for (const [key, name, tip] of BOMB_SYN) grid2.appendChild(synBox(key, name, tip));
+  bomb.appendChild(grid2);
+  const n2 = document.createElement("div"); n2.className = "note"; n2.style.marginTop = "6px";
+  n2.textContent = "실제 구현은 지뢰 폭발에 플레이어의 폭탄 효과를 실어 터뜨리는 방식이라, 여기 없는 폭탄 아이템(다른 모드 것 포함)도 저절로 따라옵니다. 미리보기는 대표적인 것만 흉내 냅니다.";
+  bomb.appendChild(n2);
+}
+function synBox(key, name, tip) {
+  const label = document.createElement("label"); label.title = tip;
+  label.innerHTML = `<input type="checkbox" ${SYN[key] ? "checked" : ""}>${name}`;
+  label.querySelector("input").addEventListener("change", ev => { SYN[key] = ev.target.checked; });
+  return label;
 }
 function buildWorld() {
   const box = document.getElementById("world");
@@ -721,7 +1132,7 @@ document.getElementById("sound").addEventListener("change", ensureAudio);
     IMG.push(img); GREEN.push(tint(img, 0.75, 1, 0.6, 0.06));
   }
   ROOMIMG = await loadImage(DATA.room);
-  buildParams(); buildWorld(); reset();
+  buildParams(); buildSynergies(); buildWorld(); reset();
   let last = performance.now(), acc = 0;
   function frame(now) {
     acc += Math.min(250, now - last); last = now;

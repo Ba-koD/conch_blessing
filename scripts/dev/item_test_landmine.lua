@@ -1,13 +1,15 @@
 local require = ConchBlessingRequire or require -- reloadable loader, see main.lua
 -- 지뢰 (Landmine): the lifecycle contract and its cases, for the tear that
--- sows mines (user design 2026-11-25). The player really holds the shoot key
+-- sows mines (user designs 2026-11-25 and 2026-11-27). The player really holds the shoot key
 -- (the engine reads it through MC_INPUT_ACTION); every tear is the engine's
 -- own, recorded here as it is fired, and every mine is the module's own
 -- record (its flight read from its own height; one field effect draws them
 -- all). Every
 -- blast is read from the enemy's actual HP and the player's actual health;
 -- the expected numbers are the user's: +40 range, x0.33 damage, -0.2 tears,
--- 3 mines a tear (+1 per 5 luck), a blast of half the holder's damage. A
+-- mines laid 3 times a tear (+1 per 5 luck), every 0.2 s, one mine at a time
+-- per copy, all of them again 5 fire intervals after a tear runs out, a blast
+-- of the holder's damage carrying the holder's bomb flags. A
 -- case keeps one harmless enemy pinned in the corner behind the player (the
 -- room stays uncleared and its doors shut), where the tears (fired to the
 -- right) never reach it. Mines placed for the blast cases are laid with the
@@ -271,7 +273,7 @@ local function measureShare(plan, id)
 end
 
 -- n copies: +40 range, x0.33 damage and -0.2 tears once however many, and
--- every tear carries 3 mines; nothing without the item.
+-- every tear lays n mines 3 times; nothing without the item.
 C.LANDMINE = { stage = function(plan, id, n)
     requireModule(plan)
     plan.act(function(_, ctx)
@@ -294,7 +296,7 @@ C.LANDMINE = { stage = function(plan, id, n)
     stand(plan, function(room) return leftSide(room) end, 20, true)
     settle(plan)
     if n > 0 then
-        everyTearCarried(plan, "every tear the holder fires carries 3 mines", 3)
+        everyTearCarried(plan, string.format("every tear the holder fires lays %d mines 3 times", n), 3 * n)
     else
         plan.check("without Landmine the tears carry nothing", function(_, ctx)
             return #ctx.fired >= 1 and evidence().laid == 0 and #roomMines() == 0,
@@ -309,15 +311,19 @@ C.LANDMINE = { stage = function(plan, id, n)
 end }
 
 -- ---------------------------------------------------------------- conditions
--- Shooting right in place: each tear flings its 3 mines to both sides of its
--- line as it flies, each seen in the air and landed, a gap apart, holding the
--- player's damage; nobody on them, they stay.
+-- Shooting right in place: each tear lays its 3 mines, one at a time to
+-- alternating sides of its line, as it flies, each seen in the air and
+-- landed, a gap apart, holding the player's damage; nobody on them, they stay.
 conditionsCase("scatter", function(plan, id)
     setup(plan, id)
     withEnemy(plan)
     stand(plan, function(room) return leftSide(room) end, 25, true)
     settle(plan)
-    everyTearCarried(plan, "every tear carried 3 mines and all were laid", 3)
+    everyTearCarried(plan, "every tear held 3 mines and all were laid", 3)
+    plan.check("one mine went down at a time with one copy", function()
+        local e = evidence()
+        return e.placed >= 1 and e.flung == e.placed, string.format("drops=%d flung=%d", e.placed, e.flung)
+    end)
     plan.check("flung to both sides of the tears' line, within a tile of it", function(_, ctx)
         local line, above, below, worst = ctx.fired[1] and ctx.fired[1].Y or 0, 0, 0, 0
         for _, mine in ipairs(roomMines()) do
@@ -368,7 +374,7 @@ conditionsCase("scatter", function(plan, id)
     plan.section("LANDMINE / scatter", "each tear flies to the far wall flinging olive mines to both sides; they arc down, land in a green splash and blink")
 end)
 
--- Luck 10: every tear carries 5 mines.
+-- Luck 10: every tear lays 5 times.
 local luckPlayer = nil -- GetPtrHash of the player whose luck the case sets
 if ModCallbacks.MC_EVALUATE_CACHE and ConchBlessing.AddPriorityCallback then
     local late = (CallbackPriority and CallbackPriority.LATE) or 100
@@ -396,17 +402,18 @@ conditionsCase("luck", function(plan, id)
     stand(plan, function(room) return leftSide(room) end, 20, true)
     plan.act(function(player) setLuck(player, false) end)
     settle(plan)
-    everyTearCarried(plan, "at luck 10 every tear carries 5 mines", 5)
+    everyTearCarried(plan, "at luck 10 every tear lays 5 mines", 5)
 end)
 
 -- Shooting into the right wall from close by: the tear stops at the wall and
--- spills everything it still carries there.
+-- spills everything it still carries there. The player stands 80 away, out of
+-- reach of the spill (40 around the stop), so nobody steps on it.
 conditionsCase("wall_spill", function(plan, id)
     setup(plan, id)
     withEnemy(plan)
     stand(plan, function(room, ctx)
         ctx.wall = room:GetBottomRightPos().X
-        return Vector(ctx.wall - 50, room:GetCenterPos().Y)
+        return Vector(ctx.wall - 80, room:GetCenterPos().Y)
     end, 15, true)
     settle(plan)
     everyTearCarried(plan, "every mine of every tear was laid", 3)
@@ -567,6 +574,965 @@ conditionsCase("weapon_items", function(plan, id)
         weaponRound(plan, id, name, itemId, 30)
     end
 end)
+
+-- REPENTOGON: the weapons that shoot tears stay with Landmine held (user
+-- decision 2026-11-27), and their tears lay mines like any other: Ludovico's
+-- one tear lays its 3 mines, waits 5 fire intervals and lays them again.
+local TEAR_WEAPONS = {
+    { "LUDOVICO_TECHNIQUE", "WEAPON_LUDOVICO_TECHNIQUE", 120 },
+    -- The Lung charges longer at Landmine's -0.2 tears: 60 updates were not
+    -- enough to fire, 150 are (`lung_probe`, 2026-11-27).
+    { "MONSTROS_LUNG", "WEAPON_MONSTROS_LUNGS", 150 },
+    { "C_SECTION", "WEAPON_FETUS", 60 },
+}
+conditionsCase("tear_weapons", function(plan, id)
+    setup(plan, id)
+    requireWeapons(plan)
+    withEnemy(plan)
+    plan.act(function(_, ctx)
+        lasers = 0
+        table.insert(ctx.cleanupFns, 1, function() lasers = nil end)
+    end)
+    for _, entry in ipairs(TEAR_WEAPONS) do
+        local name, weaponName, updates = entry[1], entry[2], entry[3]
+        local itemId, weapon = CollectibleType["COLLECTIBLE_" .. name], WeaponType and WeaponType[weaponName]
+        plan.require(name .. " is a collectible with its weapon type", function()
+            return type(itemId) == "number" and itemId > 0 and type(weapon) == "number" or nil,
+                tostring(itemId) .. " " .. tostring(weapon)
+        end)
+        plan.act(function(player, ctx)
+            player:AddCollectible(itemId, 0, false)
+            ctx.fired, lasers = {}, 0
+            clearMines()
+            T().resetEvidence()
+        end)
+        plan.wait(3)
+        plan.check(name .. ": with Landmine its weapon stays, with no plain tears beside it", function(player)
+            local held = otherWeaponsHeld(player)
+            local plain = player:HasWeaponType(WeaponType.WEAPON_TEARS)
+            return player:HasWeaponType(weapon) and not plain, string.format("%s=%s tears=%s other weapons=[%s]",
+                weaponName, tostring(player:HasWeaponType(weapon)), tostring(plain), table.concat(held, " "))
+        end)
+        stand(plan, function(room) return leftSide(room) end, updates, true)
+        plan.wait(20) -- Monstro's Lung fires its burst as the key is let go
+        plan.check(name .. ": its tears lay mines, and no beam", function()
+            local e = evidence()
+            return e.fired >= 1 and e.placed >= 1 and e.laid >= 1 and lasers == 0,
+                string.format("tears=%d pairs=%d reloads=%d lasers=%d %s", e.fired, e.placed, e.reloads, lasers,
+                    describeMines())
+        end)
+        if name == "LUDOVICO_TECHNIQUE" then
+            plan.check("Ludovico's tear refilled after it ran out and laid again", function(player)
+                local e = evidence()
+                return e.reloads >= 1 and e.laid >= 4, string.format("reloads=%d laid=%d wait=%.0f updates",
+                    e.reloads, e.laid, T().reloadDelay(player.MaxFireDelay))
+            end)
+        end
+        plan.act(function(player)
+            player:RemoveCollectible(itemId)
+            clearMines()
+        end)
+        plan.wait(3)
+    end
+end)
+
+-- The bomb synergies (user design 2026-11-27): a mine's fake explosion carries
+-- the holder's bomb flags. For each bomb item: a mine laid on a pinned enemy
+-- goes off, and the item's own mark shows (a cross of blasts, a status on the
+-- enemy, Sad Bombs' tears that lay no mines, Brimstone beams, a ghost, small
+-- scatter blasts, a random flag, or, with Bobby-Bomb, a mine creeping to the
+-- enemy); every time the player is unhurt and a rock beside the mine stays.
+local BOMB_SYNERGIES = {
+    { "BOMBER_BOY", "bomber_boy" }, { "HOT_BOMBS", "hot_bombs" }, { "BOBS_CURSE", "bobs_curse" },
+    { "SAD_BOMBS", "sad_bombs" }, { "SCATTER_BOMBS", "scatter_bombs" }, { "BRIMSTONE_BOMBS", "brimstone_bombs" },
+    { "GHOST_BOMBS", "ghost_bombs" }, { "STICKY_BOMBS", "sticky_bombs" }, { "BUTT_BOMBS", "butt_bombs" },
+    { "NANCY_BOMBS", "nancy_bombs" }, { "BOBBY_BOMB", "bobby_bomb" },
+}
+local SYNERGY_NAMES = {}
+for _, entry in ipairs(BOMB_SYNERGIES) do SYNERGY_NAMES[#SYNERGY_NAMES + 1] = entry[2] end
+
+local function bombRound(plan, itemName, key)
+    local label = key
+    local crawls = key == "bobby_bomb"
+    plan.act(function(player, ctx)
+        local room = Game():GetRoom()
+        ctx.itemId = CollectibleType["COLLECTIBLE_" .. itemName]
+        player:AddCollectible(ctx.itemId, 0, false)
+        clearMines()
+        T().resetEvidence()
+        ctx.spot = Vector(room:GetCenterPos().X + 60, room:GetCenterPos().Y)
+        player.Position, player.Velocity = ctx.spot + Vector(-160, 80), Vector.Zero
+        ctx.health = health(player)
+        ctx.rockIndex = room:GetGridIndex(ctx.spot + Vector(0, -80))
+        room:RemoveGridEntity(ctx.rockIndex, 0, false)
+        ctx.rockMade = Isaac.GridSpawn(GridEntityType.GRID_ROCK, 0, room:GetGridPosition(ctx.rockIndex), true) ~= nil
+        ctx.target = H.target(player, true)
+        ctx.targetSpot = crawls and ctx.spot + Vector(110, 0) or ctx.spot
+        pin(ctx)
+        ctx.seen, ctx.statuses, ctx.tears, ctx.lasers, ctx.souls = {}, {}, 0, 0, 0
+        for _, entity in ipairs(Isaac.GetRoomEntities()) do ctx.seen[GetPtrHash(entity)] = true end
+        playerHits = {}
+    end)
+    plan.waitUntil(function(player, ctx)
+        pin(ctx)
+        return H.targetReady(ctx.target)
+    end, 30, label .. ": an enemy waits")
+    plan.act(function(player, ctx)
+        ctx.mine = lay(player, ctx.spot)
+        -- Bomber Boy: a second mine 75 away, past the mine's own blast but inside its arm's.
+        if key == "bomber_boy" then ctx.extra = lay(player, ctx.spot + Vector(75, 0)) end
+        ctx.firedBefore = evidence().fired
+        ctx.until_ = Game():GetFrameCount() + (crawls and 240 or 90)
+    end)
+    plan.waitUntil(function(player, ctx)
+        pin(ctx)
+        player.Position, player.Velocity = ctx.spot + Vector(-160, 80), Vector.Zero
+        for _, entity in ipairs(Isaac.GetRoomEntities()) do
+            local hash = GetPtrHash(entity)
+            if not ctx.seen[hash] then
+                ctx.seen[hash] = true
+                if entity.Type == EntityType.ENTITY_TEAR then ctx.tears = ctx.tears + 1 end
+                if entity.Type == EntityType.ENTITY_LASER then ctx.lasers = ctx.lasers + 1 end
+                if entity.Type == EntityType.ENTITY_EFFECT and entity.Variant == (EffectVariant.HUNGRY_SOUL or 186)
+                    and entity.SubType == 1 then ctx.souls = ctx.souls + 1 end
+            end
+        end
+        local target = ctx.target
+        if target and target:Exists() then
+            for _, name in ipairs({ "FLAG_BURN", "FLAG_POISON", "FLAG_SLOW", "FLAG_CONFUSION" }) do
+                if EntityFlag[name] and target:HasEntityFlags(EntityFlag[name]) then ctx.statuses[name] = true end
+            end
+        end
+        if crawls and ctx.mine and not ctx.mine.dead then
+            ctx.closest = math.min(ctx.closest or math.huge, ctx.mine.spot:Distance(ctx.targetSpot))
+        end
+        return Game():GetFrameCount() >= ctx.until_, "watching"
+    end, 280, label .. ": the mine went off and its effects played")
+    plan.check(label .. ": the mine went off on the enemy", function(_, ctx)
+        local e = evidence()
+        return e.exploded >= 1 and e.struck >= 1, describeMines()
+    end)
+    local checks = {
+        bomber_boy = { "two more blasts along each arm of a cross, setting off the mine 75 away", function(_, ctx)
+            return evidence().crossed >= 4 and ctx.extra ~= nil and ctx.extra.dead == true,
+                string.format("crossed=%d pictures=%d chained=%d extra gone=%s", evidence().crossed,
+                    evidence().pictures, evidence().chained, tostring(ctx.extra and ctx.extra.dead))
+        end },
+        hot_bombs = { "the enemy burned", function(_, ctx) return ctx.statuses.FLAG_BURN == true, "burn" end },
+        bobs_curse = { "the enemy was poisoned", function(_, ctx) return ctx.statuses.FLAG_POISON == true, "poison" end },
+        sad_bombs = { "tears burst out and laid no mines", function(_, ctx)
+            local e = evidence()
+            return ctx.tears >= 8 and e.fired == ctx.firedBefore and #roomMines() == 0,
+                string.format("tears=%d tracked=%d mines=%d", ctx.tears, e.fired - ctx.firedBefore, #roomMines())
+        end },
+        scatter_bombs = { "small blasts went off around it", function()
+            return evidence().scattered >= 2, string.format("scattered=%d", evidence().scattered)
+        end },
+        brimstone_bombs = { "Brimstone beams fired", function(_, ctx) return ctx.lasers >= 4, "lasers=" .. ctx.lasers end },
+        ghost_bombs = { "a ghost rose from it", function(_, ctx)
+            return ctx.souls >= 1 and evidence().ghosts >= 1, string.format("souls=%d", ctx.souls)
+        end },
+        sticky_bombs = { "the enemy was slowed", function(_, ctx) return ctx.statuses.FLAG_SLOW == true, "slow" end },
+        butt_bombs = { "the enemy was confused", function(_, ctx) return ctx.statuses.FLAG_CONFUSION == true, "confusion" end },
+        nancy_bombs = { "the mine carried a bomb flag", function()
+            local flags = evidence().flags
+            local some = flags ~= nil and TearFlags and flags ~= TearFlags.TEAR_NORMAL
+            return some == true and evidence().flagEffects >= 1, "flagEffects=" .. evidence().flagEffects
+        end },
+        bobby_bomb = { "the mine stood up and crept to the enemy", function(_, ctx)
+            local e = evidence()
+            return e.crawled >= 20 and (ctx.closest or math.huge) < 100 and ctx.mine.legs == true,
+                string.format("crawled=%d closest=%.1f legs=%s", e.crawled, ctx.closest or -1, tostring(ctx.mine.legs))
+        end },
+    }
+    local check = checks[key]
+    plan.check(label .. ": " .. check[1], check[2])
+    plan.check(label .. ": the player was not hurt", function(player, ctx)
+        return #playerHits == 0 and health(player) == ctx.health,
+            string.format("hits=[%s] health %d -> %d", table.concat(playerHits, " "), ctx.health, health(player))
+    end)
+    plan.check(label .. ": a rock beside the mine is still whole", function(_, ctx)
+        local grid = Game():GetRoom():GetGridEntity(ctx.rockIndex)
+        return ctx.rockMade and grid ~= nil and grid.State ~= 2,
+            grid and string.format("state=%d", grid.State) or "gone"
+    end)
+    plan.act(function(player, ctx)
+        playerHits = nil
+        if ctx.target and ctx.target:Exists() then ctx.target:Remove() end
+        ctx.target = nil
+        clearMines()
+        for _, entity in ipairs(Isaac.GetRoomEntities()) do
+            local t = entity.Type
+            if t == EntityType.ENTITY_LASER or t == EntityType.ENTITY_PICKUP or t == EntityType.ENTITY_BOMB
+                or (t == EntityType.ENTITY_EFFECT and entity.Variant ~= M().mineVariant())
+                or (t == EntityType.ENTITY_FAMILIAR and entity.Variant == FamiliarVariant.BLUE_SPIDER) then
+                entity:Remove()
+            end
+        end
+        Game():GetRoom():RemoveGridEntity(ctx.rockIndex, 0, false)
+        player:RemoveCollectible(ctx.itemId)
+    end)
+    plan.wait(5)
+end
+
+S.add("LANDMINE", "bomb_synergies", { synergies = true, conditions = true }, function(plan, id)
+    setup(plan, id)
+    plan.require("REPENTOGON's bomb parts", function()
+        local game = Game()
+        return type(game.BombDamage) == "function" and type(game.BombTearflagEffects) == "function" or nil,
+            "Game():BombDamage or BombTearflagEffects missing"
+    end)
+    plan.act(function(_, ctx)
+        table.insert(ctx.cleanupFns, 1, function() playerHits = nil end)
+    end)
+    for _, entry in ipairs(BOMB_SYNERGIES) do
+        local itemName, key = entry[1], entry[2]
+        plan.require(key .. ": " .. itemName .. " is a collectible", function()
+            return type(CollectibleType["COLLECTIBLE_" .. itemName]) == "number" or nil, itemName
+        end)
+        bombRound(plan, itemName, key)
+    end
+end, SYNERGY_NAMES)
+
+-- A measurement, run by name: what a mine's blast would do as the engine's own
+-- explosion carrying the player's bomb flags, for each vanilla bomb item (and
+-- none). Each route goes off at one spot with a pinned target 30 units away, a
+-- rock 50 units away and the player 45 units away (their damage is cancelled
+-- and counted): "effects" is Game():BombExplosionEffects with the flags,
+-- "bomb" a bomb of the player's that explodes at once. Logs the target's HP
+-- lost, the status flags it showed, what appeared in the room, whether the
+-- rock broke and the hits the player would have taken.
+local probeShield -- hits on the player cancelled while the probe runs
+if ModCallbacks.MC_ENTITY_TAKE_DMG then
+    ConchBlessing:AddCallback(ModCallbacks.MC_ENTITY_TAKE_DMG, function(_, entity, _, _, source)
+        if probeShield and entity.Type == EntityType.ENTITY_PLAYER then
+            local attack = source and source.Entity
+            probeShield[#probeShield + 1] = attack and string.format("%d.%d", attack.Type, attack.Variant) or "none"
+            return false
+        end
+    end)
+end
+
+local BOMB_ITEMS = { "NONE", "BOMBER_BOY", "MR_MEGA", "HOT_BOMBS", "BOBS_CURSE", "SAD_BOMBS", "SCATTER_BOMBS",
+    "BRIMSTONE_BOMBS", "GHOST_BOMBS", "STICKY_BOMBS", "BUTT_BOMBS", "GLITTER_BOMBS", "NANCY_BOMBS", "BOBBY_BOMB" }
+local STATUS = { "FLAG_BURN", "FLAG_POISON", "FLAG_SLOW", "FLAG_CONFUSION", "FLAG_CHARM", "FLAG_FEAR", "FLAG_MIDAS_FREEZE",
+    "FLAG_FREEZE", "FLAG_SHRINK", "FLAG_BLEED_OUT", "FLAG_ICE" }
+
+local function flagsText(flags)
+    local ok, text = pcall(function()
+        if type(flags) == "number" then return string.format("%d", flags) end
+        return string.format("l=%s h=%s", tostring(flags.l), tostring(flags.h))
+    end)
+    return ok and text or tostring(flags)
+end
+
+local function probeRound(plan, itemName, route)
+    local label = itemName .. " / " .. route
+    plan.act(function(player, ctx)
+        local room = Game():GetRoom()
+        ctx.spot = Vector(room:GetCenterPos().X + 40, room:GetCenterPos().Y)
+        ctx.itemId = itemName ~= "NONE" and CollectibleType["COLLECTIBLE_" .. itemName] or nil
+        if ctx.itemId then player:AddCollectible(ctx.itemId, 0, false) end
+        player.Position, player.Velocity = ctx.spot + Vector(-45, 0), Vector.Zero
+        ctx.target = H.target(player, true)
+        ctx.targetSpot = ctx.spot + Vector(30, 0)
+        pin(ctx)
+        local rockAt = ctx.spot + Vector(0, -50)
+        ctx.rockIndex = room:GetGridIndex(rockAt)
+        room:RemoveGridEntity(ctx.rockIndex, 0, false)
+        ctx.rockMade = Isaac.GridSpawn(GridEntityType.GRID_ROCK, 0, room:GetGridPosition(ctx.rockIndex), true) ~= nil
+    end)
+    plan.waitUntil(function(player, ctx)
+        pin(ctx)
+        player.Position, player.Velocity = ctx.spot + Vector(-45, 0), Vector.Zero
+        return H.targetReady(ctx.target)
+    end, 30, label .. ": target ready")
+    plan.act(function(player, ctx)
+        ctx.seen, ctx.appeared, ctx.statuses = {}, {}, {}
+        for _, entity in ipairs(Isaac.GetRoomEntities()) do ctx.seen[GetPtrHash(entity)] = true end
+        ctx.hp = ctx.target.HitPoints
+        ctx.flags = player:GetBombFlags()
+        probeShield = {}
+        local damage = player.Damage * M().data.damageMultiplier
+        if route == "effects" then
+            Game():BombExplosionEffects(ctx.spot, damage, ctx.flags, Color.Default, player, 1, true, false,
+                DamageFlag.DAMAGE_EXPLOSION)
+        else
+            local bomb = Isaac.Spawn(EntityType.ENTITY_BOMB, BombVariant.BOMB_NORMAL, 0, ctx.spot, Vector.Zero, player)
+            bomb = bomb and bomb:ToBomb()
+            if bomb then
+                bomb.Flags = ctx.flags
+                bomb.ExplosionDamage = damage
+                bomb:SetExplosionCountdown(0)
+            end
+            ctx.bombMade = bomb ~= nil
+        end
+        ctx.until_ = Game():GetFrameCount() + 75
+    end)
+    plan.waitUntil(function(player, ctx)
+        pin(ctx)
+        player.Position, player.Velocity = ctx.spot + Vector(-45, 0), Vector.Zero
+        for _, entity in ipairs(Isaac.GetRoomEntities()) do
+            local hash = GetPtrHash(entity)
+            if not ctx.seen[hash] then
+                ctx.seen[hash] = true
+                local key = string.format("%d.%d", entity.Type, entity.Variant)
+                ctx.appeared[key] = (ctx.appeared[key] or 0) + 1
+            end
+        end
+        local target = ctx.target
+        if target and target:Exists() then
+            for _, name in ipairs(STATUS) do
+                local flag = EntityFlag[name]
+                if flag and target:HasEntityFlags(flag) then ctx.statuses[name] = true end
+            end
+        end
+        return Game():GetFrameCount() >= ctx.until_, "watching"
+    end, 120, label .. ": 75 updates after the blast")
+    plan.note(label, function(player, ctx)
+        local room = Game():GetRoom()
+        local grid = room:GetGridEntity(ctx.rockIndex)
+        local rock = not ctx.rockMade and "no rock"
+            or (grid and string.format("type=%d state=%d coll=%d", grid:GetType(), grid.State, grid.CollisionClass) or "gone")
+        local appeared, statuses = {}, {}
+        for key, count in pairs(ctx.appeared) do appeared[#appeared + 1] = key .. "x" .. count end
+        table.sort(appeared)
+        for name in pairs(ctx.statuses) do statuses[#statuses + 1] = name:gsub("^FLAG_", "") end
+        table.sort(statuses)
+        local hp = ctx.target and ctx.target:Exists() and ctx.hp - ctx.target.HitPoints or -1
+        return string.format("flags=%s hpLost=%.2f status=[%s] rock=%s playerHits=[%s] appeared=[%s]",
+            flagsText(ctx.flags), hp, table.concat(statuses, " "), rock, table.concat(probeShield or {}, " "),
+            table.concat(appeared, " "))
+    end)
+    plan.act(function(player, ctx)
+        probeShield = nil
+        if ctx.target and ctx.target:Exists() then ctx.target:Remove() end
+        ctx.target = nil
+        for _, entity in ipairs(Isaac.GetRoomEntities()) do
+            local t = entity.Type
+            if t == EntityType.ENTITY_BOMB or t == EntityType.ENTITY_TEAR or t == EntityType.ENTITY_LASER
+                or t == EntityType.ENTITY_PICKUP or (t == EntityType.ENTITY_EFFECT and entity.Variant ~= M().mineVariant())
+                or (t == EntityType.ENTITY_FAMILIAR and entity.Variant == FamiliarVariant.BLUE_SPIDER) then
+                entity:Remove()
+            end
+        end
+        Game():GetRoom():RemoveGridEntity(ctx.rockIndex, 0, false)
+        if ctx.itemId then player:RemoveCollectible(ctx.itemId) end
+    end)
+    plan.wait(5)
+end
+
+S.add("LANDMINE", "bomb_probe", { conditions = true }, function(plan, id)
+    setup(plan, id)
+    plan.act(function(player, ctx)
+        player:AddCacheFlags(CacheFlag.CACHE_ALL)
+        player:EvaluateItems()
+        table.insert(ctx.cleanupFns, 1, function() probeShield = nil end)
+    end)
+    for _, itemName in ipairs(BOMB_ITEMS) do
+        local known = itemName == "NONE" or type(CollectibleType["COLLECTIBLE_" .. itemName]) == "number"
+        if known then
+            probeRound(plan, itemName, "effects")
+            probeRound(plan, itemName, "bomb")
+        else
+            plan.note(itemName, function() return "no such collectible" end)
+        end
+    end
+end)
+S.rows[#S.rows].manual = true
+
+-- A second measurement, run by name: a real bomb of the player's, set off at
+-- once, as a mine's blast. Rounds compare the plain bomb with one marked as a
+-- fetus bomb and given the player's own bomb variant, and log the arguments of
+-- REPENTOGON's MC_PRE_GRID_HURT while the blast runs (cancelled in the second
+-- round, to see whether that keeps the rock), the update the explosion came
+-- on and the player's hits (cancelled).
+local gridProbe -- { calls, cancel } while a round watches the grid
+if ModCallbacks.MC_PRE_GRID_HURT then
+    ConchBlessing:AddCallback(ModCallbacks.MC_PRE_GRID_HURT, function(_, ...)
+        if not gridProbe then return nil end
+        local n, parts = select("#", ...), {}
+        for i = 1, n do
+            local value = select(i, ...)
+            local text = type(value)
+            if type(value) == "number" or type(value) == "boolean" then
+                text = tostring(value)
+            elseif type(value) == "userdata" then
+                local ok, kind = pcall(function()
+                    if value.GetType and value.GetGridIndex then
+                        return string.format("grid%d@%d", value:GetType(), value:GetGridIndex())
+                    end
+                    if value.Type then return string.format("ent%d.%d", value.Type, value.Variant) end
+                    if value.Entity then
+                        return value.Entity and string.format("ref%d.%d", value.Entity.Type, value.Entity.Variant) or "ref-nil"
+                    end
+                    return "userdata"
+                end)
+                text = ok and kind or "userdata?"
+            end
+            parts[#parts + 1] = text
+        end
+        if #gridProbe.calls < 4 then gridProbe.calls[#gridProbe.calls + 1] = table.concat(parts, ",") end
+        gridProbe.count = gridProbe.count + 1
+        if gridProbe.cancel then return false end
+    end)
+end
+
+local PROBE2_ITEMS = { "NONE", "MR_MEGA", "SCATTER_BOMBS", "GHOST_BOMBS", "BOBS_CURSE", "BOMBER_BOY" }
+
+local function probe2Round(plan, itemName, variantMode, cancel)
+    local label = string.format("%s / %s%s", itemName, variantMode, cancel and " / grid cancelled" or "")
+    plan.act(function(player, ctx)
+        local room = Game():GetRoom()
+        ctx.spot = Vector(room:GetCenterPos().X + 40, room:GetCenterPos().Y)
+        ctx.itemId = itemName ~= "NONE" and CollectibleType["COLLECTIBLE_" .. itemName] or nil
+        if ctx.itemId then player:AddCollectible(ctx.itemId, 0, false) end
+        player.Position, player.Velocity = ctx.spot + Vector(-45, 0), Vector.Zero
+        ctx.target = H.target(player, true)
+        ctx.targetSpot = ctx.spot + Vector(30, 0)
+        pin(ctx)
+        ctx.rockIndex = room:GetGridIndex(ctx.spot + Vector(0, -50))
+        room:RemoveGridEntity(ctx.rockIndex, 0, false)
+        ctx.rockMade = Isaac.GridSpawn(GridEntityType.GRID_ROCK, 0, room:GetGridPosition(ctx.rockIndex), true) ~= nil
+    end)
+    plan.waitUntil(function(player, ctx)
+        pin(ctx)
+        player.Position, player.Velocity = ctx.spot + Vector(-45, 0), Vector.Zero
+        return H.targetReady(ctx.target)
+    end, 30, label .. ": target ready")
+    plan.act(function(player, ctx)
+        ctx.seen, ctx.appeared, ctx.statuses = {}, {}, {}
+        for _, entity in ipairs(Isaac.GetRoomEntities()) do ctx.seen[GetPtrHash(entity)] = true end
+        ctx.hp = ctx.target.HitPoints
+        ctx.flags = player:GetBombFlags()
+        probeShield = {}
+        gridProbe = { calls = {}, count = 0, cancel = cancel }
+        ctx.start = Game():GetFrameCount()
+        ctx.boomAt = nil
+        local damage = player.Damage * M().data.damageMultiplier
+        local variant = BombVariant.BOMB_NORMAL
+        if variantMode == "fetus+variant" and type(player.GetBombVariant) == "function" then
+            variant = player:GetBombVariant(ctx.flags, false)
+        end
+        ctx.variant = variant
+        local bomb = Isaac.Spawn(EntityType.ENTITY_BOMB, variant, 0, ctx.spot, Vector.Zero, player)
+        bomb = bomb and bomb:ToBomb()
+        if bomb then
+            bomb.Flags = ctx.flags
+            bomb.ExplosionDamage = damage
+            if variantMode == "fetus+variant" then bomb.IsFetus = true end
+            bomb:SetExplosionCountdown(0)
+            ctx.radius = bomb.RadiusMultiplier
+        end
+        ctx.until_ = Game():GetFrameCount() + 75
+    end)
+    plan.waitUntil(function(player, ctx)
+        pin(ctx)
+        player.Position, player.Velocity = ctx.spot + Vector(-45, 0), Vector.Zero
+        for _, entity in ipairs(Isaac.GetRoomEntities()) do
+            local hash = GetPtrHash(entity)
+            if not ctx.seen[hash] then
+                ctx.seen[hash] = true
+                local key = string.format("%d.%d", entity.Type, entity.Variant)
+                ctx.appeared[key] = (ctx.appeared[key] or 0) + 1
+                if not ctx.boomAt and entity.Type == EntityType.ENTITY_EFFECT and entity.Variant == EffectVariant.BOMB_EXPLOSION then
+                    ctx.boomAt = Game():GetFrameCount() - ctx.start
+                end
+            end
+        end
+        local target = ctx.target
+        if target and target:Exists() then
+            for _, name in ipairs(STATUS) do
+                local flag = EntityFlag[name]
+                if flag and target:HasEntityFlags(flag) then ctx.statuses[name] = true end
+            end
+        end
+        return Game():GetFrameCount() >= ctx.until_, "watching"
+    end, 120, label .. ": 75 updates after the blast")
+    plan.note(label, function(_, ctx)
+        local room = Game():GetRoom()
+        local grid = room:GetGridEntity(ctx.rockIndex)
+        local rock = not ctx.rockMade and "no rock"
+            or (grid and string.format("state=%d coll=%d", grid.State, grid.CollisionClass) or "gone")
+        local appeared, statuses = {}, {}
+        for key, count in pairs(ctx.appeared) do appeared[#appeared + 1] = key .. "x" .. count end
+        table.sort(appeared)
+        for name in pairs(ctx.statuses) do statuses[#statuses + 1] = name:gsub("^FLAG_", "") end
+        table.sort(statuses)
+        local hp = ctx.target and ctx.target:Exists() and ctx.hp - ctx.target.HitPoints or -1
+        return string.format("variant=%s radiusMult=%s boomAfter=%s hpLost=%.2f status=[%s] rock=%s playerHits=[%s] "
+            .. "gridHurts=%d first=[%s] appeared=[%s]", tostring(ctx.variant), tostring(ctx.radius), tostring(ctx.boomAt),
+            hp, table.concat(statuses, " "), rock, table.concat(probeShield or {}, " "), gridProbe and gridProbe.count or -1,
+            gridProbe and table.concat(gridProbe.calls, " | ") or "", table.concat(appeared, " "))
+    end)
+    plan.act(function(player, ctx)
+        probeShield, gridProbe = nil, nil
+        if ctx.target and ctx.target:Exists() then ctx.target:Remove() end
+        ctx.target = nil
+        for _, entity in ipairs(Isaac.GetRoomEntities()) do
+            local t = entity.Type
+            if t == EntityType.ENTITY_BOMB or t == EntityType.ENTITY_TEAR or t == EntityType.ENTITY_LASER
+                or t == EntityType.ENTITY_PICKUP or (t == EntityType.ENTITY_EFFECT and entity.Variant ~= M().mineVariant())
+                or (t == EntityType.ENTITY_FAMILIAR and entity.Variant == FamiliarVariant.BLUE_SPIDER) then
+                entity:Remove()
+            end
+        end
+        Game():GetRoom():RemoveGridEntity(ctx.rockIndex, 0, false)
+        if ctx.itemId then player:RemoveCollectible(ctx.itemId) end
+    end)
+    plan.wait(5)
+end
+
+S.add("LANDMINE", "bomb_probe2", { conditions = true }, function(plan, id)
+    setup(plan, id)
+    plan.act(function(_, ctx)
+        table.insert(ctx.cleanupFns, 1, function() probeShield, gridProbe = nil, nil end)
+    end)
+    for _, itemName in ipairs(PROBE2_ITEMS) do
+        if itemName == "NONE" or type(CollectibleType["COLLECTIBLE_" .. itemName]) == "number" then
+            probe2Round(plan, itemName, "plain", false)
+            probe2Round(plan, itemName, "fetus+variant", true)
+        end
+    end
+end)
+S.rows[#S.rows].manual = true
+
+-- A third measurement, run by name: which REPENTOGON grid callbacks a mine's
+-- real bomb goes through as it breaks a rock (MC_GRID_HURT_DAMAGE, its POST,
+-- MC_POST_GRID_ROCK_DESTROY), and whether cancelling MC_GRID_HURT_DAMAGE keeps
+-- the rock.
+local gridHurt -- { counts, cancel } while a round watches
+for _, name in ipairs({ "MC_GRID_HURT_DAMAGE", "MC_POST_GRID_HURT_DAMAGE", "MC_POST_GRID_ROCK_DESTROY" }) do
+    local id = ModCallbacks[name]
+    if id then
+        ConchBlessing:AddCallback(id, function(_, ...)
+            if not gridHurt then return nil end
+            gridHurt.counts[name] = (gridHurt.counts[name] or 0) + 1
+            if not gridHurt.args[name] then
+                local parts = {}
+                for i = 1, select("#", ...) do
+                    local v = select(i, ...)
+                    parts[#parts + 1] = (type(v) == "number" or type(v) == "boolean") and tostring(v) or type(v)
+                end
+                gridHurt.args[name] = table.concat(parts, ",")
+            end
+            if gridHurt.cancel and name == "MC_GRID_HURT_DAMAGE" then return false end
+        end)
+    end
+end
+
+S.add("LANDMINE", "bomb_probe3", { conditions = true }, function(plan, id)
+    setup(plan, id)
+    plan.act(function(_, ctx)
+        table.insert(ctx.cleanupFns, 1, function() gridHurt, probeShield = nil, nil end)
+    end)
+    for _, cancel in ipairs({ false, true }) do
+        for _, route in ipairs({ "effects", "bomb" }) do
+            local label = route .. (cancel and " / grid hurt cancelled" or "")
+            plan.act(function(player, ctx)
+                local room = Game():GetRoom()
+                ctx.spot = Vector(room:GetCenterPos().X + 40, room:GetCenterPos().Y)
+                player.Position, player.Velocity = ctx.spot + Vector(-80, 0), Vector.Zero
+                ctx.rockIndex = room:GetGridIndex(ctx.spot + Vector(0, -50))
+                room:RemoveGridEntity(ctx.rockIndex, 0, false)
+                ctx.rockMade = Isaac.GridSpawn(GridEntityType.GRID_ROCK, 0, room:GetGridPosition(ctx.rockIndex), true) ~= nil
+            end)
+            plan.wait(3)
+            plan.act(function(player, ctx)
+                gridHurt, probeShield = { counts = {}, args = {}, cancel = cancel }, {}
+                local damage = player.Damage * M().data.damageMultiplier
+                if route == "effects" then
+                    Game():BombExplosionEffects(ctx.spot, damage, player:GetBombFlags(), Color.Default, player, 1, true,
+                        false, DamageFlag.DAMAGE_EXPLOSION)
+                else
+                    local bomb = Isaac.Spawn(EntityType.ENTITY_BOMB, BombVariant.BOMB_NORMAL, 0, ctx.spot, Vector.Zero,
+                        player):ToBomb()
+                    bomb.ExplosionDamage = damage
+                    bomb:SetExplosionCountdown(0)
+                end
+            end)
+            plan.wait(20)
+            plan.note(label, function(_, ctx)
+                local grid = Game():GetRoom():GetGridEntity(ctx.rockIndex)
+                local counts, args = {}, {}
+                for k, v in pairs(gridHurt.counts) do counts[#counts + 1] = k .. "=" .. v end
+                for k, v in pairs(gridHurt.args) do args[#args + 1] = k .. "(" .. v .. ")" end
+                return string.format("rock=%s calls=[%s] args=[%s] playerHits=%d",
+                    grid and string.format("state=%d coll=%d", grid.State, grid.CollisionClass) or "gone",
+                    table.concat(counts, " "), table.concat(args, " "), #probeShield)
+            end)
+            plan.act(function(_, ctx)
+                gridHurt, probeShield = nil, nil
+                Game():GetRoom():RemoveGridEntity(ctx.rockIndex, 0, false)
+            end)
+            plan.wait(3)
+        end
+    end
+end)
+S.rows[#S.rows].manual = true
+
+-- A fourth measurement, run by name: a "fake" explosion that keeps grids whole
+-- (user question 2026-11-27): the vanilla explosion only as a picture, then
+-- Game():BombDamage with the player's bomb flags (damage and statuses to
+-- entities) and Game():BombTearflagEffects (the flags' extra effects), for each
+-- bomb item.
+S.add("LANDMINE", "bomb_probe4", { conditions = true }, function(plan, id)
+    setup(plan, id)
+    plan.act(function(_, ctx)
+        table.insert(ctx.cleanupFns, 1, function() probeShield = nil end)
+    end)
+    for _, itemName in ipairs(BOMB_ITEMS) do
+        if itemName == "NONE" or type(CollectibleType["COLLECTIBLE_" .. itemName]) == "number" then
+            local label = itemName .. " / fake"
+            plan.act(function(player, ctx)
+                local room = Game():GetRoom()
+                ctx.spot = Vector(room:GetCenterPos().X + 40, room:GetCenterPos().Y)
+                ctx.itemId = itemName ~= "NONE" and CollectibleType["COLLECTIBLE_" .. itemName] or nil
+                if ctx.itemId then player:AddCollectible(ctx.itemId, 0, false) end
+                player.Position, player.Velocity = ctx.spot + Vector(-45, 0), Vector.Zero
+                ctx.target = H.target(player, true)
+                ctx.targetSpot = ctx.spot + Vector(30, 0)
+                pin(ctx)
+                ctx.rockIndex = room:GetGridIndex(ctx.spot + Vector(0, -50))
+                room:RemoveGridEntity(ctx.rockIndex, 0, false)
+                ctx.rockMade = Isaac.GridSpawn(GridEntityType.GRID_ROCK, 0, room:GetGridPosition(ctx.rockIndex), true) ~= nil
+            end)
+            plan.waitUntil(function(player, ctx)
+                pin(ctx)
+                player.Position, player.Velocity = ctx.spot + Vector(-45, 0), Vector.Zero
+                return H.targetReady(ctx.target)
+            end, 30, label .. ": target ready")
+            plan.act(function(player, ctx)
+                ctx.seen, ctx.appeared, ctx.statuses = {}, {}, {}
+                for _, entity in ipairs(Isaac.GetRoomEntities()) do ctx.seen[GetPtrHash(entity)] = true end
+                ctx.hp = ctx.target.HitPoints
+                ctx.flags = player:GetBombFlags()
+                probeShield = {}
+                local damage = player.Damage * M().data.damageMultiplier
+                local game = Game()
+                local picture = Isaac.Spawn(EntityType.ENTITY_EFFECT, EffectVariant.BOMB_EXPLOSION, 0, ctx.spot, Vector.Zero, nil)
+                picture.SpriteScale = Vector(0.45, 0.45)
+                local okDamage, errDamage = pcall(game.BombDamage, game, ctx.spot, damage, 40, true, player, ctx.flags,
+                    DamageFlag.DAMAGE_EXPLOSION, false)
+                local okExtra, errExtra = pcall(game.BombTearflagEffects, game, ctx.spot, 40, ctx.flags, player, 1)
+                ctx.calls = string.format("%s%s/%s%s", tostring(okDamage), okDamage and "" or ("(" .. tostring(errDamage) .. ")"),
+                    tostring(okExtra), okExtra and "" or ("(" .. tostring(errExtra) .. ")"))
+                ctx.until_ = Game():GetFrameCount() + 75
+            end)
+            plan.waitUntil(function(player, ctx)
+                pin(ctx)
+                player.Position, player.Velocity = ctx.spot + Vector(-45, 0), Vector.Zero
+                for _, entity in ipairs(Isaac.GetRoomEntities()) do
+                    local hash = GetPtrHash(entity)
+                    if not ctx.seen[hash] then
+                        ctx.seen[hash] = true
+                        local key = string.format("%d.%d", entity.Type, entity.Variant)
+                        ctx.appeared[key] = (ctx.appeared[key] or 0) + 1
+                    end
+                end
+                local target = ctx.target
+                if target and target:Exists() then
+                    for _, name in ipairs(STATUS) do
+                        local flag = EntityFlag[name]
+                        if flag and target:HasEntityFlags(flag) then ctx.statuses[name] = true end
+                    end
+                end
+                return Game():GetFrameCount() >= ctx.until_, "watching"
+            end, 120, label .. ": 75 updates after the blast")
+            plan.note(label, function(_, ctx)
+                local grid = Game():GetRoom():GetGridEntity(ctx.rockIndex)
+                local appeared, statuses = {}, {}
+                for key, count in pairs(ctx.appeared) do appeared[#appeared + 1] = key .. "x" .. count end
+                table.sort(appeared)
+                for name in pairs(ctx.statuses) do statuses[#statuses + 1] = name:gsub("^FLAG_", "") end
+                table.sort(statuses)
+                local hp = ctx.target and ctx.target:Exists() and ctx.hp - ctx.target.HitPoints or -1
+                return string.format("calls=%s hpLost=%.2f status=[%s] rock=%s playerHits=[%s] appeared=[%s]",
+                    ctx.calls, hp, table.concat(statuses, " "),
+                    grid and string.format("state=%d coll=%d", grid.State, grid.CollisionClass) or "gone",
+                    table.concat(probeShield or {}, " "), table.concat(appeared, " "))
+            end)
+            plan.act(function(player, ctx)
+                probeShield = nil
+                if ctx.target and ctx.target:Exists() then ctx.target:Remove() end
+                ctx.target = nil
+                for _, entity in ipairs(Isaac.GetRoomEntities()) do
+                    local t = entity.Type
+                    if t == EntityType.ENTITY_BOMB or t == EntityType.ENTITY_TEAR or t == EntityType.ENTITY_LASER
+                        or t == EntityType.ENTITY_PICKUP or (t == EntityType.ENTITY_EFFECT and entity.Variant ~= M().mineVariant())
+                        or (t == EntityType.ENTITY_FAMILIAR and entity.Variant == FamiliarVariant.BLUE_SPIDER) then
+                        entity:Remove()
+                    end
+                end
+                Game():GetRoom():RemoveGridEntity(ctx.rockIndex, 0, false)
+                if ctx.itemId then player:RemoveCollectible(ctx.itemId) end
+            end)
+            plan.wait(5)
+        end
+    end
+end)
+S.rows[#S.rows].manual = true
+
+-- A fifth measurement, run by name: which part of the fake explosion breaks
+-- the rock 50 units away: the picture alone, Game():BombDamage alone (radius
+-- 40, then 20) or Game():BombTearflagEffects alone, with no item and with Sad
+-- Bombs and Hot Bombs held.
+local PROBE5_PARTS = { "picture", "damage40", "damage20", "extra" }
+S.add("LANDMINE", "bomb_probe5", { conditions = true }, function(plan, id)
+    setup(plan, id)
+    plan.act(function(_, ctx)
+        table.insert(ctx.cleanupFns, 1, function() probeShield = nil end)
+    end)
+    for _, itemName in ipairs({ "NONE", "SAD_BOMBS", "HOT_BOMBS" }) do
+        for _, part in ipairs(PROBE5_PARTS) do
+            local label = itemName .. " / " .. part
+            plan.act(function(player, ctx)
+                local room = Game():GetRoom()
+                ctx.spot = Vector(room:GetCenterPos().X + 40, room:GetCenterPos().Y)
+                ctx.itemId = itemName ~= "NONE" and CollectibleType["COLLECTIBLE_" .. itemName] or nil
+                if ctx.itemId then player:AddCollectible(ctx.itemId, 0, false) end
+                player.Position, player.Velocity = ctx.spot + Vector(-45, 0), Vector.Zero
+                ctx.target = H.target(player, true)
+                ctx.targetSpot = ctx.spot + Vector(30, 0)
+                pin(ctx)
+                ctx.rockIndex = room:GetGridIndex(ctx.spot + Vector(0, -50))
+                room:RemoveGridEntity(ctx.rockIndex, 0, false)
+                Isaac.GridSpawn(GridEntityType.GRID_ROCK, 0, room:GetGridPosition(ctx.rockIndex), true)
+                ctx.rockDistance = room:GetGridPosition(ctx.rockIndex):Distance(ctx.spot)
+            end)
+            plan.waitUntil(function(player, ctx)
+                pin(ctx)
+                player.Position, player.Velocity = ctx.spot + Vector(-45, 0), Vector.Zero
+                return H.targetReady(ctx.target)
+            end, 30, label .. ": target ready")
+            plan.act(function(player, ctx)
+                ctx.hp = ctx.target.HitPoints
+                probeShield = {}
+                local game, flags = Game(), player:GetBombFlags()
+                local damage = player.Damage * M().data.damageMultiplier
+                if part == "picture" then
+                    Isaac.Spawn(EntityType.ENTITY_EFFECT, EffectVariant.BOMB_EXPLOSION, 0, ctx.spot, Vector.Zero, nil)
+                elseif part == "damage40" or part == "damage20" then
+                    game:BombDamage(ctx.spot, damage, part == "damage40" and 40 or 20, true, player, flags,
+                        DamageFlag.DAMAGE_EXPLOSION, false)
+                else
+                    game:BombTearflagEffects(ctx.spot, 40, flags, player, 1)
+                end
+            end)
+            plan.wait(40)
+            plan.note(label, function(_, ctx)
+                local grid = Game():GetRoom():GetGridEntity(ctx.rockIndex)
+                local hp = ctx.target and ctx.target:Exists() and ctx.hp - ctx.target.HitPoints or -1
+                return string.format("rockAt=%.0f rock=%s hpLost=%.2f burn=%s playerHits=%d", ctx.rockDistance,
+                    grid and (grid.State == 2 and "BROKEN" or "whole") or "gone", hp,
+                    tostring(ctx.target and ctx.target:HasEntityFlags(EntityFlag.FLAG_BURN)), #probeShield)
+            end)
+            plan.act(function(player, ctx)
+                probeShield = nil
+                if ctx.target and ctx.target:Exists() then ctx.target:Remove() end
+                ctx.target = nil
+                for _, entity in ipairs(Isaac.GetRoomEntities()) do
+                    local t = entity.Type
+                    if t == EntityType.ENTITY_TEAR or t == EntityType.ENTITY_LASER or t == EntityType.ENTITY_PICKUP
+                        or (t == EntityType.ENTITY_EFFECT and entity.Variant ~= M().mineVariant()) then
+                        entity:Remove()
+                    end
+                end
+                Game():GetRoom():RemoveGridEntity(ctx.rockIndex, 0, false)
+                if ctx.itemId then player:RemoveCollectible(ctx.itemId) end
+            end)
+            plan.wait(5)
+        end
+    end
+end)
+S.rows[#S.rows].manual = true
+
+-- A sixth measurement, run by name: (1) the exact effects a real bomb makes
+-- for Ghost Bombs and Bob's Curse (variant, subtype, spawner, timeout); (2)
+-- Game():BombDamage at an enemy's own position with radius 1 and Hot Bombs:
+-- does it hit, burn, and keep a rock right beside the enemy, and a rock under a
+-- flying enemy; (3) the same ghost and cloud spawned by us with the player as
+-- spawner: do they hurt the target and spare the player.
+local function cleanRoom(ctx)
+    for _, entity in ipairs(Isaac.GetRoomEntities()) do
+        local t = entity.Type
+        if t == EntityType.ENTITY_BOMB or t == EntityType.ENTITY_TEAR or t == EntityType.ENTITY_LASER
+            or t == EntityType.ENTITY_PICKUP or (t == EntityType.ENTITY_EFFECT and entity.Variant ~= M().mineVariant()) then
+            entity:Remove()
+        end
+    end
+    if ctx.target and ctx.target:Exists() then ctx.target:Remove() end
+    ctx.target = nil
+    if ctx.rockIndex then Game():GetRoom():RemoveGridEntity(ctx.rockIndex, 0, false) end
+end
+
+S.add("LANDMINE", "bomb_probe6", { conditions = true }, function(plan, id)
+    setup(plan, id)
+    plan.act(function(_, ctx)
+        table.insert(ctx.cleanupFns, 1, function() probeShield = nil end)
+    end)
+    -- (1) what a real bomb makes for Ghost Bombs and Bob's Curse
+    for _, itemName in ipairs({ "GHOST_BOMBS", "BOBS_CURSE" }) do
+        plan.act(function(player, ctx)
+            local room = Game():GetRoom()
+            ctx.spot = Vector(room:GetCenterPos().X + 40, room:GetCenterPos().Y)
+            ctx.itemId = CollectibleType["COLLECTIBLE_" .. itemName]
+            player:AddCollectible(ctx.itemId, 0, false)
+            player.Position, player.Velocity = ctx.spot + Vector(-120, 0), Vector.Zero
+            ctx.seen, ctx.made = {}, {}
+            for _, entity in ipairs(Isaac.GetRoomEntities()) do ctx.seen[GetPtrHash(entity)] = true end
+            local bomb = Isaac.Spawn(EntityType.ENTITY_BOMB, BombVariant.BOMB_NORMAL, 0, ctx.spot, Vector.Zero, player):ToBomb()
+            bomb.Flags = player:GetBombFlags()
+            bomb:SetExplosionCountdown(0)
+        end)
+        plan.wait(6)
+        plan.note(itemName .. " / what the bomb made", function(_, ctx)
+            local parts = {}
+            for _, entity in ipairs(Isaac.GetRoomEntities()) do
+                if not ctx.seen[GetPtrHash(entity)] and entity.Type == EntityType.ENTITY_EFFECT
+                    and (entity.Variant == 186 or entity.Variant == 141) then
+                    local effect = entity:ToEffect()
+                    local spawner = entity.SpawnerEntity
+                    parts[#parts + 1] = string.format("%d.%d.%d spawner=%s parent=%s timeout=%s state=%s",
+                        entity.Type, entity.Variant, entity.SubType,
+                        spawner and string.format("%d.%d", spawner.Type, spawner.Variant) or "nil",
+                        entity.Parent and string.format("%d.%d", entity.Parent.Type, entity.Parent.Variant) or "nil",
+                        effect and tostring(effect.Timeout) or "?", effect and tostring(effect.State) or "?")
+                end
+            end
+            return table.concat(parts, " | ")
+        end)
+        plan.act(function(player, ctx)
+            cleanRoom(ctx)
+            player:RemoveCollectible(ctx.itemId)
+        end)
+        plan.wait(3)
+    end
+    -- (2) BombDamage at an enemy with radius 1: grounded beside a rock, flying over one
+    for _, flying in ipairs({ false, true }) do
+        local label = flying and "radius 1 / fly over a rock" or "radius 1 / maggot beside a rock"
+        plan.act(function(player, ctx)
+            local room = Game():GetRoom()
+            player:AddCollectible(CollectibleType.COLLECTIBLE_HOT_BOMBS, 0, false)
+            ctx.rockIndex = room:GetGridIndex(Vector(room:GetCenterPos().X + 40, room:GetCenterPos().Y - 80))
+            room:RemoveGridEntity(ctx.rockIndex, 0, false)
+            Isaac.GridSpawn(GridEntityType.GRID_ROCK, 0, room:GetGridPosition(ctx.rockIndex), true)
+            local rock = room:GetGridPosition(ctx.rockIndex)
+            ctx.targetSpot = flying and rock or rock + Vector(0, 30)
+            player.Position, player.Velocity = rock + Vector(-120, 60), Vector.Zero
+            ctx.target = H.target(player, not flying)
+            pin(ctx)
+        end)
+        plan.waitUntil(function(_, ctx)
+            pin(ctx)
+            return H.targetReady(ctx.target)
+        end, 30, label .. ": target ready")
+        plan.act(function(player, ctx)
+            pin(ctx)
+            ctx.hp = ctx.target.HitPoints
+            probeShield = {}
+            Game():BombDamage(ctx.target.Position, player.Damage * M().data.damageMultiplier, 1, true, player,
+                player:GetBombFlags(), DamageFlag.DAMAGE_EXPLOSION, false)
+            ctx.burned = ctx.target:HasEntityFlags(EntityFlag.FLAG_BURN)
+        end)
+        plan.wait(10)
+        plan.note(label, function(_, ctx)
+            local grid = Game():GetRoom():GetGridEntity(ctx.rockIndex)
+            return string.format("hpLost=%.2f burned=%s rock=%s playerHits=%d", ctx.hp - ctx.target.HitPoints,
+                tostring(ctx.burned), grid and (grid.State == 2 and "BROKEN" or "whole") or "gone", #probeShield)
+        end)
+        plan.act(function(player, ctx)
+            probeShield = nil
+            cleanRoom(ctx)
+            player:RemoveCollectible(CollectibleType.COLLECTIBLE_HOT_BOMBS)
+        end)
+        plan.wait(3)
+    end
+    -- (3) a ghost and a cloud spawned by us
+    for _, which in ipairs({ { 186, 0, "ghost" }, { 141, 0, "cloud" } }) do
+        local label = "our " .. which[3]
+        plan.act(function(player, ctx)
+            local room = Game():GetRoom()
+            ctx.spot = Vector(room:GetCenterPos().X + 40, room:GetCenterPos().Y)
+            player.Position, player.Velocity = ctx.spot + Vector(-30, 0), Vector.Zero
+            ctx.target = H.target(player, true)
+            ctx.targetSpot = ctx.spot + Vector(60, 0)
+            pin(ctx)
+        end)
+        plan.waitUntil(function(player, ctx)
+            pin(ctx)
+            player.Position, player.Velocity = ctx.spot + Vector(-30, 0), Vector.Zero
+            return H.targetReady(ctx.target)
+        end, 30, label .. ": target ready")
+        plan.act(function(player, ctx)
+            ctx.hp = ctx.target.HitPoints
+            probeShield = {}
+            local effect = Isaac.Spawn(EntityType.ENTITY_EFFECT, which[1], which[2], ctx.spot, Vector.Zero, player)
+            ctx.made = effect and effect:Exists()
+            ctx.until_ = Game():GetFrameCount() + 120
+        end)
+        plan.waitUntil(function(player, ctx)
+            pin(ctx)
+            player.Position, player.Velocity = ctx.spot + Vector(-30, 0), Vector.Zero
+            return Game():GetFrameCount() >= ctx.until_, "watching"
+        end, 150, label .. ": 120 updates")
+        plan.note(label, function(_, ctx)
+            return string.format("made=%s hpLost=%.2f poisoned=%s playerHits=%d", tostring(ctx.made),
+                ctx.hp - ctx.target.HitPoints, tostring(ctx.target:HasEntityFlags(EntityFlag.FLAG_POISON)), #probeShield)
+        end)
+        plan.act(function(_, ctx)
+            probeShield = nil
+            cleanRoom(ctx)
+        end)
+        plan.wait(3)
+    end
+end)
+S.rows[#S.rows].manual = true
+
+-- A measurement, run by name: does Monstro's Lung fire when the bench holds
+-- the shoot key for a while and lets go, without Landmine and with it; logs the
+-- most tears seen at once, the tears this module took up and the Lung's
+-- weapon charge as the key was let go.
+S.add("LANDMINE", "lung_probe", { conditions = true }, function(plan, id)
+    setup(plan, id)
+    withEnemy(plan)
+    for _, withItem in ipairs({ false, true }) do
+        for _, hold in ipairs({ 60, 150 }) do
+            local label = string.format("%s, held %d", withItem and "with Landmine" or "without Landmine", hold)
+            plan.act(function(player, ctx)
+                player:AddCollectible(CollectibleType.COLLECTIBLE_MONSTROS_LUNG, 0, false)
+                give(player, id, withItem and 1 or 0)
+                clearMines()
+                T().resetEvidence()
+                ctx.most, ctx.charge = 0, nil
+            end)
+            plan.wait(3)
+            stand(plan, function(room) return leftSide(room) end, hold, true)
+            plan.act(function(player, ctx)
+                local weapon = type(player.GetWeapon) == "function" and player:GetWeapon(1) or nil
+                ctx.charge = weapon and type(weapon.GetCharge) == "function" and weapon:GetCharge() or "?"
+                ctx.until_ = Game():GetFrameCount() + 30
+            end)
+            plan.waitUntil(function(_, ctx)
+                ctx.most = math.max(ctx.most, #Isaac.FindByType(EntityType.ENTITY_TEAR))
+                return Game():GetFrameCount() >= ctx.until_, "watching"
+            end, 40, label .. ": 30 updates after letting go")
+            plan.note(label, function(player, ctx)
+                return string.format("mostTears=%d taken=%d laid=%d chargeAtRelease=%s lung=%s tears=%s", ctx.most,
+                    evidence().fired, evidence().laid, tostring(ctx.charge),
+                    tostring(player:HasWeaponType(WeaponType.WEAPON_MONSTROS_LUNGS)),
+                    tostring(player:HasWeaponType(WeaponType.WEAPON_TEARS)))
+            end)
+            plan.act(function(player)
+                player:RemoveCollectible(CollectibleType.COLLECTIBLE_MONSTROS_LUNG)
+                clearMines()
+                give(player, id, 1)
+            end)
+            plan.wait(3)
+        end
+    end
+end)
+S.rows[#S.rows].manual = true
 
 -- A measurement, run by name: attacks that may or may not be weapons of their
 -- own (lasers that come with tears, charged beams), with and without Landmine.
@@ -916,11 +1882,12 @@ local function watch(ctx)
     ctx.hits = targetHits
 end
 
--- A blast is half the holder's damage (user decision 2026-11-25; it was twice).
-local BLAST = 0.5
+-- A blast is the holder's damage (user decision 2026-11-27; half from
+-- 2026-11-25, twice before that).
+local BLAST = 1
 
--- Whether the enemy lost exactly what was recorded, every blast half the
--- holder's damage and every tear hit the holder's damage.
+-- Whether the enemy lost exactly what was recorded, every blast the holder's
+-- damage and every tear hit the holder's damage.
 local function exactLoss(ctx, damage)
     local sum, bad, mines = 0, 0, 0
     for _, hit in ipairs(ctx.hits or {}) do
@@ -964,7 +1931,7 @@ damageCase("on_enemy", function(plan, id)
         local e = evidence()
         return e.landedOn >= 1 and e.spilled >= 1, describeMines()
     end)
-    plan.check("the enemy lost exactly its tear hits and half the damage for every blast", function(_, ctx)
+    plan.check("the enemy lost exactly its tear hits and the holder's damage for every blast", function(_, ctx)
         local ok, blasts, detail = exactLoss(ctx, ctx.damage)
         return ok and blasts >= 1, detail
     end)
@@ -972,7 +1939,7 @@ damageCase("on_enemy", function(plan, id)
 end)
 
 -- A player walking onto an armed mine sets it off and takes no damage; the
--- enemy beside it loses half the holder's damage.
+-- enemy beside it loses the holder's damage.
 damageCase("player_steps", function(plan, id)
     setup(plan, id)
     withEnemy(plan, function(room) return leftSide(room) + Vector(154, 0) end)
@@ -1006,7 +1973,7 @@ damageCase("player_steps", function(plan, id)
         local e = evidence()
         return e.byPlayer == 1 and e.exploded == 1 and #roomMines() == 0, describeMines()
     end)
-    plan.check("the enemy beside it lost exactly half the holder's damage", function(_, ctx)
+    plan.check("the enemy beside it lost exactly the holder's damage", function(_, ctx)
         local ok, blasts, detail = exactLoss(ctx, ctx.damage)
         return ok and blasts == 1, detail
     end)
@@ -1046,13 +2013,13 @@ damageCase("chain", function(plan, id)
         local e = evidence()
         return e.chained == 1 and e.exploded == 2 and #roomMines() == 0, describeMines()
     end)
-    plan.check("both blasts reached the enemy, half the holder's damage each", function(_, ctx)
+    plan.check("both blasts reached the enemy, the holder's damage each", function(_, ctx)
         local ok, blasts, detail = exactLoss(ctx, ctx.damage)
         return ok and blasts == 2, detail
     end)
 end)
 
--- An enemy walking onto an armed mine sets it off: it loses exactly half the
+-- An enemy walking onto an armed mine sets it off: it loses exactly the
 -- holder's damage, the player far off is not hurt and a rock beside it stays
 -- whole.
 damageCase("trigger", function(plan, id)
@@ -1082,7 +2049,7 @@ damageCase("trigger", function(plan, id)
         return false, "waiting for the enemy to set it off"
     end, 30, "the enemy steps on the mine")
     plan.wait(3)
-    plan.check("the enemy lost exactly half the holder's damage", function(_, ctx)
+    plan.check("the enemy lost exactly the holder's damage", function(_, ctx)
         local ok, blasts, detail = exactLoss(ctx, ctx.damage)
         return ok and blasts == 1 and evidence().byPlayer == 0, detail
     end)

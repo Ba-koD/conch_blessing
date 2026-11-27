@@ -998,19 +998,23 @@ ConchBlessing.ItemData = {
         },
     },
     LANDMINE = {
-        -- 지뢰 (user design 2026-11-15, reworked 2026-11-25): +40 range, x0.33
-        -- damage, -0.2 tears, attacks locked to tears, and every tear scatters
-        -- mines as it flies (3, +1 per 5 luck, no cap); whatever steps on a
-        -- mine sets it off, and it never hurts a player.
+        -- 지뢰 (user design 2026-11-15, reworked 2026-11-25 and 2026-11-27): +40
+        -- range, x0.33 damage, -0.2 tears, attacks locked to tears, and every
+        -- tear of the holder's scatters mines 3 times (+1 per 5 luck, no cap),
+        -- one mine at a time per copy held, refilling after it runs out;
+        -- whatever steps on a mine sets it off, it never hurts a player, and its
+        -- fake explosion carries the holder's bomb flags (the synergies below).
         type = "passive",
+        stackable = true,
         id = Isaac.GetItemIdByName("Landmine"),
         gfx = "landmine.png",
         tags = "offensive",
         cache = "damage firedelay range weapon",
         -- The items whose weapon its tears replace (EID's "Overridden by" lines;
-        -- `cb test landmine weapon_items` checks each in game).
+        -- `cb test landmine weapon_items` checks each in game). Monstro's Lung,
+        -- Ludovico and C Section shoot tears, so they keep their weapons.
         eidOverrides = { "TECHNOLOGY", "DR_FETUS", "MOMS_KNIFE", "BRIMSTONE", "EPIC_FETUS",
-            "MONSTROS_LUNG", "LUDOVICO_TECHNIQUE", "TECH_X", "SPIRIT_SWORD", "C_SECTION" },
+            "TECH_X", "SPIRIT_SWORD" },
         pool = {
             RoomType.ROOM_TREASURE
         },
@@ -1021,10 +1025,23 @@ ConchBlessing.ItemData = {
         origin = { id = CollectibleType.COLLECTIBLE_IPECAC, type = "collectible" },
         flag = "neutral",
         script = "scripts/items/collectibles/landmine",
+        -- Bomb items whose flags its mines carry (`cb test landmine bomb_synergies`).
+        synergies = {
+            [{ id = CollectibleType.COLLECTIBLE_BOMBER_BOY, type = "collectible" }] = "bomber_boy",
+            [{ id = CollectibleType.COLLECTIBLE_HOT_BOMBS, type = "collectible" }] = "hot_bombs",
+            [{ id = CollectibleType.COLLECTIBLE_BOBS_CURSE, type = "collectible" }] = "bobs_curse",
+            [{ id = CollectibleType.COLLECTIBLE_SAD_BOMBS, type = "collectible" }] = "sad_bombs",
+            [{ id = CollectibleType.COLLECTIBLE_SCATTER_BOMBS, type = "collectible" }] = "scatter_bombs",
+            [{ id = CollectibleType.COLLECTIBLE_BRIMSTONE_BOMBS, type = "collectible" }] = "brimstone_bombs",
+            [{ id = CollectibleType.COLLECTIBLE_GHOST_BOMBS, type = "collectible" }] = "ghost_bombs",
+            [{ id = CollectibleType.COLLECTIBLE_STICKY_BOMBS, type = "collectible" }] = "sticky_bombs",
+            [{ id = CollectibleType.COLLECTIBLE_BUTT_BOMBS, type = "collectible" }] = "butt_bombs",
+            [{ id = CollectibleType.COLLECTIBLE_NANCY_BOMBS, type = "collectible" }] = "nancy_bombs",
+            [{ id = CollectibleType.COLLECTIBLE_BOBBY_BOMB, type = "collectible" }] = "bobby_bomb",
+        },
         callbacks = {
             postUpdate = "landmine.onUpdate",
             evaluateCache = "landmine.onEvaluateCache",
-            fireTear = "landmine.onFireTear",
             postNewRoom = "landmine.onNewRoom",
             gameStarted = "landmine.onGameStarted",
             preGameExit = "landmine.onGameExit",

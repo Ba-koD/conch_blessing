@@ -10,7 +10,8 @@ floor mine is the same object at gameplay size with a smaller puddle, so it
 reads on dark floors too; its button blinks red once a second when armed. A
 tear drops it from its own height (user request 2026-11-19): it falls as the
 bare mine (Fall), sinks into the puddle it splashes on landing and settles
-(Land), then idles.
+(Land), then idles. With Bobby-Bomb a lying mine stands up on four thin legs
+and creeps toward enemies (Walk, two strides; a first draft of 2026-11-27).
 Authored on the native grid (user request 2026-11-15); these text grids are
 the source. `python docs/previews/landmine/author.py` writes the runtime PNGs
 and anm2 and enlarged previews into .tmp/landmine/.
@@ -125,6 +126,22 @@ FALL_BODY = MINE[:7] + [
 ]
 
 
+# A walking mine (Bobby-Bomb): the bare mine lifted out of its puddle on four
+# thin legs, two strides. Rows 0-8 are the body (FALL_BODY), rows 9-10 the legs;
+# its feet stand on the ground point (WALK_PIVOT).
+WALK_LEGS = [
+    [
+        "...KK.......KK...",  # 9
+        "..K..K.....K..K..",  # 10
+    ],
+    [
+        "....KK.....KK....",  # 9
+        "...K..K...K..K...",  # 10
+    ],
+]
+WALK_PIVOT = (8, 10)
+
+
 def paint(image, rows, at, palette, skip_rows=()):
     px = image.load()
     for y, row in enumerate(rows):
@@ -163,23 +180,33 @@ def fall_frame():
     return cell
 
 
+def walk_frame(stride, lit=False):
+    cell = Image.new("RGBA", CELL)
+    paint(cell, FALL_BODY, (0, 0), dict(PAL, **(ON if lit else OFF)))
+    paint(cell, WALK_LEGS[stride], (0, len(FALL_BODY)), PAL)
+    return cell
+
+
 # Sheet cells in order. Fall holds the bare mine while it drops; Land sinks it
 # into its puddle and lets it settle over 8 updates (the mine arms as it ends);
 # Idle shows the lit button for 4 updates and the dark one for 26.
-CELLS = [fall_frame(), mine_frame(3), mine_frame(1), mine_frame(0), mine_frame(0, lit=True)]
+# Walk strides every 4 updates with the button lit on the first stride.
+CELLS = [fall_frame(), mine_frame(3), mine_frame(1), mine_frame(0), mine_frame(0, lit=True), walk_frame(0, lit=True),
+         walk_frame(1)]
 FALL = [(0, 1)]
 LAND = [(1, 2), (2, 2), (3, 2), (4, 2)]
 IDLE = [(4, 4), (3, 26)]
+WALK = [(5, 4), (6, 4)]
 
 
-def frame_xml(cell, delay):
+def frame_xml(cell, delay, pivot=PIVOT):
     return ('          <Frame XPosition="0" YPosition="0" XPivot="%d" YPivot="%d" XCrop="%d" YCrop="0" '
             'Width="%d" Height="%d" XScale="100" YScale="100" Delay="%d" Visible="true" RedTint="255" '
             'GreenTint="255" BlueTint="255" AlphaTint="255" RedOffset="0" GreenOffset="0" BlueOffset="0" '
-            'Rotation="0" Interpolated="false" />' % (PIVOT[0], PIVOT[1], cell * CELL[0], CELL[0], CELL[1], delay))
+            'Rotation="0" Interpolated="false" />' % (pivot[0], pivot[1], cell * CELL[0], CELL[0], CELL[1], delay))
 
 
-def animation_xml(name, frames, loop):
+def animation_xml(name, frames, loop, pivot=PIVOT):
     total = sum(delay for _, delay in frames)
     lines = ['    <Animation Name="%s" FrameNum="%d" Loop="%s">' % (name, total, "true" if loop else "false"),
              '      <RootAnimation>',
@@ -189,7 +216,7 @@ def animation_xml(name, frames, loop):
              '      </RootAnimation>',
              '      <LayerAnimations>',
              '        <LayerAnimation LayerId="0" Visible="true">']
-    lines += [frame_xml(cell, delay) for cell, delay in frames]
+    lines += [frame_xml(cell, delay, pivot) for cell, delay in frames]
     lines += ['        </LayerAnimation>', '      </LayerAnimations>', '      <NullAnimations />',
               '      <Triggers />', '    </Animation>']
     return lines
@@ -212,6 +239,7 @@ def anm2():
     lines += animation_xml("Fall", FALL, True)
     lines += animation_xml("Land", LAND, False)
     lines += animation_xml("Idle", IDLE, True)
+    lines += animation_xml("Walk", WALK, True, WALK_PIVOT)
     lines += ['  </Animations>', '</AnimatedActor>', '']
     return "\n".join(lines)
 
@@ -232,7 +260,8 @@ def sheet():
 def check():
     assert len(ICON) == 32 and all(len(row) == 32 for row in ICON), "icon must be 32x32"
     assert len(MINE) == CELL[1] and all(len(row) == CELL[0] for row in MINE), "mine must fit its cell"
-    for rows, palette in [(ICON, ICON_PAL), (MINE, PAL), (FALL_BODY, PAL)]:
+    assert all(len(FALL_BODY) + len(legs) == CELL[1] for legs in WALK_LEGS), "a walking mine must fit its cell"
+    for rows, palette in [(ICON, ICON_PAL), (MINE, PAL), (FALL_BODY, PAL)] + [(legs, PAL) for legs in WALK_LEGS]:
         assert len({len(row) for row in rows}) == 1, "ragged grid"
         for row in rows:
             for ch in row:
