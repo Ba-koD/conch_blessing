@@ -54,4 +54,5 @@ return {
     { key = "JOBS_BLESSING" },
     { key = "AGING_CURVE" },
     { key = "CEREAL" },
+    { key = "RAINMAKERS_ROSE" },
 }

@@ -320,6 +320,11 @@
     "detail": "gfx/items/collectibles/rabbit_af3d.png"
   },
   {
+    "source": "gfx/items/collectibles/rainmakers_rose.png",
+    "status": "pending",
+    "detail": "3D model not built yet (Rose of the Rainmaker, added 2026-11-27)"
+  },
+  {
     "source": "gfx/items/collectibles/rat.png",
     "status": "modelled",
     "detail": "gfx/items/collectibles/rat_af3d.png"

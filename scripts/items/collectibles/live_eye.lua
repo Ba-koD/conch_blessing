@@ -273,7 +273,8 @@ ConchBlessing.liveeye.onTearCollision = function(_, tear, collider, low)
     end
 
     local data = tear:GetData()
-    if not data or not data.conch_liveeye or data.conch_liveeye.hit then
+    -- A tear the player did not aim (an item's rain) is neither a hit nor a miss.
+    if not data or not data.conch_liveeye or data.conch_liveeye.hit or data.__ConchBlessingUnaimed then
         return nil
     end
 
@@ -325,7 +326,7 @@ ConchBlessing.liveeye.onTearRemoved = function(_, entity)
     end
 
     local data = tear:GetData()
-    if data and data.conch_liveeye and not data.conch_liveeye.hit then
+    if data and data.conch_liveeye and not data.conch_liveeye.hit and not data.__ConchBlessingUnaimed then
         if data.conch_liveeye.ignoreRemoval then
             ConchBlessing.printDebug("Live Eye: tear removed after hitting poop/fire (IGNORED)")
             data.conch_liveeye.hit = true

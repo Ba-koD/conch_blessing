@@ -12,7 +12,7 @@ end
 local CycleCompare = require("scripts.dev.item_test_cycle_compare")
 local BirthrightParity = require("scripts.dev.item_test_birthright_parity")
 local contracts = {}
-for _, module in ipairs({ "stats", "combat", "special", "rat", "conch_pearl", "tiger", "ox", "kids_menu", "hermit_crab", "wrong_answer_note", "rabbit", "jangseung", "conch_certificate", "seonnyeo", "jeon_woochi", "conch_debris", "landmine", "underdog", "jobs_blessing", "aging_curve", "cereal" }) do
+for _, module in ipairs({ "stats", "combat", "special", "rat", "conch_pearl", "tiger", "ox", "kids_menu", "hermit_crab", "wrong_answer_note", "rabbit", "jangseung", "conch_certificate", "seonnyeo", "jeon_woochi", "conch_debris", "landmine", "underdog", "jobs_blessing", "aging_curve", "cereal", "rainmakers_rose" }) do
     for key, contract in pairs(require("scripts.dev.item_test_" .. module)) do
         assert(not contracts[key], "duplicate item contract: " .. key)
         contracts[key] = contract

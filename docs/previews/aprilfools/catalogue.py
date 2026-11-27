@@ -30,6 +30,7 @@ PENDING={
  'gfx/items/pick ups/pickup_gebo.png':'3D model not built yet (Gebo, the Cereal rune, added 2026-11-25)',
  'gfx/ui/conch_cereal_ui.png':'3D model not built yet (Cereal bowl and HUD marks, added 2026-11-24)',
  'gfx/effects/conch_jangseung_rope.png':'3D model not built yet (Jangseung 금줄, added 2026-11-15)',
+ 'gfx/items/collectibles/rainmakers_rose.png':'3D model not built yet (Rose of the Rainmaker, added 2026-11-27)',
 }
 
 

@@ -319,9 +319,12 @@ local function bolt(player, position, enemies, aimed)
         damage, hit, cue, volume, 20 * math.log(volume, 10), gap, aimed and "on" or "miss")
 end
 
-local function raiseTwister(player, position)
+-- `color` tints the pillar (Rose of the Rainmaker's Brimstone rain raises red
+-- ones through ConchBlessing.dragon.raiseTwister); nil keeps Hush's own.
+local function raiseTwister(player, position, color)
     local twisters = ConchBlessing.dragon._twisters
-    twisters[#twisters + 1] = { position = Vector(position.X, position.Y), age = 0, player = EntityPtr(player) }
+    twisters[#twisters + 1] = { position = Vector(position.X, position.Y), age = 0, player = EntityPtr(player),
+        color = color }
     local d, sky = ConchBlessing.dragon.data, ConchBlessing.dragon._sky
     if sky.sinceWind >= d.twisterWindGap then
         sky.sinceWind = 0
@@ -625,7 +628,9 @@ local function drawStrikes()
             if ConchBlessing.AprilFools then ConchBlessing.AprilFools.Apply(pillar) end
             for _, twister in ipairs(twisters) do
                 pillar:SetFrame(twisterFrame(twister))
+                if twister.color then pillar.Color = twister.color end
                 pillar:Render(Isaac.WorldToScreen(twister.position))
+                if twister.color then pillar.Color = Color(1, 1, 1, 1) end
             end
         end
     end
@@ -674,6 +679,15 @@ end
 
 ConchBlessing.dragon.onNewRoom = function()
     clearEffects()
+end
+
+-- A twister of `player`'s at `position`, exactly as 진's own (five seconds, the
+-- pull, 5% of the player's damage a tick, the wind), whether or not anyone
+-- holds 진; `color` tints its pillar.
+ConchBlessing.dragon.raiseTwister = function(player, position, color)
+    if not player or not position then return false end
+    raiseTwister(player, position, color)
+    return true
 end
 
 ConchBlessing.dragon.onPreGameExit = function()

@@ -1167,6 +1167,48 @@ ConchBlessing.ItemData = {
             [{ id = CollectibleType.COLLECTIBLE_BREAKFAST, type = "collectible" }] = "breakfast",
         },
     },
+    RAINMAKERS_ROSE = {
+        -- 레인메이커의 장미 (user design 2026-11-27): Depression's positive
+        -- answer, an homage to the rose of the Rainmaker character mod. Homing
+        -- tears fall from the sky at a third of the holder's tears, one per
+        -- copy; a hit brings down 25 at once; shot speed +0.2.
+        type = "passive",
+        id = Isaac.GetItemIdByName("Rose of the Rainmaker"),
+        stackable = true,
+        gfx = "rainmakers_rose.png",
+        tags = "offensive",
+        cache = "shotspeed",
+        pool = { RoomType.ROOM_TREASURE }, -- Depression's pool
+        quality = 3,
+        hidden = false,
+        shopprice = 15,
+        devilprice = 2,
+        origin = { id = CollectibleType.COLLECTIBLE_DEPRESSION, type = "collectible" },
+        flag = "positive",
+        script = "scripts/items/collectibles/rainmakers_rose",
+        synergies = {
+            -- 진's storm: while a living player holds it, the rain falls twice over.
+            [{ type = "collectible", name = "Dragon" }] = "dragon",
+            -- The rain takes the form of the holder's attack.
+            [{ id = CollectibleType.COLLECTIBLE_BRIMSTONE, type = "collectible" }] = "brimstone",
+            [{ id = CollectibleType.COLLECTIBLE_TECHNOLOGY, type = "collectible" }] = "technology",
+            [{ id = CollectibleType.COLLECTIBLE_TECH_X, type = "collectible" }] = "tech_x",
+            [{ id = CollectibleType.COLLECTIBLE_DR_FETUS, type = "collectible" }] = "dr_fetus",
+            [{ id = CollectibleType.COLLECTIBLE_EPIC_FETUS, type = "collectible" }] = "epic_fetus",
+            [{ id = CollectibleType.COLLECTIBLE_MOMS_KNIFE, type = "collectible" }] = "moms_knife",
+            [{ id = CollectibleType.COLLECTIBLE_SPIRIT_SWORD, type = "collectible" }] = "spirit_sword",
+            [{ id = CollectibleType.COLLECTIBLE_C_SECTION, type = "collectible" }] = "c_section",
+        },
+        callbacks = {
+            postUpdate = "rainmakersRose.onUpdate",
+            postRender = "rainmakersRose.onRender",
+            postRoomRenderEntities = "rainmakersRose.onRoomRender",
+            evaluateCache = "rainmakersRose.onEvaluateCache",
+            postNewRoom = "rainmakersRose.reset",
+            postGameStarted = "rainmakersRose.reset",
+            preGameExit = "rainmakersRose.reset",
+        },
+    },
 
     -- The twelve zodiac items (십이지) close the collectible group in their own
     -- order, 자 … 해, followed by the familiars and trinkets.

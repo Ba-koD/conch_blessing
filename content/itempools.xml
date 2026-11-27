@@ -51,6 +51,7 @@
         <Item Name="Underdog" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Aging Curve" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Cereal" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
+        <Item Name="Rose of the Rainmaker" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Rat" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Ox" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>
         <Item Name="Tiger" Weight="1.0" DecreaseBy="1" RemoveOn="0.1"/>

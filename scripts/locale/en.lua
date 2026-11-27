@@ -759,6 +759,28 @@ return {
             },
         },
 
+        RAINMAKERS_ROSE = {
+            name = "Rose of the Rainmaker",
+            description = "To the Rainmaker who rained first",
+            eid = {
+                "{{Shotspeed}} Shot speed + 0.2",
+                "#{{Tears}} Homing tears fall from the sky at random, at a third of your fire rate",
+                "#Getting hit brings down 25 homing tears from the sky at once",
+                "#Holding several makes more tears fall normally",
+            },
+            synergies = {
+                dragon = "Twice as many tears fall from the sky",
+                brimstone = "Each drop raises a red twister where it lands",
+                technology = "The rain strikes down as lasers",
+                tech_x = "Each drop leaves a laser ring where it lands",
+                dr_fetus = "Bombs fall instead and explode (never hurt you)",
+                epic_fetus = "Rockets fall instead and explode widely (never hurt you)",
+                moms_knife = "The rain falls as piercing blades",
+                spirit_sword = "The rain falls as sword beams",
+                c_section = "The rain falls as fetuses",
+            },
+        },
+
         -- Familiars
         TIME_MONEY = {
             name = "Time = Money",
