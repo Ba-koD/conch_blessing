@@ -44,21 +44,31 @@ function V:Distance(o) return math.sqrt((self.X-o.X)^2+(self.Y-o.Y)^2) end
 function V:Length() return math.sqrt(self.X^2+self.Y^2) end
 Vector=setmetatable({},{__call=function(_,x,y) return setmetatable({X=x,Y=y},V) end})
 Vector.Zero=Vector(0,0)
-function Color(...) return {...} end
+Color=setmetatable({},{__call=function(_,...) return {...} end})
 ModCallbacks={}
 CacheFlag={CACHE_DAMAGE=1,CACHE_FIREDELAY=2,CACHE_SHOTSPEED=4,CACHE_RANGE=8,CACHE_LUCK=1024,CACHE_WEAPON=32}
+Color.Default={1,1,1,1}
 WeaponType={WEAPON_TEARS=1,WEAPON_BRIMSTONE=2,WEAPON_LASER=3,WEAPON_KNIFE=4,WEAPON_BOMBS=5,WEAPON_ROCKETS=6,
     WEAPON_MONSTROS_LUNGS=7,WEAPON_LUDOVICO_TECHNIQUE=8,WEAPON_TECH_X=9,WEAPON_BONE=10,WEAPON_NOTCHED_AXE=11,
     WEAPON_URN_OF_SOULS=12,WEAPON_SPIRIT_SWORD=13,WEAPON_FETUS=14,WEAPON_UMBILICAL_WHIP=15}
-EntityType={ENTITY_PLAYER=1,ENTITY_TEAR=2,ENTITY_FAMILIAR=3,ENTITY_EFFECT=1000}
+EntityType={ENTITY_PLAYER=1,ENTITY_TEAR=2,ENTITY_FAMILIAR=3,ENTITY_BOMB=4,ENTITY_EFFECT=1000}
+BombVariant={BOMB_NORMAL=0}
 EffectVariant={BOMB_EXPLOSION=1,POOF01=15,HUNGRY_SOUL=186,PURGATORY=189}
 LaserVariant={THICK_RED=1}
-TearFlags={TEAR_HOMING=1<<2,TEAR_SCATTER_BOMB=1<<36,TEAR_CROSS_BOMB=1<<45,TEAR_GHOST_BOMB=1<<50,TEAR_BRIMSTONE_BOMB=1<<41}
+TearFlags={TEAR_HOMING=1<<2,TEAR_SCATTER_BOMB=1<<36,TEAR_CROSS_BOMB=1<<45,TEAR_GHOST_BOMB=1<<50,TEAR_BRIMSTONE_BOMB=1<<41,
+    TEAR_BURN=1<<22,TEAR_POISON=1<<4,TEAR_SAD_BOMB=1<<35,TEAR_STICKY=1<<34,TEAR_BUTT_BOMB=1<<37,TEAR_SLOW=1<<3,
+    TEAR_EGG=1<<23,TEAR_SPECTRAL=1<<0}
+CollectibleType={COLLECTIBLE_NANCY_BOMBS=725}
 EntityPartition={ENEMY=8}
 EntityFlag={FLAG_FRIENDLY=1<<29}
 DamageFlag={DAMAGE_EXPLOSION=1<<2}
 GridCollisionClass={COLLISION_NONE=0,COLLISION_PIT=1,COLLISION_SOLID=4}
 bombCalls={}; flagCalls={}
+function bombs()
+    local list={}
+    for _,e in ipairs(entities) do if e.Type==EntityType.ENTITY_BOMB then list[#list+1]=e end end
+    return list
+end
 SoundEffect={SOUND_BOOM=37}
 played={}
 function SFXManager() return {Play=function(_,id,volume) played[#played+1]={id=id,volume=volume} end} end
@@ -67,6 +77,7 @@ function RNG()
     local r={n=0,seed=1}
     function r:SetSeed(seed) self.seed=seed self.n=0 end
     function r:Next() self.n=self.n+1 return (self.seed*31+self.n*7)%100000 end
+    function r:RandomInt(n) return math.floor(self:RandomFloat()*n) end
     function r:RandomFloat()
         self.n=self.n+1
         return ((self.seed*7919+self.n*104729)%1000)/1000
@@ -76,20 +87,28 @@ end
 errors={}; callbacks={}
 -- StatsAPI's doubles: additions applied and the item multiplier table.
 applied={}
-multipliers={}
+multipliers={}   -- the Damage multiplier, by player
+tearsMult={}     -- the Tears multiplier, by player
 um={}
-function um:SetItemMultiplier(p,id,stat,value) multipliers[p.hash]={id=id,stat=stat,value=value}; applied[#applied+1]="set "..value end
-function um:RemoveItemMultiplier(p,id,stat) multipliers[p.hash]=nil; applied[#applied+1]="remove" end
+function um:SetItemMultiplier(p,id,stat,value)
+    if stat=="Tears" then tearsMult[p.hash]=value else multipliers[p.hash]={id=id,stat=stat,value=value} end
+    applied[#applied+1]="set "..stat.." "..value
+end
+function um:RemoveItemMultiplier(p,id,stat)
+    if stat=="Tears" then tearsMult[p.hash]=nil else multipliers[p.hash]=nil end
+    applied[#applied+1]="remove "..stat
+end
 function um:QueueCacheUpdate() end
 function um:SaveToSaveManager() end
 ConchBlessing={ItemData={},printError=function(m) errors[#errors+1]=m end,printDebug=function() end,
     stats={unifiedMultipliers=um,
         tears={applyAddition=function(p,a) p.tearsAdded=(p.tearsAdded or 0)+a end},
-        range={applyAddition=function(p,a) p.rangeAdded=(p.rangeAdded or 0)+a end}},
+        range={applyAddition=function(p,a) p.rangeAdded=(p.rangeAdded or 0)+a end},
+        shotSpeed={applyAddition=function(p,a) p.shotAdded=(p.shotAdded or 0)+a end}},
     getUnifiedMultiplierState=function(p)
-        local e=multipliers[p.hash]
-        if not e then return {itemMultipliers={}} end
-        return {itemMultipliers={[e.id]={Damage={value=e.value}}}}
+        local e,t=multipliers[p.hash],tearsMult[p.hash]
+        if not e and not t then return {itemMultipliers={}} end
+        return {itemMultipliers={[LANDMINE]={Damage=e and {value=e.value} or nil,Tears=t and {value=t} or nil}}}
     end}
 function ConchBlessing:AddCallback(id,fn) callbacks[id]=fn end
 function GetPtrHash(e) return e.hash end
@@ -102,7 +121,7 @@ function Sprite()
     function sp:Load(path) self.path=path end
     function sp:SetFrame(anim,f) if not (missingAnims or {})[anim] then self.anim=anim end; self.frame=f end
     function sp:GetAnimation() return self.anim or "" end
-    function sp:Render(pos) renders[#renders+1]={anim=self.anim,frame=self.frame,pos=pos} end
+    function sp:Render(pos) renders[#renders+1]={anim=self.anim,frame=self.frame,pos=pos,red=self.Color~=nil} end
     return sp
 end
 
@@ -119,7 +138,10 @@ function E:IsVulnerableEnemy() return self.enemy==true and not self.invulnerable
 function E:HasEntityFlags(f) return ((self.flags or 0) & f)~=0 end
 function E:IsDead() return self.dead==true end
 function E:IsCoopGhost() return self.ghost==true end
+function E:HasCollectible(id) return (self.items or {})[id]==true end
 function E:GetBombFlags() return self.bombFlags or 0 end
+function E:ToBomb() return self.Type==EntityType.ENTITY_BOMB and self or nil end
+function E:SetExplosionCountdown(n) self.countdown=n end
 function E:GetCollectibleNum(id) return id==LANDMINE and (self.copies or 0) or 0 end
 function E:TakeDamage(amount,flags,source) self.hits=self.hits or {}; self.hits[#self.hits+1]={amount=amount,flags=flags,source=source} end
 function E:AddCacheFlags(f) self.cacheFlags=(self.cacheFlags or 0)|f end
@@ -213,6 +235,7 @@ function Game()
     return g
 end
 reloadLandmine()
+M.data.dudChance=0   -- the tests lay their own duds
 function player(copies)
     local p=entity({Type=EntityType.ENTITY_PLAYER,Variant=0,Position=Vector(20,150),copies=copies or 1,Damage=3.5,
         Luck=0,Size=10,MaxFireDelay=10})
@@ -288,16 +311,17 @@ class LandmineTests(unittest.TestCase):
             self.assertNotIn(kept, row)
         self.assertIn('evaluateCache = "landmine.onEvaluateCache"', row)
         self.assertIn('postUpdate = "landmine.onUpdate"', row)
-        self.assertIn('cache = "damage firedelay range weapon"', row)
+        self.assertIn('cache = "damage firedelay shotspeed range weapon"', row)
         self.assertNotIn('weaponFiredOptional', row)
         self.assertIn('stackable = true', row)
         # The user's EID (2026-11-25), Korean verbatim with stat icons.
         kr = (ROOT / 'scripts/locale/kr.lua').read_text(encoding='utf-8')
         entry = kr[kr.index('LANDMINE = {'):kr.index('UNDERDOG = {')]
-        for line in ('{{Range}} 고정 사거리 +40, {{Damage}} 공격력 x0.33, {{Tears}} 연사 -0.2',
-                     '#공격이 눈물로 고정되고, 눈물마다 지뢰를 3번 뿌립니다({{Luck}} 행운 5마다 +1번)',
+        for line in ('{{Range}} 고정 사거리 +40, {{Damage}} 공격력 x0.33, {{Tears}} 연사 x0.8, {{Shotspeed}} 탄속 -0.2',
+                     '#공격이 눈물로 고정되고, 눈물마다 지뢰를 2번 뿌립니다({{Luck}} 행운 5마다 +1번)',
                      '#중첩할 때마다 한 번에 뿌리는 지뢰가 1개씩 늘어납니다',
                      '#{{Tears}} 지뢰를 뿌리기 시작하면 5 / 연사 초 뒤 다시 가득 채워집니다', '#지뢰 피해는 내 공격력과 같습니다',
+                     '#지뢰의 10%는 녹슨 지뢰로 2배의 피해와 나에게 데미지를 줍니다',
                      '#{{Warning}} REPENTOGON 권장'):
             self.assertIn('"' + line + '"', entry)
         warnings = {
@@ -314,11 +338,12 @@ class LandmineTests(unittest.TestCase):
     def test_payload_grows_with_luck_without_a_cap(self):
         result = self.run_lua('return T.payload(0), T.payload(4), T.payload(5), T.payload(10), T.payload(26), '
                               'T.payload(-3), T.payload(100)')
-        # 3 drops and one more for every 5 luck, one mine a drop with one copy.
-        self.assertEqual(result, (3, 3, 4, 5, 8, 3, 23))
+        # 2 drops (user decision 2026-11-28) and one more for every 5 luck, one
+        # mine a drop with one copy.
+        self.assertEqual(result, (2, 2, 3, 4, 7, 2, 22))
         copies = self.run_lua('return T.payload(0,2), T.payload(5,3), T.payload(10,2), T.perDrop(0), T.perDrop(3)')
         # Copies raise the mines laid at once and the most a tear holds.
-        self.assertEqual(copies, (6, 12, 10, 1, 3))
+        self.assertEqual(copies, (4, 9, 8, 1, 3))
 
     def test_reload_waits_five_fire_intervals(self):
         result = self.run_lua('return T.reloadDelay(10), T.reloadDelay(1.5), T.reloadDelay(-5), T.reloadDelay(nil)')
@@ -335,7 +360,7 @@ class LandmineTests(unittest.TestCase):
         self.assertEqual((damage, negative, edge, outside), (3.5, 0, True, False))
         self.assertAlmostEqual(landing, 0, places=9)
 
-    def test_a_tear_lays_its_three_mines_then_refills_after_five_fire_intervals(self):
+    def test_a_tear_lays_its_two_mines_then_refills_after_five_fire_intervals(self):
         result = self.run_lua('''
             local p=player(); p.Damage=1.2
             local t=tear(p,20,150,6,0)
@@ -354,10 +379,10 @@ class LandmineTests(unittest.TestCase):
         (before, first, waiting, second, third, emptied, refilled, again, reloads, carriers, straddle, worst,
          damage, owner, gap) = result
         # One copy: a mine on the 3rd update (half of 6), then every 6, sides
-        # alternating; 5 x (10 + 1) = 55 updates after the first mine (the 58th
-        # update) it holds 3 again and lays on at once.
-        self.assertEqual((before, first, waiting, second, third), (0, 1, 1, 2, 3))
-        self.assertEqual((emptied, refilled, again, reloads, carriers), (3, 4, 5, 1, 1))
+        # alternating, two in all; 5 x (10 + 1) = 55 updates after the first
+        # mine (the 58th update) it holds 2 again and lays on at once.
+        self.assertEqual((before, first, waiting, second, third), (0, 1, 1, 2, 2))
+        self.assertEqual((emptied, refilled, again, reloads, carriers), (2, 3, 4, 1, 1))
         self.assertTrue(straddle)
         self.assertLessEqual(worst, 40)
         self.assertEqual((damage, owner), (1.2, True))
@@ -373,7 +398,7 @@ class LandmineTests(unittest.TestCase):
         ''')
         # The first mine on the 3rd update, so the stock is full again on the
         # 58th (55 later) and the next mine goes down then.
-        self.assertEqual(result, (3, 4, 1))
+        self.assertEqual(result, (2, 3, 1))
 
     def test_copies_lay_more_mines_at_once_and_hold_more(self):
         result = self.run_lua('''
@@ -393,11 +418,11 @@ class LandmineTests(unittest.TestCase):
             local b={run(3)}
             return a[1],a[2],a[3],a[4],a[5],a[6],b[1],b[2],b[3],b[4],b[5],b[6]
         ''')
-        # Two copies: a pair at once, 6 in all, one of each pair to each side;
-        # three copies: three at once (two to one side), 9 in all.
-        self.assertEqual(result[:6], (2, 4, 6, 6, 3, 3))
-        self.assertEqual(result[6:10], (3, 6, 9, 9))
-        self.assertEqual(sorted(result[10:]), [4, 5])
+        # Two copies: a pair at once, 4 in all, one of each pair to each side;
+        # three copies: three at once (two to one side), 6 in all.
+        self.assertEqual(result[:6], (2, 4, 4, 4, 2, 2))
+        self.assertEqual(result[6:10], (3, 6, 6, 6))
+        self.assertEqual(sum(result[10:]), 6)
 
     def test_every_tear_of_the_holders_lays_mines_and_no_other(self):
         result = self.run_lua('''
@@ -442,7 +467,7 @@ class LandmineTests(unittest.TestCase):
             update(70)
             return held, gone, T.evidence().reloads, T.evidence().laid
         ''')
-        self.assertEqual(result, (1, 0, 0, 3))
+        self.assertEqual(result, (1, 0, 0, 2))
 
     def test_a_mine_flies_from_the_tear_and_lands_where_it_was_aimed(self):
         result = self.run_lua('''
@@ -471,7 +496,7 @@ class LandmineTests(unittest.TestCase):
             for k=before+1,#M.mines() do farthest=math.max(farthest,M.mines()[k].x) end
             return #M.mines()-before, T.evidence().carried>0, farthest>160
         ''')
-        self.assertEqual(result, (3, True, True))
+        self.assertEqual(result, (2, True, True))
 
     def test_a_stopped_tear_spills_the_rest_around_where_it_stopped(self):
         result = self.run_lua('''
@@ -486,7 +511,7 @@ class LandmineTests(unittest.TestCase):
             end
             return T.evidence().flung, T.evidence().spilled, #M.mines(), #T.carriers(), far
         ''')
-        self.assertEqual(result, (1, 2, 3, 0, 0))
+        self.assertEqual(result, (1, 1, 2, 0, 0))
 
     def test_a_spill_with_no_free_ground_piles_up_and_off_the_floor_is_lost(self):
         result = self.run_lua('''
@@ -500,7 +525,7 @@ class LandmineTests(unittest.TestCase):
             local t2=tear(p,300,100,10,0); update(1); t2:Remove(); update(1)
             return piled, T.evidence().laid-before, T.evidence().lost
         ''')
-        self.assertEqual(result, (3, 0, 3))
+        self.assertEqual(result, (2, 0, 2))
 
     def test_luck_adds_mines_to_every_tear(self):
         result = self.run_lua('''
@@ -509,7 +534,7 @@ class LandmineTests(unittest.TestCase):
             update(40)
             return T.evidence().laid
         ''')
-        self.assertEqual(result, 5)
+        self.assertEqual(result, 4)
 
     def test_only_a_living_holders_tears_carry_mines(self):
         result = self.run_lua('''
@@ -640,7 +665,8 @@ class LandmineTests(unittest.TestCase):
         ''')
         # Copies do not stack; the active items' own weapons (11, 12) stay.
         # Monstro's Lung (7), Ludovico (8) and C Section's fetuses (14) shoot tears and stay.
-        self.assertEqual(result, (-0.2, 1600, '2-,3-,4-,5-,6-,9-,10-,13-,15-,1+', None, None, None))
+        # The tears are StatsAPI's x0.8 item multiplier, not an addition.
+        self.assertEqual(result, (None, 1600, '2-,3-,4-,5-,6-,9-,10-,13-,15-,1+', None, None, None))
 
     def test_a_weapon_that_shoots_its_own_tears_gets_no_plain_tears_beside_it(self):
         result = self.run_lua('''
@@ -664,14 +690,17 @@ class LandmineTests(unittest.TestCase):
             local none=multipliers[p.hash]
             p.copies=2; update(1)
             local held=multipliers[p.hash] and multipliers[p.hash].value
+            local tears=tearsMult[p.hash]
             local evaluated=p.evaluated
             update(5)
             local steady=#applied
             p.copies=0; update(1)
-            return none==nil, held, evaluated, steady, multipliers[p.hash]==nil, p.evaluated, p.cacheFlags
+            return none==nil, held, tears, evaluated, steady, multipliers[p.hash]==nil, tearsMult[p.hash]==nil,
+                p.evaluated, p.cacheFlags
         ''')
-        # Set once on pickup, removed on loss; stats evaluated at each change.
-        self.assertEqual(result, (True, 0.33, 1, 1, True, 2, 1 | 2 | 8 | 32))
+        # x0.33 damage and x0.8 tears, each set once on pickup and removed on
+        # loss; stats evaluated at each change.
+        self.assertEqual(result, (True, 0.33, 0.8, 1, 2, True, True, 2, 1 | 2 | 4 | 8 | 32))
 
     def test_nothing_is_evaluated_before_the_save_is_loaded(self):
         result = self.run_lua('''
@@ -687,6 +716,16 @@ class LandmineTests(unittest.TestCase):
         ''')
         # A reload in the middle of a run: the sync waits for the save, then runs.
         self.assertEqual(result, (None, 1, 0.33))
+
+    def test_shot_speed_drops_by_a_fifth_once(self):
+        result = self.run_lua('''
+            local p=player(3)
+            M.onEvaluateCache(nil,p,CacheFlag.CACHE_SHOTSPEED)
+            local none=player(0)
+            M.onEvaluateCache(nil,none,CacheFlag.CACHE_SHOTSPEED)
+            return p.shotAdded, none.shotAdded
+        ''')
+        self.assertEqual(result, (-0.2, None))
 
     def test_a_stale_multiplier_is_removed_after_a_start(self):
         result = self.run_lua('''
@@ -738,16 +777,193 @@ class LandmineTests(unittest.TestCase):
         self.assertEqual(drawn, 'Fall0 Idle11 Land6')
         self.assertEqual((stray, x, y, count), (0, 100 * 0.65 + 1, 150 * 0.65 + 2, 3))
 
+    def test_the_numbers_the_user_set(self):
+        result = self.run_lua('''
+            reloadLandmine()
+            local d=M.data
+            local out={d.drops,d.tearsMultiplier,d.shotSpeed,d.synergyChance,d.dudChance,d.dudDamage,
+                T.rolls(0.05,0.1),T.rolls(0.1,0.1),T.rolls(0.5,0.1),T.rolls(nil,0.1)}
+            d.dudChance=0
+            return table.unpack(out)
+        ''')
+        # User decisions 2026-11-28: 2 drops, x0.8 tears and -0.2 shot speed,
+        # each bomb synergy on its tenth, one mine in ten a dud that goes off as
+        # a real bomb for twice the damage.
+        self.assertEqual(result, (2, 0.8, -0.2, 0.1, 0.1, 2, True, False, False, False))
+
+    def test_only_one_mine_in_ten_carries_the_bomb_flags(self):
+        result = self.run_lua('''
+            engineBombs=true
+            local p=player(); p.Position=Vector(500,280)
+            p.bombFlags=TearFlags.TEAR_CROSS_BOMB|TearFlags.TEAR_HOMING
+            local plain=T.lay(p,Vector(140,150),3); plain.bombRoll=0.5
+            local victim=enemy(142,150,10)
+            update(M.data.armFrames); update(1)
+            local plainFlags, plainCross, plainHit=#flagCalls, T.evidence().crossed, victim.hits and #victim.hits or 0
+            victim:Remove()
+            local flagged=T.lay(p,Vector(400,150),3); flagged.bombRoll=0.05
+            local second=enemy(402,150,10)
+            update(M.data.armFrames); update(1)
+            return plainFlags, plainCross, plainHit, #flagCalls, T.evidence().crossed>=4, T.evidence().flagged
+        ''')
+        # A roll above the 10%: a plain blast (the enemy still hit once, no flag
+        # effects); below it: the bomb flags ride on it.
+        self.assertEqual(result, (0, 0, 1, 1, True, 1))
+
+    def test_each_bomb_synergy_owns_a_tenth_of_the_roll(self):
+        result = self.run_lua('''
+            local p=player()
+            p.bombFlags=TearFlags.TEAR_BURN|TearFlags.TEAR_SCATTER_BOMB|TearFlags.TEAR_HOMING|TearFlags.TEAR_EGG
+            local function on(roll) return T.mineFlags(p,{bombRoll=roll,seed=5}) end
+            local function name(flag)
+                if flag==nil then return "none" end
+                for key,value in pairs(TearFlags) do if value==flag then return key end end
+                return "other"
+            end
+            local slots={}
+            for _,roll in ipairs({0,0.099,0.1,0.95,0.9999,1}) do slots[#slots+1]=tostring(T.slotOf(roll)) end
+            slots[#slots+1]=tostring(T.slotOf(nil))
+            local before=name(on(0.95))
+            p.items={[CollectibleType.COLLECTIBLE_NANCY_BOMBS]=true}
+            local nancy=name(on(0.95))
+            return table.concat(slots," "), name(on(0.15)), name(on(0.45)), name(on(0.05)), before,
+                nancy~="none" and nancy~="other" and nancy~="TEAR_HOMING", name(T.mineFlags(nil,{bombRoll=0.15}))
+        ''')
+        # Ten tenths in order; a held synergy rides on its own tenth only, one
+        # not held gives nothing, Nancy Bombs' tenth gives one of the other nine.
+        self.assertEqual(result, ('1 1 2 10 10 nil nil', 'TEAR_BURN', 'TEAR_SCATTER_BOMB', 'none', 'none', True, 'none'))
+
+    def test_no_bomb_flags_means_no_synergy_on_any_tenth(self):
+        result = self.run_lua('''
+            local p=player()
+            local any=false
+            for i=0,99 do if T.mineFlags(p,{bombRoll=i/100,seed=3}) then any=true end end
+            return any
+        ''')
+        self.assertFalse(result)
+
+    def test_a_slot_carries_what_its_item_sets_beside_its_own_flag(self):
+        result = self.run_lua('''
+            local sticky=T.slotFlags(8,TearFlags.TEAR_STICKY|TearFlags.TEAR_EGG|TearFlags.TEAR_BURN)
+            local eggOnly=T.slotFlags(8,TearFlags.TEAR_EGG)
+            local all=T.slotFlags(7,nil)
+            return sticky==(TearFlags.TEAR_STICKY|TearFlags.TEAR_EGG), eggOnly, all==(TearFlags.TEAR_GHOST_BOMB|TearFlags.TEAR_SPECTRAL)
+        ''')
+        # Sticky Bombs' tenth: its own flag and the egg (its slowing creep), not
+        # the burn another item sets; without its own flag, nothing; Ghost
+        # Bombs' tenth for Nancy: both of its flags.
+        self.assertEqual(result, (True, None, True))
+
+    def test_a_dud_is_decided_when_it_is_laid(self):
+        result = self.run_lua('''
+            local p=player(); p.Position=Vector(500,280)
+            M.data.dudChance=1
+            local all=T.lay(p,Vector(100,150),3)
+            M.data.dudChance=0
+            local none=T.lay(p,Vector(200,150),3)
+            local forced=T.lay(p,Vector(300,150),3,nil,nil,{dud=true})
+            local spared=T.lay(p,Vector(300,250),3,nil,nil,{dud=false})
+            local a=T.lay(p,Vector(400,150),3,nil,nil,{seed=777})
+            local b=T.lay(p,Vector(400,250),3,nil,nil,{seed=777})
+            return all.dud, none.dud, forced.dud, spared.dud, a.bombRoll==b.bombRoll, a.seed, T.evidence().duds
+        ''')
+        self.assertEqual(result, (True, False, True, False, True, 777, 2))
+
+    def test_a_dud_goes_off_as_a_real_bomb(self):
+        result = self.run_lua('''
+            engineBombs=true
+            local p=player(); p.Position=Vector(500,250); p.Damage=3
+            p.bombFlags=TearFlags.TEAR_CROSS_BOMB
+            local dud=T.lay(p,Vector(100,150),3,nil,nil,{dud=true}); dud.bombRoll=0.5
+            local near=enemy(134,150,10)
+            update(M.data.armFrames)
+            p.Position=Vector(110,150)
+            update(1)
+            local c=bombs()[1]
+            return dud.dead==true, #bombs(), c and c.Position.X, c and c.ExplosionDamage, c and c.Flags==0,
+                c and c.SpawnerEntity==p, c and c.countdown, #bombCalls, near.hits and #near.hits or 0,
+                T.evidence().realBlasts, #flagCalls
+        ''')
+        # A real bomb of the holder's at the dud, exploding at once with twice
+        # the mine's damage (user decision 2026-11-28) and no flags (its roll
+        # missed); none of the mine's fake blast or flag parts.
+        self.assertEqual(result, (True, 1, 100, 6, True, True, 0, 0, 0, 1, 0))
+
+    def test_a_dud_carries_the_flags_when_its_roll_does(self):
+        result = self.run_lua('''
+            engineBombs=true
+            local p=player(); p.Position=Vector(500,250)
+            p.bombFlags=TearFlags.TEAR_CROSS_BOMB
+            local dud=T.lay(p,Vector(100,150),3,nil,nil,{dud=true}); dud.bombRoll=0.05
+            update(M.data.armFrames)
+            enemy(100,150,10)
+            update(1)
+            return #bombs(), bombs()[1] and bombs()[1].Flags==TearFlags.TEAR_CROSS_BOMB
+        ''')
+        self.assertEqual(result, (1, True))
+
+    def test_a_dud_an_enemy_or_a_blast_sets_off_is_a_real_bomb_too(self):
+        result = self.run_lua('''
+            engineBombs=true
+            local p=player(); p.Position=Vector(500,250)
+            local mine=T.lay(p,Vector(100,150),3,nil,nil,{dud=false})
+            local dud=T.lay(p,Vector(130,150),3,nil,nil,{dud=true})
+            update(M.data.armFrames)
+            enemy(100,150,10)
+            update(1)
+            local afterMine=#bombs()
+            update(M.data.chainDelay)
+            return afterMine, mine.dead==true, dud.dead==true, #bombs()
+        ''')
+        # The plain mine's fake blast sets the dud off a moment later, as a real bomb.
+        self.assertEqual(result, (0, True, True, 1))
+
+    def test_without_the_real_bomb_a_dud_blasts_like_a_mine(self):
+        result = self.run_lua('''
+            EntityType.ENTITY_BOMB=nil
+            local p=player(); p.Position=Vector(500,250)
+            local dud=T.lay(p,Vector(100,150),3,nil,nil,{dud=true})
+            local near=enemy(134,150,10)
+            update(M.data.armFrames)
+            enemy(100,150,10)
+            update(1)
+            return dud.dead==true, near.hits and #near.hits or 0, near.hits and near.hits[1].amount,
+                T.evidence().realBlasts
+        ''')
+        self.assertEqual(result, (True, 1, 6, 0))
+
+    def test_a_dud_has_its_own_frames(self):
+        result = self.run_lua('''
+            local p=player(); p.Position=Vector(500,280)
+            T.lay(p,Vector(100,150),3,nil,nil,{dud=true})
+            T.lay(p,Vector(200,150),3,nil,nil,{dud=false})
+            update(T.frames.Land+2)
+            renders={}
+            M.onFieldRender(nil,T.field(),Vector(0,0))
+            local names={}
+            for _,r in ipairs(renders) do names[#names+1]=(r.pos.X<100 and "dud" or "plain")..":"..r.anim end
+            table.sort(names)
+            return table.concat(names," "), T.frames.DudIdle
+        ''')
+        self.assertEqual(result, ('dud:DudIdle plain:Idle', 8))
+
     def test_bomb_flags_ride_on_a_fake_explosion(self):
         result = self.run_lua('''
             engineBombs=true
             local p=player(); p.Position=Vector(500,280)
             p.bombFlags=TearFlags.TEAR_CROSS_BOMB|TearFlags.TEAR_GHOST_BOMB|TearFlags.TEAR_SCATTER_BOMB
-            local m=T.lay(p,Vector(140,150),4)
+            local m=T.lay(p,Vector(140,150),4); m.bombRoll=T.slotRoll("bomber_boy")
             local victim=enemy(142,150,10)
             local beside=enemy(300,135,10)          -- beside the rock: struck plainly, the rock stays
-            T.lay(p,Vector(300,150),4)
+            local r=T.lay(p,Vector(300,150),4); r.bombRoll=T.slotRoll("bomber_boy")
             update(M.data.armFrames)
+            update(1)
+            local crossFlags=flagCalls[1] and flagCalls[1].flags==TearFlags.TEAR_CROSS_BOMB
+            -- one mine on Ghost Bombs' tenth, one on Scatter Bombs'
+            local g=T.lay(p,Vector(140,260),4); g.bombRoll=T.slotRoll("ghost_bombs")
+            local s=T.lay(p,Vector(450,200),4); s.bombRoll=T.slotRoll("scatter_bombs")
+            update(M.data.armFrames)
+            enemy(140,260,10); enemy(450,200,10)
             update(1)
             local e=T.evidence()
             local ghosts=0
@@ -755,13 +971,14 @@ class LandmineTests(unittest.TestCase):
             local queued=#T.scattered()
             update(M.data.scatterDelay)
             return #bombCalls>=1, bombCalls[1].radius, bombCalls[1].pos.X, #flagCalls>=1, flagCalls[1].pos.X,
-                e.crossed>=4, ghosts>=1, queued>=1, T.evidence().scattered==queued and #T.scattered()==0,
+                e.crossed>=4 and crossFlags, ghosts==1, queued>=1, T.evidence().scattered==queued and #T.scattered()==0,
                 beside.hits and #beside.hits or 0, victim.hits and victim.hits[1].source.Entity==p
         ''')
         (damaged, radius, at, effects, effects_at, crossed, ghosts, queued, scattered, beside, source) = result
         # Engine bomb damage at the enemy's own spot with radius 1; the flags'
-        # effects once at the mine; the cross, a Purgatory soul (인's 창귀,
-        # 1000.189.1) and scatter blasts made here.
+        # effects once at the mine; each mine carries only its tenth's flag:
+        # the cross, a Purgatory soul (인's 창귀, 1000.189.1) and scatter blasts
+        # from three mines.
         self.assertEqual((damaged, radius, at, effects, effects_at), (True, 1, 142, True, 140))
         self.assertEqual((crossed, ghosts, queued, scattered), (True, True, True, True))
         self.assertGreaterEqual(beside, 1)
@@ -775,7 +992,7 @@ class LandmineTests(unittest.TestCase):
             engineBombs=true
             local p=player(); p.Position=Vector(500,280); p.Damage=3
             p.bombFlags=TearFlags.TEAR_BRIMSTONE_BOMB|TearFlags.TEAR_HOMING
-            local m=T.lay(p,Vector(140,150),3)
+            local m=T.lay(p,Vector(140,150),3); m.bombRoll=T.slotRoll("brimstone_bombs")
             local victim=enemy(142,150,10)
             update(M.data.armFrames)
             update(1)
@@ -787,7 +1004,7 @@ class LandmineTests(unittest.TestCase):
             end
             local passed=flagCalls[1] and flagCalls[1].flags
             return #lasers, table.concat(angles," "), table.concat(lengths," "), table.concat(damages," "), detached, at,
-                passed==TearFlags.TEAR_HOMING, T.evidence().beams
+                passed==0, T.evidence().beams
         ''')
         # Each hit a tenth of the mine's 3 (a beam hits about 14 times).
         self.assertEqual(result, (4, '0 90 180 270', '40 40 40 40', '0.3 0.3 0.3 0.3', True, True, True, 4))
@@ -801,7 +1018,7 @@ class LandmineTests(unittest.TestCase):
             ConchBlessing.tiger={adoptSoul=function(soul,owner,opts) handed[#handed+1]={soul=soul,owner=owner,opts=opts} return true end}
             local p=player(); p.Position=Vector(500,280)
             p.bombFlags=TearFlags.TEAR_GHOST_BOMB
-            T.lay(p,Vector(140,150),4)
+            local m=T.lay(p,Vector(140,150),4); m.bombRoll=T.slotRoll("ghost_bombs")
             enemy(142,150,10)
             update(M.data.armFrames)
             update(1)
@@ -812,16 +1029,16 @@ class LandmineTests(unittest.TestCase):
         ''')
         self.assertEqual(result, (1, 189, 1, True, True, 2, False, 'landmine'))
 
-    def test_without_brimstone_bombs_no_beams_and_flags_pass_whole(self):
+    def test_without_brimstone_bombs_no_beams_and_only_the_slots_flag_passes(self):
         result = self.run_lua('''
             engineBombs=true
             local p=player(); p.Position=Vector(500,280)
             p.bombFlags=TearFlags.TEAR_HOMING|TearFlags.TEAR_GHOST_BOMB
-            T.lay(p,Vector(140,150),3)
+            local m=T.lay(p,Vector(140,150),3); m.bombRoll=T.slotRoll("ghost_bombs")
             enemy(142,150,10)
             update(M.data.armFrames)
             update(1)
-            return #lasers, flagCalls[1].flags==(TearFlags.TEAR_HOMING|TearFlags.TEAR_GHOST_BOMB), T.evidence().ghosts
+            return #lasers, flagCalls[1].flags==TearFlags.TEAR_GHOST_BOMB, T.evidence().ghosts
         ''')
         self.assertEqual(result, (0, True, 1))
 
@@ -829,10 +1046,10 @@ class LandmineTests(unittest.TestCase):
         result = self.run_lua('''
             engineBombs=true
             local p=player(); p.Position=Vector(500,280)
-            local function run(flags)
+            local function run(flags,key)
                 M.onNewRoom(); T.resetEvidence()
                 p.bombFlags=flags
-                local a=T.lay(p,Vector(140,150),4)
+                local a=T.lay(p,Vector(140,150),4); a.bombRoll=key and T.slotRoll(key) or 0.99
                 local b=T.lay(p,Vector(215,150),4)      -- 75 away: past the mine's 40, inside the arm's
                 update(M.data.armFrames)
                 local victim=enemy(140,150,10)
@@ -843,9 +1060,9 @@ class LandmineTests(unittest.TestCase):
                 update(M.data.scatterDelay+M.data.chainDelay+1)
                 return b.dead==true, c and c.dead==true or false
             end
-            local crossB=run(TearFlags.TEAR_CROSS_BOMB)
+            local crossB=run(TearFlags.TEAR_CROSS_BOMB,"bomber_boy")
             local plainB=run(0)
-            local _, scatterC=run(TearFlags.TEAR_SCATTER_BOMB)
+            local _, scatterC=run(TearFlags.TEAR_SCATTER_BOMB,"scatter_bombs")
             return crossB, plainB, scatterC
         ''')
         # Bomber Boy's arm reaches the mine 75 away; without it nothing does;

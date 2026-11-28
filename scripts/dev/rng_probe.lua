@@ -463,6 +463,31 @@ function probe.tiger(samples)
     end
 end
 
+-- --------------------------------------------------------------- landmine
+-- The shipped roll over the mine's own RNG draws: a dud, then the bomb flags.
+function probe.landmine(samples)
+    header("Landmine (a mine is a dud that goes off as a real bomb; which bomb synergy a mine may carry)")
+    local module = ConchBlessing.landmine
+    local t, d = module and module._test, module and module.data
+    if not t or not t.rolls or not t.slotOf or not d then out("SKIPPED (module not loaded)") return end
+    local rng = RNG()
+    local seed = Random()
+    if seed == 0 then seed = 1 end
+    rng:SetSeed(seed, 35)
+    local duds, slots = 0, {}
+    for i = 1, 10 do slots[i] = 0 end
+    for _ = 1, samples do
+        if t.rolls(rng:RandomFloat(), d.dudChance) then duds = duds + 1 end
+        local slot = t.slotOf(rng:RandomFloat())
+        if slot then slots[slot] = slots[slot] + 1 end
+    end
+    out(string.format("  dud:          configured=%6.2f%%  measured=%7.3f%%", d.dudChance * 100, duds / samples * 100))
+    local parts = {}
+    for i = 1, 10 do parts[i] = string.format("%.1f", slots[i] / samples * 100) end
+    out(string.format("  synergy tenths: configured=%6.2f%% each  measured=%s%%", d.synergyChance * 100,
+        table.concat(parts, "/")))
+end
+
 -- --------------------------------------------------------------- underdog
 -- The shipped weighted draw over a stand-in pool whose quality 0-1 share is p:
 -- item 1 is quality 0, item 2 quality 3.
@@ -608,6 +633,7 @@ function probe.run(params)
     probe.conchPearl(samples)
     probe.tiger(samples)
     probe.underdog(samples)
+    probe.landmine(samples)
     probe.injectableDeath()
     out("")
     out("cb test rng: done")

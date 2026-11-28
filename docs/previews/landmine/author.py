@@ -12,6 +12,9 @@ tear drops it from its own height (user request 2026-11-19): it falls as the
 bare mine (Fall), sinks into the puddle it splashes on landing and settles
 (Land), then idles. With Bobby-Bomb a lying mine stands up on four thin legs
 and creeps toward enemies (Walk, two strides; a first draft of 2026-11-27).
+One mine in ten is a dud (2026-11-28): the same mine rusted through, its paint
+worn off the warning stripes and a crack across its top, its button blinking
+fast (DudFall, DudLand, DudIdle, DudWalk); it goes off as a real bomb.
 Authored on the native grid (user request 2026-11-15); these text grids are
 the source. `python docs/previews/landmine/author.py` writes the runtime PNGs
 and anm2 and enlarged previews into .tmp/landmine/.
@@ -113,6 +116,35 @@ MINE = [
     ".KKgggggggggggKK.",  # 9
     "...KKKKKKKKKKK...",  # 10
 ]
+# The dud (불발탄, user request 2026-11-28: drawn naturally, not tinted): the
+# same mine rusted, a crack across the top face, the stripes' paint worn.
+DUD_MINE = [
+    "......KKKKK......",  # 0
+    "....KKKRRrKKK....",  # 1
+    "..KKLLKrrrKMMKK..",  # 2
+    ".KLLLSLKKKMMMSSK.",  # 3
+    ".KELLLSMMMSMSSdK.",  # 4
+    ".KEEEELLSMMSDddK.",  # 5
+    ".KEYDEDDyDDDDzdK.",  # 6
+    "KgKKDEDyDDDzdKKgK",  # 7
+    "KGgggKKKKKKKgggqK",  # 8
+    ".KKgggggggggggKK.",  # 9
+    "...KKKKKKKKKKK...",  # 10
+]
+DUD_PAL = dict({
+    "H": (206, 150, 104),  # top face, highlight
+    "L": (168, 98, 56),    # top face, lit (rust)
+    "M": (130, 72, 40),    # top face
+    "S": (92, 48, 28),     # top face, shadow and the crack
+    "E": (110, 62, 36),    # side band, lit
+    "D": (78, 42, 24),     # side band
+    "d": (52, 28, 16),     # side band, shadow
+    "Y": (176, 144, 94),   # warning stripe, faded
+    "y": (132, 102, 64),   # warning stripe, faded
+    "z": (90, 70, 42),     # warning stripe, shadow
+    "C": (126, 116, 106),  # collar, tarnished
+    "c": (78, 72, 70),     # collar, tarnished
+})
 PUDDLE_ROWS = 7  # rows 7-10 are the puddle around the mine's foot
 CELL = (17, 11)
 PIVOT = (8, 8)
@@ -155,12 +187,12 @@ def paint(image, rows, at, palette, skip_rows=()):
                 px[tx, ty] = (palette[ch] if ch in palette else PAL[ch]) + (255,)
 
 
-def mine_frame(rise=0, lit=False):
+def mine_frame(rise=0, lit=False, rows=MINE, base=None):
     """The mine sunk `rise` rows into its puddle (positive) or bounced up (negative)."""
     cell = Image.new("RGBA", CELL)
-    palette = dict(PAL, **(ON if lit else OFF))
-    body, puddle = MINE[:PUDDLE_ROWS], MINE[PUDDLE_ROWS:]
-    paint(cell, MINE, (0, 0), palette, skip_rows=range(PUDDLE_ROWS))
+    palette = dict(PAL, **(base or {}), **(ON if lit else OFF))
+    body, puddle = rows[:PUDDLE_ROWS], rows[PUDDLE_ROWS:]
+    paint(cell, rows, (0, 0), palette, skip_rows=range(PUDDLE_ROWS))
     visible = body[:len(body) - rise] if rise > 0 else body
     paint(cell, visible, (0, rise), palette)
     if rise > 0:
@@ -174,17 +206,25 @@ def mine_frame(rise=0, lit=False):
     return cell
 
 
-def fall_frame():
+def fall_frame(body=None, base=None):
     cell = Image.new("RGBA", CELL)
-    paint(cell, FALL_BODY, (0, 0), dict(PAL, **OFF))
+    paint(cell, body or FALL_BODY, (0, 0), dict(PAL, **(base or {}), **OFF))
     return cell
 
 
-def walk_frame(stride, lit=False):
+def walk_frame(stride, lit=False, body=None, base=None):
     cell = Image.new("RGBA", CELL)
-    paint(cell, FALL_BODY, (0, 0), dict(PAL, **(ON if lit else OFF)))
-    paint(cell, WALK_LEGS[stride], (0, len(FALL_BODY)), PAL)
+    body = body or FALL_BODY
+    paint(cell, body, (0, 0), dict(PAL, **(base or {}), **(ON if lit else OFF)))
+    paint(cell, WALK_LEGS[stride], (0, len(body)), PAL)
     return cell
+
+
+# The dud's bare body as it falls, its foot closed like the mine's.
+DUD_FALL_BODY = DUD_MINE[:7] + [
+    "..KKDEDyDDDzdKK..",  # 7
+    "....KKKKKKKKK....",  # 8
+]
 
 
 # Sheet cells in order. Fall holds the bare mine while it drops; Land sinks it
@@ -192,11 +232,20 @@ def walk_frame(stride, lit=False):
 # Idle shows the lit button for 4 updates and the dark one for 26.
 # Walk strides every 4 updates with the button lit on the first stride.
 CELLS = [fall_frame(), mine_frame(3), mine_frame(1), mine_frame(0), mine_frame(0, lit=True), walk_frame(0, lit=True),
-         walk_frame(1)]
+         walk_frame(1),
+         # the dud: cells 7-13 in the same order; its button blinks fast
+         fall_frame(DUD_FALL_BODY, DUD_PAL), mine_frame(3, rows=DUD_MINE, base=DUD_PAL),
+         mine_frame(1, rows=DUD_MINE, base=DUD_PAL), mine_frame(0, rows=DUD_MINE, base=DUD_PAL),
+         mine_frame(0, lit=True, rows=DUD_MINE, base=DUD_PAL), walk_frame(0, True, DUD_FALL_BODY, DUD_PAL),
+         walk_frame(1, False, DUD_FALL_BODY, DUD_PAL)]
 FALL = [(0, 1)]
 LAND = [(1, 2), (2, 2), (3, 2), (4, 2)]
 IDLE = [(4, 4), (3, 26)]
 WALK = [(5, 4), (6, 4)]
+DUD_FALL = [(7, 1)]
+DUD_LAND = [(8, 2), (9, 2), (10, 2), (11, 2)]
+DUD_IDLE = [(11, 3), (10, 5)]
+DUD_WALK = [(12, 4), (13, 4)]
 
 
 def frame_xml(cell, delay, pivot=PIVOT):
@@ -240,6 +289,10 @@ def anm2():
     lines += animation_xml("Land", LAND, False)
     lines += animation_xml("Idle", IDLE, True)
     lines += animation_xml("Walk", WALK, True, WALK_PIVOT)
+    lines += animation_xml("DudFall", DUD_FALL, True)
+    lines += animation_xml("DudLand", DUD_LAND, False)
+    lines += animation_xml("DudIdle", DUD_IDLE, True)
+    lines += animation_xml("DudWalk", DUD_WALK, True, WALK_PIVOT)
     lines += ['  </Animations>', '</AnimatedActor>', '']
     return "\n".join(lines)
 
@@ -261,7 +314,13 @@ def check():
     assert len(ICON) == 32 and all(len(row) == 32 for row in ICON), "icon must be 32x32"
     assert len(MINE) == CELL[1] and all(len(row) == CELL[0] for row in MINE), "mine must fit its cell"
     assert all(len(FALL_BODY) + len(legs) == CELL[1] for legs in WALK_LEGS), "a walking mine must fit its cell"
-    for rows, palette in [(ICON, ICON_PAL), (MINE, PAL), (FALL_BODY, PAL)] + [(legs, PAL) for legs in WALK_LEGS]:
+    assert len(DUD_MINE) == CELL[1] and all(len(row) == CELL[0] for row in DUD_MINE), "dud must fit its cell"
+    assert len(DUD_FALL_BODY) == len(FALL_BODY), "the dud falls like the mine"
+    # The dud keeps the mine's outline: only its colours and markings differ.
+    for mine_row, dud_row in zip(MINE, DUD_MINE):
+        assert [ch == "K" or ch == "." for ch in mine_row] == [ch == "K" or ch == "." for ch in dud_row], dud_row
+    for rows, palette in [(ICON, ICON_PAL), (MINE, PAL), (FALL_BODY, PAL), (DUD_MINE, PAL),
+                          (DUD_FALL_BODY, PAL)] + [(legs, PAL) for legs in WALK_LEGS]:
         assert len({len(row) for row in rows}) == 1, "ragged grid"
         for row in rows:
             for ch in row:

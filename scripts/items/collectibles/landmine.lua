@@ -2,9 +2,11 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- 지뢰 (Landmine), the Magic Conch's neutral answer to Ipecac (user design
 -- 2026-11-15, reworked on 2026-11-25 into a tear that sows mines). Ipecac's
 -- stat changes are turned round: +40 flat range, a x0.33 damage multiplier,
--- -0.2 tears, and the holder's attacks are locked to tears (REPENTOGON).
+-- a x0.8 tears multiplier and -0.2 shot speed (user decisions 2026-11-28;
+-- the tears were -0.2 before), and the holder's attacks are locked to tears
+-- (REPENTOGON).
 -- Every tear of a living holder, whatever made it (fired, split, a tear of
--- that tear's, another mod's), lays mines 3 times, once more for every 5 luck
+-- that tear's, another mod's), lays mines 2 times (3 until 2026-11-28), once more for every 5 luck
 -- with no upper limit, every 0.2 s while it lives: one mine a time with one
 -- copy (alternating sides), a pair with two, three with three, so copies raise
 -- both the mines laid at once and the most a tear holds while luck raises only
@@ -51,9 +53,21 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- Purgatory soul, 인's 창귀, which flies at an enemy and bursts on it, in place
 -- of its hungry soul; user decisions 2026-11-27), handed to 인's own soul
 -- handling so its burst deals each enemy one hit of half the mine's damage
--- instead of the engine's ticks of twice the holder's. With the homing flag
+-- instead of the engine's ticks of twice the holder's. The ten bomb
+-- synergies besides Bobby-Bomb's each own a tenth of a mine's second roll
+-- (user decision 2026-11-28): a mine carries only the one its roll falls on,
+-- when the holder's bombs have it (Nancy Bombs' tenth gives one of the other
+-- nine at random), so one bomb item rides on one mine in ten and all ten on
+-- every mine, one each; the rest go off as plain blasts. With the homing flag
 -- (Bobby-Bomb) a lying mine stands up on legs and creeps toward the nearest
--- enemy. Mr. Mega is no bomb
+-- enemy, on every mine as before.
+--
+-- One mine in ten is a dud (불발탄, user decisions 2026-11-28), a rusted mine
+-- with a fast-blinking button (its own frames in the sheet). It goes off as a
+-- real bomb: a bomb entity of the engine's, exploding at once with twice the
+-- mine's damage, which breaks rocks, poop and TNT, opens secret walls and
+-- hurts players by the engine's own rules, where an ordinary mine never hurts
+-- the player or the room. Mr. Mega is no bomb
 -- flag and Glitter Bombs' pickups come only from a real bomb, so neither
 -- follows. A player is never hurt by a blast (cancelled at IMPORTANT priority).
 --
@@ -81,9 +95,10 @@ local PROC_KEY = "landmine"
 M.data = {
     damageMultiplier = 1, -- a blast, of the holder's damage when the tear was fired
     statMultiplier = 0.33, -- the holder's damage multiplier (StatsAPI)
-    tears = -0.2,         -- shots a second
+    tearsMultiplier = 0.8, -- the holder's tears multiplier (StatsAPI), once however many copies
+    shotSpeed = -0.2,     -- once however many copies
     range = 40 * 40,      -- +40 tiles, in TearRange units
-    drops = 3,            -- times a tear lays mines before it is empty
+    drops = 2,            -- times a tear lays mines before it is empty (3 until 2026-11-28)
     luckStep = 5,         -- once more for every this much luck, with no upper limit
     placeEvery = 6,       -- a tear lays every this many updates (0.2 s), the first after half of it
     reloadShots = 5,      -- an emptied tear waits this many fire intervals, then holds them all again
@@ -116,6 +131,9 @@ M.data = {
     crawlSpeed = 0.9,     -- Bobby-Bomb: units an update a lying mine creeps
     crawlReach = 200,     -- toward the nearest enemy this close
     gridClear = 30,       -- the engine's bomb damage is dealt only where no grid entity is this close
+    synergyChance = 0.1,  -- each of the ten bomb synergies' share of a mine's roll (Bobby-Bomb's legs: every mine)
+    dudChance = 0.1,      -- a mine is a dud this often, and goes off as a real bomb
+    dudDamage = 2,        -- a dud's blast, of the mine's damage
 }
 
 local BLAST_COLOR = Color(0.75, 1, 0.6, 1, 0, 0.06, 0) -- Ipecac's green
@@ -171,7 +189,7 @@ M.available = mineVariant > 0
 -- The mine's sheet, and the frames of its animations: Fall (in the air), Land
 -- (on the way down into its splash) and Idle (its button blinking).
 local SHEET = "gfx/" .. (definitions.LANDMINE and definitions.LANDMINE.anm2path or "effects/conch_landmine.anm2")
-local FRAMES = { Fall = 1, Land = 8, Idle = 30, Walk = 8 }
+local FRAMES = { Fall = 1, Land = 8, Idle = 30, Walk = 8, DudFall = 1, DudLand = 8, DudIdle = 8, DudWalk = 8 }
 local FIELD_DEPTH = -100000 -- the field draws before every other entity
 
 -- Every mine is a record { owner, damage, x, y, spot, key, frame, flying,
@@ -213,7 +231,7 @@ local evidence
 local function resetEvidence()
     evidence = { fired = 0, laid = 0, flung = 0, placed = 0, reloads = 0, spilled = 0, piled = 0, lost = 0,
         carried = 0, landed = 0, bombDamage = 0, flagEffects = 0, crossed = 0, scattered = 0, ghosts = 0, crawled = 0,
-        beams = 0,
+        beams = 0, flagged = 0, duds = 0, realBlasts = 0,
         flags = nil,
         landedOn = 0, exploded = 0, struck = 0, chained = 0, pictures = 0, byPlayer = 0, drawn = 0,
         drawnMines = 0, last = nil }
@@ -238,7 +256,13 @@ local function perDrop(copies)
     return math.max(1, math.floor(tonumber(copies) or 1))
 end
 
--- The mines a tear holds at `luck` for a holder of `copies`: 3 drops, one more
+-- Whether a roll in [0, 1) falls under `chance`: one draw each decides a dud
+-- and whether a mine carries the holder's bomb flags.
+local function rolls(roll, chance)
+    return (tonumber(roll) or 1) < (tonumber(chance) or 0)
+end
+
+-- The mines a tear holds at `luck` for a holder of `copies`: 2 drops, one more
 -- for every 5 luck, of `perDrop` mines each, no upper limit.
 local function payload(luck, copies)
     luck = math.max(0, tonumber(luck) or 0)
@@ -434,14 +458,36 @@ local function land(record)
     evidence.landed = evidence.landed + 1
 end
 
+-- A seed for a mine: the next of its tear's RNG, else a fresh one.
+local serial = 0
+local function nextSeed(rng)
+    local seed
+    if rng and type(rng.Next) == "function" then seed = rng:Next() end
+    if not seed or seed == 0 then
+        serial = serial + 1
+        seed = (Game():GetFrameCount() * 7919 + serial * 104729) % 2147483646 + 1
+    end
+    return seed
+end
+
 -- A mine of `player` for `to` on the floor: flung from `from` at `lift` above
 -- the floor (negative, screen pixels as PositionOffset), or landing at once
--- without them. Returns its record.
-local function lay(player, to, damage, from, lift)
+-- without them. Its seed (`opts.seed`, else a fresh one) decides at once
+-- whether it is a dud and whether it will carry the bomb flags; `opts.dud`
+-- settles the first (benches). Returns its record.
+local function lay(player, to, damage, from, lift, opts)
     if not M.available then return nil end
     local x, y = to.X, to.Y
     local record = { owner = player and EntityPtr(player) or nil, damage = damage, x = x, y = y,
         spot = Vector(x, y), key = keyOf(tileOf(x), tileOf(y)), frame = Game():GetFrameCount() }
+    local seed = opts and opts.seed or nextSeed(nil)
+    local rng = RNG()
+    rng:SetSeed(seed, 35)
+    record.seed = seed
+    local dudRoll = rng:RandomFloat()
+    record.bombRoll = rng:RandomFloat()
+    if opts and opts.dud ~= nil then record.dud = opts.dud == true else record.dud = rolls(dudRoll, M.data.dudChance) end
+    if record.dud then evidence.duds = evidence.duds + 1 end
     lift = math.min(0, tonumber(lift) or 0)
     if from then
         record.flying, record.sx, record.sy, record.lift, record.k = true, from.X, from.Y, lift, 0
@@ -485,7 +531,8 @@ local function fling(carrier, side, ring)
             to = Vector(carrier.x - ux * ahead - uy * lateral, carrier.y - uy * ahead + ux * lateral)
         end
         if isFloor(room, to) and freeSpot(to.X, to.Y) then
-            lay(carrierPlayer(carrier), to, carrier.damage, Vector(carrier.x, carrier.y), carrier.lift)
+            lay(carrierPlayer(carrier), to, carrier.damage, Vector(carrier.x, carrier.y), carrier.lift,
+                { seed = nextSeed(rng) })
             evidence.flung = evidence.flung + 1
             return true
         end
@@ -518,7 +565,8 @@ local function spill(carrier)
         end
         local to = free or floor
         if to then
-            lay(carrierPlayer(carrier), to, carrier.damage, Vector(carrier.x, carrier.y), carrier.lift)
+            lay(carrierPlayer(carrier), to, carrier.damage, Vector(carrier.x, carrier.y), carrier.lift,
+                { seed = nextSeed(rng) })
             evidence.spilled = evidence.spilled + 1
             if not free then evidence.piled = evidence.piled + 1 end
         else
@@ -729,29 +777,136 @@ local function burnScattered()
     scattered = still
 end
 
+-- The ten bomb synergies besides Bobby-Bomb's, each with its tenth of a
+-- mine's second roll, in this order; the last is Nancy Bombs'. The first flag
+-- of each names the item; the others are what the same item sets beside it,
+-- as `bomb_synergies` logged the player's bomb flags on 2026-11-28 (Sticky
+-- Bombs: TEAR_STICKY and TEAR_EGG, whose creep is the slowing; Ghost Bombs:
+-- TEAR_GHOST_BOMB and TEAR_SPECTRAL; every other item one flag).
+local SLOT_FLAGS = {
+    { "TEAR_CROSS_BOMB" }, { "TEAR_BURN" }, { "TEAR_POISON" }, { "TEAR_SAD_BOMB" }, { "TEAR_SCATTER_BOMB" },
+    { "TEAR_BRIMSTONE_BOMB" }, { "TEAR_GHOST_BOMB", "TEAR_SPECTRAL" }, { "TEAR_STICKY", "TEAR_EGG" },
+    { "TEAR_BUTT_BOMB" },
+}
+local SLOT_KEYS = { "bomber_boy", "hot_bombs", "bobs_curse", "sad_bombs", "scatter_bombs", "brimstone_bombs",
+    "ghost_bombs", "sticky_bombs", "butt_bombs", "nancy_bombs" }
+local NANCY = CollectibleType and CollectibleType.COLLECTIBLE_NANCY_BOMBS
+
+-- Which synergy a roll in [0, 1) falls on: 1 to 10, or nil.
+local function slotOf(roll)
+    local width = tonumber(M.data.synergyChance) or 0
+    roll = tonumber(roll)
+    if not roll or width <= 0 or roll < 0 then return nil end
+    local slot = math.floor(roll / width) + 1
+    if slot <= #SLOT_KEYS then return slot end
+    return nil
+end
+
+-- The flags of slot `index` that `held` has (all of them when `held` is
+-- nil), or nil when it lacks the slot's first flag.
+local function slotFlags(index, held)
+    local names = SLOT_FLAGS[index]
+    local first = TF[names[1]]
+    if not first or (held and not hasFlag(held, first)) then return nil end
+    local flags = first
+    for k = 2, #names do
+        local extra = TF[names[k]]
+        if extra and (not held or hasFlag(held, extra)) then
+            local ok, joined = pcall(function() return flags | extra end)
+            if ok then flags = joined end
+        end
+    end
+    return flags
+end
+
+-- The bomb synergy a mine of `owner`'s carries, or nil: its slot's flags
+-- when the holder's bombs have that item, Nancy Bombs' slot another of the
+-- nine at random.
+local function mineFlags(owner, record)
+    if not owner then return nil end
+    local slot = slotOf(record.bombRoll)
+    if not slot then return nil end
+    if slot <= #SLOT_FLAGS then
+        -- no bomb flags held: no synergy (nil to slotFlags would mean all)
+        local held = bombFlags(owner)
+        return held and slotFlags(slot, held) or nil
+    end
+    if NANCY and type(owner.HasCollectible) == "function" and owner:HasCollectible(NANCY) then
+        local rng = RNG()
+        rng:SetSeed(math.max(1, tonumber(record.seed) or 1), 41)
+        return slotFlags(rng:RandomInt(#SLOT_FLAGS) + 1, nil)
+    end
+    return nil
+end
+
+-- A dud goes off as a real bomb: the engine's own explosion at its spot with
+-- `damage` (twice the mine's) and the holder's bomb flags when this mine's roll gives
+-- them), which breaks the room's rocks and hurts players by its own rules.
+-- Whether the engine offers it (false: the dud blasts like any mine).
+-- A real bomb of the holder's, not Game():BombExplosionEffects: measured
+-- 2026-11-28, that spared its source (the holder) with DamageSource false. It
+-- hurts players as any bomb of its strength does (a bomb of 100 took a full
+-- heart that day, one of a mine's twice damage half a heart), and its kills
+-- are the holder's.
+local function realBlast(record, damage)
+    if not (EntityType and EntityType.ENTITY_BOMB) then return false end
+    local owner = livingOwner(record.owner)
+    local tearFlags = mineFlags(owner, record) or TF.TEAR_NORMAL or 0
+    local bomb
+    local function place()
+        local variant = BombVariant and BombVariant.BOMB_NORMAL or 0
+        bomb = Isaac.Spawn(EntityType.ENTITY_BOMB, variant, 0, record.spot, Vector.Zero, owner)
+        bomb = bomb and bomb:ToBomb()
+        if not bomb then return end
+        bomb.Flags = tearFlags
+        bomb.ExplosionDamage = damage
+        bomb:SetExplosionCountdown(0)
+    end
+    if owner then
+        DamageProvenance.withTriggeredSource(owner, PROC_KEY, nil, PROC_KEY, place)
+    else
+        place()
+    end
+    if not bomb then return false end
+    evidence.realBlasts = evidence.realBlasts + 1
+    return true
+end
+
 local function explode(record)
     if record.dead then return end
     local position = record.spot
     local frame = Game():GetFrameCount()
+    if record.dud and realBlast(record, mineDamage(record.damage) * M.data.dudDamage) then
+        chainAround(record.x, record.y, M.data.blastRadius, record)
+        evidence.exploded = evidence.exploded + 1
+        drop(record)
+        return
+    end
     picture(position, M.data.blastScale)
     if BLAST_SOUND and frame ~= soundFrame then
         soundFrame = frame
         SFXManager():Play(BLAST_SOUND, Sound.volume(0.8), 0, false, 1.1)
     end
-    local damage, radius = mineDamage(record.damage), M.data.blastRadius
+    -- (a dud that finds no real explosion still blasts for twice the damage)
+    local damage = mineDamage(record.damage) * (record.dud and M.data.dudDamage or 1)
+    local radius = M.data.blastRadius
     -- The owner is the source, marked with this proc so the blast's hits and
     -- what its bomb flags make (Sad Bombs' tears, beams, souls) never lay or
     -- set off mines again through it; a mine whose owner left the run strikes
     -- with no source and no flags.
     local owner = livingOwner(record.owner)
     if owner then
-        local flags = bombFlags(owner)
+        -- One bomb synergy at most, the one the mine's roll falls on (user
+        -- decision 2026-11-28); Bobby-Bomb's legs read the flags on their own
+        -- and stay on every mine.
+        local flags = mineFlags(owner, record)
         evidence.flags = flags
+        if flags then evidence.flagged = evidence.flagged + 1 end
         DamageProvenance.withTriggeredSource(owner, PROC_KEY, nil, PROC_KEY, function()
             strike(position, radius, damage, owner, flags)
             if flags then
                 local rng = RNG()
-                rng:SetSeed(math.max(1, (record.key % 100000) * 31 + frame), 35)
+                rng:SetSeed(record.seed or math.max(1, (record.key % 100000) * 31 + frame), 35)
                 bombEffects(position, radius, damage, owner, flags, rng)
             end
         end)
@@ -836,7 +991,8 @@ local function burnFuses()
 end
 
 -- Every armed mine something stands on goes off: an active enemy (flying ones
--- too) or a living player, who takes no damage from it.
+-- too) or a living player, who takes no damage from it (a dud's real
+-- explosion hurts by the engine's rules).
 local stepped = {}
 local function stepOn()
     local count, reach = 0, M.data.triggerRadius
@@ -987,26 +1143,35 @@ local function carry()
 end
 
 -- ------------------------------------------------------------------ stats
-local STAT_FLAGS = CacheFlag.CACHE_DAMAGE | CacheFlag.CACHE_FIREDELAY | CacheFlag.CACHE_RANGE | (WEAPON_CACHE or 0)
+local STAT_FLAGS = CacheFlag.CACHE_DAMAGE | CacheFlag.CACHE_FIREDELAY | CacheFlag.CACHE_SHOTSPEED
+    | CacheFlag.CACHE_RANGE | (WEAPON_CACHE or 0)
 
--- The x0.33 damage multiplier is StatsAPI's item multiplier, kept in step with
--- whether the player holds the item (copies do not stack).
+-- The x0.33 damage and x0.8 tears multipliers are StatsAPI's item
+-- multipliers, kept in step with whether the player holds the item (copies
+-- do not stack).
 local function syncMultiplier(player, held)
     local um = ConchBlessing.stats and ConchBlessing.stats.unifiedMultipliers
     if not um or type(um.SetItemMultiplier) ~= "function" then return end
     local state = ConchBlessing.getUnifiedMultiplierState and ConchBlessing.getUnifiedMultiplierState(player, um)
     local row = state and state.itemMultipliers and state.itemMultipliers[ID]
-    local entry = row and row.Damage
-    local target = held and M.data.statMultiplier or nil
-    if target and (not entry or entry.value ~= target) then
-        um:SetItemMultiplier(player, ID, "Damage", target, "Landmine")
-    elseif not target and entry then
-        um:RemoveItemMultiplier(player, ID, "Damage")
-    else
-        return
+    local changed = false
+    for _, stat in ipairs({ "Damage", "Tears" }) do
+        local entry = row and row[stat]
+        local target = held and (stat == "Damage" and M.data.statMultiplier or M.data.tearsMultiplier) or nil
+        local moved = false
+        if target and (not entry or entry.value ~= target) then
+            um:SetItemMultiplier(player, ID, stat, target, "Landmine")
+            moved = true
+        elseif not target and entry then
+            um:RemoveItemMultiplier(player, ID, stat)
+            moved = true
+        end
+        if moved then
+            changed = true
+            if um.QueueCacheUpdate then um:QueueCacheUpdate(player, stat) end
+        end
     end
-    if um.QueueCacheUpdate then um:QueueCacheUpdate(player, "Damage") end
-    if um.SaveToSaveManager then um:SaveToSaveManager(player) end
+    if changed and um.SaveToSaveManager then um:SaveToSaveManager(player) end
 end
 
 -- When a player gains or loses the item, its multiplier follows and their
@@ -1046,8 +1211,9 @@ end
 function M.onEvaluateCache(_, player, flag)
     if ID <= 0 or not player or player:GetCollectibleNum(ID) <= 0 then return end
     local stats = ConchBlessing.stats
-    if flag == CacheFlag.CACHE_FIREDELAY then
-        if stats and stats.tears and stats.tears.applyAddition then stats.tears.applyAddition(player, M.data.tears, nil) end
+    if flag == CacheFlag.CACHE_SHOTSPEED then
+        local stat = stats and stats.shotSpeed
+        if stat and stat.applyAddition then stat.applyAddition(player, M.data.shotSpeed, nil) end
     elseif flag == CacheFlag.CACHE_RANGE then
         if stats and stats.range and stats.range.applyAddition then stats.range.applyAddition(player, M.data.range, nil) end
     elseif WEAPON_CACHE and flag == WEAPON_CACHE then
@@ -1164,6 +1330,10 @@ function M.onFieldRender(_, effect, offset)
     offset = offset or Vector.Zero
     local now = Game():GetFrameCount()
     local fall, land, idle, walk = set.Fall[1], set.Land, set.Idle, set.Walk
+    -- A dud's own frames (an older sheet without them draws it as a mine).
+    local rfall, rland, ridle, rwalk = set.DudFall and set.DudFall[1] or fall, set.DudLand or land,
+        set.DudIdle or idle, set.DudWalk or walk
+    local dudIdleCount = set.DudIdle and FRAMES.DudIdle or idleCount
     local landCount, idleCount, walkCount = FRAMES.Land, FRAMES.Idle, FRAMES.Walk
     -- A lying mine's place on the render plane never moves, and the offset
     -- (the camera and the shake) seldom does, so each mine keeps where it was
@@ -1179,20 +1349,25 @@ function M.onFieldRender(_, effect, offset)
         local r = mines[k]
         if not r.dead then
             drew = drew + 1
+            local dud = r.dud
             if r.flying then
-                fall:Render(toRender(Vector(r.px, r.py)) + offset + Vector(0, r.z))
+                local sprite = dud and rfall or fall
+                sprite:Render(toRender(Vector(r.px, r.py)) + offset + Vector(0, r.z))
             else
                 local at = r.drawAt
                 if r.drawStamp ~= stamp then
                     at = toRender(r.spot) + offset
                     r.drawAt, r.drawStamp = at, stamp
                 end
-                if r.legs and walk then
-                    walk[r.walking and (now - r.walkAt) % walkCount + 1 or 1]:Render(at)
+                local walking = dud and rwalk or walk
+                if r.legs and walking then
+                    walking[r.walking and (now - r.walkAt) % walkCount + 1 or 1]:Render(at)
                 elseif r.idle then
-                    idle[(now - r.idleAt) % idleCount + 1]:Render(at)
+                    local pick = dud and ridle or idle
+                    pick[(now - r.idleAt) % (dud and dudIdleCount or idleCount) + 1]:Render(at)
                 else
-                    land[math.max(0, math.min(landCount - 1, now - r.landedAt)) + 1]:Render(at)
+                    local pick = dud and rland or land
+                    pick[math.max(0, math.min(landCount - 1, now - r.landedAt)) + 1]:Render(at)
                 end
             end
         end
@@ -1231,6 +1406,16 @@ end
 function M.mineVariant() return mineVariant end
 
 M._test = {
+    rolls = rolls,
+    slotOf = slotOf,
+    mineFlags = mineFlags,
+    slotFlags = slotFlags,
+    slotRoll = function(key)
+        for i, name in ipairs(SLOT_KEYS) do
+            if name == key then return (i - 0.5) * M.data.synergyChance end
+        end
+        return nil
+    end,
     mineDamage = mineDamage,
     payload = payload,
     perDrop = perDrop,

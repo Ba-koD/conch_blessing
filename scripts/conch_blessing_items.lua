@@ -1009,7 +1009,7 @@ ConchBlessing.ItemData = {
         id = Isaac.GetItemIdByName("Landmine"),
         gfx = "landmine.png",
         tags = "offensive",
-        cache = "damage firedelay range weapon",
+        cache = "damage firedelay shotspeed range weapon",
         -- The items whose weapon its tears replace (EID's "Overridden by" lines;
         -- `cb test landmine weapon_items` checks each in game). Monstro's Lung,
         -- Ludovico and C Section shoot tears, so they keep their weapons.

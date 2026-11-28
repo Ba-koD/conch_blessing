@@ -46,6 +46,7 @@ SRC = {
     "pearl": "scripts/items/collectibles/conch_pearl.lua",
     "tiger": "scripts/items/collectibles/tiger.lua",
     "underdog": "scripts/items/collectibles/underdog.lua",
+    "landmine": "scripts/items/collectibles/landmine.lua",
 }
 
 _cache: dict[str, list[str]] = {}
@@ -767,6 +768,32 @@ def build(samples: int, seed: int) -> str:
                          f"{(1 - a) ** limit:.2e}", f"{peeks / samples:.2f}"])
     w("\n".join(table(["Pool", "Copies n", "Exact P (quality 0/1/2/3/4)", "Measured",
                         "Weights x w^n", "P (fallback)", "Peeks per draw"], rows)))
+    w("")
+
+    # 16 -------------------------------------------------------------------------
+    dud, dud_cite = const("landmine", "dudChance")
+    flags, flags_cite = const("landmine", "synergyChance")
+    w("## 16. Landmine")
+    w("")
+    w("Every mine is laid with a seed of its own (the next value of its tear's RNG, else a fresh one).")
+    w(f"Its first `RandomFloat()` makes it a dud (a real bomb) when below dudChance = {dud:g} ({dud_cite}); its second")
+    w(f"picks one of the ten bomb synergies besides Bobby-Bomb's, each owning synergyChance = {flags:g}")
+    w(f"({flags_cite}) of it in order (Bomber Boy, Hot, Bob's Curse, Sad, Scatter, Brimstone, Ghost, Sticky,")
+    w("Butt, Nancy). The mine carries that one flag when the holder's bombs have it (Nancy Bombs' tenth gives")
+    w("one of the other nine at random), so a held synergy rides on one mine in ten. Bobby-Bomb's legs need no")
+    w("roll and stay on every mine. Each roll is a single draw, and the two are independent draws of one seed.")
+    w("")
+    rows = []
+    hits = sum(1 for _ in range(samples) if rng.random() < dud)
+    rows.append(["a dud", f"**{dud:.0%}**", f"{hits / samples:.3%}"])
+    counts = [0] * 10
+    for _ in range(samples):
+        slot = int(rng.random() / flags)
+        if slot < 10:
+            counts[slot] += 1
+    rows.append(["on a given synergy's tenth", f"**{flags:.0%}** each",
+                 "/".join(f"{c / samples:.1%}" for c in counts)])
+    w("\n".join(table(["A mine is", "Exact P", "Measured"], rows)))
     w("")
 
     return "\n".join(md) + "\n"

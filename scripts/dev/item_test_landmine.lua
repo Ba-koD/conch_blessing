@@ -6,10 +6,14 @@ local require = ConchBlessingRequire or require -- reloadable loader, see main.l
 -- record (its flight read from its own height; one field effect draws them
 -- all). Every
 -- blast is read from the enemy's actual HP and the player's actual health;
--- the expected numbers are the user's: +40 range, x0.33 damage, -0.2 tears,
--- mines laid 3 times a tear (+1 per 5 luck), every 0.2 s, one mine at a time
+-- the expected numbers are the user's: +40 range, x0.33 damage, x0.8 tears, -0.2 shot speed,
+-- mines laid 2 times a tear (+1 per 5 luck), every 0.2 s, one mine at a time
 -- per copy, all of them again 5 fire intervals after a tear runs out, a blast
--- of the holder's damage carrying the holder's bomb flags. A
+-- of the holder's damage carrying the holder's bomb flags on one mine in ten,
+-- and one mine in ten a rusted dud that goes off as a real bomb. Every
+-- case lays no dud of its own accord (its chance is held at 0 while it runs)
+-- and `bomb_synergies` sets each mine's roll on its item's tenth, so each
+-- case sees the mines it lays; `dud` lays its dud itself. A
 -- case keeps one harmless enemy pinned in the corner behind the player (the
 -- room stays uncleared and its doors shut), where the tears (fired to the
 -- right) never reach it. Mines placed for the blast cases are laid with the
@@ -168,6 +172,11 @@ local function setup(plan, id)
             playerHits, targetHits, watched, lasers = nil, nil, nil, nil
             if ctx.target and ctx.target:Exists() then ctx.target:Remove() end
         end }
+        -- No dud of its own accord: a case lays the duds it wants.
+        local d = M().data
+        local dudChance = d.dudChance
+        d.dudChance = 0
+        table.insert(ctx.cleanupFns, function() d.dudChance = dudChance end)
         give(player, id, 1)
         clearMines()
         T().resetEvidence()
@@ -225,11 +234,14 @@ local function settle(plan)
 end
 
 -- The mines laid for each tear fired: `per` each.
+-- (a tear still flying 5 fire intervals after its first mine holds `per`
+-- again: -0.2 shot speed keeps tears up long enough, user decision 2026-11-28)
 local function everyTearCarried(plan, label, per)
     plan.check(label, function(_, ctx)
         local e, shots = evidence(), #ctx.fired
-        return shots >= 1 and e.fired == shots and e.laid == per * shots and e.lost == 0 and #roomMines() == e.laid,
-            string.format("observed tears=%d per=%d %s", shots, per, describeMines())
+        return shots >= 1 and e.fired == shots and e.laid == per * (shots + e.reloads) and e.lost == 0
+            and #roomMines() == e.laid,
+            string.format("observed tears=%d per=%d reloads=%d %s", shots, per, e.reloads, describeMines())
     end)
 end
 
@@ -251,7 +263,7 @@ local function lay(player, spot)
 end
 
 -- ---------------------------------------------------------------- lifecycle
-local STATS = { "Damage", "Tears", "Range" }
+local STATS = { "Damage", "Tears", "Range", "ShotSpeed" }
 
 -- The item's share of the displayed stats: the stats while held, less the
 -- stats with every copy taken away (the damage as a ratio), then the copies
@@ -265,15 +277,15 @@ local function measureShare(plan, id)
     plan.wait(3)
     plan.act(function(player, ctx)
         local without = H.stats(player)
-        ctx.share = { Damage = ctx.with.Damage / without.Damage, Tears = ctx.with.Tears - without.Tears,
-            Range = ctx.with.Range - without.Range }
+        ctx.share = { Damage = ctx.with.Damage / without.Damage, Tears = ctx.with.Tears / without.Tears,
+            Range = ctx.with.Range - without.Range, ShotSpeed = ctx.with.ShotSpeed - without.ShotSpeed }
         give(player, id, ctx.held)
     end)
     plan.wait(3)
 end
 
--- n copies: +40 range, x0.33 damage and -0.2 tears once however many, and
--- every tear lays n mines 3 times; nothing without the item.
+-- n copies: +40 range, x0.33 damage, x0.8 tears and -0.2 shot speed once however many, and
+-- every tear lays n mines 2 times; nothing without the item.
 C.LANDMINE = { stage = function(plan, id, n)
     requireModule(plan)
     plan.act(function(_, ctx)
@@ -283,9 +295,10 @@ C.LANDMINE = { stage = function(plan, id, n)
     end)
     withEnemy(plan)
     measureShare(plan, id)
-    plan.check(n > 0 and "+40 range, x0.33 damage and -0.2 tears, once whatever the copies"
+    plan.check(n > 0 and "+40 range, x0.33 damage, x0.8 tears and -0.2 shot speed, once whatever the copies"
         or "without Landmine no stat moves", function(_, ctx)
-        local want = n > 0 and { Damage = 0.33, Tears = -0.2, Range = 40 } or { Damage = 1, Tears = 0, Range = 0 }
+        local want = n > 0 and { Damage = 0.33, Tears = 0.8, Range = 40, ShotSpeed = -0.2 }
+            or { Damage = 1, Tears = 1, Range = 0, ShotSpeed = 0 }
         local ok, parts = true, {}
         for _, stat in ipairs(STATS) do
             if math.abs(ctx.share[stat] - want[stat]) > 0.005 then ok = false end
@@ -296,7 +309,7 @@ C.LANDMINE = { stage = function(plan, id, n)
     stand(plan, function(room) return leftSide(room) end, 20, true)
     settle(plan)
     if n > 0 then
-        everyTearCarried(plan, string.format("every tear the holder fires lays %d mines 3 times", n), 3 * n)
+        everyTearCarried(plan, string.format("every tear the holder fires lays %d mines 2 times", n), 2 * n)
     else
         plan.check("without Landmine the tears carry nothing", function(_, ctx)
             return #ctx.fired >= 1 and evidence().laid == 0 and #roomMines() == 0,
@@ -311,15 +324,17 @@ C.LANDMINE = { stage = function(plan, id, n)
 end }
 
 -- ---------------------------------------------------------------- conditions
--- Shooting right in place: each tear lays its 3 mines, one at a time to
+-- Shooting right in place: each tear lays its 2 mines, one at a time to
 -- alternating sides of its line, as it flies, each seen in the air and
 -- landed, a gap apart, holding the player's damage; nobody on them, they stay.
 conditionsCase("scatter", function(plan, id)
     setup(plan, id)
     withEnemy(plan)
-    stand(plan, function(room) return leftSide(room) end, 25, true)
+    -- 330 from the right wall, which a tear reaches before it refills (-0.2
+    -- shot speed, 2026-11-28), so nothing spills there
+    stand(plan, function(room) return Vector(room:GetBottomRightPos().X - 330, room:GetCenterPos().Y) end, 25, true)
     settle(plan)
-    everyTearCarried(plan, "every tear held 3 mines and all were laid", 3)
+    everyTearCarried(plan, "every tear held 2 mines and all were laid", 2)
     plan.check("one mine went down at a time with one copy", function()
         local e = evidence()
         return e.placed >= 1 and e.flung == e.placed, string.format("drops=%d flung=%d", e.placed, e.flung)
@@ -374,7 +389,7 @@ conditionsCase("scatter", function(plan, id)
     plan.section("LANDMINE / scatter", "each tear flies to the far wall flinging olive mines to both sides; they arc down, land in a green splash and blink")
 end)
 
--- Luck 10: every tear lays 5 times.
+-- Luck 10: every tear lays 4 times.
 local luckPlayer = nil -- GetPtrHash of the player whose luck the case sets
 if ModCallbacks.MC_EVALUATE_CACHE and ConchBlessing.AddPriorityCallback then
     local late = (CallbackPriority and CallbackPriority.LATE) or 100
@@ -399,10 +414,12 @@ conditionsCase("luck", function(plan, id)
     plan.require("luck 10", function(player)
         return player.Luck == 10, string.format("luck %.2f", player.Luck)
     end)
+    -- luck stays 10 until every mine is down: a tear that refills holds what
+    -- its holder's luck gives then
     stand(plan, function(room) return leftSide(room) end, 20, true)
-    plan.act(function(player) setLuck(player, false) end)
     settle(plan)
-    everyTearCarried(plan, "at luck 10 every tear lays 5 mines", 5)
+    everyTearCarried(plan, "at luck 10 every tear lays 4 mines", 4)
+    plan.act(function(player) setLuck(player, false) end)
 end)
 
 -- Shooting into the right wall from close by: the tear stops at the wall and
@@ -413,10 +430,12 @@ conditionsCase("wall_spill", function(plan, id)
     withEnemy(plan)
     stand(plan, function(room, ctx)
         ctx.wall = room:GetBottomRightPos().X
-        return Vector(ctx.wall - 80, room:GetCenterPos().Y)
+        -- close enough that a tear (2 mines, the second 9 updates out) reaches
+        -- the wall still holding one
+        return Vector(ctx.wall - 45, room:GetCenterPos().Y)
     end, 15, true)
     settle(plan)
-    everyTearCarried(plan, "every mine of every tear was laid", 3)
+    everyTearCarried(plan, "every mine of every tear was laid", 2)
     plan.check("what the tears still carried spilled by the wall", function(_, ctx)
         local far = 0
         for _, mine in ipairs(roomMines()) do
@@ -580,9 +599,10 @@ end)
 -- one tear lays its 3 mines, waits 5 fire intervals and lays them again.
 local TEAR_WEAPONS = {
     { "LUDOVICO_TECHNIQUE", "WEAPON_LUDOVICO_TECHNIQUE", 120 },
-    -- The Lung charges longer at Landmine's -0.2 tears: 60 updates were not
-    -- enough to fire, 150 are (`lung_probe`, 2026-11-27).
-    { "MONSTROS_LUNG", "WEAPON_MONSTROS_LUNGS", 150 },
+    -- The Lung charges longer at Landmine's lower tears: at -0.2 tears 60
+    -- updates were not enough to fire and 150 were (`lung_probe`, 2026-11-27);
+    -- x0.8 tears (2026-11-28) is slower again.
+    { "MONSTROS_LUNG", "WEAPON_MONSTROS_LUNGS", 200 },
     { "C_SECTION", "WEAPON_FETUS", 60 },
 }
 conditionsCase("tear_weapons", function(plan, id)
@@ -691,6 +711,8 @@ local function bombRound(plan, itemName, key)
     end, 30, label .. ": an enemy waits")
     plan.act(function(player, ctx)
         ctx.mine = lay(player, ctx.spot)
+        -- The mine's roll falls on this item's tenth (Bobby-Bomb needs none).
+        if ctx.mine and T().slotRoll(key) then ctx.mine.bombRoll = T().slotRoll(key) end
         -- Bomber Boy: a second mine 75 away, past the mine's own blast but inside its arm's.
         if key == "bomber_boy" then ctx.extra = lay(player, ctx.spot + Vector(75, 0)) end
         ctx.firedBefore = evidence().fired
@@ -737,6 +759,19 @@ local function bombRound(plan, itemName, key)
         end
         return Game():GetFrameCount() >= ctx.until_, "watching"
     end, 280, label .. ": the mine went off and its effects played")
+    -- Which tear flags the item puts on the player's bombs (a record for the
+    -- slot table in landmine.lua).
+    plan.note(label .. ": the bomb flags held", function(player)
+        local flags, names = player:GetBombFlags(), {}
+        for name, value in pairs(TearFlags) do
+            if name ~= "TEAR_NORMAL" then
+                local ok, set = pcall(function() return (flags & value) == value end)
+                if ok and set then names[#names + 1] = name end
+            end
+        end
+        table.sort(names)
+        return table.concat(names, " ")
+    end)
     plan.check(label .. ": the mine went off on the enemy", function(_, ctx)
         local e = evidence()
         return e.exploded >= 1 and e.struck >= 1, describeMines()
@@ -1978,7 +2013,7 @@ damageCase("on_enemy", function(plan, id)
     plan.wait(12)
     plan.check("a mine that landed on the enemy went off at once", function()
         local e = evidence()
-        return e.landedOn >= 1 and e.spilled >= 1, describeMines()
+        return e.landedOn >= 1, describeMines()
     end)
     plan.check("the enemy lost exactly its tear hits and the holder's damage for every blast", function(_, ctx)
         local ok, blasts, detail = exactLoss(ctx, ctx.damage)
@@ -2030,6 +2065,130 @@ damageCase("player_steps", function(plan, id)
         local hits = playerHits or {}
         return #hits == 0 and health(player) == ctx.health,
             string.format("playerHits=[%s] health %d -> %d", table.concat(hits, "; "), ctx.health, health(player))
+    end)
+end)
+
+-- A dud (user decisions 2026-11-28): first a real bomb of the player's own, as
+-- strong as the dud, at their feet shows what it does to them (the control);
+-- then the player
+-- steps on a dud beside a pinned enemy and a rock. It goes off as a real bomb:
+-- the player takes the same hit as from the real bomb, the enemy loses twice
+-- the mine's damage and the rock breaks. An ordinary mine never hurts the player
+-- or the room (`player_steps`, `trigger`).
+damageCase("dud", function(plan, id)
+    plan.section("LANDMINE / dud", "a rusted mine with a fast-blinking button lies there; a real bomb, then the dud, blow up")
+    setup(plan, id)
+    withEnemy(plan, function(room) return leftSide(room) + Vector(154, 0) end)
+    plan.act(function(player, ctx)
+        ctx.spot = leftSide(Game():GetRoom()) + Vector(0, 80)
+        player.Position, player.Velocity = ctx.spot, Vector.Zero
+        playerHits = {}
+        local bomb = Isaac.Spawn(EntityType.ENTITY_BOMB, BombVariant.BOMB_NORMAL, 0, ctx.spot, Vector.Zero, player)
+        bomb = bomb and bomb:ToBomb()
+        if bomb then
+            -- as strong as the dud will be (a bomb of 100 took a full heart, one
+            -- this weak half of one; measured 2026-11-28)
+            bomb.ExplosionDamage = player.Damage * M().data.damageMultiplier * M().data.dudDamage
+            bomb:SetExplosionCountdown(1)
+        end
+    end)
+    plan.waitUntil(function(player, ctx)
+        pin(ctx)
+        player.Position, player.Velocity = ctx.spot, Vector.Zero
+        return #playerHits >= 1, "waiting for the bomb"
+    end, 60, "control: a real bomb of the player's at their feet hurts them")
+    plan.act(function(_, ctx)
+        ctx.control = playerHits[1]
+        playerHits = nil
+    end)
+    plan.waitUntil(function(player, ctx)
+        pin(ctx)
+        player.Position, player.Velocity = ctx.spot, Vector.Zero
+        local cooldown = type(player.GetDamageCooldown) == "function" and player:GetDamageCooldown() or 0
+        return cooldown <= 0, "damage cooldown " .. cooldown
+    end, 150, "the player can be hurt again")
+    plan.act(function(player, ctx)
+        local room = Game():GetRoom()
+        ctx.spot = leftSide(room)
+        ctx.mineSpot = ctx.spot + Vector(120, 0)
+        player.Position, player.Velocity = ctx.spot, Vector.Zero
+        ctx.damage = player.Damage
+        ctx.rockIndex = room:GetGridIndex(ctx.mineSpot + Vector(0, -40))
+        room:RemoveGridEntity(ctx.rockIndex, 0, false)
+        ctx.rockMade = Isaac.GridSpawn(GridEntityType.GRID_ROCK, 0, room:GetGridPosition(ctx.rockIndex), true) ~= nil
+        ctx.mine = T().lay(player, ctx.mineSpot, player.Damage, nil, nil, { dud = true })
+    end)
+    armed(plan, "the dud is armed with nobody on it")
+    plan.require("one armed dud, the enemy within its blast but not on it, a rock above it", function(_, ctx)
+        local reach = M().data.triggerRadius + ctx.target.Size
+        local gap = ctx.target.Position:Distance(ctx.mineSpot)
+        return #roomMines() == 1 and ctx.mine and ctx.mine.dud == true and ctx.rockMade and gap > reach
+            and gap <= M().data.blastRadius + ctx.target.Size,
+            string.format("enemy %.1f from the mine, reach %.1f dud=%s rock=%s %s", gap, reach,
+                tostring(ctx.mine and ctx.mine.dud), tostring(ctx.rockMade), describeMines())
+    end)
+    plan.act(function(player, ctx)
+        ctx.health = health(player)
+        ctx.hpBefore = ctx.target.HitPoints
+        playerHits = {}
+        ctx.spot = ctx.mineSpot
+    end)
+    plan.waitUntil(function(player, ctx)
+        pin(ctx)
+        player.Position, player.Velocity = ctx.spot, Vector.Zero
+        return evidence().exploded >= 1, "waiting for the player to set it off"
+    end, 10, "the player steps on the dud")
+    plan.wait(3)
+    plan.check("the player set the dud off and it went off as a real bomb", function()
+        local e = evidence()
+        return e.byPlayer == 1 and e.exploded == 1 and e.realBlasts == 1 and #roomMines() == 0,
+            string.format("realBlasts=%d %s", e.realBlasts, describeMines())
+    end)
+    plan.check("the enemy beside it lost twice the mine's damage", function(_, ctx)
+        local lost = ctx.hpBefore - (ctx.target:Exists() and ctx.target.HitPoints or 0)
+        local want = ctx.damage * M().data.dudDamage
+        return math.abs(lost - want) <= 0.01 * want, string.format("lost %.3f, want %.3f", lost, want)
+    end)
+    plan.check("the dud hurt the player once, as their own real bomb did", function(player, ctx)
+        local hits = playerHits or {}
+        local control = ctx.control and ctx.control:match("amt=[%d.]+ flags=%d+")
+        local got = hits[1] and hits[1]:match("amt=[%d.]+ flags=%d+")
+        return #hits == 1 and control ~= nil and got == control and health(player) < ctx.health,
+            string.format("control=[%s] dud=[%s] health %d -> %d", tostring(ctx.control),
+                table.concat(hits, "; "), ctx.health, health(player))
+    end)
+    plan.check("the rock above it broke", function(_, ctx)
+        local grid = Game():GetRoom():GetGridEntity(ctx.rockIndex)
+        return grid == nil or grid.State == 2 or grid:GetType() ~= GridEntityType.GRID_ROCK,
+            grid and string.format("type=%d state=%d", grid:GetType(), grid.State) or "gone"
+    end)
+    -- A dud the enemy sets off far from the player spares the player.
+    plan.waitUntil(function(player, ctx)
+        pin(ctx)
+        player.Position, player.Velocity = ctx.spot, Vector.Zero
+        local cooldown = type(player.GetDamageCooldown) == "function" and player:GetDamageCooldown() or 0
+        return cooldown <= 0, "damage cooldown " .. cooldown
+    end, 150, "the player can be hurt again")
+    plan.act(function(player, ctx)
+        T().resetEvidence()
+        ctx.spot = leftSide(Game():GetRoom())
+        player.Position, player.Velocity = ctx.spot, Vector.Zero
+        ctx.farMine = T().lay(player, ctx.target.Position, player.Damage, nil, nil, { dud = true })
+        ctx.health = health(player)
+        playerHits = {}
+    end)
+    plan.waitUntil(function(player, ctx)
+        pin(ctx)
+        player.Position, player.Velocity = ctx.spot, Vector.Zero
+        return evidence().exploded >= 1, describeMines()
+    end, 30, "the enemy sets off a dud far from the player")
+    plan.wait(3)
+    plan.check("a dud the enemy set off far away left the player unhurt", function(player, ctx)
+        local hits = playerHits or {}
+        local gap = ctx.spot:Distance(ctx.farMine.spot)
+        return evidence().realBlasts == 1 and #hits == 0 and health(player) == ctx.health,
+            string.format("gap=%.0f realBlasts=%d hits=[%s] health %d -> %d", gap, evidence().realBlasts,
+                table.concat(hits, "; "), ctx.health, health(player))
     end)
 end)
 
